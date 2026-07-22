@@ -254,7 +254,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Inpaint</span>
+    <span class="flex-1 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Inpaint</span>
     <Button variant="ghost" size="icon-xs" title="New mosaic" onclick={createMosaic}>
       <Plus width="16" height="16" />
     </Button>
@@ -269,7 +269,7 @@
           {#snippet child({ props })}
             <div
               {...props}
-              class="flex h-8 w-full cursor-pointer items-center gap-2 rounded-sm px-3 text-sm outline-none select-none hover:bg-element-hover"
+              class="flex h-8 w-full cursor-pointer items-center gap-2 rounded-sm px-3 text-lg outline-none select-none hover:bg-element-hover"
               role="button"
               tabindex="0"
               onclick={(e) => rowClick(e, m)}
@@ -300,7 +300,7 @@
                 class="min-w-0 flex-1"
                 textClass="block cursor-pointer truncate {isViewed ? 'text-fg' : 'text-fg-muted'}"
               />
-              <span class="shrink-0 rounded bg-element-bg px-1 text-xs text-fg-muted tabular-nums">
+              <span class="shrink-0 rounded bg-element-bg px-1 text-base text-fg-muted tabular-nums">
                 {Object.keys(m.channels).length}
               </span>
             </div>
@@ -314,7 +314,7 @@
         <div class="rounded-xs border-y border-border/60 pb-2">
           {#each Object.entries(m.channels) as [channel, { weight }] (channel)}
             <div class="flex h-8 items-center gap-2 px-3.5">
-              <span class="w-10 shrink-0 truncate text-xs text-fg-muted">{channel}</span>
+              <span class="w-10 shrink-0 truncate text-base text-fg-muted">{channel}</span>
               <input
                 type="range"
                 class="thin-slider flex-1"
@@ -332,14 +332,14 @@
             </div>
           {/each}
           {#if Object.keys(m.channels).length === 0}
-            <p class="flex h-8 items-center px-3 text-xs text-fg-faint">Paint here to add channels</p>
+            <p class="flex h-8 items-center px-3 text-base text-fg-faint">Paint here to add channels</p>
           {/if}
         </div>
       {/if}
     </div>
   {/each}
   {#if list.length === 0}
-    <p class="px-1.5 py-2 text-center text-xs text-fg-faint">No mosaics yet</p>
+    <p class="px-1.5 py-2 text-center text-base text-fg-faint">No mosaics yet</p>
   {/if}
 </div>
 

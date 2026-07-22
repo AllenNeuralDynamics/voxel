@@ -52,15 +52,13 @@ export type ThemeId = (typeof registry)[number]['id'];
 export type ThemeEntry = (typeof registry)[number];
 
 export type Mode = 'light' | 'dark' | 'auto';
-export type Density = 'compact' | 'cozy';
-export type Scale = 'xs' | 'sm' | 'default' | 'lg' | 'xl';
+export type Density = 'compact' | 'default' | 'cozy';
 
 export interface ThemePrefs {
   mode: Mode;
   light: ThemeId;
   dark: ThemeId;
   density: Density;
-  scale: Scale;
 }
 
 // ── Manager ──────────────────────────────────────────────────────────
@@ -69,22 +67,14 @@ const DEFAULTS: ThemePrefs = {
   mode: 'auto',
   light: 'base',
   dark: 'jetbrains',
-  density: 'cozy',
-  scale: 'default'
+  density: 'default'
 };
 const MEDIA = '(prefers-color-scheme: dark)';
 
-const DENSITY_CLASSES: Record<Density, string> = {
-  compact: 'density-compact',
-  cozy: ''
-};
-
-const SCALE_PX: Record<Scale, number> = {
-  xs: 12,
-  sm: 13,
-  default: 14,
-  lg: 15,
-  xl: 16
+const DENSITY_PERCENT: Record<Density, number> = {
+  compact: 75,
+  default: 81.25,
+  cozy: 87.5
 };
 
 class ThemeManager {
@@ -132,17 +122,7 @@ class ThemeManager {
 
       // Density
       $effect(() => {
-        const root = document.documentElement;
-        for (const cls of Object.values(DENSITY_CLASSES)) {
-          if (cls) root.classList.remove(cls);
-        }
-        const cls = DENSITY_CLASSES[this.prefs.current.density];
-        if (cls) root.classList.add(cls);
-      });
-
-      // Scale
-      $effect(() => {
-        document.documentElement.style.fontSize = `${SCALE_PX[this.prefs.current.scale]}px`;
+        document.documentElement.style.fontSize = `${DENSITY_PERCENT[this.prefs.current.density]}%`;
       });
     });
   }
@@ -161,10 +141,6 @@ class ThemeManager {
 
   setDensity(density: Density) {
     this.prefs.current = { ...this.prefs.current, density };
-  }
-
-  setScale(scale: Scale) {
-    this.prefs.current = { ...this.prefs.current, scale };
   }
 }
 

@@ -586,7 +586,7 @@
         disabled={aoOptions.length === 0}
         onchange={(v) => (selectedAoUid = v)}
       />
-      <div class="ml-auto flex min-h-8 items-center gap-4 text-xs text-fg-muted">
+      <div class="ml-auto flex min-h-8 items-center gap-4 text-base text-fg-muted">
         <p>Freq <span class="font-mono text-nowrap text-fg">{formatFrequency(frequency)}</span></p>
         <p>Samples <span class="font-mono text-nowrap text-fg">{samples.toLocaleString()}</span></p>
       </div>
@@ -605,7 +605,7 @@
               onOpenChange={(o) => (o ? collapsedPanels.delete(panelKey) : collapsedPanels.add(panelKey))}
             >
               <div class="row flex w-full shrink-0 snap-end flex-col rounded-md border border-border p-2">
-                <div class="flex items-center gap-1 px-1 text-xs text-fg-muted">
+                <div class="flex items-center gap-1 px-1 text-base text-fg-muted">
                   {#each panel.channels as channelId (channelId)}
                     {@const color = waveformColors[channelId] ?? '#888'}
                     <button
@@ -640,7 +640,7 @@
             </Collapsible.Root>
           {/each}
           {#if panels.length === 0}
-            <div class="flex h-full items-center justify-center text-sm text-fg-muted">No waveform data</div>
+            <div class="flex h-full items-center justify-center text-lg text-fg-muted">No waveform data</div>
           {/if}
         </div>
       </Pane>
@@ -653,7 +653,7 @@
             {@const port = aoPorts[selectedDeviceId]}
             {@const wf = editingWaveform}
             <!-- Device header: id + port -->
-            <div class="flex shrink-0 items-center gap-1.5 border-b px-4 py-2 text-xs font-medium">
+            <div class="flex shrink-0 items-center gap-1.5 border-b px-4 py-2 text-base font-medium">
               <span>{sanitizeString(selectedDeviceId)}</span>
               {#if port}<span class="text-fg-faint">({port})</span>{/if}
             </div>
@@ -661,7 +661,7 @@
             <!-- Editor body: scrolls if content exceeds pane height -->
             <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
               {#if !canEdit}
-                <p class="mb-3 text-xs text-warning/80">Acquiring — controls are read-only.</p>
+                <p class="mb-3 text-base text-warning/80">Acquiring — controls are read-only.</p>
               {/if}
 
               {#if isDerivedWaveform(wf)}
@@ -1110,12 +1110,12 @@
               </div>
             </div>
           {:else}
-            <div class="flex h-full items-center justify-center text-sm text-fg-muted">No waveforms available</div>
+            <div class="flex h-full items-center justify-center text-lg text-fg-muted">No waveforms available</div>
           {/if}
         </div>
       </Pane>
     </PaneGroup>
   </div>
 {:else}
-  <div class="flex h-full items-center justify-center text-sm text-fg-muted">Select a profile to view waveforms</div>
+  <div class="flex h-full items-center justify-center text-lg text-fg-muted">Select a profile to view waveforms</div>
 {/if}

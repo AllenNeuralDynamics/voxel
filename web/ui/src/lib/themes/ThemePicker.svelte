@@ -3,26 +3,11 @@
 
   import { ChevronDown } from '$lib/icons';
   import { Label } from '$lib/kit';
-  import { type Density, type Mode, type Scale, type ThemeId, themes } from '$lib/themes';
+  import { type Density, type Mode, type ThemeId, themes } from '$lib/themes';
 
-  const modes: { value: Mode; label: string }[] = [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'auto', label: 'Auto' }
-  ];
+  const modes: Mode[] = ['light', 'dark', 'auto'];
 
-  const densities: { value: Density; label: string }[] = [
-    { value: 'compact', label: 'Compact' },
-    { value: 'cozy', label: 'Cozy' }
-  ];
-
-  const scales: { value: Scale; label: string }[] = [
-    { value: 'xs', label: 'XS' },
-    { value: 'sm', label: 'SM' },
-    { value: 'default', label: 'Default' },
-    { value: 'lg', label: 'LG' },
-    { value: 'xl', label: 'XL' }
-  ];
+  const densities: Density[] = ['compact', 'default', 'cozy'];
 
   const lightThemes = themes.list.filter((t) => t.swatches.light);
   const darkThemes = themes.list.filter((t) => t.swatches.dark);
@@ -39,9 +24,9 @@
   }
 
   const triggerClass =
-    'flex w-full items-center justify-between gap-2.5 rounded border border-input bg-element-bg px-2.5 py-2 text-sm transition-colors hover:bg-element-hover focus:border-focused focus:outline-none';
+    'flex w-full items-center justify-between gap-2.5 rounded border border-input bg-element-bg px-2.5 py-2 text-lg transition-colors hover:bg-element-hover focus:border-focused focus:outline-none';
   const itemClass =
-    'flex w-full cursor-default items-center justify-between gap-2.5 rounded px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg';
+    'flex w-full cursor-default items-center justify-between gap-2.5 rounded px-2.5 py-2 text-lg outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg';
   const contentClass =
     'z-50 mt-1 w-(--bits-select-anchor-width) rounded border bg-floating p-1 shadow-md origin-(--bits-select-content-transform-origin) text-fg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95';
 </script>
@@ -92,33 +77,16 @@
 <div class="flex flex-col gap-6">
   <!-- Density -->
   <div class="flex flex-col gap-1.5">
-    <span class="text-xs font-medium text-fg-muted uppercase">Density</span>
+    <span class="text-lg font-medium text-fg">Density</span>
     <div class="flex gap-1.5">
-      {#each densities as d (d.value)}
+      {#each densities as d (d)}
         <button
-          class="flex-1 cursor-pointer rounded-md border px-2 py-1.5 text-sm transition-colors {pillClass(
-            themes.prefs.current.density === d.value
+          class="flex-1 cursor-pointer rounded-md border px-2 py-1.5 text-lg capitalize transition-colors {pillClass(
+            themes.prefs.current.density === d
           )}"
-          onclick={() => themes.setDensity(d.value)}
+          onclick={() => themes.setDensity(d)}
         >
-          {d.label}
-        </button>
-      {/each}
-    </div>
-  </div>
-
-  <!-- Scale -->
-  <div class="flex flex-col gap-1.5">
-    <span class="text-xs font-medium text-fg-muted uppercase">Scale</span>
-    <div class="flex gap-1.5">
-      {#each scales as s (s.value)}
-        <button
-          class="flex-1 cursor-pointer rounded-md border px-2 py-1.5 text-sm transition-colors {pillClass(
-            themes.prefs.current.scale === s.value
-          )}"
-          onclick={() => themes.setScale(s.value)}
-        >
-          {s.label}
+          {d}
         </button>
       {/each}
     </div>
@@ -128,16 +96,16 @@
 
   <!-- Theme -->
   <div class="flex items-center justify-between">
-    <span class="text-sm font-medium text-fg">Theme</span>
+    <span class="text-lg font-medium text-fg">Theme</span>
     <div class="flex gap-1">
-      {#each modes as m (m.value)}
+      {#each modes as m (m)}
         <button
-          class="cursor-pointer rounded-md border px-2 py-1 text-xs transition-colors {pillClass(
-            themes.prefs.current.mode === m.value
+          class="cursor-pointer rounded-md border px-2 py-1 text-base capitalize transition-colors {pillClass(
+            themes.prefs.current.mode === m
           )}"
-          onclick={() => themes.setMode(m.value)}
+          onclick={() => themes.setMode(m)}
         >
-          {m.label}
+          {m}
         </button>
       {/each}
     </div>

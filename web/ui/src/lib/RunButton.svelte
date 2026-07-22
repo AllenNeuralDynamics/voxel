@@ -78,7 +78,7 @@
     size="md"
     disabled={!instrument || app.snapping}
     title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
-    class="border-border text-sm"
+    class="border-border text-lg"
     onclick={() => toastError(app.captureSnapshot())}
   >
     {#if app.snapping}

@@ -67,7 +67,7 @@
 
 <div class={cn('flex w-full min-w-68 flex-col py-2', className)}>
   <div class="flex shrink-0 items-center gap-2 px-3 py-1">
-    <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">Lasers</span>
+    <span class=" font-medium tracking-wide text-fg-muted uppercase">Lasers</span>
     <div class="flex-1"></div>
     <Button
       variant="ghost"
@@ -87,7 +87,7 @@
         {@render laserTile(laser)}
       {/each}
     {:else}
-      <p class="text-xs text-fg-muted/60">No lasers.</p>
+      <p class=" text-fg-muted/60">No lasers.</p>
     {/if}
   </div>
 </div>

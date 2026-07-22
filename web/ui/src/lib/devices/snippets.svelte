@@ -13,7 +13,7 @@
 
 <!-- Primary device identity label (e.g. a laser's "488 nm" or a camera id). -->
 {#snippet deviceLabel(label: string)}
-  <span class="text-xs font-medium text-fg tabular-nums">{label}</span>
+  <span class="text-base font-medium text-fg tabular-nums">{label}</span>
 {/snippet}
 
 <!-- Emission-colored channel dot (muted when the channel has no emission); channel id on hover. -->
@@ -29,7 +29,7 @@
 
 <!-- Subtle channel marker: an emission-colored dot with the channel id (muted dot when the channel has no emission). -->
 {#snippet channelChip(channel: Channel)}
-  <span class="inline-flex items-center gap-1 text-[0.6rem] text-fg tabular-nums">
+  <span class="inline-flex items-center gap-1 text-xs text-fg tabular-nums">
     {@render channelDot(channel)}
     {sanitizeString(channel.id)}
   </span>

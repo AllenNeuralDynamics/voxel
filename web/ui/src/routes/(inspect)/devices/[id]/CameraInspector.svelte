@@ -84,7 +84,7 @@
 <section class="space-y-5">
   <!-- Header -->
   <div class="flex items-center justify-between">
-    <h2 class="text-base font-medium text-fg">{sanitizeString(deviceId)}</h2>
+    <h2 class="text-xl font-medium text-fg">{sanitizeString(deviceId)}</h2>
     <span
       class={cn('h-2 w-2 rounded-full', camera?.connected ? 'bg-success' : 'bg-fg-muted/30')}
       title={camera?.connected ? 'Connected' : 'Disconnected'}
@@ -100,7 +100,7 @@
           {@const exposure = camera.exposure}
           {@const info = camera.interface?.properties?.['exposure_time_ms']}
           <div class="grid gap-1">
-            <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Exposure'}</span>
+            <span class="font-medium text-fg-muted">{info?.label ?? 'Exposure'}</span>
             <PropInput model={exposure} size="xs" />
           </div>
         {/if}
@@ -111,7 +111,7 @@
             {@const pf = camera.pixelFormat}
             {@const info = camera.interface?.properties?.['pixel_format']}
             <div class="grid gap-1">
-              <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Pixel Format'}</span>
+              <span class="font-medium text-fg-muted">{info?.label ?? 'Pixel Format'}</span>
               <PropInput model={pf} size="xs" />
             </div>
           {/if}
@@ -120,7 +120,7 @@
             {@const bin = camera.binning}
             {@const info = camera.interface?.properties?.['binning']}
             <div class="grid gap-1">
-              <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Binning'}</span>
+              <span class="text-base font-medium text-fg-muted">{info?.label ?? 'Binning'}</span>
               <Enumerated.Select model={bin} formatLabel={(o) => `${o}x${o}`} size="xs" />
             </div>
           {/if}
@@ -129,9 +129,9 @@
         <!-- Sensor ROI -->
         <div class="space-y-3">
           <div class="flex items-baseline justify-between">
-            <h4 class="text-xs font-medium tracking-wide text-fg-muted uppercase">Sensor ROI</h4>
+            <h4 class="text-base font-medium tracking-wide text-fg-muted uppercase">Sensor ROI</h4>
             {#if frameSize}
-              <span class="font-mono text-sm text-fg-muted">
+              <span class="font-mono text-lg text-fg-muted">
                 {frameSize.x} &times; {frameSize.y} px{#if frameSizeMb != null}
                   &ensp;|&ensp;{frameSizeMb.toFixed(1)} MB{/if}
               </span>
@@ -166,7 +166,7 @@
             </svg>
           {:else}
             <div class="flex aspect-4/3 items-center justify-center rounded border border-border bg-element-bg">
-              <span class="text-sm text-fg-muted">No region data</span>
+              <span class="text-lg text-fg-muted">No region data</span>
             </div>
           {/if}
 
@@ -233,7 +233,7 @@
       <!-- RIGHT COLUMN: sensor info, stream -->
       <div class="space-y-5">
         <!-- Sensor / Pixel size -->
-        <div class="grid gap-1 text-sm">
+        <div class="grid gap-1 text-lg">
           {#if sensorSize}
             <div class="flex justify-between">
               <span class="text-fg-muted">Sensor</span>
@@ -264,8 +264,8 @@
 
         <!-- Stream info -->
         <div class="space-y-1">
-          <h4 class="text-xs font-medium tracking-wide text-fg-muted uppercase">Stream</h4>
-          <div class="grid gap-1 text-sm">
+          <h4 class="text-base font-medium tracking-wide text-fg-muted uppercase">Stream</h4>
+          <div class="grid gap-1 text-lg">
             <div class="flex justify-between">
               <span class="text-fg-muted">Frame Rate</span>
               <span class="font-mono text-fg">
@@ -296,7 +296,7 @@
     </div>
   {:else}
     <div class="flex items-center justify-center py-12">
-      <p class="text-base text-fg-muted">Camera not available</p>
+      <p class="text-xl text-fg-muted">Camera not available</p>
     </div>
   {/if}
 </section>

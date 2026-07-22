@@ -3,7 +3,7 @@
 
   export const dialogContentVariants = tv({
     base: [
-      'bg-canvas fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)]',
+      'bg-canvas fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2.3rem)]',
       'translate-x-[-50%] translate-y-[-50%] gap-3 rounded-md border p-4 shadow-md duration-200',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',

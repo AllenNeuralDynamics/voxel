@@ -24,7 +24,7 @@
 </script>
 
 {#if !model}
-  <span class={cn('text-xs text-fg-faint', className)}>—</span>
+  <span class={cn('text-base text-fg-faint', className)}>—</span>
 {:else if model instanceof EnumeratedModel}
   <Enumerated.Select model={model as EnumeratedModel<string>} {disabled} {size} class={className} />
 {:else if model instanceof BoolModel}
@@ -38,5 +38,5 @@
 {:else if model instanceof StringModel}
   <Text.Input {model} {disabled} {size} class={className} />
 {:else}
-  <span class={cn('font-mono text-xs text-fg-muted', className)}>{formatFallback(model.value)}</span>
+  <span class={cn('font-mono text-base text-fg-muted', className)}>{formatFallback(model.value)}</span>
 {/if}

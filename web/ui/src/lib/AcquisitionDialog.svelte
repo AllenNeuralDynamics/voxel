@@ -98,7 +98,7 @@
       <div class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto py-2">
         <!-- Storage -->
         <section class="flex flex-col gap-3">
-          <h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Storage</h3>
+          <h3 class=" font-medium tracking-wide text-fg-muted/70 uppercase">Storage</h3>
           <div class="flex items-start gap-4">
             <div class="flex-1">
               <Field label="Store" id="acq-store">
@@ -139,7 +139,7 @@
 
         <!-- Metadata -->
         <section class="flex flex-col gap-2">
-          <h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</h3>
+          <h3 class=" font-medium tracking-wide text-fg-muted/70 uppercase">Metadata</h3>
           <MetadataPanel {instrument} />
         </section>
 
@@ -147,14 +147,14 @@
 
         <!-- Output -->
         <section class="flex flex-col gap-2">
-          <h3 class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Output</h3>
+          <h3 class=" font-medium tracking-wide text-fg-muted/70 uppercase">Output</h3>
           <OutputControls {instrument} />
         </section>
       </div>
 
       <hr class="-mx-4 border-border" />
       <Dialog.Footer>
-        <span class="mr-auto text-xs text-fg-muted">
+        <span class="mr-auto text-fg-muted">
           {taskCount} task{taskCount === 1 ? '' : 's'} → {volumeCount} volume{volumeCount === 1 ? '' : 's'}
         </span>
         <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>

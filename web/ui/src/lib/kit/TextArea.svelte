@@ -18,19 +18,19 @@
       size: {
         xs: {
           wrapper: 'px-1.5 py-0.5',
-          textarea: 'text-xs'
+          textarea: 'text-base'
         },
         sm: {
           wrapper: 'px-1.5 py-0.5',
-          textarea: 'text-xs'
+          textarea: 'text-base'
         },
         md: {
           wrapper: 'px-2 py-1',
-          textarea: 'text-sm'
+          textarea: 'text-lg'
         },
         lg: {
           wrapper: 'px-2.5 py-1.5',
-          textarea: 'text-base'
+          textarea: 'text-xl'
         }
       }
     },

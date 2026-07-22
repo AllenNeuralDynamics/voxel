@@ -37,7 +37,7 @@
   const pyramidEdge = (level: string) => Math.max(64, 1 << Number(level));
 </script>
 
-<div class={cn('grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-xs', className)}>
+<div class={cn('grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 ', className)}>
   <Label>Compression</Label>
   <Select
     size="xs"

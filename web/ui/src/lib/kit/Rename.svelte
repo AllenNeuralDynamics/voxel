@@ -16,9 +16,9 @@
       size: { xs: {}, sm: {}, md: {} }
     },
     compoundSlots: [
-      { slots: ['text', 'input'], size: 'xs', class: '-ml-1 px-1 py-0 text-xs' },
-      { slots: ['text', 'input'], size: 'sm', class: '-ml-1 -mt-0.5 px-1 py-0.5 text-sm' },
-      { slots: ['text', 'input'], size: 'md', class: '-ml-1.5 -mt-0.5 px-1.5 py-0.5 text-base' }
+      { slots: ['text', 'input'], size: 'xs', class: '-ml-1 px-1 py-0 text-base' },
+      { slots: ['text', 'input'], size: 'sm', class: '-ml-1 -mt-0.5 px-1 py-0.5 text-lg' },
+      { slots: ['text', 'input'], size: 'md', class: '-ml-1.5 -mt-0.5 px-1.5 py-0.5 text-xl' }
     ],
     defaultVariants: { size: 'sm' }
   });

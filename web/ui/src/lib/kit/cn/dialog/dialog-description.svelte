@@ -9,6 +9,6 @@
 <DialogPrimitive.Description
   bind:ref
   data-slot="dialog-description"
-  class={cn('text-sm text-fg-muted', className)}
+  class={cn('text-lg text-fg-muted', className)}
   {...restProps}
 />

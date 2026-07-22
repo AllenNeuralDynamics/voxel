@@ -60,7 +60,7 @@
   class="relative h-full flex-none border border-border-faint transition-colors duration-300 ease-in-out hover:bg-floating/75"
   style="width: {PANEL_WIDTH}px"
 >
-  <p class="absolute top-1 right-1 z-10 text-xs text-fg-muted">Z</p>
+  <p class="absolute top-1 right-1 z-10 text-fg-muted">Z</p>
 
   {#if z}
     <input

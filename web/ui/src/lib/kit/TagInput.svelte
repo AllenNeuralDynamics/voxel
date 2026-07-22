@@ -25,25 +25,25 @@
       size: {
         xs: {
           chip: 'h-ui-xs',
-          input: 'px-1.5 text-xs',
+          input: 'px-1.5 text-base',
           remove: 'px-0.5',
           add: 'size-ui-xs'
         },
         sm: {
           chip: 'h-ui-sm',
-          input: 'px-1.5 text-xs',
+          input: 'px-1.5 text-base',
           remove: 'px-0.5',
           add: 'size-ui-sm'
         },
         md: {
           chip: 'h-ui-md',
-          input: 'px-2 text-sm',
+          input: 'px-2 text-lg',
           remove: 'px-1',
           add: 'size-ui-md'
         },
         lg: {
           chip: 'h-ui-lg',
-          input: 'px-2.5 text-base',
+          input: 'px-2.5 text-xl',
           remove: 'px-1',
           add: 'size-ui-lg'
         }

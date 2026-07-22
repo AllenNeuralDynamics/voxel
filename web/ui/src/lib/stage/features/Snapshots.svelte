@@ -262,7 +262,7 @@
 </script>
 
 {#snippet snapshotInfoCard(snap: Snapshot, inst: Instrument)}
-  <div class="flex flex-col divide-y divide-border/50 text-xs">
+  <div class="flex flex-col divide-y divide-border/50 text-base">
     <div class="flex flex-col gap-1 px-2.5 py-2">
       <div class="flex items-center justify-between gap-2">
         <span class="min-w-0 truncate font-medium text-fg">{snap.label}</span>
@@ -319,7 +319,7 @@
 {#snippet groupInfoCard(g: SnapshotGroup)}
   {@const gTiles = snaps.tilesOf(g.id)}
   {@const channels = groupChannels(gTiles)}
-  <div class="flex flex-col divide-y divide-border/50 text-xs">
+  <div class="flex flex-col divide-y divide-border/50 text-base">
     <div class="flex min-h-8 items-center justify-between gap-2 px-2.5 py-2">
       <span class="min-w-0 truncate font-medium text-fg">{g.name}</span>
       {#if targetGroupId === g.id}
@@ -399,7 +399,7 @@
               <div
                 {...props}
                 class={cn(
-                  'flex w-full cursor-pointer items-center gap-2 rounded-sm py-1 pr-3.5 pl-6 text-sm outline-none select-none',
+                  'flex w-full cursor-pointer items-center gap-2 rounded-sm py-1 pr-3.5 pl-6 text-lg outline-none select-none',
                   isSelected ? 'bg-element-selected' : 'hover:bg-element-hover'
                 )}
                 role="button"
@@ -419,7 +419,7 @@
                   class="min-w-0 flex-1"
                   textClass="block cursor-pointer truncate {isSelected ? 'text-fg' : 'text-fg-muted'}"
                 />
-                <span class="shrink-0 font-mono text-xs text-fg-faint tabular-nums">z{Math.round(snap.stageZ)}</span>
+                <span class="shrink-0 font-mono text-base text-fg-faint tabular-nums">z{Math.round(snap.stageZ)}</span>
               </div>
             {/snippet}
           </HoverCard.Trigger>
@@ -439,7 +439,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Snapshots</span>
+    <span class="flex-1 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Snapshots</span>
     <Button variant="ghost" size="icon-xs" title="New group" onclick={() => snaps.createSnapshotGroup()}>
       <Plus width="16" height="16" />
     </Button>
@@ -459,7 +459,7 @@
                   <div
                     {...props}
                     class={cn(
-                      'group flex w-full cursor-pointer items-center gap-2 rounded-sm px-3.5 py-1 text-sm outline-none select-none',
+                      'group flex w-full cursor-pointer items-center gap-2 rounded-sm px-3.5 py-1 text-lg outline-none select-none',
                       'hover:bg-element-hover'
                     )}
                     role="button"
@@ -491,7 +491,8 @@
                       class="min-w-0 flex-1"
                       textClass="block cursor-pointer truncate {isTarget || isActive ? 'text-fg' : ''}"
                     />
-                    <span class="shrink-0 rounded bg-element-bg px-1 text-xs text-fg-muted tabular-nums">{count}</span>
+                    <span class="shrink-0 rounded bg-element-bg px-1 text-base text-fg-muted tabular-nums">{count}</span
+                    >
                   </div>
                 {/snippet}
               </HoverCard.Trigger>
@@ -525,6 +526,6 @@
     </div>
   {/each}
   {#if groups.length === 0}
-    <p class="px-1.5 py-2 text-center text-xs text-fg-faint">No snapshots yet</p>
+    <p class="px-1.5 py-2 text-center text-base text-fg-faint">No snapshots yet</p>
   {/if}
 </div>

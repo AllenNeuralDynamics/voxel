@@ -221,7 +221,7 @@
     tabindex="0"
     aria-selected={selected}
     class={cn(
-      'col-span-full grid cursor-default grid-cols-subgrid text-left text-sm text-fg-muted transition-colors select-none',
+      'col-span-full grid cursor-default grid-cols-subgrid text-left text-lg text-fg-muted transition-colors select-none',
       selected ? 'bg-element-selected/50' : 'hover:bg-element-hover'
     )}
     onclick={(e) => handleRowClick(row, e)}
@@ -267,7 +267,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="px-0.5 text-xs leading-none"
+        class="px-0.5 text-base leading-none"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -281,7 +281,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="px-0.5 text-xs leading-none"
+        class="px-0.5 text-base leading-none"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -295,7 +295,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="px-0.5 text-xs leading-none"
+        class="px-0.5 text-base leading-none"
       />
     </span>
     <span data-cell-edit class="cell justify-end focus-within:text-fg">
@@ -309,7 +309,7 @@
         decimals={unit.decimals}
         numCharacters={8}
         align="right"
-        class="px-0.5 text-xs leading-none"
+        class="px-0.5 text-base leading-none"
       />
     </span>
     <div data-cell-edit class="cell justify-end">
@@ -324,7 +324,7 @@
             {#each row.profileIds as id (id)}
               <span
                 class={cn(
-                  'truncate rounded-full px-1.5 py-px text-xs',
+                  'truncate rounded-full px-1.5 py-px text-base',
                   id === instrument?.activeProfileId ? 'bg-element-bg text-fg' : 'bg-element-bg/50 text-fg-muted'
                 )}
               >
@@ -340,7 +340,7 @@
               <button
                 type="button"
                 onclick={() => toggleProfile(row, id)}
-                class="flex w-full items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-element-hover"
+                class="flex w-full items-center gap-2 rounded px-1.5 py-1 text-base hover:bg-element-hover"
               >
                 <span
                   class={cn(
@@ -378,7 +378,7 @@
       <div class="shrink-0 px-3 py-4">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
-            <span class="text-xs text-nowrap text-fg-muted tabular-nums">
+            <span class="text-base text-nowrap text-fg-muted tabular-nums">
               {selectedRows.length}/{rows.length}
             </span>
             {#if instrument}
@@ -443,11 +443,11 @@
       >
         {#if rows.length === 0}
           <div class="col-span-full flex min-h-32 items-center justify-center p-4">
-            <p class="text-sm text-fg-faint">No tasks — add tasks from the grid</p>
+            <p class="text-lg text-fg-faint">No tasks — add tasks from the grid</p>
           </div>
         {:else}
           <!-- Column header -->
-          <div class="col-span-full grid grid-cols-subgrid text-sm font-medium text-fg-muted">
+          <div class="col-span-full grid grid-cols-subgrid text-lg font-medium text-fg-muted">
             <span class="cell cell-first cell-head justify-center">
               <Checkbox
                 size="xs"
@@ -492,13 +492,13 @@
       <Dialog.Footer>
         <button
           onclick={() => (deleteDialogOpen = false)}
-          class="rounded border border-border px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+          class="rounded border border-border px-3 py-1.5 text-lg text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
         >
           Cancel
         </button>
         <button
           onclick={deleteSelected}
-          class="rounded bg-danger px-3 py-1.5 text-sm text-danger-fg transition-colors hover:bg-danger/90"
+          class="rounded bg-danger px-3 py-1.5 text-lg text-danger-fg transition-colors hover:bg-danger/90"
         >
           Delete
         </button>
@@ -513,7 +513,7 @@
     --cell-border: 1px solid var(--color-border-faint);
     display: flex;
     align-items: center;
-    padding: 0.25rem 0.5rem;
+    padding: 0.3rem 0.5rem;
     border-right: var(--cell-border);
     border-bottom: var(--cell-border);
     transition: background-color 150ms;

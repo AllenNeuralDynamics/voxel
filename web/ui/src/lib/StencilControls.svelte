@@ -35,7 +35,7 @@
   <!-- Offset -->
   <div class="flex flex-col gap-2">
     <div class="flex items-center justify-between">
-      <span class="text-xs text-fg-muted">Offset</span>
+      <span class=" text-fg-muted">Offset</span>
       {@render linkButton(offsetLinked, () => {
         offsetLinked = !offsetLinked;
         if (offsetLinked) toastError(instrument.updateStencil({ y_offset: stencil.x_offset }));
@@ -97,7 +97,7 @@
   <!-- Overlap -->
   <div class="flex flex-col gap-2">
     <div class="flex items-center justify-between">
-      <span class="text-xs text-fg-muted">Overlap</span>
+      <span class=" text-fg-muted">Overlap</span>
       {@render linkButton(overlapLinked, () => {
         overlapLinked = !overlapLinked;
         if (overlapLinked) toastError(instrument.updateStencil({ overlap_y: stencil.overlap_x }));
@@ -158,7 +158,7 @@
 
   <!-- Z range -->
   <div class="flex flex-col gap-2">
-    <span class="text-xs text-fg-muted">Z range</span>
+    <span class=" text-fg-muted">Z range</span>
     <SpinBox
       model={{
         value: stencil.z_start / 1000,

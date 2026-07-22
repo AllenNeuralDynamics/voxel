@@ -344,7 +344,7 @@
           </div>
           {#if cursor}
             <div
-              class="canvas-overlay-halo pointer-events-none absolute bottom-4 left-4 z-10 flex gap-2 font-mono text-xs tabular-nums {cursorInBounds
+              class="canvas-overlay-halo pointer-events-none absolute bottom-4 left-4 z-10 flex gap-2 font-mono tabular-nums {cursorInBounds
                 ? 'text-fg-muted'
                 : 'text-fg-faint'}"
             >
@@ -359,7 +359,7 @@
             <div
               class="canvas-overlay-halo pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-0.5"
             >
-              <span class="font-mono text-xs text-fg-muted">{scaleBar.label}</span>
+              <span class="font-mono text-fg-muted">{scaleBar.label}</span>
               <div class="h-1 rounded-full bg-fg-muted" style:width="{scaleBar.barPx}px"></div>
             </div>
           {/if}

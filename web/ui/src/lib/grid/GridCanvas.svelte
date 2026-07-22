@@ -50,6 +50,6 @@
   </div>
 {:else}
   <div class="grid h-full w-full place-content-center">
-    <p class="text-base text-fg-muted">Stage not available</p>
+    <p class="text-xl text-fg-muted">Stage not available</p>
   </div>
 {/if}
