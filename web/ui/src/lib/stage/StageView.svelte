@@ -3,13 +3,13 @@
 </script>
 
 <script lang="ts">
-  import { PersistedState, watch } from 'runed';
+  import { watch } from 'runed';
   import { onMount } from 'svelte';
 
   import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
-  import { toastError } from '$lib/utils';
+  import { pref, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
   import Inpaint from './features/Inpaint.svelte';
@@ -41,7 +41,7 @@
 
   let hostEl: HTMLDivElement;
   let surface: Surface | null = null;
-  const collapsed = new PersistedState('voxel-stage-sidebar-collapsed', false);
+  const collapsed = pref('stage:sidebar-collapsed', false);
   let boundsColor = '#3f3f46';
   let markerColor = '#22c55e';
   let marqueeColor = '#e5e7eb';

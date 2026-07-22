@@ -196,7 +196,7 @@
           title={label}
           onclick={select}
           class={cn(
-            'inline-flex h-full cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 min-w-24 text-sm whitespace-nowrap transition-colors',
+            'inline-flex h-full min-w-24 cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 text-sm whitespace-nowrap transition-colors',
             active ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
           )}
         >
@@ -209,7 +209,7 @@
     </div>
   {/snippet}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
-    <PaneGroup direction="horizontal" autoSaveId="shell.v5">
+    <PaneGroup direction="horizontal" autoSaveId="shell">
       <!-- Mode controls: nav + routed content + logs -->
       <Pane {...leftPane}>
         <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
@@ -242,7 +242,7 @@
             <RunButton {app} />
           </header>
           <main class="min-h-0 flex-1 overflow-hidden">
-            <PaneGroup direction="vertical" autoSaveId="shell.viewer">
+            <PaneGroup direction="vertical" autoSaveId="shell:viewer">
               <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
                 <div class="flex h-full flex-col bg-canvas">
                   <div class="relative flex-1 overflow-hidden" data-fly-origin>
@@ -287,7 +287,7 @@
         <header class="flex h-15 shrink-0 items-center border-b border-border px-4">
           <ProfileSelector {instrument} size="md" class="w-full" />
         </header>
-        <PaneGroup direction="vertical" bind:ref={rightSplitEl} autoSaveId="monitors.v1" class="min-h-0 flex-1">
+        <PaneGroup direction="vertical" bind:ref={rightSplitEl} autoSaveId="monitors" class="min-h-0 flex-1">
           <Pane class="min-h-0 bg-canvas/35">
             <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
               {#if instrument.cameras.size > 0}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { type DragDropState, draggable, droppable } from '@thisux/sveltednd';
-  import { PersistedState, watch } from 'runed';
+  import { watch } from 'runed';
   import { onMount, tick } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { slide } from 'svelte/transition';
@@ -28,7 +28,7 @@
     type SnapshotGroup,
     wheelZoomFactor
   } from '$lib/model';
-  import { cn, toastError, trimFloat } from '$lib/utils';
+  import { cn, pref, toastError, trimFloat } from '$lib/utils';
 
   import LiveThumbnail from './LiveThumbnail.svelte';
 
@@ -43,7 +43,7 @@
   });
 
   // Snapshot picker: dock open/closed state persists across sessions.
-  const sidebarOpen = new PersistedState('voxel-snaps-sidebar-open', true);
+  const sidebarOpen = pref('snaps:sidebar-open', true);
 
   // ── Snapshot picker (sidebar tree) ──
   const groups = $derived(snaps.snapshotGroupList);

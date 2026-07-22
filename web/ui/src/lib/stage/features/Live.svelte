@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { PersistedState, watch } from 'runed';
+  import { watch } from 'runed';
 
   import { Eye, EyeOff, VideoCamera } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
+  import { pref } from '$lib/utils';
 
   import type { Bounds, Painter } from '../draw';
   import { getStageScene, type StageLayer, useLayer } from '../scene.svelte';
@@ -18,7 +19,7 @@
   const previewing = $derived(preview?.isPreviewing ?? false);
 
   // Manual show/hide, remembered across sessions; gates the layer on top of `isPreviewing`.
-  const show = new PersistedState('voxel-stage-live-visible', true);
+  const show = pref('stage:live-visible', true);
 
   // The live FOV footprint (stage µm) centered on the current pose; null until pose + FOV are known.
   function liveBox(): Bounds | null {

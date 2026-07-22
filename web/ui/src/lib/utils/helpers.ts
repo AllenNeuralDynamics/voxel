@@ -1,3 +1,4 @@
+import { PersistedState } from 'runed';
 import { toast } from 'svelte-sonner';
 
 /** Fire-and-forget a mutation promise, surfacing any rejection as an error toast.
@@ -27,4 +28,8 @@ export function sanitizeString(str: string): string {
 /** Round to at most `decimals` places and drop trailing zeros (9.96999… → "9.97", 10.0 → "10"). */
 export function trimFloat(value: number, decimals: number): string {
   return String(parseFloat(value.toFixed(decimals)));
+}
+
+export function pref<T>(key: string, initial: T): PersistedState<T> {
+  return new PersistedState<T>(`voxel:${key}`, initial);
 }
