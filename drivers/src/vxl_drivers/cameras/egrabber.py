@@ -9,6 +9,11 @@ from egrabber import (
     BUFFER_INFO_BASE,
     GENTL_INFINITE,
     INFO_DATATYPE_PTR,
+    INFO_DATATYPE_SIZET,
+    STREAM_INFO_NUM_AWAIT_DELIVERY,
+    STREAM_INFO_NUM_DELIVERED,
+    STREAM_INFO_NUM_QUEUED,
+    STREAM_INFO_NUM_UNDERRUN,
     Buffer,
     EGenTL,
     EGrabber,
@@ -231,13 +236,15 @@ class VieworksCamera(Camera):
     def stream_info(self) -> StreamInfo | None:
         if not self._dev.fetch_remote("AcquisitionStatus", dtype=bool):
             return None
+        stream = self._dev.stream
+        b = self._binning.value
         return StreamInfo(
-            frame_index=-1,
-            input_buffer_size=-1,
-            output_buffer_size=-1,
-            dropped_frames=-1,
-            data_rate_mbs=-1,
-            frame_rate_fps=-1,
+            frame_index=stream.get_info(STREAM_INFO_NUM_DELIVERED, INFO_DATATYPE_SIZET),
+            input_buffer_size=stream.get_info(STREAM_INFO_NUM_QUEUED, INFO_DATATYPE_SIZET),
+            output_buffer_size=stream.get_info(STREAM_INFO_NUM_AWAIT_DELIVERY, INFO_DATATYPE_SIZET),
+            dropped_frames=stream.get_info(STREAM_INFO_NUM_UNDERRUN, INFO_DATATYPE_SIZET),
+            data_rate_mbs=(stream.get("StatisticsDataRate") or 0.0) / (b * b),
+            frame_rate_fps=stream.get("StatisticsFrameRate") or 0.0,
         )
 
     # ==================== Sensor ROI ====================
