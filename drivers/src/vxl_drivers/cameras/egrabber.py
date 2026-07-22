@@ -200,10 +200,11 @@ class VieworksCamera(Camera):
         maximum=lambda self: self._exposure_ms.max,
         step=0.001,
     )
-    def exposure_time_ms(self) -> int:
-        if exp_time := self._dev.remote.get(feature="ExposureTime", dtype=float):
-            return int(exp_time / 1000)
-        return 0
+    def exposure_time_ms(self) -> float:
+        exp_time_us = self._dev.remote.get(feature="ExposureTime", dtype=float)
+        if exp_time_us is None:
+            return 0.0
+        return exp_time_us / 1000
 
     @exposure_time_ms.setter
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
