@@ -101,7 +101,7 @@
 
     const actual: Record<Axis3, number> = { x: stage.norm('x'), y: stage.norm('y'), z: stage.norm('z') };
     const n: Record<Axis3, number> = { ...actual };
-    if (dragN) for (const a of AXES) if (dragN[a] !== undefined) n[a] = dragN[a]!;
+    if (targetN) for (const a of AXES) if (targetN[a] !== undefined) n[a] = targetN[a]!;
 
     if (cam.isIso) drawFaces(ctx, border);
     else drawOrtho(ctx, border);
@@ -123,7 +123,7 @@
       ctx.strokeStyle = axisColor(a);
       const [aa0, aa1] = cam.axisLine(a, actual);
       stroke(aa0, aa1);
-      if (dragN?.[a] !== undefined) {
+      if (targetN?.[a] !== undefined) {
         ctx.setLineDash([2, 4]);
         const [ta0, ta1] = cam.axisLine(a, n);
         stroke(ta0, ta1);
@@ -179,7 +179,18 @@
   let start = { px: 0, py: 0, n: 0 };
   // Live drag target(s) in normalized coords — drives the thumb immediately while the throttled stage lags.
   let dragN = $state<Partial<Record<Axis3, number>> | null>(null);
-  let dragging = false;
+  let dragging = $state(false);
+
+  // While dragging, the local drag target leads (the stage command is throttled). Once released, the
+  // stage's own commanded target takes over and clears itself as each axis arrives.
+  const targetN = $derived.by<Partial<Record<Axis3, number>> | null>(() => {
+    if (dragging) return dragN;
+    const t = stage.target;
+    if (!t || !stage.targetPending) return null;
+    const out: Partial<Record<Axis3, number>> = {};
+    for (const a of AXES) if (t[a] != null) out[a] = stage.normOf(a, t[a]);
+    return Object.keys(out).length ? out : null;
+  });
   let planeMode = false; // ortho + Shift: drag the whole plane (both in-plane axes) instead of one handle
   let cursor = $state('default');
 
@@ -280,16 +291,7 @@
       moveTimer = null;
     }
     flush();
-    // Keep the target overlay until each axis settles (cleared by the settle watch); drop any axis that
-    // didn't actually move, since no stop transition will come for it.
-    if (dragN) {
-      const remaining: Partial<Record<Axis3, number>> = {};
-      for (const a of AXES) {
-        const t = dragN[a];
-        if (t !== undefined && Math.abs(stage.norm(a) - t) >= 0.002) remaining[a] = t;
-      }
-      dragN = Object.keys(remaining).length ? remaining : null;
-    }
+    dragN = null; // released: stage.target drives the overlay from here
   }
 
   function distToSegment(p: Pt, a: Pt, b: Pt): number {
@@ -329,23 +331,9 @@
         shown.z,
         size.w,
         size.h,
-        dragN
+        targetN
       ] as const,
     () => draw()
-  );
-
-  // Once a released axis stops moving, drop its target overlay — the actual position has reached it.
-  const prevMoving: Record<Axis3, boolean> = { x: false, y: false, z: false };
-  watch(
-    () => AXES.map((a) => stage.moving(a)),
-    () => {
-      if (!dragging && dragN) {
-        const next: Partial<Record<Axis3, number>> = { ...dragN };
-        for (const a of AXES) if (prevMoving[a] && !stage.moving(a)) delete next[a];
-        dragN = Object.keys(next).length ? next : null;
-      }
-      for (const a of AXES) prevMoving[a] = stage.moving(a);
-    }
   );
 
   function axisModel(a: Axis3, step: number) {

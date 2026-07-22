@@ -7,7 +7,9 @@
   const config = $derived(instrument ? { hal: instrument.hal, bench: instrument.state } : null);
 </script>
 
-<section class="px-4 pt-2 pb-4">
-  <h2 class="mb-4 text-xl font-medium text-fg">Configuration</h2>
-  <JsonView data={config} expandDepth={2} />
+<section class="flex h-full flex-col">
+  <h2 class="mb-4 px-4 text-2xl text-fg-muted">Configuration</h2>
+  <div class="flex-1 overflow-auto px-4">
+    <JsonView data={config} expandDepth={2} />
+  </div>
 </section>

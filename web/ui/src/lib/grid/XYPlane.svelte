@@ -237,33 +237,27 @@
 
   // ── Slider targets ───────────────────────────────────────────────────
 
-  let targetX = $state<number | null>(null);
-  let targetY = $state<number | null>(null);
+  const stageTarget = $derived(instrument.stage.target);
+  const targetPending = $derived(instrument.stage.targetPending);
 
-  const displayX = $derived(sxMoving && targetX !== null ? targetX : sxPos);
-  const displayY = $derived(syMoving && targetY !== null ? targetY : syPos);
+  const displayX = $derived(targetPending && stageTarget?.x != null ? stageTarget.x : sxPos);
+  const displayY = $derived(targetPending && stageTarget?.y != null ? stageTarget.y : syPos);
 
   function onSliderInputX(e: Event) {
     const v = parseFloat((e.target as HTMLInputElement).value);
-    targetX = v;
-    sx?.move(v);
+    toastError(instrument.stage.moveTo({ x: v }));
   }
 
   function onSliderInputY(e: Event) {
     const v = parseFloat((e.target as HTMLInputElement).value);
-    targetY = v;
-    sy?.move(v);
+    toastError(instrument.stage.moveTo({ y: v }));
   }
 
   // ── Interaction ──────────────────────────────────────────────────────
 
   function moveTo(x: number, y: number) {
     if (isXYMoving || !sx || !sy) return;
-    const tx = sxLower + x;
-    const ty = syLower + y;
-    targetX = tx;
-    targetY = ty;
-    toastError(instrument.stage.moveTo({ x: tx, y: ty }));
+    toastError(instrument.stage.moveTo({ x: sxLower + x, y: syLower + y }));
   }
 
   function addTasksAt(positions: Array<{ x: number; y: number }>) {

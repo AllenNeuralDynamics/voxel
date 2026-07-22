@@ -52,7 +52,7 @@
   const triggerGradient = $derived(
     triggerStops && triggerStops.length > 1
       ? stopsToGradient(triggerStops)
-      : (triggerStops?.[0] ?? 'var(--color-fg-muted)')
+      : (triggerStops?.[0] ?? 'var(--color-floating)')
   );
 
   const defaultTriggerClass = 'cursor-pointer text-xl leading-5 font-medium transition-colors hover:brightness-125';

@@ -9,7 +9,7 @@
   import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
-  import { pref, toastError } from '$lib/utils';
+  import { pref, sanitizeString, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
   import Inpaint from './features/Inpaint.svelte';
@@ -43,7 +43,8 @@
   let surface: Surface | null = null;
   const collapsed = pref('stage:sidebar-collapsed', false);
   let boundsColor = '#3f3f46';
-  let markerColor = '#22c55e';
+  let markerColor = '#e254d4';
+  let hoverWorld: [number, number] | null = null;
   let marqueeColor = '#e5e7eb';
   // Camera scale + view width, mirrored from the (plain) camera each render to drive the reactive scale bar.
   let camScale = $state(0);
@@ -53,6 +54,11 @@
   let menuHits = $state<StageHit[]>([]);
   let menuWorld: [number, number] = [0, 0];
   let menuMode = $state<'point' | 'marquee'>('point');
+  let menuOpen = $state(false);
+  // Only hits whose layer actually contributes a section — separators and headings key off these.
+  const menuSections = $derived(menuHits.filter((mh) => mh.layer.menu));
+  const marqueeSections = $derived(menuHits.filter((mh) => mh.layer.marqueeMenu));
+  const sectionLabel = (mh: StageHit) => mh.layer.label ?? sanitizeString(mh.layer.id);
   // Live cursor position in stage µm for the readout overlay; null when the pointer is off the canvas.
   let cursor = $state<[number, number] | null>(null);
   // Whether the cursor is within the reachable stage limits (unknown limits count as in-range).
@@ -156,6 +162,42 @@
     p.strokeRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
   };
 
+  // Under-chrome: a dotted FOV footprint for the cursor. Shown anywhere inside the imageable frame, but
+  // drawn at the clamped position so it lands where the stage actually would. Alt means marquee, so hidden.
+  const ghostLayer: Layer = (p) => {
+    if (!hoverWorld || !fov) return;
+    const [hx, hy] = hoverWorld;
+    const b = stageBounds;
+    if (b && (hx < b.minX || hx > b.maxX || hy < b.minY || hy > b.maxY)) return;
+    const [x, y] = clampToStage(hx, hy);
+    const [fw, fh] = fov;
+    p.strokeStyle = markerColor;
+    p.globalAlpha = 0.4;
+    p.lineWidthPx = 1;
+    p.lineDashPx = [3, 3];
+    p.strokeRect(x - fw / 2, y - fh / 2, fw, fh);
+    p.lineDashPx = [];
+    p.globalAlpha = 1;
+  };
+
+  // Where the stage was last commanded to, from any surface. Dashed and brighter than the hover ghost:
+  // solid = actual, dashed = commanded, dotted = hover.
+  const targetLayer: Layer = (p) => {
+    const t = stage?.target;
+    if (!t || !stage?.targetPending || !fov) return;
+    const x = t.x ?? hereX;
+    const y = t.y ?? hereY;
+    if (x == null || y == null) return;
+    const [fw, fh] = fov;
+    p.strokeStyle = markerColor;
+    p.globalAlpha = 0.7;
+    p.lineWidthPx = 1.5;
+    p.lineDashPx = [6, 4];
+    p.strokeRect(x - fw / 2, y - fh / 2, fw, fh);
+    p.lineDashPx = [];
+    p.globalAlpha = 1;
+  };
+
   // Over-chrome: the live stage position + FOV as a "you are here" box with a crosshair, drawn over content.
   // When that box is panned off-screen, a low-opacity chevron pinned to the viewport edge points back to it.
   const markerLayer: Layer = (p) => {
@@ -202,16 +244,11 @@
     p.globalAlpha = 0.08;
     p.fillRect(m.minX, m.minY, w, h);
     p.globalAlpha = 1;
-    p.raw((ctx) => {
-      const [x1, y1] = p.project(m.minX, m.maxY); // world max-Y is screen-top under the Y-up camera
-      const [x2, y2] = p.project(m.maxX, m.minY);
-      ctx.save();
-      ctx.strokeStyle = marqueeColor;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-      ctx.restore();
-    });
+    p.strokeStyle = marqueeColor;
+    p.lineWidthPx = 1;
+    p.lineDashPx = [4, 3];
+    p.strokeRect(m.minX, m.minY, w, h);
+    p.lineDashPx = [];
   };
 
   // True when a world point falls inside the current marquee selection.
@@ -245,8 +282,18 @@
 
   // Redraw as the live stage position moves, and when registered layers change (structure or content).
   watch(
-    () => [hereX, hereY, scene.layers, scene.generation] as const,
+    () => [hereX, hereY, scene.layers, scene.generation, stage?.target, stage?.targetPending] as const,
     () => surface?.invalidate()
+  );
+
+  // Closing the menu releases the pinned ghost; the next pointer move re-places it if still over the canvas.
+  watch(
+    () => menuOpen,
+    (open) => {
+      if (open) return;
+      hoverWorld = null;
+      surface?.invalidate();
+    }
   );
 
   // Honor a feature's request to frame a region (e.g. "fit selected snapshots").
@@ -263,12 +310,14 @@
 
   onMount(() => {
     boundsColor = getComputedStyle(hostEl).getPropertyValue('--color-border').trim() || boundsColor;
-    markerColor = getComputedStyle(hostEl).getPropertyValue('--color-success').trim() || markerColor;
+    markerColor = getComputedStyle(hostEl).getPropertyValue('--stage-marker').trim() || markerColor;
     marqueeColor = getComputedStyle(hostEl).getPropertyValue('--color-fg').trim() || marqueeColor;
     surface = new Surface(hostEl, {
       render: (p: Painter) => {
         boundsLayer(p);
         for (const layer of scene.layers) if (layer.visible) layer.draw(p);
+        ghostLayer(p);
+        targetLayer(p);
         markerLayer(p);
         marqueeLayer(p);
         camScale = surface?.cam.scale ?? 0;
@@ -281,6 +330,13 @@
           saveViewport();
         },
         scaleLimits,
+        onHover: (world, e) => {
+          if (menuOpen) return; // freeze the ghost on the point the open menu will act on
+          const next = world && !e.altKey ? world : null;
+          if (next?.[0] === hoverWorld?.[0] && next?.[1] === hoverWorld?.[1]) return;
+          hoverWorld = next;
+          surface?.invalidate();
+        },
         onClick: (world, e) => {
           clearMarquee(); // a plain click drops the selection
           for (const { layer, hit } of scene.hits(world)) layer.onSelect?.(hit, e);
@@ -296,11 +352,14 @@
           if (m && inMarquee(world)) {
             menuMode = 'marquee';
             menuHits = scene.marqueeHits(m);
+            hoverWorld = null; // marquee mode acts on the region, not the point
           } else {
             clearMarquee(); // right-clicking outside the selection drops it, then acts on the point
             menuMode = 'point';
             menuHits = scene.hits(world);
+            hoverWorld = world; // pin the ghost to the point the menu will act on
           }
+          surface?.invalidate();
         },
         marqueeOn: (e) => e.altKey, // Alt/Option-drag rubber-bands a selection region instead of panning
         onMarquee: (rect) => {
@@ -322,7 +381,7 @@
 </script>
 
 <div class="flex h-full w-full">
-  <ContextMenu.Root>
+  <ContextMenu.Root bind:open={menuOpen}>
     <ContextMenu.Trigger>
       {#snippet child({ props })}
         <div
@@ -368,12 +427,30 @@
     </ContextMenu.Trigger>
     <ContextMenu.Content class="min-w-44">
       {#if menuMode === 'marquee'}
-        {#each menuHits as mh (mh.layer.id)}
-          {#if mh.layer.marqueeMenu}
-            {@render mh.layer.marqueeMenu(mh.hit)}
-            <ContextMenu.Separator />
-          {/if}
-        {/each}
+        {#if marqueeSections.length > 2}
+          {#each marqueeSections as mh (mh.layer.id)}
+            {#if mh.layer.marqueeMenu}
+              <ContextMenu.Sub>
+                <ContextMenu.SubTrigger>{sectionLabel(mh)}</ContextMenu.SubTrigger>
+                <ContextMenu.SubContent class="min-w-44">
+                  {@render mh.layer.marqueeMenu(mh.hit)}
+                </ContextMenu.SubContent>
+              </ContextMenu.Sub>
+            {/if}
+          {/each}
+        {:else}
+          {#each marqueeSections as mh (mh.layer.id)}
+            {#if mh.layer.marqueeMenu}
+              <ContextMenu.Group>
+                <ContextMenu.GroupHeading>{sectionLabel(mh)}</ContextMenu.GroupHeading>
+                {@render mh.layer.marqueeMenu(mh.hit)}
+              </ContextMenu.Group>
+            {/if}
+          {/each}
+        {/if}
+        {#if marqueeSections.length > 0}
+          <ContextMenu.Separator />
+        {/if}
         <ContextMenu.Item onSelect={clearMarquee}>
           <Close width="14" height="14" />
           Clear selection
@@ -399,10 +476,33 @@
             Halt
           </ContextMenu.Item>
         {/if}
-        {#each menuHits as mh (mh.layer.id)}
+        {#if menuSections.length > 0}
           <ContextMenu.Separator />
-          {#if mh.layer.menu}{@render mh.layer.menu(mh.hit)}{/if}
-        {/each}
+        {/if}
+        {#if menuSections.length > 2}
+          {#each menuSections as mh (mh.layer.id)}
+            {#if mh.layer.menu}
+              <ContextMenu.Sub>
+                <ContextMenu.SubTrigger>{sectionLabel(mh)}</ContextMenu.SubTrigger>
+                <ContextMenu.SubContent class="min-w-44">
+                  {@render mh.layer.menu(mh.hit)}
+                </ContextMenu.SubContent>
+              </ContextMenu.Sub>
+            {/if}
+          {/each}
+        {:else}
+          {#each menuSections as mh, i (mh.layer.id)}
+            {#if mh.layer.menu}
+              {#if i > 0}
+                <ContextMenu.Separator />
+              {/if}
+              <ContextMenu.Group>
+                <ContextMenu.GroupHeading>{sectionLabel(mh)}</ContextMenu.GroupHeading>
+                {@render mh.layer.menu(mh.hit)}
+              </ContextMenu.Group>
+            {/if}
+          {/each}
+        {/if}
       {/if}
     </ContextMenu.Content>
   </ContextMenu.Root>

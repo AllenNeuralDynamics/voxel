@@ -92,9 +92,9 @@
   </div>
 
   {#if camera?.connected}
-    <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
+    <div class="flex flex-wrap justify-between gap-8">
       <!-- LEFT COLUMN: controls, sensor ROI, dynamic rw, commands -->
-      <div class="space-y-5">
+      <div class="min-w-86 flex-1 space-y-5">
         <!-- Exposure Time -->
         {#if camera.exposure}
           {@const exposure = camera.exposure}
@@ -129,9 +129,9 @@
         <!-- Sensor ROI -->
         <div class="space-y-3">
           <div class="flex items-baseline justify-between">
-            <h4 class="text-base font-medium tracking-wide text-fg-muted uppercase">Sensor ROI</h4>
+            <h4 class="text-base font-medium tracking-wide text-fg-muted">Sensor ROI</h4>
             {#if frameSize}
-              <span class="font-mono text-lg text-fg-muted">
+              <span class="font-mono text-fg-muted">
                 {frameSize.x} &times; {frameSize.y} px{#if frameSizeMb != null}
                   &ensp;|&ensp;{frameSizeMb.toFixed(1)} MB{/if}
               </span>
@@ -142,7 +142,7 @@
           {#if sensorSize && roi}
             <svg
               viewBox="0 0 {sensorW} {sensorH}"
-              class="w-full rounded border border-border bg-element-bg"
+              class="rounded border border-border bg-element-bg"
               style="max-height: 280px;"
               preserveAspectRatio="xMidYMid meet"
             >
@@ -166,7 +166,7 @@
             </svg>
           {:else}
             <div class="flex aspect-4/3 items-center justify-center rounded border border-border bg-element-bg">
-              <span class="text-lg text-fg-muted">No region data</span>
+              <span class="text-fg-muted">No region data</span>
             </div>
           {/if}
 
@@ -225,37 +225,34 @@
             <Button variant="outline" size="sm" onclick={resetRegion} class="w-full">Reset ROI</Button>
           {/if}
         </div>
-
-        <!-- Dynamic: remaining properties + commands -->
-        <DeviceBrowser device={camera} exclusions={cameraExclusions} />
       </div>
 
       <!-- RIGHT COLUMN: sensor info, stream -->
-      <div class="space-y-5">
+      <div class="min-w-64 flex-1 space-y-5">
         <!-- Sensor / Pixel size -->
-        <div class="grid gap-1 text-lg">
+        <div class="grid gap-1 text-fg">
           {#if sensorSize}
             <div class="flex justify-between">
               <span class="text-fg-muted">Sensor</span>
-              <span class="font-mono text-fg">{sensorSize.x} &times; {sensorSize.y} px</span>
+              <span class="font-mono">{sensorSize.x} &times; {sensorSize.y} px</span>
             </div>
           {/if}
           {#if pixelSize}
             <div class="flex justify-between">
               <span class="text-fg-muted">Pixel</span>
-              <span class="font-mono text-fg">{pixelSize.x} &times; {pixelSize.y} &micro;m</span>
+              <span class="font-mono">{pixelSize.x} &times; {pixelSize.y} &micro;m</span>
             </div>
           {/if}
           {#if pixelType}
             <div class="flex justify-between">
               <span class="text-fg-muted">Type</span>
-              <span class="font-mono text-fg">{pixelType}</span>
+              <span class="font-mono">{pixelType}</span>
             </div>
           {/if}
           {#if frameAreaUm}
             <div class="flex justify-between">
               <span class="text-fg-muted">Area</span>
-              <span class="font-mono text-fg">
+              <span class="font-mono">
                 {(frameAreaUm.x / 1000).toFixed(2)} &times; {(frameAreaUm.y / 1000).toFixed(2)} mm
               </span>
             </div>
@@ -264,17 +261,17 @@
 
         <!-- Stream info -->
         <div class="space-y-1">
-          <h4 class="text-base font-medium tracking-wide text-fg-muted uppercase">Stream</h4>
-          <div class="grid gap-1 text-lg">
+          <h4 class="font-medium tracking-wide text-fg-muted uppercase">Stream</h4>
+          <div class="grid gap-1 text-fg">
             <div class="flex justify-between">
               <span class="text-fg-muted">Frame Rate</span>
-              <span class="font-mono text-fg">
+              <span class="font-mono">
                 {typeof frameRateHz === 'number' ? `${frameRateHz.toFixed(1)} fps` : '—'}
               </span>
             </div>
             <div class="flex justify-between">
               <span class="text-fg-muted">Data Rate</span>
-              <span class="font-mono text-fg">
+              <span class="font-mono">
                 {streamInfo?.data_rate_mbs != null ? `${streamInfo.data_rate_mbs.toFixed(1)} MB/s` : '—'}
               </span>
             </div>
@@ -286,13 +283,15 @@
             </div>
             <div class="flex justify-between">
               <span class="text-fg-muted">Frame Index</span>
-              <span class="font-mono text-fg">
+              <span class="font-mono">
                 {streamInfo?.frame_index != null ? streamInfo.frame_index : '—'}
               </span>
             </div>
           </div>
         </div>
       </div>
+      <!-- Dynamic: remaining properties + commands -->
+      <DeviceBrowser device={camera} exclusions={cameraExclusions} />
     </div>
   {:else}
     <div class="flex items-center justify-center py-12">

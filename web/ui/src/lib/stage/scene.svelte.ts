@@ -9,17 +9,18 @@ import type { Bounds, Painter } from './draw';
  * describe a hit. Features register these into the scene; StageCanvas draws and routes, never needing to
  * know what a layer *is* — the hit payload `H` is opaque to everyone but the layer that produced it.
  */
-export interface StageLayer<H = unknown> {
+export interface StageLayer<H = unknown, M = H> {
   id: string;
+  label?: string; // section heading for this layer's slice of the context menu; defaults to a capitalized id
   z: number; // draw + hit order (ascending). Chrome reserves bounds ≈ -1000, marker ≈ +1000; content ≥ 0.
   visible: boolean;
   draw: (p: Painter) => void;
   hitTest?: (world: [number, number]) => H | null;
-  hitMarquee?: (rect: Bounds) => H | null; // what of this layer's content a marquee region covers (items or area)
+  hitMarquee?: (rect: Bounds) => M | null; // what of this layer's content a marquee region covers (items or area)
   onSelect?: (hit: H, e?: PointerEvent) => void; // single click on a hit (event carries modifier keys)
   onActivate?: (hit: H) => void; // double click on a hit
   menu?: Snippet<[H]>; // this layer's section of the point context menu for a hit
-  marqueeMenu?: Snippet<[H]>; // this layer's section of the marquee context menu for a covered region
+  marqueeMenu?: Snippet<[M]>; // this layer's section of the marquee context menu for a covered region
   maxScale?: () => number | null; // preferred zoom-in ceiling (px per µm), e.g. native tile resolution; null = no opinion
 }
 
@@ -54,7 +55,7 @@ export class StageScene {
     return this.#generation;
   }
 
-  register<H>(layer: StageLayer<H>): () => void {
+  register<H, M>(layer: StageLayer<H, M>): () => void {
     this.#layers.set(layer.id, layer as StageLayer);
     return () => this.#layers.delete(layer.id);
   }
@@ -136,7 +137,7 @@ export function getStageScene(): StageScene {
 }
 
 /** Register a layer for the lifetime of the calling component (unregisters on unmount). */
-export function useLayer<H>(layer: StageLayer<H>): void {
+export function useLayer<H, M>(layer: StageLayer<H, M>): void {
   const scene = getStageScene();
   onMount(() => scene.register(layer));
 }

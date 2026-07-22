@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Alert, ChevronDown } from '$lib/icons';
   import { type Preview } from '$lib/model';
-  import { cn } from '$lib/utils';
 
   import Histogram from './Histogram.svelte';
 
@@ -11,7 +10,7 @@
 
   let { previewer }: Props = $props();
 
-  let expanded = $state(false);
+  let expanded = $state(true);
 
   const namedChannels = $derived(previewer.channels.filter((c) => c.name));
 
@@ -33,12 +32,11 @@
   });
 
   const maxFrameIdx = $derived(Math.max(0, ...sizedChannels.map((c) => c.latestFrameInfo?.frame_idx ?? 0)));
-  const overlayCard = 'border border-border bg-surface/80 shadow-xl backdrop-blur-sm rounded-md';
 </script>
 
-<div class={cn(overlayCard, 'pointer-events-auto flex w-64 flex-col items-start gap-1.5')}>
+<div class="pointer-events-auto flex w-64 flex-col items-start overlay-panel">
   {#if expanded}
-    <div class="flex w-64 flex-col divide-y divide-border overflow-hidden px-2.5">
+    <div class="flex w-64 flex-col divide-y divide-border overflow-hidden border-b border-border px-2.5">
       {#if frameInfo}
         <div class="space-y-1 py-2">
           {#if sizeMismatch}
@@ -92,7 +90,7 @@
 
   <button
     onclick={() => (expanded = !expanded)}
-    class="flex h-7 w-full cursor-pointer items-center justify-between gap-1.5 border border-border/50 bg-floating/90 px-2 font-mono text-fg-muted shadow-lg backdrop-blur-sm transition-colors hover:bg-element-hover hover:text-fg"
+    class="flex h-7 w-full cursor-pointer items-center justify-between gap-1.5 px-2 font-mono text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
     aria-label={expanded ? 'Hide histograms' : 'Show histograms'}
     title={expanded ? 'Hide histograms' : 'Show histograms'}
   >

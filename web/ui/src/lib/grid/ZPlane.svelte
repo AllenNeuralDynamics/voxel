@@ -15,7 +15,6 @@
 
   let containerRef = $state<HTMLDivElement | null>(null);
   let panelHeight = $state(250);
-  let target = $state<number | null>(null);
 
   const taskSelection = getTaskSelection();
 
@@ -36,12 +35,13 @@
 
   const fovZ = $derived(z ? zPos - zLower : 0);
   const zLineY = $derived(depth > 0 ? (1 - fovZ / depth) * panelHeight - 1 : 0);
-  const displayValue = $derived(zMoving && target !== null ? target : zPos);
+  const stageTarget = $derived(instrument.stage.target);
+  const targetPending = $derived(instrument.stage.targetPending);
+  const displayValue = $derived(targetPending && stageTarget?.z != null ? stageTarget.z : zPos);
 
   function oninput(e: Event) {
     const v = parseFloat((e.target as HTMLInputElement).value);
-    target = v;
-    z?.move(v);
+    instrument.stage.moveTo({ z: v });
   }
 
   onMount(() => {

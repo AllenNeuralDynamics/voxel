@@ -433,7 +433,7 @@
         {onColormapChange}
         width={columnWidth}
         align="center"
-        triggerClass=" font-medium cursor-pointer transition-[filter] hover:brightness-125"
+        triggerClass="text-sm font-medium cursor-pointer transition-[filter] hover:brightness-125"
       />
     </div>
 

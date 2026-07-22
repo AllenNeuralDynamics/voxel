@@ -199,9 +199,7 @@
 
   <!-- Right overlay: viewport minimap (when zoomed) + always-on pan/zoom controls, above the scale bar -->
   <div class="pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-1.5">
-    <div
-      class="pointer-events-auto flex w-fit max-w-62 flex-col gap-1.5 rounded-xs border border-border/50 bg-floating/90 p-1.5 shadow-lg backdrop-blur-sm"
-    >
+    <div class="pointer-events-auto flex w-fit max-w-62 flex-col gap-1.5 overlay-panel p-1.5">
       {#if showNavigator}
         <div transition:fade={{ duration: 150 }}>
           <LiveMinimap {previewer} />
@@ -214,10 +212,27 @@
           decimals={2}
           numCharacters={6}
           align="right"
+          class="bg-transparent"
           steppers={false}
         />
-        <SpinBox model={previewer.panXModel} prefix="X" decimals={2} numCharacters={5} align="right" steppers={false} />
-        <SpinBox model={previewer.panYModel} prefix="Y" decimals={2} numCharacters={5} align="right" steppers={false} />
+        <SpinBox
+          model={previewer.panXModel}
+          prefix="X"
+          decimals={2}
+          numCharacters={5}
+          align="right"
+          steppers={false}
+          class="bg-transparent"
+        />
+        <SpinBox
+          model={previewer.panYModel}
+          prefix="Y"
+          decimals={2}
+          numCharacters={5}
+          align="right"
+          steppers={false}
+          class="bg-transparent"
+        />
       </div>
     </div>
 
