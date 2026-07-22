@@ -20,7 +20,7 @@
 
 {#if instrument}
   <section class="flex h-full flex-col">
-    <h2 class="mb-4 px-4 text-2xl text-fg-muted">Stage</h2>
+    <h2 class="mb-4 px-4 text-2xl text-fg">Stage</h2>
     {#if axes.length > 0}
       <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 overflow-y-auto px-4">
         {#each axes as { label, axis } (axis.id)}

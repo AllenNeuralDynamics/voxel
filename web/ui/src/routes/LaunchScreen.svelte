@@ -6,7 +6,7 @@
   import InstrumentInspector from '$lib/InstrumentInspector.svelte';
   import { Button, Dialog, Field, TextInput } from '$lib/kit';
   import LogViewer from '$lib/LogViewer.svelte';
-  import type { HALConfig, InstrumentInfo, InstrumentState, LoadError, VoxelApp } from '$lib/model';
+  import type { HALConfig, InstrumentDefaults, InstrumentInfo, InstrumentState, LoadError, VoxelApp } from '$lib/model';
   import { configError, isLoaded } from '$lib/model';
   import { themes } from '$lib/themes';
   import { sanitizeString } from '$lib/utils';
@@ -26,6 +26,12 @@
   let dialogOpen = $state(false);
   let dialogTemplate = $state('');
   let dialogName = $state('');
+
+  // Reset-bench dialog state.
+  let resetBenchDialogOpen = $state(false);
+  let resetBenchInstrument = $state('');
+  let resetBenchLabel = $state('');
+  const resetBenchSlug = $derived(resetBenchLabel.trim().toLowerCase().replaceAll(' ', '-'));
 
   const instrumentEntries = $derived(Object.entries(app.catalog.instruments));
   const templateEntries = $derived(Object.entries(app.catalog.templates));
@@ -62,7 +68,7 @@
 
   // Resolve the HAL + bench (or load errors) for the current selection.
   type Selected =
-    | { ok: true; name: string; kind: 'instrument' | 'template'; hal: HALConfig; bench: InstrumentState }
+    | { ok: true; name: string; kind: 'instrument' | 'template'; hal: HALConfig; bench: InstrumentDefaults }
     | { ok: false; name: string; source: 'config' | 'bench'; errors: LoadError };
 
   const selected = $derived.by((): Selected | null => {
@@ -137,11 +143,26 @@
       if (app.error) toast.error(app.error);
     }
   }
+
+  function openResetBenchDialog(name: string) {
+    resetBenchInstrument = name;
+    resetBenchLabel = '';
+    resetBenchDialogOpen = true;
+  }
+
+  async function submitResetBench() {
+    try {
+      await app.resetBench(resetBenchInstrument, resetBenchLabel);
+      resetBenchDialogOpen = false;
+    } catch {
+      if (app.error) toast.error(app.error);
+    }
+  }
 </script>
 
 <div class="grid h-screen w-full grid-cols-[auto_1fr] bg-canvas">
   <!-- Inspector -->
-  <div class="flex min-w-4xl flex-col bg-surface/60">
+  <div class="flex min-h-0 min-w-4xl flex-col overflow-hidden bg-surface/60">
     <!-- Header -->
     <div class="shrink-0">
       <!-- Row 1: brand + appearance -->
@@ -268,6 +289,16 @@
                 </ul>
               {/if}
             </div>
+            {#if selected.source === 'bench'}
+              <Button
+                variant="outline"
+                size="sm"
+                class="self-start"
+                onclick={() => openResetBenchDialog(selected.name)}
+              >
+                Reset bench…
+              </Button>
+            {/if}
           </div>
         {:else}
           <InstrumentInspector hal={selected.hal} bench={selected.bench} />
@@ -306,6 +337,35 @@
       <Button variant="outline" onclick={() => (dialogOpen = false)}>Cancel</Button>
       <Button variant="success" disabled={app.busy} onclick={createFromTemplate}>
         {app.busy ? 'Creating…' : 'Create'}
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={resetBenchDialogOpen}>
+  <Dialog.Content size="md">
+    <Dialog.Header>
+      <Dialog.Title>Reset Bench</Dialog.Title>
+    </Dialog.Header>
+    <hr class="-mx-4 border-border" />
+
+    <div class="flex flex-col gap-4 py-2">
+      <p class="text-lg text-fg-muted">
+        Archive <span class="font-medium text-fg">{sanitizeString(resetBenchInstrument)}</span>'s bench so it reopens
+        with its configured defaults. The current bench is kept as
+        <span class="font-mono text-fg">bench.{resetBenchSlug || '…'}.json</span>.
+      </p>
+      <Field label="Label" id="reset-bench-label">
+        <TextInput bind:value={resetBenchLabel} id="reset-bench-label" align="left" placeholder="e.g. corrupt" />
+      </Field>
+    </div>
+
+    <hr class="-mx-4 border-border" />
+    <Dialog.Footer>
+      <div class="flex-1"></div>
+      <Button variant="outline" onclick={() => (resetBenchDialogOpen = false)}>Cancel</Button>
+      <Button variant="danger" disabled={app.busy || !resetBenchSlug} onclick={submitResetBench}>
+        {app.busy ? 'Resetting…' : 'Reset Bench'}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

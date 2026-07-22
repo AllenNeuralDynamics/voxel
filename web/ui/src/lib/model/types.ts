@@ -232,14 +232,18 @@ export interface WriterSettings {
   target_shard_gb: number;
 }
 
-/** The instrument's editable bench: imaging protocol, planning defaults, traversal, writer, tasks, metadata. */
-export interface InstrumentState {
+/** Baseline fields that can live in `config.default` (mirrors `InstrumentDefaults` in src/vxl/instrument.py). */
+export interface InstrumentDefaults {
   imaging: ImagingProtocol;
   metadata_cls: string;
-  metadata: Record<string, unknown>;
+  output: WriterSettings;
   stencil: Stencil;
   traversal: TileOrder;
-  output: WriterSettings;
+}
+
+/** The instrument's editable bench: the baseline fields plus per-run/managed state (metadata, tasks). */
+export interface InstrumentState extends InstrumentDefaults {
+  metadata: Record<string, unknown>;
   tasks: Record<string, AcquisitionTask>;
   last_modified: string;
 }
@@ -390,10 +394,10 @@ export interface JsonSchema {
   required?: string[];
 }
 
-/** A template or instrument config: hardware blueprint + default bench. */
+/** A template or instrument config: hardware blueprint + default baseline. */
 export interface InstrumentConfig {
   hal: HALConfig;
-  default: InstrumentState;
+  default: InstrumentDefaults;
 }
 
 /** A failed load: field → error message. */
@@ -520,6 +524,7 @@ export interface PreviewUpdate {
 export interface ServerTopics {
   'app.status': AppStatus;
   'instrument.status': InstrumentStatus;
+  'instrument.default': InstrumentDefaults;
   'device.props.update': DevicePropsUpdate;
   'acquisition.progress': AcquisitionProgress;
   'preview.updates': PreviewUpdate;

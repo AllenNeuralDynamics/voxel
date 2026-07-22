@@ -22,6 +22,7 @@ from vxl.instrument import (
     AcquisitionRequest,
     ChannelPatch,
     HALConfig,
+    InstrumentDefaults,
     ProfilePatch,
     StencilPatch,
     TaskPatch,
@@ -75,6 +76,24 @@ async def launch(name: str, app: AppDep) -> dict[str, str]:
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return {"launched": instrument.path.stem}
+
+
+@app_router.post("/instruments/{name}/reset-bench")
+async def reset_bench(name: str, label: str, app: AppDep) -> dict[str, str]:
+    """Archive ``<name>.voxel/bench.json`` to ``bench.<label>.json`` so the next launch repopulates it.
+
+    404 if the instrument or its bench is missing, 409 if it's active or the archive already exists,
+    422 on an empty label.
+    """
+    try:
+        archive = app.reset_bench(name, label)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (FileExistsError, RuntimeError) as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return {"archived": archive.name}
 
 
 @app_router.post("/templates/{template}/launch")
@@ -175,6 +194,10 @@ class _MetadataSchema(BaseModel):
     target: str  # dotted path or registered schema name
 
 
+class _DefaultScope(BaseModel):
+    include: set[str] | None = None  # None → all promotable baseline fields
+
+
 class DeviceSnapshot(BaseModel):
     """One device's identity + introspected interface, or the error that introspection raised."""
 
@@ -216,6 +239,13 @@ async def get_hardware(inst: InstrumentDep) -> HALConfig:
     return inst.hal.config
 
 
+@instrument_router.get("/default")
+async def get_default(inst: InstrumentDep) -> InstrumentDefaults:
+    """The on-disk baseline (``config.yaml`` ``default``). Bootstrap for the divergence view; live
+    updates arrive on the ``instrument.default`` topic when ``save_as_default`` changes it."""
+    return inst.default.value
+
+
 @instrument_router.post("/profile/active")
 async def activate_profile(body: _ActivateProfile, inst: InstrumentDep) -> dict[str, str]:
     return {"active": await inst.set_active_profile(body.profile_id)}
@@ -239,6 +269,24 @@ async def apply_settings(inst: InstrumentDep) -> None:
 @instrument_router.post("/settings/save", status_code=204)
 async def save_settings(inst: InstrumentDep) -> None:
     await inst.save_settings()
+
+
+@instrument_router.post("/default/save", status_code=204)
+async def save_as_default(body: _DefaultScope, inst: InstrumentDep) -> None:
+    """Persist the live bench's baseline fields into ``config.yaml``'s ``default`` (all, or ``include``)."""
+    if body.include is None:
+        await inst.save_as_default()
+    else:
+        await inst.save_as_default(body.include)
+
+
+@instrument_router.post("/default/restore", status_code=204)
+async def restore_default(body: _DefaultScope, inst: InstrumentDep) -> None:
+    """Reset the live bench's baseline fields from ``config.yaml``'s ``default`` (all, or ``include``)."""
+    if body.include is None:
+        await inst.restore_default()
+    else:
+        await inst.restore_default(body.include)
 
 
 @instrument_router.patch("/channels/{channel_id}", status_code=204)

@@ -199,5 +199,3 @@ default:
   output:
     max_level: 3
     compression: blosc.lz4
-
-  tasks: {}

@@ -174,6 +174,30 @@ class VoxelApp:
         config.instantiate(target, self.instruments_dir)
         return await self.launch(target)
 
+    def reset_bench(self, name: str, label: str) -> Path:
+        """Archive ``<name>.voxel/bench.json`` to ``bench.<label>.json`` so the next launch repopulates a
+        fresh bench from ``config.default``.
+
+        ``label`` is lowercased with spaces replaced by dashes. Raises if the instrument is active, missing,
+        has no ``bench.json``, or an archive with that label already exists.
+        """
+        if (active := self._active.value) is not None and active.path.stem == name:
+            raise RuntimeError(f"'{name}' is active; close it first")
+        directory = self.instruments_dir / f"{name}.voxel"
+        if not directory.is_dir():
+            raise FileNotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
+        bench = directory / "bench.json"
+        if not bench.exists():
+            raise FileNotFoundError(f"No bench.json to reset for '{name}'")
+        slug = label.strip().lower().replace(" ", "-")
+        if not slug:
+            raise ValueError("label must not be empty")
+        archive = directory / f"bench.{slug}.json"
+        if archive.exists():
+            raise FileExistsError(f"Archive '{archive.name}' already exists")
+        bench.rename(archive)
+        return archive
+
     async def close(self) -> None:
         """Close the active instrument (no-op if none)."""
         if (active := self._active.value) is not None:

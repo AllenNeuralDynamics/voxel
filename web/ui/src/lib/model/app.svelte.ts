@@ -29,6 +29,7 @@ import type {
   ChannelPatch,
   DeviceSnapshot,
   HALConfig,
+  InstrumentDefaults,
   InstrumentsCatalog,
   InstrumentStatus,
   JsonSchema,
@@ -249,6 +250,7 @@ export class Stage {
 export class Instrument {
   status = $state.raw<InstrumentStatus>(undefined as unknown as InstrumentStatus); // set in the constructor
   hal = $state.raw<HALConfig>(undefined as unknown as HALConfig);
+  default = $state.raw<InstrumentDefaults>(undefined as unknown as InstrumentDefaults);
 
   readonly devices = new SvelteMap<string, DeviceHandle>();
 
@@ -410,10 +412,17 @@ export class Instrument {
   #unsubs: Unsub[] = [];
   #schemaCls: string | null = null; // metadata_cls the schema was last fetched for
 
-  constructor(client: Client, status: InstrumentStatus, hal: HALConfig, devices: Record<string, DeviceSnapshot>) {
+  constructor(
+    client: Client,
+    status: InstrumentStatus,
+    hal: HALConfig,
+    defaults: InstrumentDefaults,
+    devices: Record<string, DeviceSnapshot>
+  ) {
     this.#client = client;
     this.status = status;
     this.hal = hal;
+    this.default = defaults;
     for (const [id, snapshot] of Object.entries(devices)) this.devices.set(id, createDevice(client, snapshot));
     const sx = this.#stageAxis('x');
     const sy = this.#stageAxis('y');
@@ -429,6 +438,7 @@ export class Instrument {
     );
     this.#unsubs.push(client.on('device.props.update', (u) => this.devices.get(u.device)?.ingest(u.properties)));
     this.#unsubs.push(client.on('acquisition.progress', (p) => this.progress.set(`${p.task}:${p.profile}`, p)));
+    this.#unsubs.push(client.on('instrument.default', (d) => (this.default = d)));
     void this.#syncMetadataSchema();
   }
 
@@ -437,12 +447,13 @@ export class Instrument {
     let latest: InstrumentStatus | undefined;
     const buffer = client.on('instrument.status', (s) => (latest = s));
     try {
-      const [fetched, hal, devices] = await Promise.all([
+      const [fetched, hal, defaults, devices] = await Promise.all([
         client.get<InstrumentStatus>('/instrument'),
         client.get<HALConfig>('/instrument/hardware'),
+        client.get<InstrumentDefaults>('/instrument/default'),
         client.get<Record<string, DeviceSnapshot>>('/instrument/devices')
       ]);
-      const instrument = new Instrument(client, latest ?? fetched, hal, devices); // a push during the fetch wins
+      const instrument = new Instrument(client, latest ?? fetched, hal, defaults, devices); // a push during the fetch wins
       void instrument.#refreshDevices(); // initial prop values fill in reactively (the feed only pushes changes)
       return instrument;
     } finally {
@@ -452,12 +463,14 @@ export class Instrument {
 
   /** Re-fetch state + hal + device props over REST — after a reconnect, where pushes may have been missed. */
   async rehydrate(): Promise<void> {
-    const [status, hal] = await Promise.all([
+    const [status, hal, defaults] = await Promise.all([
       this.#client.get<InstrumentStatus>('/instrument'),
-      this.#client.get<HALConfig>('/instrument/hardware')
+      this.#client.get<HALConfig>('/instrument/hardware'),
+      this.#client.get<InstrumentDefaults>('/instrument/default')
     ]);
     this.status = status;
     this.hal = hal;
+    this.default = defaults;
     void this.#refreshDevices();
   }
 
@@ -493,6 +506,14 @@ export class Instrument {
 
   saveSettings(): Promise<void> {
     return this.#client.post('/instrument/settings/save');
+  }
+
+  saveAsDefault(): Promise<void> {
+    return this.#client.post('/instrument/default/save', {});
+  }
+
+  restoreDefault(): Promise<void> {
+    return this.#client.post('/instrument/default/restore', {});
   }
 
   updateChannel(channelId: string, patch: ChannelPatch): Promise<void> {
@@ -744,6 +765,12 @@ export class VoxelApp {
   async launchTemplate(template: string, name?: string): Promise<void> {
     const query = name ? `?name=${encodeURIComponent(name)}` : '';
     await this.#run(() => this.#client.post(`/templates/${encodeURIComponent(template)}/launch${query}`));
+  }
+
+  async resetBench(name: string, label: string): Promise<void> {
+    const path = `/instruments/${encodeURIComponent(name)}/reset-bench?label=${encodeURIComponent(label)}`;
+    await this.#run(() => this.#client.post(path));
+    await this.refresh();
   }
 
   /** Close the active instrument. */

@@ -36,7 +36,7 @@
 <div class="mb-6 flex items-center justify-between">
   <div class="flex items-center gap-2">
     <span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
-    <h2 class="text-xl font-medium text-fg">
+    <h2 class="text-2xl text-fg">
       {typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
     </h2>
   </div>
@@ -66,7 +66,7 @@
     <!-- Status readback -->
     {#if typeof measured === 'number' || typeof temperature === 'number'}
       <div class="rounded border border-border bg-card p-3">
-        <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Status</h4>
+        <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Status</h4>
         <div class="grid gap-1.5 text-lg">
           {#if typeof measured === 'number'}
             <div class="flex justify-between">

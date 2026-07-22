@@ -3,11 +3,11 @@
 
   import { ChevronRight } from '$lib/icons';
   import { JsonView } from '$lib/kit';
-  import type { DeviceConfig, HALConfig, InstrumentState, NodeKind } from '$lib/model';
+  import type { DeviceConfig, HALConfig, InstrumentDefaults, NodeKind } from '$lib/model';
 
   interface Props {
     hal: HALConfig;
-    bench: InstrumentState;
+    bench: InstrumentDefaults;
   }
 
   const { hal, bench }: Props = $props();
