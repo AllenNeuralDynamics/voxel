@@ -267,6 +267,30 @@ class AnalogOutput(Device):
         never started). Raises on timeout via the underlying driver.
         """
 
+    def emit(self, signals: AOSignals, timeout_s: float | None = None) -> None:
+        """Play ``signals`` through the hardware exactly once, blocking until done.
+
+        Reserves resources, writes the resolved waveforms, runs a single finite
+        cycle, waits for completion, then tears down so the device returns to its
+        pre-call state. Composed from the driver primitives; does not touch the
+        controller's streaming ``loaded`` / ``state``.
+
+        Args:
+            signals: Signal configuration to emit; resolved via ``signals.arrays()``.
+            timeout_s: Max seconds to wait for the cycle. When ``None``, derived from
+                the signal duration plus a margin.
+        """
+        if timeout_s is None:
+            timeout_s = float(signals.duration) + float(signals.rest_time) + 1.0
+        self.setup(signals)
+        try:
+            self.write(signals.arrays())
+            self.start(repeat=1)
+            self.wait_until_done(timeout_s)
+            self.stop()
+        finally:
+            self.teardown()
+
 
 class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
     """Typed async handle for ``AnalogOutput`` devices.
