@@ -21,7 +21,7 @@
   data-inset={inset}
   data-variant={variant}
   class={cn(
-    "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-lg outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-element-hover data-highlighted:text-fg data-inset:ps-8 data-[variant=destructive]:text-danger data-[variant=destructive]:data-highlighted:bg-danger/10 data-[variant=destructive]:data-highlighted:text-danger dark:data-[variant=destructive]:data-highlighted:bg-danger/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-fg-muted data-[variant=destructive]:*:[svg]:text-danger!",
+    "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-lg outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-element-hover data-highlighted:text-fg data-inset:ps-8 data-[variant=destructive]:data-highlighted:bg-danger/10 data-[variant=destructive]:data-highlighted:text-danger dark:data-[variant=destructive]:data-highlighted:bg-danger/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-fg-muted data-[variant=destructive]:data-highlighted:*:[svg]:text-danger!",
     className
   )}
   {...restProps}

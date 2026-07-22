@@ -70,21 +70,6 @@
   // --- Shell nav ---
 
   let shellRef = $state<HTMLElement | null>(null);
-  const leftPane = createPaneSize(() => shellRef, {
-    min: 560,
-    default: 740,
-    fallback: { min: 30, default: 30, max: 50 }
-  });
-  const rightPane = createPaneSize(() => shellRef, { min: 336, max: 350, fallback: { min: 15, max: 18 } });
-
-  // Vertical split inside the right pane: monitors (top) over the stage gizmo (bottom).
-  let rightSplitEl = $state<HTMLElement | null>(null);
-  const stagePane = createPaneSize(() => rightSplitEl, {
-    default: 280,
-    min: 250,
-    max: 320,
-    fallback: { min: 28, max: 40, default: 32 }
-  });
 
   type Segment = { key: string; label: string; icon?: Component; active: boolean; select: () => void };
 
@@ -129,7 +114,23 @@
     }))
   );
 
-  // --- Bottom pane (logs) ---
+  // Pane sizes
+
+  const leftPane = createPaneSize(() => shellRef, {
+    min: 43,
+    default: 57,
+    fallback: { min: 30, default: 30, max: 50 }
+  });
+  const rightPane = createPaneSize(() => shellRef, { min: 26, max: 27, fallback: { min: 15, max: 18 } });
+
+  // Vertical split inside the right pane: monitors (top) over the stage gizmo (bottom).
+  let rightSplitEl = $state<HTMLElement | null>(null);
+  const stagePane = createPaneSize(() => rightSplitEl, {
+    default: 21.5,
+    min: 19,
+    max: 24.5,
+    fallback: { min: 28, max: 40, default: 32 }
+  });
 
   let bottomPane = $state<Pane | undefined>(undefined);
   const logsOpen = $derived(bottomPane ? !bottomPane.isCollapsed() : false);

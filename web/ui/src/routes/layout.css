@@ -7,6 +7,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --stage-marker: oklch(0.72 0.25 328);
+
   --ui-step: 0.25rem;
   --ui-base: 2.5rem;
 
@@ -18,6 +20,10 @@
 
 .nss {
   vector-effect: non-scaling-stroke;
+}
+
+@utility overlay-panel {
+  @apply rounded-sm border border-border bg-surface/80 shadow-xl backdrop-blur-sm;
 }
 
 @theme {

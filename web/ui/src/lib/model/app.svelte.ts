@@ -143,8 +143,14 @@ export interface StageBounds {
  * (imageable bounds, normalized position) and whole-stage move/halt commands. Constructed reactively by
  * the instrument (re-made when the mapping or FOV changes); the handles carry their own live position.
  */
+/** Axis is treated as "arrived" once it's within this many µm of the commanded target. */
+const TARGET_TOLERANCE_UM = 0.5;
+
 export class Stage {
   readonly #getFov: () => [number, number] | null;
+
+  /** Last commanded absolute position (µm), from any in-app surface. Null until something moves. */
+  target = $state.raw<{ x?: number; y?: number; z?: number } | null>(null);
 
   constructor(
     readonly x: AxisHandle,
@@ -177,16 +183,31 @@ export class Stage {
     return this.moving('x') || this.moving('y') || this.moving('z');
   }
 
+  /** True while the stage is still short of its commanded target on any axis. */
+  readonly targetPending: boolean = $derived.by(() => {
+    const t = this.target;
+    if (!t) return false;
+    return (['x', 'y', 'z'] as const).some((a) => {
+      const want = t[a];
+      return want != null && Math.abs(this.position(a) - want) > TARGET_TOLERANCE_UM;
+    });
+  });
+
   /** Raw [lower, upper] soft limits for an axis (µm), defaulting to [0, 1] until the limits stream in. */
   #range(a: StageAxis): [number, number] {
     const h = this.axis(a);
     return [h.lowerLimit?.value ?? 0, h.upperLimit?.value ?? 1];
   }
 
-  /** Normalized [0,1] position along an axis (guards a zero-length range). */
-  norm(a: StageAxis): number {
+  /** Normalize an absolute µm value onto [0,1] for an axis (guards a zero-length range). */
+  normOf(a: StageAxis, um: number): number {
     const [lo, hi] = this.#range(a);
-    return hi > lo ? (this.position(a) - lo) / (hi - lo) : 0;
+    return hi > lo ? (um - lo) / (hi - lo) : 0;
+  }
+
+  /** Normalized [0,1] position along an axis. */
+  norm(a: StageAxis): number {
+    return this.normOf(a, this.position(a));
   }
   denorm(a: StageAxis, n: number): number {
     const [lo, hi] = this.#range(a);
@@ -210,6 +231,7 @@ export class Stage {
 
   /** Drive the stage to an absolute position (µm); axes omitted from `pos` are left unchanged. */
   moveTo(pos: { x?: number; y?: number; z?: number }): Promise<unknown> {
+    this.target = { ...this.target, ...pos };
     const moves: Promise<unknown>[] = [];
     if (pos.x != null) moves.push(this.x.move(pos.x));
     if (pos.y != null) moves.push(this.y.move(pos.y));
@@ -217,8 +239,9 @@ export class Stage {
     return Promise.all(moves);
   }
 
-  /** Halt all stage axes. */
+  /** Halt all stage axes, abandoning any commanded target. */
   halt(): Promise<unknown> {
+    this.target = null;
     return Promise.all([this.x.halt(), this.y.halt(), this.z.halt()]);
   }
 }

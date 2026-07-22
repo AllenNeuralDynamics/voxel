@@ -85,7 +85,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 font-medium tracking-wide text-fg-muted/70 uppercase">Live</span>
+    <span class="flex-1 text-sm tracking-wide text-fg-muted/70 uppercase">Live</span>
     <Button
       variant="ghost"
       size="icon-xs"

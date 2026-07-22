@@ -46,7 +46,7 @@
 
   function rowClass(active: boolean, hasError: boolean): string {
     return cn(
-      'flex items-center gap-2 rounded px-2 py-1 text-lg transition-colors',
+      'flex items-center gap-2 rounded px-2 py-1 transition-colors',
       hasError ? 'text-danger' : active ? 'text-fg' : 'text-fg-muted hover:text-fg',
       active ? 'bg-element-selected' : 'hover:bg-element-hover'
     );
@@ -57,7 +57,7 @@
   <a
     href={resolve(path)}
     class={cn(
-      'flex items-center rounded px-2 py-1 text-lg transition-colors',
+      'flex items-center rounded px-2 py-1 transition-colors',
       active ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
     )}
   >
@@ -67,13 +67,13 @@
 
 {#snippet sectionHeader(label: string)}
   <div class="mx-4 mt-3 mb-1.5 h-px bg-border"></div>
-  <div class="mb-1 px-4 text-[9px] tracking-wide text-fg-faint uppercase">{label}</div>
+  <div class="mb-1 px-4 text-sm tracking-wide text-fg-faint uppercase">{label}</div>
 {/snippet}
 
 {#snippet deviceRow(id: string)}
   {@const device = instrument?.devices.get(id)}
   <a href={resolve(`/devices/${id}` as '/')} class={rowClass(activeDeviceId === id, !!device?.error)}>
-    <span class="min-w-0 flex-1 truncate">{sanitizeString(id)}</span>
+    <span class="min-w-0 flex-1 truncate" title={sanitizeString(id)}>{sanitizeString(id)}</span>
     <span
       class="h-1.5 w-1.5 shrink-0 rounded-full {device?.connected ? 'bg-success' : 'bg-fg-muted/30'}"
       title={device?.connected ? 'Connected' : 'Disconnected'}
@@ -82,7 +82,7 @@
 {/snippet}
 
 <div class="flex h-full">
-  <aside class="flex w-48 shrink-0 flex-col overflow-auto border-r border-border py-2">
+  <aside class="flex w-44 shrink-0 flex-col overflow-auto border-r border-border py-2">
     <div class="flex flex-col gap-0.5 px-2">
       {@render navItem('Overview', '/', overviewActive)}
       {@render navItem('Config', '/config', configActive)}

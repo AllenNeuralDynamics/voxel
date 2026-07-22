@@ -263,6 +263,7 @@ export interface Painter {
   strokeStyle: string;
   fillStyle: string;
   lineWidthPx: number; // screen px
+  lineDashPx: readonly number[]; // screen px; empty = solid
   globalAlpha: number; // 0..1
 
   // Flip-safe geometry — stage µm
@@ -310,6 +311,7 @@ export class CanvasPainter implements Painter {
   strokeStyle = '#000';
   fillStyle = '#000';
   lineWidthPx = 1;
+  lineDashPx: readonly number[] = [];
   globalAlpha = 1;
 
   readonly #ctx: CanvasRenderingContext2D;
@@ -349,6 +351,7 @@ export class CanvasPainter implements Painter {
     this.#ctx.globalAlpha = this.globalAlpha;
     this.#ctx.strokeStyle = this.strokeStyle;
     this.#ctx.lineWidth = this.px(this.lineWidthPx);
+    this.#ctx.setLineDash(this.lineDashPx.map((n) => this.px(n)));
   }
 
   #applyFill(): void {
@@ -447,6 +450,7 @@ export interface Interaction {
   constrain?: (cam: Camera) => void; // clamp the camera after any pan/zoom (the consumer knows the bounds)
   scaleLimits?: () => readonly [number, number]; // [min, max] scale for wheel-zoom
   onPointerDown?: (world: [number, number], e: PointerEvent) => boolean; // return true to claim the gesture (no pan/click)
+  onHover?: (world: [number, number] | null, e: PointerEvent) => void; // cursor moved over the surface; null on leave
   onClick?: (world: [number, number], e: PointerEvent) => void; // press + release without a drag
   onDblClick?: (world: [number, number], e: MouseEvent) => void;
   onContextMenu?: (world: [number, number], e: MouseEvent) => void; // right-click; the handler opens any menu
@@ -564,6 +568,7 @@ export class Surface {
       el.style.cursor = 'grabbing';
     };
     const move = (e: PointerEvent) => {
+      i.onHover?.(worldAt(e), e);
       if (marqueeing) {
         if (!moved && Math.hypot(e.clientX - downX, e.clientY - downY) > CLICK_SLOP) moved = true;
         if (moved) i.onMarquee?.(boxOf(downWorld, worldAt(e)), false);
@@ -608,8 +613,11 @@ export class Surface {
       this.invalidate();
     };
 
+    const leave = (e: PointerEvent) => i.onHover?.(null, e);
+
     el.addEventListener('pointerdown', down, { passive: true });
     el.addEventListener('pointermove', move, { passive: true });
+    el.addEventListener('pointerleave', leave, { passive: true });
     el.addEventListener('pointerup', up, { passive: true });
     el.addEventListener('dblclick', dblclick);
     el.addEventListener('contextmenu', contextmenu);
@@ -618,6 +626,7 @@ export class Surface {
     return () => {
       el.removeEventListener('pointerdown', down);
       el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerleave', leave);
       el.removeEventListener('pointerup', up);
       el.removeEventListener('dblclick', dblclick);
       el.removeEventListener('contextmenu', contextmenu);

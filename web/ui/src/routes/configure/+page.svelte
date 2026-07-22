@@ -165,7 +165,7 @@
   {@const isDiverged = needsSave && hasSaved}
   {@const link = linkableByModel.get(prop.model)}
   <div class="grid grid-cols-[10rem_minmax(9rem,1fr)_minmax(5.7rem,auto)] items-center gap-2">
-    <div class="flex min-w-0 items-center gap-2 text-lg leading-none text-fg-muted">
+    <div class="flex min-w-0 items-center gap-2 leading-none text-fg-muted">
       <span class="truncate" title={prop.info.desc ?? ''}>
         {prop.label}
       </span>
@@ -190,7 +190,7 @@
     <button
       type="button"
       class={cn(
-        'flex min-w-0 items-center justify-end gap-1 text-lg text-fg-muted',
+        'flex min-w-0 items-center justify-end gap-1 text-fg-muted',
         'w-full text-right font-mono text-base text-fg-muted tabular-nums transition-colors select-none',
         isDiverged ? 'cursor-pointer hover:text-fg' : 'cursor-default',
         !hasSaved && 'invisible'
@@ -200,7 +200,7 @@
       ondblclick={() => toastError(device.setProps({ [name]: saved }))}
     >
       {formatPropValue(saved, stepHint)}
-      <span class="min-w-[2ch] text-xs text-nowrap opacity-50">{prop.units !== '' ? prop.units : '  '}</span>
+      <span class="min-w-[2ch] text-sm text-nowrap opacity-50">{prop.units !== '' ? prop.units : '  '}</span>
     </button>
   </div>
 {/snippet}
@@ -209,7 +209,7 @@
   <div class="flex items-baseline justify-between gap-2 pb-1.5">
     <span class="text-base font-medium text-fg">{sanitizeString(name)}</span>
     {#if type}
-      <span class="py-0.5 font-mono text-xs text-fg-faint">{type}</span>
+      <span class="py-0.5 font-mono text-sm text-fg-faint">{type}</span>
     {/if}
   </div>
 {/snippet}
@@ -238,7 +238,7 @@
             class="flex cursor-pointer items-center gap-2 transition-colors hover:text-fg"
             onclick={() => (roiExpanded = !roiExpanded)}
           >
-            <span class="text-lg">Sensor ROI</span>
+            <span>Sensor ROI</span>
           </button>
           {#if roiLink}
             {@const linked = linkGroups.has(roiLink.key)}
@@ -382,7 +382,7 @@
       <span class="text-base font-medium text-fg">{device.id}</span>
       <div class="ml-auto flex items-center gap-2">
         {#if device.interface?.type}
-          <span class="py-0.5 font-mono text-xs text-fg-faint">{device.interface.type}</span>
+          <span class="py-0.5 font-mono text-sm text-fg-faint">{device.interface.type}</span>
         {/if}
         {#if expanded}
           <ChevronDown width="12" height="12" />
@@ -423,7 +423,7 @@
       <h2 class="text-xl font-medium text-fg">
         {instrument.activeProfile?.label || sanitizeString(instrument.activeProfileId ?? '') || '—'}
       </h2>
-      <span class="text-base text-fg-muted">
+      <span class="text-fg-muted">
         {instrument.activeChannels.length} channel{instrument.activeChannels.length === 1 ? '' : 's'}
       </span>
 
@@ -439,7 +439,7 @@
           <!-- Header: channel identity + emission accent -->
           <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
             <span class="text-lg font-medium text-fg">{ch.label}</span>
-            <span class="flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">
+            <span class="flex shrink-0 items-center gap-1.5 text-sm text-fg-muted">
               <span
                 class="inline-block size-1.5 shrink-0 rounded-full"
                 style="background-color: {accent ?? 'var(--color-fg-muted)'};"
@@ -471,7 +471,7 @@
     </div>
     {#if syncDevices.length > 0}
       <div class="mt-6">
-        <h3 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Sync</h3>
+        <h3 class="mb-2 font-medium tracking-wide text-fg-muted/70 uppercase">Sync</h3>
         <div class="flex flex-wrap gap-4">
           {#each syncDevices as dev (dev.id)}
             <div class="max-w-md min-w-72 flex-1 rounded-sm border border-border bg-card px-3 py-3">

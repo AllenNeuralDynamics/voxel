@@ -1,21 +1,32 @@
 import { ElementSize } from 'runed';
 
+let rootPx = $state(16);
+
+if (typeof document !== 'undefined') {
+  const read = () => {
+    rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  };
+  read();
+  new MutationObserver(read).observe(document.documentElement, { attributeFilter: ['style'] });
+}
+
 export interface PaneSizeBounds {
-  /** Minimum extent in px, along the group's direction (width if horizontal, height if vertical). */
+  /** Minimum extent in rem, along the group's direction (width if horizontal, height if vertical). */
   min?: number;
-  /** Maximum extent in px, along the group's direction. */
+  /** Maximum extent in rem, along the group's direction. */
   max?: number;
-  /** Default (initial) extent in px, along the group's direction. */
+  /** Default (initial) extent in rem, along the group's direction. */
   default?: number;
   /** Percentages to use before the container is measured. */
   fallback?: { min?: number; max?: number; default?: number };
 }
 
 /**
- * Reactive pixel-based pane sizing for paneforge. Converts px bounds to the percentages a `<Pane>`
+ * Reactive rem-based pane sizing for paneforge. Converts rem bounds to the percentages a `<Pane>`
  * expects, measuring the axis that matches the group's `data-direction` (width for horizontal groups,
- * height for vertical). Spread the whole result onto the pane:
- * `<Pane {...createPaneSize(() => el, { default: 280, min: 250, max: 320 })} />`.
+ * height for vertical). Bounds track the root font size, so panes scale with the density setting.
+ * Spread the whole result onto the pane:
+ * `<Pane {...createPaneSize(() => el, { default: 21.5, min: 19, max: 24.5 })} />`.
  *
  * `defaultSize` is only present when `default` is set, so the spread never clobbers a literal default
  * on panes that don't use one.
@@ -34,9 +45,9 @@ export function createPaneSize(containerEl: () => HTMLElement | null, bounds: Pa
     const rect = el.getBoundingClientRect();
     return vertical ? rect.height : rect.width;
   };
-  const pct = (px: number, fallback: number) => {
+  const pct = (rem: number, fallback: number) => {
     const ext = extent();
-    return ext > 0 ? (px / ext) * 100 : fallback;
+    return ext > 0 ? ((rem * rootPx) / ext) * 100 : fallback;
   };
 
   const result: { minSize?: number; maxSize?: number; defaultSize?: number } = {

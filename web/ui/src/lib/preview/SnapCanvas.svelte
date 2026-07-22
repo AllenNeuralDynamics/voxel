@@ -761,7 +761,6 @@
   });
 
   const shadow = 'drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]';
-  const overlayCard = 'border border-border bg-surface/80 shadow-xl backdrop-blur-sm rounded-md';
 </script>
 
 {#snippet snapMenu(snap: Snapshot)}
@@ -1044,10 +1043,7 @@
         {@const f = focused}
         {@const inst = app.instrument}
         <div
-          class={cn(
-            'pointer-events-auto flex w-60 flex-col divide-y divide-border/50 overflow-hidden text-base',
-            overlayCard
-          )}
+          class="pointer-events-auto flex w-60 flex-col divide-y divide-border/50 overflow-hidden overlay-panel text-base"
         >
           <!-- Name (double-click to rename) + profile -->
           <div class="flex min-h-8 items-center justify-between gap-2 px-2.5">

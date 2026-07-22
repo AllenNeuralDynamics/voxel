@@ -50,7 +50,7 @@
 </script>
 
 {#if entries.length > 0}
-  <div class="space-y-px text-lg">
+  <div class="space-y-px">
     {#each entries as { key, value } (key)}
       {#if isContainer(value)}
         <details open={depth < expandDepth}>

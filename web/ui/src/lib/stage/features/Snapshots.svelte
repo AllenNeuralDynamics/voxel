@@ -11,6 +11,12 @@
   import type { Bounds, Painter } from '../draw';
   import { getStageScene, type StageLayer, useLayer } from '../scene.svelte';
 
+  // The tiles a marquee covers. Distinct from the point hit (a single Snapshot) — every marquee action
+  // is set-shaped, so it carries ids rather than the snapshots themselves.
+  interface TilesHit {
+    ids: string[];
+  }
+
   const app = getVoxelApp();
   const snaps = app.snaps;
   const scene = getStageScene();
@@ -24,6 +30,7 @@
   const selected = $derived(active?.selected ?? null); // multi-selected snap ids in the shown group
 
   const groups = $derived(snaps.snapshotGroupList);
+  const otherGroups = $derived(groups.filter((g) => g.id !== activeGroupId)); // valid "move to" destinations
   const targetGroupId = $derived(snaps.targetGroupId);
 
   let isolated = $state<Snapshot | null>(null);
@@ -123,6 +130,18 @@
     return null;
   }
 
+  // Every tile whose FOV footprint overlaps the marquee; null when it covers none, so the section hides.
+  function hitTiles(rect: Bounds): TilesHit | null {
+    const covered = tiles.filter(
+      (t) =>
+        rect.maxX > t.stageX - t.fovW / 2 &&
+        rect.minX < t.stageX + t.fovW / 2 &&
+        rect.maxY > t.stageY - t.fovH / 2 &&
+        rect.minY < t.stageY + t.fovH / 2
+    );
+    return covered.length ? { ids: covered.map((t) => t.id) } : null;
+  }
+
   const MAX_UPSCALE = 4; // don't upscale a tile's source pixels beyond this, or it turns blocky
   function tileMaxScale(): number | null {
     let nativePxPerUm = 0;
@@ -133,7 +152,7 @@
     return nativePxPerUm > 0 ? nativePxPerUm * MAX_UPSCALE : null;
   }
 
-  const layer: StageLayer<Snapshot> = {
+  const layer: StageLayer<Snapshot, TilesHit> = {
     id: 'snapshots',
     z: 0,
     get visible() {
@@ -147,6 +166,8 @@
       isolated = snap;
     },
     menu: tileMenu,
+    hitMarquee: hitTiles,
+    marqueeMenu: tilesMenu,
     maxScale: tileMaxScale
   };
   useLayer(layer);
@@ -349,16 +370,31 @@
   </div>
 {/snippet}
 
+{#snippet selectedLabel(text: string)}
+  <ContextMenu.Label class="font-normal text-fg-muted">
+    <span class="truncate">{text}</span>
+  </ContextMenu.Label>
+{/snippet}
+
+{#snippet tilesMenu(hit: TilesHit)}
+  {@render selectedLabel(`Selected ${hit.ids.length} snapshots`)}
+  {@render tileActions(hit.ids)}
+{/snippet}
+
 {#snippet tileMenu(snap: Snapshot)}
   {@const ids = menuTargets(snap)}
-  {@const many = ids.length > 1}
+  {@render selectedLabel(ids.length > 1 ? `Selected ${ids.length} snapshots` : `Selected ${snap.label}`)}
   <ContextMenu.Item onSelect={() => goToSnap(snap)}>
     <Crosshair width="14" height="14" />
     Go to snapshot
   </ContextMenu.Item>
+  {@render tileActions(ids)}
+{/snippet}
+
+{#snippet tileActions(ids: string[])}
   <ContextMenu.Item onSelect={() => fitTiles(ids)}>
     <FitToScreen width="14" height="14" />
-    {many ? `Recenter ${ids.length} selected` : 'Recenter'}
+    Recenter
   </ContextMenu.Item>
   <ContextMenu.Sub>
     <ContextMenu.SubTrigger>
@@ -366,25 +402,24 @@
       Move to
     </ContextMenu.SubTrigger>
     <ContextMenu.SubContent class="min-w-40">
-      {#each groups as g (g.id)}
-        {#if g.id !== activeGroupId}
-          <ContextMenu.Item onSelect={() => snaps.moveToSnapshotGroup(ids, g.id)}>
-            <ImageMultiple width="14" height="14" />
-            {g.name}
-          </ContextMenu.Item>
-        {/if}
+      {#each otherGroups as g (g.id)}
+        <ContextMenu.Item onSelect={() => snaps.moveToSnapshotGroup(ids, g.id)}>
+          <ImageMultiple width="14" height="14" />
+          {g.name}
+        </ContextMenu.Item>
       {/each}
-      <ContextMenu.Separator />
+      {#if otherGroups.length > 0}
+        <ContextMenu.Separator />
+      {/if}
       <ContextMenu.Item onSelect={() => moveToNewGroup(ids)}>
         <Plus width="14" height="14" />
         New group
       </ContextMenu.Item>
     </ContextMenu.SubContent>
   </ContextMenu.Sub>
-  <ContextMenu.Separator />
   <ContextMenu.Item variant="destructive" onSelect={() => snaps.remove(ids)}>
     <TrashCanOutline width="14" height="14" />
-    {many ? `Delete ${ids.length} snapshots` : 'Delete'}
+    Delete
   </ContextMenu.Item>
 {/snippet}
 
@@ -439,7 +474,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Snapshots</span>
+    <span class="flex-1 text-sm tracking-wide text-fg-muted/70 uppercase">Snapshots</span>
     <Button variant="ghost" size="icon-xs" title="New group" onclick={() => snaps.createSnapshotGroup()}>
       <Plus width="16" height="16" />
     </Button>

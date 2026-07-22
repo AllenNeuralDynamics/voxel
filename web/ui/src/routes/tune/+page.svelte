@@ -556,8 +556,8 @@
 
   let paneGroupEl = $state<HTMLElement | null>(null);
   const sidebarSize = createPaneSize(() => paneGroupEl, {
-    min: 260,
-    max: 320,
+    min: 20,
+    max: 24.5,
     fallback: {
       min: 30,
       max: 40,
@@ -565,7 +565,7 @@
     }
   });
   const mainPanelSize = createPaneSize(() => paneGroupEl, {
-    min: 350,
+    min: 27,
     fallback: {
       min: 55,
       default: 70

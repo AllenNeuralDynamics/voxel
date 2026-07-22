@@ -109,6 +109,16 @@
     };
   }
 
+  // A right-click with no marquee erases one FOV footprint centered on the point — the same region the
+  // hover ghost is showing, resolved through the marquee path since a footprint is just a region.
+  function hitPoint(world: [number, number]): EraseHit | null {
+    const f = stage?.fov;
+    if (!f) return null;
+    const [fw, fh] = f;
+    const [x, y] = world;
+    return hitMarquee({ minX: x - fw / 2, minY: y - fh / 2, maxX: x + fw / 2, maxY: y + fh / 2 });
+  }
+
   const layer: StageLayer<EraseHit> = {
     id: 'inpaint',
     z: -1, // beneath the snapshots layer (z 0) — a background navigation map
@@ -116,7 +126,9 @@
       return viewedList.length > 0;
     },
     draw,
+    hitTest: hitPoint,
     hitMarquee,
+    menu: eraseMenu,
     marqueeMenu: eraseMenu,
     maxScale: mosaicMaxScale
   };
@@ -254,7 +266,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Inpaint</span>
+    <span class="flex-1 text-sm tracking-wide text-fg-muted/70 uppercase">Inpaint</span>
     <Button variant="ghost" size="icon-xs" title="New mosaic" onclick={createMosaic}>
       <Plus width="16" height="16" />
     </Button>
