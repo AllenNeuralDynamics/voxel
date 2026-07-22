@@ -25,7 +25,7 @@
 
 <div class={cn('flex w-full min-w-68 flex-col py-2', className)}>
   <div class="flex shrink-0 items-center gap-2 px-3 py-1">
-    <span class="text-xs font-medium tracking-wide text-fg-muted uppercase">Cameras</span>
+    <span class=" font-medium tracking-wide text-fg-muted uppercase">Cameras</span>
     <div class="flex-1"></div>
     <span class="font-mono text-[10px] text-fg-faint tabular-nums">{allCameras.length}</span>
   </div>
@@ -36,7 +36,7 @@
         {@render cameraRow(cam)}
       {/each}
     {:else}
-      <p class="text-xs text-fg-muted/60">No cameras.</p>
+      <p class=" text-fg-muted/60">No cameras.</p>
     {/if}
   </div>
 </div>

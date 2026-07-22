@@ -361,14 +361,14 @@
 
 <div class={cn('flex h-full flex-col gap-0', className)}>
   <div class="flex items-center justify-between gap-2">
-    <span class="text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Stage</span>
+    <span class=" font-medium tracking-wide text-fg-muted/70 uppercase">Stage</span>
     <div class="flex items-center gap-2">
       <div class="flex overflow-hidden rounded border border-border">
         {#each AXES as a (a)}
           <button
             onclick={() => toggle(a)}
             class={cn(
-              'w-7 cursor-pointer border-l border-border py-0.5 text-xs uppercase transition-colors first:border-l-0',
+              'w-7 cursor-pointer border-l border-border py-0.5  uppercase transition-colors first:border-l-0',
               shown[a] ? AXIS_ON[a] : 'text-fg-faint hover:text-fg-muted'
             )}
             title={`View down ${a.toUpperCase()}`}

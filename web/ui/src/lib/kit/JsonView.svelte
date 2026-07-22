@@ -50,7 +50,7 @@
 </script>
 
 {#if entries.length > 0}
-  <div class="space-y-px text-sm">
+  <div class="space-y-px text-lg">
     {#each entries as { key, value } (key)}
       {#if isContainer(value)}
         <details open={depth < expandDepth}>
@@ -65,7 +65,7 @@
               <path d="M6 4l4 4-4 4z" />
             </svg>
             <span class="text-fg-muted">{key}:</span>
-            <span class="text-xs text-fg-faint">{summary(value)}</span>
+            <span class="text-base text-fg-faint">{summary(value)}</span>
           </summary>
           <div class="ml-2 border-l border-border/50 pl-2">
             <JsonView data={value} depth={depth + 1} {expandDepth} />
@@ -80,5 +80,5 @@
     {/each}
   </div>
 {:else if data != null && typeof data !== 'object'}
-  <span class="font-mono text-sm {primitiveClass(data)}">{primitiveText(data)}</span>
+  <span class="font-mono text-lg {primitiveClass(data)}">{primitiveText(data)}</span>
 {/if}

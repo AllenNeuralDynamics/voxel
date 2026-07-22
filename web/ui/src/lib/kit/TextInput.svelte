@@ -19,23 +19,23 @@
       size: {
         xs: {
           wrapper: 'h-ui-xs',
-          input: 'px-1.5 text-xs',
-          prefix: 'ps-1.5 text-xs'
+          input: 'px-1.5 text-base',
+          prefix: 'ps-1.5 text-base'
         },
         sm: {
           wrapper: 'h-ui-sm',
-          input: 'px-1.5 text-xs',
-          prefix: 'ps-1.5 text-xs'
+          input: 'px-1.5 text-base',
+          prefix: 'ps-1.5 text-base'
         },
         md: {
           wrapper: 'h-ui-md',
-          input: 'px-2 text-sm',
-          prefix: 'ps-2 text-sm'
+          input: 'px-2 text-lg',
+          prefix: 'ps-2 text-lg'
         },
         lg: {
           wrapper: 'h-ui-lg',
-          input: 'px-2.5 text-base',
-          prefix: 'ps-2.5 text-base'
+          input: 'px-2.5 text-xl',
+          prefix: 'ps-2.5 text-xl'
         }
       }
     },

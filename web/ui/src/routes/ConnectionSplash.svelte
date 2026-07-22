@@ -18,7 +18,7 @@
     <div class="flex items-center justify-between gap-2 px-6 py-4">
       <div class="flex items-center gap-2">
         <VoxelLogo class="h-6 w-6" />
-        <h1 class="text-lg font-light tracking-wide text-fg uppercase">Voxel</h1>
+        <h1 class="text-2xl font-light tracking-wide text-fg uppercase">Voxel</h1>
       </div>
       <button
         title="Appearance"
@@ -35,11 +35,11 @@
     <div class="flex flex-1 items-center justify-between gap-4 p-8">
       <div class="flex min-w-0 flex-col gap-2">
         {#if connectionState === 'failed'}
-          <p class="text-sm text-danger">Connection Failed</p>
+          <p class="text-lg text-danger">Connection Failed</p>
         {:else}
-          <p class="text-sm text-fg-muted">Connecting&hellip;</p>
+          <p class="text-lg text-fg-muted">Connecting&hellip;</p>
         {/if}
-        <p class="truncate font-mono text-xs text-fg-muted/70" title={app.client.wsUrl}>
+        <p class="truncate font-mono text-base text-fg-muted/70" title={app.client.wsUrl}>
           {app.client.wsUrl}
         </p>
       </div>
@@ -48,7 +48,7 @@
         <div
           class="flex size-16 shrink-0 items-center justify-center rounded-full border-3 border-danger/70 text-danger/70"
         >
-          <span class="text-3xl leading-none font-black">!</span>
+          <span class="text-4xl leading-none font-black">!</span>
         </div>
       {:else}
         <div class="size-16 shrink-0 animate-spin rounded-full border-3 border-border border-t-primary"></div>
@@ -61,7 +61,7 @@
     <div class="flex h-ui-md items-center justify-end gap-2 px-4">
       {#if connectionState === 'failed'}
         <button
-          class="flex-1 cursor-pointer px-2 py-1 text-center text-xs hover:text-danger/80"
+          class="flex-1 cursor-pointer px-2 py-1 text-center text-base hover:text-danger/80"
           onclick={() => app.retryConnection()}
         >
           Retry

@@ -35,20 +35,20 @@
       },
       size: {
         xs: {
-          trigger: 'h-ui-xs min-h-ui-xs px-1.5 text-xs',
-          item: 'min-h-ui-xs px-1.5 py-1 text-xs'
+          trigger: 'h-ui-xs min-h-ui-xs px-1.5 text-base',
+          item: 'min-h-ui-xs px-1.5 py-1 text-base'
         },
         sm: {
-          trigger: 'h-ui-sm min-h-ui-sm px-1.5 text-xs',
-          item: 'min-h-ui-sm px-1.5 py-1 text-xs'
+          trigger: 'h-ui-sm min-h-ui-sm px-1.5 text-base',
+          item: 'min-h-ui-sm px-1.5 py-1 text-base'
         },
         md: {
-          trigger: 'h-ui-md min-h-ui-md px-2 text-sm',
-          item: 'min-h-ui-md px-2 py-1 text-sm'
+          trigger: 'h-ui-md min-h-ui-md px-2 text-lg',
+          item: 'min-h-ui-md px-2 py-1 text-lg'
         },
         lg: {
-          trigger: 'h-ui-lg min-h-ui-lg px-2.5 text-base capitalize',
-          item: 'min-h-ui-lg px-2.5 py-1.5 text-base'
+          trigger: 'h-ui-lg min-h-ui-lg px-2.5 text-xl capitalize',
+          item: 'min-h-ui-lg px-2.5 py-1.5 text-xl'
         }
       }
     },
@@ -164,7 +164,7 @@
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content {side} {sideOffset} {align} class={styles.content()}>
       {#if options.length === 0 && emptyMessage}
-        <div class="px-3 py-2 text-base text-fg-muted">{emptyMessage}</div>
+        <div class="px-3 py-2 text-xl text-fg-muted">{emptyMessage}</div>
       {:else}
         <SelectPrimitive.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
           <SelectPrimitive.Group>
@@ -187,7 +187,7 @@
                 <div class="flex flex-col gap-0.5">
                   <span class="text-fg">{option.label}</span>
                   {#if option.description}
-                    <span class="text-xs text-fg-muted">{option.description}</span>
+                    <span class="text-base text-fg-muted">{option.description}</span>
                   {/if}
                 </div>
                 {#if trailing}

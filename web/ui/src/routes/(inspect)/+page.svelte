@@ -6,10 +6,10 @@
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
 
-  const headingClass = 'mb-2 text-xs tracking-wide text-fg-muted uppercase';
+  const headingClass = 'mb-2 tracking-wide text-fg-muted uppercase';
   const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3';
   const rowLabelClass = 'whitespace-nowrap text-fg-muted';
-  const rowValueClass = 'truncate font-mono text-sm text-fg';
+  const rowValueClass = 'truncate font-mono text-fg';
 
   function formatRelative(iso: string): string {
     if (!iso) return '';
@@ -42,13 +42,13 @@
   <!-- Identity / status -->
   <section class="border-b border-border px-4 pt-2 pb-6">
     <div class="flex items-center gap-2">
-      <h2 class="text-base font-medium text-fg">{app.activeName ?? 'Instrument'}</h2>
-      <span class="rounded-full bg-element-bg px-1.5 py-px text-xs font-medium text-fg-muted uppercase">
+      <h2 class="text-xl font-medium text-fg">{app.activeName ?? 'Instrument'}</h2>
+      <span class="rounded-full bg-element-bg px-1.5 py-px font-medium text-fg-muted uppercase">
         {instrument.mode}
       </span>
     </div>
 
-    <dl class="mt-4 grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+    <dl class="mt-4 grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
       <dt class={rowLabelClass}>Active profile</dt>
       <dd class={rowValueClass}>{(activeProfile?.label ?? sanitizeString(instrument.activeProfileId)) || '—'}</dd>
 
@@ -86,8 +86,8 @@
     <h3 class={headingClass}>Channels</h3>
     <div class={cardGroupClass}>
       {#each Object.entries(imaging.channels) as [channelId, channel] (channelId)}
-        <div class="rounded-lg border bg-card p-3 text-sm text-fg shadow-sm">
-          <div class="mb-2 flex items-center gap-2">
+        <div class="rounded-lg border bg-card p-3 text-fg shadow-sm">
+          <div class="mb-2 flex items-center gap-2 text-lg">
             {#if channel.emission}
               <span
                 class="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -124,16 +124,16 @@
     {@const channels = instrument.imaging.channels}
     {@const isActive = profileId === instrument.activeProfileId}
     {#if profile}
-      <div class="rounded-lg border bg-card p-3 text-sm text-fg shadow-sm">
+      <div class="rounded-lg border bg-card p-3 shadow-sm">
         <div class="mb-2 flex items-center justify-between gap-2">
-          <span class="truncate font-medium text-fg">{profile.label ?? sanitizeString(profileId)}</span>
+          <span class="truncate text-lg font-medium text-fg">{profile.label ?? sanitizeString(profileId)}</span>
           {#if isActive}
-            <span class="shrink-0 rounded-full bg-success/15 px-1.5 py-px text-center text-xs font-medium text-success">
+            <span class="shrink-0 rounded-full bg-success/15 px-1.5 py-px text-center font-medium text-success">
               Active
             </span>
           {:else}
             <button
-              class="shrink-0 cursor-pointer rounded-full border border-fg-faint px-1.5 py-px text-center text-xs font-medium text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+              class="shrink-0 cursor-pointer rounded-full border border-fg-faint px-1.5 py-px text-center font-medium text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
               onclick={() => toastError(instrument.setActiveProfile(profileId))}
             >
               Activate
@@ -148,7 +148,7 @@
             {#each profile.channels as channelId (channelId)}
               {@const ch = channels[channelId]}
               {#if ch}
-                <span class="flex items-center gap-1 rounded bg-element-bg px-1.5 py-0.5 text-xs text-fg-muted">
+                <span class="flex items-center gap-1 rounded bg-element-bg px-1.5 py-0.5 text-fg-muted">
                   {#if ch.emission}
                     <span class="h-1.5 w-1.5 rounded-full" style="background-color: {wavelengthToColor(ch.emission)}"
                     ></span>

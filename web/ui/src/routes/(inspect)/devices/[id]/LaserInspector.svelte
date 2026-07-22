@@ -36,7 +36,7 @@
 <div class="mb-6 flex items-center justify-between">
   <div class="flex items-center gap-2">
     <span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
-    <h2 class="text-base font-medium text-fg">
+    <h2 class="text-xl font-medium text-fg">
       {typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
     </h2>
   </div>
@@ -58,7 +58,7 @@
       {@const ps = laser.powerSetpoint}
       {@const info = laser.interface?.properties?.['power_setpoint']}
       <div class="grid gap-1">
-        <span class="text-xs font-medium text-fg-muted">{info?.label ?? 'Power'}</span>
+        <span class="text-base font-medium text-fg-muted">{info?.label ?? 'Power'}</span>
         <PropInput model={ps} size="xs" />
       </div>
     {/if}
@@ -66,8 +66,8 @@
     <!-- Status readback -->
     {#if typeof measured === 'number' || typeof temperature === 'number'}
       <div class="rounded border border-border bg-card p-3">
-        <h4 class="mb-2 text-xs font-medium tracking-wide text-fg-muted uppercase">Status</h4>
-        <div class="grid gap-1.5 text-sm">
+        <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Status</h4>
+        <div class="grid gap-1.5 text-lg">
           {#if typeof measured === 'number'}
             <div class="flex justify-between">
               <span class="text-fg-muted">Power</span>
@@ -89,6 +89,6 @@
   </div>
 {:else}
   <div class="flex items-center justify-center py-12">
-    <p class="text-base text-fg-muted">Laser not available</p>
+    <p class="text-xl text-fg-muted">Laser not available</p>
   </div>
 {/if}

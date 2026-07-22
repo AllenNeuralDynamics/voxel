@@ -164,8 +164,8 @@
   {@const saved = div?.saved[name]}
   {@const isDiverged = needsSave && hasSaved}
   {@const link = linkableByModel.get(prop.model)}
-  <div class="grid grid-cols-[9rem_minmax(8rem,1fr)_minmax(5rem,auto)] items-center gap-2">
-    <div class="flex min-w-0 items-center gap-2 text-sm leading-none text-fg-muted">
+  <div class="grid grid-cols-[10rem_minmax(9rem,1fr)_minmax(5.7rem,auto)] items-center gap-2">
+    <div class="flex min-w-0 items-center gap-2 text-lg leading-none text-fg-muted">
       <span class="truncate" title={prop.info.desc ?? ''}>
         {prop.label}
       </span>
@@ -190,8 +190,8 @@
     <button
       type="button"
       class={cn(
-        'flex min-w-0 items-center justify-end gap-1 text-sm text-fg-muted',
-        'w-full text-right font-mono text-xs text-fg-muted tabular-nums transition-colors select-none',
+        'flex min-w-0 items-center justify-end gap-1 text-lg text-fg-muted',
+        'w-full text-right font-mono text-base text-fg-muted tabular-nums transition-colors select-none',
         isDiverged ? 'cursor-pointer hover:text-fg' : 'cursor-default',
         !hasSaved && 'invisible'
       )}
@@ -200,16 +200,16 @@
       ondblclick={() => toastError(device.setProps({ [name]: saved }))}
     >
       {formatPropValue(saved, stepHint)}
-      <span class="min-w-[2ch] text-[0.65rem] text-nowrap opacity-50">{prop.units !== '' ? prop.units : '  '}</span>
+      <span class="min-w-[2ch] text-xs text-nowrap opacity-50">{prop.units !== '' ? prop.units : '  '}</span>
     </button>
   </div>
 {/snippet}
 
 {#snippet sectionHeader(name: string, type?: string)}
   <div class="flex items-baseline justify-between gap-2 pb-1.5">
-    <span class="text-xs font-medium text-fg">{sanitizeString(name)}</span>
+    <span class="text-base font-medium text-fg">{sanitizeString(name)}</span>
     {#if type}
-      <span class="py-0.5 font-mono text-[0.65rem] text-fg-faint">{type}</span>
+      <span class="py-0.5 font-mono text-xs text-fg-faint">{type}</span>
     {/if}
   </div>
 {/snippet}
@@ -238,7 +238,7 @@
             class="flex cursor-pointer items-center gap-2 transition-colors hover:text-fg"
             onclick={() => (roiExpanded = !roiExpanded)}
           >
-            <span class="text-sm">Sensor ROI</span>
+            <span class="text-lg">Sensor ROI</span>
           </button>
           {#if roiLink}
             {@const linked = linkGroups.has(roiLink.key)}
@@ -268,7 +268,7 @@
         </div>
 
         {#if roiExpanded}
-          <div class="grid grid-cols-[9rem_1fr] gap-8 pt-2">
+          <div class="grid grid-cols-[10rem_1fr] gap-8 pt-2">
             <!-- SVG sensor diagram -->
             <svg
               viewBox="0 0 {sensorW} {sensorH}"
@@ -379,10 +379,10 @@
       class="flex w-full cursor-pointer items-center gap-2 pb-1.5 text-left text-fg-muted transition-colors hover:text-fg"
       onclick={() => (expanded ? expandedDevices.delete(device.id) : expandedDevices.add(device.id))}
     >
-      <span class="text-xs font-medium text-fg">{device.id}</span>
+      <span class="text-base font-medium text-fg">{device.id}</span>
       <div class="ml-auto flex items-center gap-2">
         {#if device.interface?.type}
-          <span class="py-0.5 font-mono text-[0.65rem] text-fg-faint">{device.interface.type}</span>
+          <span class="py-0.5 font-mono text-xs text-fg-faint">{device.interface.type}</span>
         {/if}
         {#if expanded}
           <ChevronDown width="12" height="12" />
@@ -408,11 +408,11 @@
   {@const wheel = setting.wheel}
   {@const declared = setting.filter}
   <div class="flex min-h-ui-xs items-center justify-between gap-2">
-    <span class="text-xs text-fg-muted">{sanitizeString(wheel.id)}</span>
+    <span class="text-base text-fg-muted">{sanitizeString(wheel.id)}</span>
     {#if declared}
-      <span class="text-xs text-fg tabular-nums">{declared}</span>
+      <span class="text-base text-fg tabular-nums">{declared}</span>
     {:else}
-      <span class="text-xs text-fg-faint italic">none declared</span>
+      <span class="text-base text-fg-faint italic">none declared</span>
     {/if}
   </div>
 {/snippet}
@@ -420,10 +420,10 @@
 <section class="flex flex-1 flex-col p-4">
   {#if instrument}
     <header class="mb-4 flex flex-wrap items-center gap-4">
-      <h2 class="text-base font-medium text-fg">
+      <h2 class="text-xl font-medium text-fg">
         {instrument.activeProfile?.label || sanitizeString(instrument.activeProfileId ?? '') || '—'}
       </h2>
-      <span class="text-xs text-fg-muted">
+      <span class="text-base text-fg-muted">
         {instrument.activeChannels.length} channel{instrument.activeChannels.length === 1 ? '' : 's'}
       </span>
 
@@ -438,8 +438,8 @@
         <div class="max-w-3xl min-w-96 flex-1 rounded-sm border border-border bg-card/50">
           <!-- Header: channel identity + emission accent -->
           <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
-            <span class="text-sm font-medium text-fg">{ch.label}</span>
-            <span class="flex shrink-0 items-center gap-1.5 text-[0.65rem] text-fg-muted">
+            <span class="text-lg font-medium text-fg">{ch.label}</span>
+            <span class="flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">
               <span
                 class="inline-block size-1.5 shrink-0 rounded-full"
                 style="background-color: {accent ?? 'var(--color-fg-muted)'};"
@@ -471,7 +471,7 @@
     </div>
     {#if syncDevices.length > 0}
       <div class="mt-6">
-        <h3 class="mb-2 text-xs font-medium tracking-wide text-fg-muted/70 uppercase">Sync</h3>
+        <h3 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Sync</h3>
         <div class="flex flex-wrap gap-4">
           {#each syncDevices as dev (dev.id)}
             <div class="max-w-md min-w-72 flex-1 rounded-sm border border-border bg-card px-3 py-3">

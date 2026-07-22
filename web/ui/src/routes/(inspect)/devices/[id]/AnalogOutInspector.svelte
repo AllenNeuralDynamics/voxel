@@ -24,7 +24,7 @@
 
 <!-- Header -->
 <div class="mb-6 flex items-center justify-between">
-  <h2 class="text-base font-medium text-fg">{sanitizeString(deviceId)}</h2>
+  <h2 class="text-xl font-medium text-fg">{sanitizeString(deviceId)}</h2>
   <span
     class={cn('h-2 w-2 rounded-full', ao?.connected ? 'bg-success' : 'bg-fg-muted/30')}
     title={ao?.connected ? 'Connected' : 'Disconnected'}
@@ -35,16 +35,16 @@
   <!-- Engine state -->
   {#if engineState}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-xs font-medium tracking-wide text-fg-muted uppercase">Engine State</h4>
-      <p class="font-mono text-sm text-fg">{engineState}</p>
+      <h4 class="mb-2 font-medium tracking-wide text-fg-muted uppercase">Engine State</h4>
+      <p class="font-mono text-fg">{engineState}</p>
     </div>
   {/if}
 
   <!-- Output ports -->
   {#if ports.length > 0}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-xs font-medium tracking-wide text-fg-muted uppercase">Output Ports</h4>
-      <div class="grid gap-1.5 text-sm">
+      <h4 class="mb-2 font-medium tracking-wide text-fg-muted uppercase">Output Ports</h4>
+      <div class="grid gap-1.5">
         {#each ports as [name, pin] (name)}
           <div class="flex items-center justify-between">
             <span class="text-fg">{name}</span>
@@ -58,8 +58,8 @@
   <!-- Trigger inputs -->
   {#if triggers.length > 0}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-xs font-medium tracking-wide text-fg-muted uppercase">Trigger Inputs</h4>
-      <div class="grid gap-1.5 text-sm">
+      <h4 class="mb-2 font-medium tracking-wide text-fg-muted uppercase">Trigger Inputs</h4>
+      <div class="grid gap-1.5">
         {#each triggers as [name, pin] (name)}
           <div class="flex items-center justify-between">
             <span class="text-fg">{name}</span>
@@ -73,8 +73,8 @@
   <!-- Loaded signals summary -->
   {#if loaded}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-xs font-medium tracking-wide text-fg-muted uppercase">Loaded Signals</h4>
-      <div class="grid gap-1.5 text-sm">
+      <h4 class="mb-2 font-medium tracking-wide text-fg-muted uppercase">Loaded Signals</h4>
+      <div class="grid gap-1.5">
         <div class="flex items-center justify-between">
           <span class="text-fg-muted">Sample rate</span>
           <span class="font-mono text-fg">{loaded.sample_rate.toLocaleString()} Hz</span>
@@ -105,7 +105,7 @@
     <DeviceBrowser device={ao} />
   {:else}
     <div class="flex items-center justify-center py-12">
-      <p class="text-base text-fg-muted">AO device not available</p>
+      <p class="text-xl text-fg-muted">AO device not available</p>
     </div>
   {/if}
 </div>

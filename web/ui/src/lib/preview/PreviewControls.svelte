@@ -40,7 +40,7 @@
   {#if expanded}
     <div class="flex w-64 flex-col divide-y divide-border overflow-hidden px-2.5">
       {#if frameInfo}
-        <div class="space-y-1 py-2 text-xs">
+        <div class="space-y-1 py-2">
           {#if sizeMismatch}
             <div class="flex items-center gap-1.5 text-warning">
               <Alert width="12" height="12" />
@@ -92,7 +92,7 @@
 
   <button
     onclick={() => (expanded = !expanded)}
-    class="flex h-7 w-full cursor-pointer items-center justify-between gap-1.5 border border-border/50 bg-floating/90 px-2 font-mono text-xs text-fg-muted shadow-lg backdrop-blur-sm transition-colors hover:bg-element-hover hover:text-fg"
+    class="flex h-7 w-full cursor-pointer items-center justify-between gap-1.5 border border-border/50 bg-floating/90 px-2 font-mono text-fg-muted shadow-lg backdrop-blur-sm transition-colors hover:bg-element-hover hover:text-fg"
     aria-label={expanded ? 'Hide histograms' : 'Show histograms'}
     title={expanded ? 'Hide histograms' : 'Show histograms'}
   >

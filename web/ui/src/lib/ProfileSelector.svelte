@@ -80,7 +80,7 @@
   <Select.Portal>
     <Select.Content align="start" sideOffset={4} class={cn(styles.content(), 'bg-surface')}>
       {#if profileList.length === 0}
-        <div class="px-3 py-2 text-base text-fg-muted">No profiles available</div>
+        <div class="px-3 py-2 text-xl text-fg-muted">No profiles available</div>
       {:else}
         <Select.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
           <Select.Group>
@@ -103,7 +103,7 @@
                 <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span class="text-fg">{profile.label}</span>
                   {#if profile.description}
-                    <span class="text-xs text-fg-muted">{profile.description}</span>
+                    <span class="text-base text-fg-muted">{profile.description}</span>
                   {/if}
                 </div>
                 <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-primary">

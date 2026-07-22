@@ -74,7 +74,7 @@
   <div class="flex shrink-0 items-center gap-2 py-2">
     <div class="flex items-center gap-3">
       <label
-        class="flex cursor-pointer items-center gap-1.5 text-xs transition-colors {wrap.current
+        class="flex cursor-pointer items-center gap-1.5 text-base transition-colors {wrap.current
           ? 'text-fg'
           : 'text-fg-muted'} hover:text-fg"
       >

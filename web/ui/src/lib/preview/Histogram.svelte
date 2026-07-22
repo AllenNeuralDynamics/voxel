@@ -433,7 +433,7 @@
         {onColormapChange}
         width={columnWidth}
         align="center"
-        triggerClass="text-xs font-medium cursor-pointer transition-[filter] hover:brightness-125"
+        triggerClass=" font-medium cursor-pointer transition-[filter] hover:brightness-125"
       />
     </div>
 
@@ -461,7 +461,7 @@
     width: var(--label-width, 36px);
     margin-left: calc(-1 * var(--char-offset));
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     line-height: 1;
     color: var(--color-fg-muted);
     background: transparent;

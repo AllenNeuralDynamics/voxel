@@ -80,9 +80,9 @@
     --track-filled: var(--color-primary);
     --track-unfilled: var(--color-element-bg);
     --thumb-color: var(--track-filled);
-    --track-radius: 0.2rem;
+    --track-radius: 0.23rem;
     --thumb-width: 4px;
-    --track-height: 0.75rem;
+    --track-height: 0.86rem;
     --thumb-radius: var(--thumb-width);
     --thumb-height: calc(var(--track-height) * 2);
     --thumb-margin-block: calc((var(--track-height) / 2 - var(--thumb-height) / 2) - 0.5px);

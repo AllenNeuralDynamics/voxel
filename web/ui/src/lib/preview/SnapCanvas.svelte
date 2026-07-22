@@ -199,7 +199,7 @@
     if (ids.length) snaps.moveToSnapshotGroup(ids, target);
   }
 
-  const rowBase = 'group flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-sm outline-none select-none';
+  const rowBase = 'group flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-lg outline-none select-none';
 
   // What's being shown: the viewed folder (0..N tiles), from the store. Null when nothing is viewed.
   const active = $derived(snaps.activeSnap);
@@ -848,7 +848,7 @@
         >
           <img src={snap.thumbnail} alt="" class="h-6 w-8 shrink-0 rounded-sm border border-border object-cover" />
           <span class="min-w-0 flex-1 truncate {isActive ? 'text-fg' : 'text-fg-muted'}">{snap.label}</span>
-          <span class="shrink-0 font-mono text-xs text-fg-faint tabular-nums">z{Math.round(snap.stageZ)}</span>
+          <span class="shrink-0 font-mono text-base text-fg-faint tabular-nums">z{Math.round(snap.stageZ)}</span>
         </div>
       {/snippet}
     </ContextMenu.Trigger>
@@ -939,7 +939,7 @@
                     {#if renamingId === g.id}
                       <input
                         bind:value={renameValue}
-                        class="border-focused min-w-0 flex-1 rounded-sm border bg-element-bg px-1 text-sm outline-none"
+                        class="border-focused min-w-0 flex-1 rounded-sm border bg-element-bg px-1 text-lg outline-none"
                         onclick={(e) => e.stopPropagation()}
                         onblur={commitRename}
                         onkeydown={renameKeydown}
@@ -951,7 +951,7 @@
                     {:else}
                       <span class="min-w-0 flex-1 truncate {isTarget ? 'text-fg' : ''}">{g.name}</span>
                     {/if}
-                    <span class="shrink-0 rounded bg-element-bg px-1 text-xs text-fg-muted tabular-nums">
+                    <span class="shrink-0 rounded bg-element-bg px-1 text-base text-fg-muted tabular-nums">
                       {groupTiles.length}
                     </span>
                   </div>
@@ -969,7 +969,7 @@
           </div>
         {/each}
         {#if groups.length === 0}
-          <p class="px-1.5 py-3 text-center text-xs text-fg-faint">No snapshots yet</p>
+          <p class="px-1.5 py-3 text-center text-base text-fg-faint">No snapshots yet</p>
         {/if}
       </div>
     </div>
@@ -1045,7 +1045,7 @@
         {@const inst = app.instrument}
         <div
           class={cn(
-            'pointer-events-auto flex w-60 flex-col divide-y divide-border/50 overflow-hidden text-xs',
+            'pointer-events-auto flex w-60 flex-col divide-y divide-border/50 overflow-hidden text-base',
             overlayCard
           )}
         >
@@ -1096,7 +1096,7 @@
       {/if}
 
       {#if group}
-        <div class="flex max-w-72 items-center gap-1.5 text-xs {shadow}">
+        <div class="flex max-w-72 items-center gap-1.5 text-base {shadow}">
           <span class="truncate font-medium text-fg">{group.name}</span>
           {#if zLabel}
             <span class="shrink-0 font-mono text-fg-muted tabular-nums">· {zLabel}</span>
@@ -1108,14 +1108,14 @@
     <!-- Scale bar, bottom-right -->
     {#if scaleBar}
       <div class="pointer-events-none absolute right-4 bottom-4 flex flex-col items-end gap-0.5">
-        <span class="font-mono text-xs text-fg-muted {shadow}">{scaleBar.label}</span>
+        <span class="font-mono text-base text-fg-muted {shadow}">{scaleBar.label}</span>
         <div class="h-1 rounded-full bg-fg-muted {shadow}" style:width="{scaleBar.barPx}px"></div>
       </div>
     {/if}
 
     {#if tiles.length === 0 && !stageBounds}
       <div class="pointer-events-none absolute inset-0 grid place-content-center">
-        <p class="text-sm text-fg-muted">{active ? 'Empty group' : 'No snapshots yet'}</p>
+        <p class="text-lg text-fg-muted">{active ? 'Empty group' : 'No snapshots yet'}</p>
       </div>
     {/if}
   </div>

@@ -55,7 +55,7 @@
       : (triggerStops?.[0] ?? 'var(--color-fg-muted)')
   );
 
-  const defaultTriggerClass = 'cursor-pointer text-base leading-5 font-medium transition-colors hover:brightness-125';
+  const defaultTriggerClass = 'cursor-pointer text-xl leading-5 font-medium transition-colors hover:brightness-125';
 
   // ── Grid State ────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@
           type="text"
           bind:value={search}
           placeholder="Search colormaps..."
-          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-input bg-element-bg px-1.5 text-xs text-fg placeholder-fg-muted focus:outline-none"
+          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-input bg-element-bg px-1.5 text-base text-fg placeholder-fg-muted focus:outline-none"
         />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
@@ -149,7 +149,7 @@
                     else next.add(group.uid);
                     hiddenGroups = next;
                   }}
-                  class="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-xs text-fg-muted outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg"
+                  class="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-base text-fg-muted outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg"
                 >
                   {#snippet children({ checked })}
                     <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -178,17 +178,17 @@
                   aria-label="Select colormap {name}"
                 >
                   <span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
-                  <span class="truncate text-xs text-fg-muted">{name}</span>
+                  <span class="truncate text-base text-fg-muted">{name}</span>
                 </button>
               {/each}
             </div>
           {:else}
-            <div class="pb-2 text-xs text-fg-muted">No matches</div>
+            <div class="pb-2 text-base text-fg-muted">No matches</div>
           {/if}
         {:else}
           {#each catalog as group (group.uid)}
             {#if !hiddenGroups.has(group.uid)}
-              <div class="pt-1 pb-0.5 text-xs font-medium tracking-wide text-fg-muted uppercase opacity-60">
+              <div class="pt-1 pb-0.5 text-base font-medium tracking-wide text-fg-muted uppercase opacity-60">
                 {group.label}
               </div>
               <div class="swatch-grid pb-2">
@@ -200,7 +200,7 @@
                     aria-label="Select colormap {name}"
                   >
                     <span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
-                    <span class="truncate text-xs text-fg-muted">{name}</span>
+                    <span class="truncate text-base text-fg-muted">{name}</span>
                   </button>
                 {/each}
               </div>
@@ -218,7 +218,7 @@
           }}
           placeholder={triggerColor}
           size="5"
-          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-element-bg px-1.5 font-mono text-xs text-fg placeholder:text-fg-muted focus:outline-none"
+          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-element-bg px-1.5 font-mono text-base text-fg placeholder:text-fg-muted focus:outline-none"
           style:--hex-color={triggerColor}
         />
         <button
@@ -238,14 +238,14 @@
   .swatch-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-    gap: 0.375rem 0.125rem;
+    gap: 0.43rem 0.125rem;
   }
 
   .swatch-row {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.125rem 0.25rem;
+    gap: 0.43rem;
+    padding: 0.14rem 0.25rem;
     border-radius: 2px;
     cursor: pointer;
     transition: background 0.15s;
@@ -263,8 +263,8 @@
 
   .swatch-gradient {
     flex-shrink: 0;
-    width: 2.5rem;
-    height: 0.625rem;
+    width: 2.9rem;
+    height: 0.71rem;
     border-radius: 1px;
     border: 1px solid oklch(1 0 0 / 0.1);
   }

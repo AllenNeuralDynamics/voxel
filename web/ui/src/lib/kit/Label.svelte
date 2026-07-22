@@ -14,7 +14,7 @@
 </script>
 
 {#if forId}
-  <label for={forId} {title} class={cn('text-xs text-fg-muted', className)}>{@render children()}</label>
+  <label for={forId} {title} class={cn('text-base text-fg-muted', className)}>{@render children()}</label>
 {:else}
-  <span {title} class={cn('text-xs text-fg-muted', className)}>{@render children()}</span>
+  <span {title} class={cn('text-base text-fg-muted', className)}>{@render children()}</span>
 {/if}

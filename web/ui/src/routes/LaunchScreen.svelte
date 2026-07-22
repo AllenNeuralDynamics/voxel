@@ -148,7 +148,7 @@
       <div class="flex items-center justify-between px-4 py-2">
         <div class="flex items-center gap-2">
           <VoxelLogo class="h-6 w-6" />
-          <h1 class="text-2xl font-normal tracking-wider text-fg uppercase">Voxel</h1>
+          <h1 class="text-3xl font-normal tracking-wider text-fg uppercase">Voxel</h1>
         </div>
         <button
           title="Appearance"
@@ -163,7 +163,7 @@
       <div class="flex items-center gap-3 border-b border-border px-4 py-2.5">
         <Select.Root type="single" value={pickerValue} onValueChange={onPick}>
           <Select.Trigger
-            class="flex min-w-56 items-center justify-between gap-2 rounded px-1.5 py-0.5 text-lg font-medium text-fg transition-colors hover:bg-element-hover focus:outline-none"
+            class="flex min-w-56 items-center justify-between gap-2 rounded px-1.5 py-0.5 text-2xl font-medium text-fg transition-colors hover:bg-element-hover focus:outline-none"
           >
             <span class="truncate">
               {#if selection}{sanitizeString(selection.name)}{:else}<span class="text-fg-muted"
@@ -188,7 +188,7 @@
                     <Select.Item
                       value={`instrument:${name}`}
                       label={sanitizeString(name)}
-                      class="relative flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-xs outline-none select-none data-highlighted:bg-element-hover"
+                      class="relative flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-base outline-none select-none data-highlighted:bg-element-hover"
                     >
                       <span class="min-w-0 flex-1 truncate text-fg">{sanitizeString(name)}</span>
                       {#if hasError(info)}
@@ -210,7 +210,7 @@
                       <Select.Item
                         value={`template:${name}`}
                         label={sanitizeString(name)}
-                        class="relative flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-xs outline-none select-none data-highlighted:bg-element-hover"
+                        class="relative flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-base outline-none select-none data-highlighted:bg-element-hover"
                       >
                         <span class="min-w-0 flex-1 truncate text-fg">{sanitizeString(name)}</span>
                       </Select.Item>
@@ -239,30 +239,30 @@
           <div class="flex h-full flex-col gap-3 overflow-y-auto p-4">
             <div class="flex items-center gap-2">
               <AlertCircleOutline width="18" height="18" class="shrink-0 text-danger" />
-              <h2 class="text-lg font-medium text-fg">{selected.name}</h2>
+              <h2 class="text-2xl font-medium text-fg">{selected.name}</h2>
             </div>
             <div class="overflow-hidden rounded border border-danger/40 bg-danger/5">
               <div class="border-b border-danger/30 px-3 py-2">
-                <div class="text-sm font-medium text-danger">
+                <div class="text-lg font-medium text-danger">
                   {selected.source === 'config' ? 'config.yaml' : 'bench.json'} couldn't be loaded — {errorEntries.length}
                   issue{errorEntries.length === 1 ? '' : 's'}
                 </div>
-                <p class="mt-0.5 text-xs text-fg-muted">
+                <p class="mt-0.5 text-base text-fg-muted">
                   {selected.source === 'config'
                     ? 'Fix these fields in the instrument configuration before it can be opened.'
                     : 'The saved bench no longer matches the current schema. Fix or delete bench.json to recover.'}
                 </p>
               </div>
               {#if errorEntries.length === 0}
-                <p class="px-3 py-2 text-sm text-fg-muted">No further details were reported.</p>
+                <p class="px-3 py-2 text-lg text-fg-muted">No further details were reported.</p>
               {:else}
                 <ul class="divide-y divide-border/40">
                   {#each errorEntries as [location, message] (location)}
                     <li class="flex flex-col gap-0.5 px-3 py-2">
-                      <span class="font-mono text-xs break-all text-fg-muted">
+                      <span class="font-mono text-base break-all text-fg-muted">
                         {location === '' ? 'file' : location === '<model>' ? 'model' : location}
                       </span>
-                      <span class="text-sm text-danger">{message}</span>
+                      <span class="text-lg text-danger">{message}</span>
                     </li>
                   {/each}
                 </ul>
@@ -274,7 +274,7 @@
         {/if}
       {:else}
         <div class="flex h-full items-center justify-center">
-          <p class="text-sm text-fg-muted/60">Select an instrument or template</p>
+          <p class="text-lg text-fg-muted/60">Select an instrument or template</p>
         </div>
       {/if}
     </div>
@@ -292,7 +292,7 @@
     <hr class="-mx-4 border-border" />
 
     <div class="flex flex-col gap-4 py-2">
-      <p class="text-sm text-fg-muted">
+      <p class="text-lg text-fg-muted">
         From template <span class="font-medium text-fg">{dialogTemplate}</span>.
       </p>
       <Field label="Instance Name" id="instance-name">

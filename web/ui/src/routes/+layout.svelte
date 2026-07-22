@@ -166,14 +166,14 @@
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          class="z-50 min-w-56 rounded-md border border-border bg-elevated p-1 text-sm shadow-lg outline-none"
+          class="z-50 min-w-56 rounded-md border border-border bg-elevated p-1 text-lg shadow-lg outline-none"
         >
           <DropdownMenu.Item
             class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-highlighted:bg-element-hover"
             onclick={() => (themes.pickerOpen = true)}
           >
             Change Appearance
-            <span class="ml-8 text-xs text-fg-faint">⌘K T</span>
+            <span class="ml-8 text-base text-fg-faint">⌘K T</span>
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
@@ -182,7 +182,7 @@
             onclick={() => (closeDialogOpen = true)}
           >
             Close Session…
-            <span class="ml-8 text-xs text-fg-faint">⌘K Q</span>
+            <span class="ml-8 text-base text-fg-faint">⌘K Q</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -196,7 +196,7 @@
           title={label}
           onclick={select}
           class={cn(
-            'inline-flex h-full min-w-24 cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 text-sm whitespace-nowrap transition-colors',
+            'inline-flex h-full min-w-24 cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 text-lg whitespace-nowrap transition-colors',
             active ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
           )}
         >
@@ -234,7 +234,7 @@
               {@render segmented(modeSegments)}
               <button
                 onclick={toggleLogs}
-                class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+                class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-lg whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
               >
                 {logsOpen ? 'Hide logs' : 'Show logs'}
               </button>
@@ -315,7 +315,7 @@
       <Dialog.Header>
         <Dialog.Title>Close Session</Dialog.Title>
       </Dialog.Header>
-      <p class="text-sm text-fg-muted">
+      <p class="text-lg text-fg-muted">
         Are you sure you want to close the current session? Any unsaved progress will be lost.
       </p>
       <Dialog.Footer>

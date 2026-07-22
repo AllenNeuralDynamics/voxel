@@ -6,54 +6,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Density tokens ───────────────────────────────────────────────────── */
-
-/*:root {
-  --ui-xs: 1.75rem;
-  --ui-sm: 2rem;
-  --ui-md: 2.25rem;
-  --ui-lg: 2.5rem;
-  --ui-xl: 3rem;
-}
-
 :root {
-  --ui-xs: 1.375rem;
-  --ui-sm: 1.55rem;
-  --ui-md: 1.725rem;
-  --ui-lg: 1.9rem;
-  --ui-xl: 2.075rem;
-}
+  --ui-step: 0.25rem;
+  --ui-base: 2.5rem;
 
-.density-compact {
-  --ui-xs: 1.25rem;
-  --ui-sm: 1.375rem;
-  --ui-md: 1.5rem;
-  --ui-lg: 1.75rem;
-  --ui-xl: 2rem;
-}
-
-.density-comfortable {
-  --ui-xs: 2rem;
-  --ui-sm: 2.25rem;
-  --ui-md: 2.5rem;
-  --ui-lg: 2.75rem;
-  --ui-xl: 3.75rem;
-}*/
-
-:root {
-  --ui-step: 0.25rem; /* 4px */
-  --ui-base: 1.75rem; /* 28px — md anchor */
-  --ui-base: 2rem;
-
-  --ui-xs: calc(var(--ui-base) - 2 * var(--ui-step)); /* 20px */
-  --ui-sm: calc(var(--ui-base) - 1 * var(--ui-step)); /* 24px */
-  --ui-md: var(--ui-base); /* 28px */
-  --ui-lg: calc(var(--ui-base) + 1 * var(--ui-step)); /* 32px */
-}
-
-.density-compact {
-  --ui-base: 1.5rem; /* 24px → 16/20/24/28 */
-  --ui-base: 1.75rem;
+  --ui-xs: calc(var(--ui-base) - 2 * var(--ui-step));
+  --ui-sm: calc(var(--ui-base) - 1 * var(--ui-step));
+  --ui-md: var(--ui-base);
+  --ui-lg: calc(var(--ui-base) + 1 * var(--ui-step));
 }
 
 .nss {
@@ -63,6 +23,13 @@
 @theme {
   --font-sans: 'IBM Plex Sans Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Lilex Variable', ui-monospace, monospace;
+
+  --spacing: 0.3rem;
+
+  --radius-xs: 0.15rem;
+  --radius-sm: 0.3rem;
+  --radius-md: 0.45rem;
+  --radius-lg: 0.6rem;
 }
 
 @theme inline {

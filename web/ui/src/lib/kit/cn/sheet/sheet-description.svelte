@@ -9,6 +9,6 @@
 <SheetPrimitive.Description
   bind:ref
   data-slot="sheet-description"
-  class={cn('text-base text-fg-muted', className)}
+  class={cn('text-xl text-fg-muted', className)}
   {...restProps}
 />

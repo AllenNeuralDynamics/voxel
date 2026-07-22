@@ -46,7 +46,7 @@
 
   function rowClass(active: boolean, hasError: boolean): string {
     return cn(
-      'flex items-center gap-2 rounded px-2 py-1 text-sm transition-colors',
+      'flex items-center gap-2 rounded px-2 py-1 text-lg transition-colors',
       hasError ? 'text-danger' : active ? 'text-fg' : 'text-fg-muted hover:text-fg',
       active ? 'bg-element-selected' : 'hover:bg-element-hover'
     );
@@ -57,7 +57,7 @@
   <a
     href={resolve(path)}
     class={cn(
-      'flex items-center rounded px-2 py-1 text-sm transition-colors',
+      'flex items-center rounded px-2 py-1 text-lg transition-colors',
       active ? 'bg-element-selected text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
     )}
   >

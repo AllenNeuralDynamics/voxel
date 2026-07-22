@@ -92,7 +92,7 @@
   </section>
   <section class="grid h-full min-h-0 grid-rows-[auto_1fr] gap-3 overflow-hidden p-4">
     <!-- Top toolbar: section tabs (primary) + surface picker (secondary) -->
-    <div class="flex h-8 items-center gap-3 text-sm">
+    <div class="flex h-8 items-center gap-3 text-lg">
       <div class="flex h-8 gap-1 rounded-md border border-border">
         {#each SECTIONS as section (section)}
           <button
@@ -105,7 +105,7 @@
           </button>
         {/each}
       </div>
-      <div class="ml-auto flex h-8 gap-1 rounded-md border border-border text-xs">
+      <div class="ml-auto flex h-8 gap-1 rounded-md border border-border text-base">
         {#each surfaces as { name }, i (i)}
           <button
             class="cursor-pointer rounded-sm px-2.5 py-1 transition-colors {activeSurface === i
@@ -127,8 +127,8 @@
 
         <!-- Typography -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Typography</h3>
-          <div class="flex flex-col gap-1 text-base">
+          <h3 class="mb-2 text-base text-fg-faint">Typography</h3>
+          <div class="flex flex-col gap-1 text-xl">
             <span class="text-fg">fg — Primary text</span>
             <span class="text-fg-muted">fg-muted — Secondary text</span>
             <span class="text-fg-faint">fg-faint — Placeholder text</span>
@@ -138,11 +138,11 @@
 
         <!-- Surfaces -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Surfaces</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Surfaces</h3>
           <div class="flex gap-3">
             {#each ['canvas', 'surface', 'panel', 'elevated', 'floating'] as surface (surface)}
               <div
-                class="flex h-20 w-28 items-end rounded-md border border-border p-2 text-xs text-fg-muted bg-{surface}"
+                class="flex h-20 w-28 items-end rounded-md border border-border p-2 text-base text-fg-muted bg-{surface}"
               >
                 {surface}
               </div>
@@ -152,10 +152,10 @@
 
         <!-- Borders -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Borders</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Borders</h3>
           <div class="flex gap-2">
             {#each ['border', 'border-variant', 'border-focused', 'border-selected', 'border-disabled'] as b (b)}
-              <div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} p-2 text-xs text-fg-muted">
+              <div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} p-2 text-base text-fg-muted">
                 {b.replace('border-', '')}
               </div>
             {/each}
@@ -164,10 +164,10 @@
 
         <!-- Elements -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Elements</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Elements</h3>
           <div class="flex gap-2">
             {#each ['element-bg', 'element-hover', 'element-active', 'element-selected'] as el (el)}
-              <div class="flex h-12 w-24 items-end rounded-md border border-border p-2 text-xs text-fg-muted bg-{el}">
+              <div class="flex h-12 w-24 items-end rounded-md border border-border p-2 text-base text-fg-muted bg-{el}">
                 {el.replace('element-', '')}
               </div>
             {/each}
@@ -176,11 +176,11 @@
 
         <!-- Buttons -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Buttons</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Buttons</h3>
           <div class="flex flex-col gap-2">
             {#each sizes as sz (sz)}
               <div class="flex flex-wrap items-center gap-2">
-                <span class="w-6 text-xs text-fg-faint">{sz}</span>
+                <span class="w-6 text-base text-fg-faint">{sz}</span>
                 <Button size={sz}>Default</Button>
                 <Button size={sz} variant="secondary">Secondary</Button>
                 <Button size={sz} variant="outline">Outline</Button>
@@ -194,11 +194,11 @@
 
         <!-- Inputs -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Inputs</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Inputs</h3>
           <div class="flex flex-col gap-3">
             {#each sizes as sz (sz)}
               <div class="flex flex-wrap items-center gap-3">
-                <span class="w-6 text-xs text-fg-faint">{sz}</span>
+                <span class="w-6 text-base text-fg-faint">{sz}</span>
                 <TextInput size={sz} bind:value={textValue} placeholder="Type here…" />
                 <Numeric.SpinBox
                   size={sz}
@@ -214,7 +214,7 @@
 
         <!-- TextArea -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">TextArea</h3>
+          <h3 class="mb-2 text-base text-fg-faint">TextArea</h3>
           <div class="max-w-xs">
             <TextArea size="xs" value="Multi-line text content" />
           </div>
@@ -222,7 +222,7 @@
 
         <!-- TagInput -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">TagInput</h3>
+          <h3 class="mb-2 text-base text-fg-faint">TagInput</h3>
           <div class="max-w-xs">
             <TagInput size="xs" value={tags} />
           </div>
@@ -230,27 +230,27 @@
 
         <!-- Controls -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Controls</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Controls</h3>
           <div class="flex flex-wrap items-center gap-6">
             <div class="flex items-center gap-2">
               <Checkbox bind:checked size="sm" />
-              <span class="text-sm text-fg-muted">Checked</span>
+              <span class="text-lg text-fg-muted">Checked</span>
             </div>
             <div class="flex items-center gap-2">
               <Checkbox bind:checked={unchecked} size="sm" />
-              <span class="text-sm text-fg-muted">Unchecked</span>
+              <span class="text-lg text-fg-muted">Unchecked</span>
             </div>
             <div class="flex items-center gap-2">
               <Checkbox checked={false} {indeterminate} size="sm" />
-              <span class="text-sm text-fg-muted">Indeterminate</span>
+              <span class="text-lg text-fg-muted">Indeterminate</span>
             </div>
             <div class="flex items-center gap-2">
               <Checkbox disabled size="sm" />
-              <span class="text-sm text-fg-muted">Disabled</span>
+              <span class="text-lg text-fg-muted">Disabled</span>
             </div>
             <div class="flex items-center gap-2">
               <Switch checked={false} disabled size="sm" />
-              <span class="text-sm text-fg-muted">Disabled</span>
+              <span class="text-lg text-fg-muted">Disabled</span>
             </div>
             <div class="w-32">
               <Slider value={sliderValue} target={50} min={0} max={100} />
@@ -260,7 +260,7 @@
 
         <!-- ColorPicker -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">ColorPicker</h3>
+          <h3 class="mb-2 text-base text-fg-faint">ColorPicker</h3>
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
               <ColorPicker
@@ -268,28 +268,28 @@
                 presetColors={['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6']}
                 onColorChange={(c) => (pickerColor = c)}
               />
-              <span class="text-sm text-fg-muted">With presets</span>
+              <span class="text-lg text-fg-muted">With presets</span>
             </div>
             <div class="flex items-center gap-2">
               <ColorPicker color={pickerColor} onColorChange={(c) => (pickerColor = c)} />
-              <span class="text-sm text-fg-muted">No presets</span>
+              <span class="text-lg text-fg-muted">No presets</span>
             </div>
-            <span class="font-mono text-xs text-fg-muted">{pickerColor}</span>
+            <span class="font-mono text-base text-fg-muted">{pickerColor}</span>
           </div>
         </div>
 
         <!-- Semantic -->
         <div>
-          <h3 class="mb-2 text-xs text-fg-faint">Semantic</h3>
+          <h3 class="mb-2 text-base text-fg-faint">Semantic</h3>
           <div class="flex gap-3">
             {#each ['danger', 'success', 'warning', 'info'] as s (s)}
               <div class="flex flex-col gap-1">
                 <div
-                  class="flex h-10 w-24 items-center justify-center rounded-md text-xs font-medium text-{s}-fg bg-{s}"
+                  class="flex h-10 w-24 items-center justify-center rounded-md text-base font-medium text-{s}-fg bg-{s}"
                 >
                   {s}
                 </div>
-                <div class="flex h-10 w-24 items-center justify-center rounded-md text-xs text-{s} bg-{s}-bg">
+                <div class="flex h-10 w-24 items-center justify-center rounded-md text-base text-{s} bg-{s}-bg">
                   {s}-bg
                 </div>
               </div>
@@ -300,8 +300,8 @@
         <!-- ─────────────── Prop UI ─────────────── -->
 
         <div>
-          <h2 class="text-base font-medium text-fg">Prop UI</h2>
-          <p class="mt-1 max-w-2xl text-xs text-fg-muted">
+          <h2 class="text-xl font-medium text-fg">Prop UI</h2>
+          <p class="mt-1 max-w-2xl text-base text-fg-muted">
             Model-driven widgets in <code>$lib/prop</code>. Each widget binds to a typed
             <code>PropModel</code> from <code>models.svelte.ts</code>; mutations flow through
             <code>model.patch(value)</code>, which updates local state and fires <code>onPatch</code> upstream. Multiple widgets
@@ -312,16 +312,16 @@
         <!-- Numeric -->
         <section class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-fg">Numeric</h3>
-            <p class="mt-1 text-xs text-fg-muted">
+            <h3 class="text-lg font-medium text-fg">Numeric</h3>
+            <p class="mt-1 text-base text-fg-muted">
               <code>NumericModel</code> — clamping, step-snapping, optional throttled patch, plus
               <code>wheel</code> and <code>scrubber</code> attachments for gesture-based scrubbing.
             </p>
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">Numeric.Input</h4>
-            <div class="flex flex-col gap-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Numeric.Input</h4>
+            <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
                 <span class="w-44 text-fg-muted">Free range, step 1</span>
                 <Numeric.Input model={freeRange} numCharacters={6} {@attach freeRange.wheel} />
@@ -348,8 +348,8 @@
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">Numeric.SpinBox</h4>
-            <div class="flex flex-col gap-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Numeric.SpinBox</h4>
+            <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
                 <span class="w-44 text-fg-muted">freeRange (no prefix)</span>
                 <Numeric.SpinBox model={freeRange} numCharacters={6} />
@@ -373,8 +373,8 @@
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">Numeric.SpinSlider</h4>
-            <div class="flex flex-col gap-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Numeric.SpinSlider</h4>
+            <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
                 <span class="w-44 text-fg-muted">bounded [0..100], step 5</span>
                 <div class="w-80">
@@ -403,16 +403,16 @@
         <!-- Enumerated -->
         <section class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-fg">Enumerated</h3>
-            <p class="mt-1 text-xs text-fg-muted">
+            <h3 class="text-lg font-medium text-fg">Enumerated</h3>
+            <p class="mt-1 text-base text-fg-muted">
               <code>EnumeratedModel&lt;T&gt;</code> for fixed-option string or numeric values. Operations:
               <code>select(v)</code> (validates against options), <code>cycle(±1)</code> (wraps).
             </p>
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">Enumerated.Select</h4>
-            <div class="flex flex-col gap-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Enumerated.Select</h4>
+            <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
                 <span class="w-44 text-fg-muted">String options</span>
                 <div class="w-40">
@@ -442,15 +442,15 @@
         <!-- Bool -->
         <section class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-fg">Bool</h3>
-            <p class="mt-1 text-xs text-fg-muted">
+            <h3 class="text-lg font-medium text-fg">Bool</h3>
+            <p class="mt-1 text-base text-fg-muted">
               <code>BoolModel</code> — simple boolean value with <code>toggle()</code> operation.
             </p>
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">Bool.Toggle</h4>
-            <div class="flex flex-col gap-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Bool.Toggle</h4>
+            <div class="flex flex-col gap-2 text-base">
               {#each sizes as sz (sz)}
                 <div class="flex items-center gap-3">
                   <span class="w-44 text-fg-muted">size {sz}</span>
@@ -472,8 +472,8 @@
         <!-- Text -->
         <section class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-fg">Text</h3>
-            <p class="mt-1 text-xs text-fg-muted">
+            <h3 class="text-lg font-medium text-fg">Text</h3>
+            <p class="mt-1 text-base text-fg-muted">
               <code>StringModel</code> for free-form text. Widget commits on Enter or blur — not per keystroke — so
               instrument-control writes don't fire on every character.
               <kbd class="rounded border border-border bg-element-bg px-1">Esc</kbd>
@@ -483,8 +483,8 @@
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">Text.Input</h4>
-            <div class="flex flex-col gap-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Text.Input</h4>
+            <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
                 <span class="w-44 text-fg-muted">Default</span>
                 <div class="w-64">
@@ -512,8 +512,8 @@
         <!-- PropInput dispatcher -->
         <section class="space-y-4">
           <div>
-            <h3 class="text-sm font-medium text-fg">PropInput (dispatcher)</h3>
-            <p class="mt-1 max-w-2xl text-xs text-fg-muted">
+            <h3 class="text-lg font-medium text-fg">PropInput (dispatcher)</h3>
+            <p class="mt-1 max-w-2xl text-base text-fg-muted">
               <code>&lt;PropInput {'{model}'} /&gt;</code> dispatches by <code>instanceof</code> to the right widget per
               kind. Bounded numerics get <code>SpinSlider</code>; unbounded get <code>SpinBox</code>;
               <code>EnumeratedModel</code> → <code>Select</code>; <code>BoolModel</code> →
@@ -523,8 +523,8 @@
           </div>
 
           <div class="space-y-2 border-l-2 border-border/50 pl-4">
-            <h4 class="text-xs font-medium tracking-wide text-fg-faint uppercase">All kinds, dispatched</h4>
-            <div class="grid grid-cols-[14rem_1fr_minmax(8rem,auto)] items-center gap-x-4 gap-y-2 text-xs">
+            <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">All kinds, dispatched</h4>
+            <div class="grid grid-cols-[16rem_1fr_minmax(9rem,auto)] items-center gap-x-4 gap-y-2 text-base">
               {#each dispatchRows as row (row.label)}
                 <span class="text-fg-muted">{row.label}</span>
                 <div class="min-w-0">

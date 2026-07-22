@@ -97,7 +97,7 @@
         <div class="grid gap-2">
           {#each params as [name, param] (name)}
             <div class="grid gap-1">
-              <span class="text-xs font-medium text-fg-muted">
+              <span class="text-base font-medium text-fg-muted">
                 {sanitizeString(name)}
               </span>
               {#if param.options && param.options.length > 0}
@@ -136,7 +136,7 @@
         >
           <pre
             class={cn(
-              'max-h-40 overflow-auto font-mono text-sm break-all whitespace-pre-wrap',
+              'max-h-40 overflow-auto font-mono text-lg break-all whitespace-pre-wrap',
               isError ? 'text-danger' : 'text-fg'
             )}>{formatResult(lastResult)}</pre>
         </div>

@@ -5,10 +5,10 @@
   import { type NumericSource, useNumericModel } from './model.svelte';
 
   const SIZE = {
-    xs: 'h-ui-xs text-xs',
-    sm: 'h-ui-sm text-xs',
-    md: 'h-ui-md text-sm',
-    lg: 'h-ui-lg text-base'
+    xs: 'h-ui-xs text-base',
+    sm: 'h-ui-sm text-base',
+    md: 'h-ui-md text-lg',
+    lg: 'h-ui-lg text-xl'
   } as const;
 
   interface Props {

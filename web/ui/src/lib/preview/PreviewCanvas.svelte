@@ -185,7 +185,7 @@
 </script>
 
 {#snippet scaleBarBadge(bar: { barPx: number; label: string } | null)}
-  <span class="font-mono text-xs text-fg-muted">{bar?.label ?? '--'}</span>
+  <span class="font-mono text-fg-muted">{bar?.label ?? '--'}</span>
   <div class="h-1 rounded-full bg-fg-muted" style:width="{bar?.barPx ?? 0}px"></div>
 {/snippet}
 
@@ -207,7 +207,7 @@
           <LiveMinimap {previewer} />
         </div>
       {/if}
-      <div class="flex items-center gap-1.5 font-mono text-xs">
+      <div class="flex items-center gap-1.5 font-mono">
         <SpinBox
           model={previewer.zoomModel}
           prefix="Zoom"

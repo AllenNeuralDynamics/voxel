@@ -10,7 +10,7 @@
   <Sheet.Content side="right" overlay={false} class="w-80 sm:max-w-80">
     <Sheet.Header>
       <Sheet.Title>Appearance</Sheet.Title>
-      <Sheet.Description class="text-sm">Choose a color theme for the interface.</Sheet.Description>
+      <Sheet.Description class="text-lg">Choose a color theme for the interface.</Sheet.Description>
     </Sheet.Header>
     <div class="px-4">
       <ThemePicker />

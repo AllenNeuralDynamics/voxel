@@ -619,7 +619,7 @@
 
 <div bind:this={containerRef} class="grid min-w-0 flex-1 place-content-center">
   <div class="relative" style="width: {canvasWidth}px; height: {canvasHeight}px;">
-    <p class="absolute top-1 right-1 z-10 text-xs text-fg-muted">X / Y</p>
+    <p class="absolute top-1 right-1 z-10 text-fg-muted">X / Y</p>
     <input
       type="range"
       class="stage-slider absolute z-10"
