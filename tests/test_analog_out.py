@@ -4,16 +4,14 @@ import numpy as np
 import pytest
 from vxlib.quantity import Frequency, Time
 
-from vxl.daq import SimulatedAnalogOutput, SimulatedDaqmx
+from vxl.daq import SimulatedAO, SimulatedDaqmx
 from vxl.daq.analog import (
-    AnalogOutputController,
+    AOController,
     AOSignals,
     DerivedResolutionError,
-    ExternalClock,
-    InternalClock,
     resolve_to_arrays,
 )
-from vxl.daq.analog.ni import NiAnalogOutput
+from vxl.daq.analog.ni import NiAO
 from vxl.daq.analog.wave import (
     DerivedMirror,
     DerivedOffset,
@@ -208,24 +206,6 @@ class TestAOSignals:
         # 1 / (0.02 + 0.03) = 20 Hz
         assert sig.frame_frequency == pytest.approx(20.0)
 
-    def test_internal_clock_is_default(self):
-        sig = AOSignals(
-            sample_rate=Frequency(100_000.0),
-            duration=Time(0.01),
-            waveforms={"x": validate_waveform(_triangle())},
-        )
-        assert isinstance(sig.clock_src, InternalClock)
-
-    def test_external_clock_carries_source(self):
-        sig = AOSignals(
-            sample_rate=Frequency(100_000.0),
-            duration=Time(0.01),
-            clock_src=ExternalClock(source="camera"),
-            waveforms={"x": validate_waveform(_triangle())},
-        )
-        assert isinstance(sig.clock_src, ExternalClock)
-        assert sig.clock_src.source == "camera"
-
     def test_equality_by_value(self):
         a = AOSignals(
             sample_rate=Frequency(100_000.0),
@@ -308,18 +288,15 @@ class TestSimulatedDaqmxHub:
         assert hub.get_pfi_path("pfi0") == "/Dev1/PFI0"
 
 
-# ==================== SimulatedAnalogOutput ====================
+# ==================== SimulatedAO ====================
 
 
-def _make_ao(
-    ports: dict[str, str] | None = None, triggers: dict[str, str] | None = None
-) -> tuple[SimulatedDaqmx, SimulatedAnalogOutput]:
+def _make_ao(ports: dict[str, str] | None = None) -> tuple[SimulatedDaqmx, SimulatedAO]:
     hub = SimulatedDaqmx(num_ao=8, num_pfi=4, num_counters=2)
-    ao = SimulatedAnalogOutput(
+    ao = SimulatedAO(
         uid="ao_main",
         hub=hub,
         ports=ports or {"galvo": "ao0", "etl": "ao1"},
-        triggers=triggers or {"camera": "pfi0"},
     )
     return hub, ao
 
@@ -329,7 +306,6 @@ def _signals(**overrides) -> AOSignals:
         "sample_rate": 10_000.0,
         "duration": 0.01,
         "rest_time": 0.0,
-        "clock_src": InternalClock(),
         "waveforms": {
             "galvo": validate_waveform(_triangle()),
             "etl": validate_waveform(_triangle(vmin=0, vmax=3, rest=0)),
@@ -339,40 +315,18 @@ def _signals(**overrides) -> AOSignals:
     return AOSignals(**defaults)
 
 
-class TestSimulatedAnalogOutput:
+class TestSimulatedAO:
     def test_setup_reserves_ports_on_hub(self):
         hub, ao = _make_ao()
         ao.setup(_signals())
         assert hub.assigned_pins["ao0"] == "ao_main"
         assert hub.assigned_pins["ao1"] == "ao_main"
 
-    def test_setup_reserves_counter_for_internal_clock(self):
+    def test_setup_reserves_counter_for_internal_pacing(self):
         hub, ao = _make_ao()
         ao.setup(_signals())
         counters = [p for p, owner in hub.assigned_pins.items() if p.startswith("ctr") and owner == "ao_main"]
         assert len(counters) == 1
-
-    def test_setup_skips_counter_for_external_clock(self):
-        hub, ao = _make_ao()
-        ao.setup(_signals(clock_src=ExternalClock(source="camera")))
-        counters = [p for p in hub.assigned_pins if p.startswith("ctr")]
-        assert counters == []
-
-    def test_setup_rejects_external_trigger_unknown(self):
-        _, ao = _make_ao()
-        with pytest.raises(ValueError, match="Unknown trigger"):
-            ao.setup(_signals(clock_src=ExternalClock(source="no_such")))
-
-    def test_internal_clock_out_pin_reserves_physical_pin(self):
-        hub, ao = _make_ao()
-        ao.setup(_signals(clock_src=InternalClock(out_pin="camera")))
-        # "camera" -> "pfi0" per _make_ao default triggers; pfi0 should be owned by ao
-        assert hub.assigned_pins.get("pfi0") == "ao_main"
-
-    def test_internal_clock_out_pin_unknown_raises(self):
-        _, ao = _make_ao()
-        with pytest.raises(ValueError, match="Unknown trigger"):
-            ao.setup(_signals(clock_src=InternalClock(out_pin="no_such")))
 
     def test_write_stores_arrays(self):
         _, ao = _make_ao()
@@ -451,10 +405,6 @@ class TestSimulatedAnalogOutput:
         _, ao = _make_ao()
         assert ao.can_hotswap(_signals(), _signals(duration=0.02)) is False
 
-    def test_can_hotswap_false_when_clock_changes(self):
-        _, ao = _make_ao()
-        assert ao.can_hotswap(_signals(), _signals(clock_src=ExternalClock(source="camera"))) is False
-
     def test_can_hotswap_false_when_ports_change(self):
         _, ao = _make_ao()
         assert ao.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
@@ -464,39 +414,39 @@ class TestSimulatedAnalogOutput:
         assert ao.can_hotswap(None, _signals()) is False
 
 
-# ==================== AnalogOutputController state machine ====================
+# ==================== AOController state machine ====================
 
 
 class TestControllerStateMachine:
     async def test_starts_fresh_with_no_loaded(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         assert ctrl.state == "fresh"
         assert ctrl.loaded is None
 
     async def test_load_fresh_to_ready(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         assert ctrl.state == "ready"
         assert ctrl.loaded == _signals()
 
     async def test_start_requires_load(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         with pytest.raises(RuntimeError, match="no signals loaded"):
             await ctrl.start()
 
     async def test_start_ready_to_running(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start()
         assert ctrl.state == "running"
 
     async def test_stop_running_to_ready(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start()
         await ctrl.stop()
@@ -504,7 +454,7 @@ class TestControllerStateMachine:
 
     async def test_stop_when_not_running_is_noop(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.stop()  # fresh
         assert ctrl.state == "fresh"
         await ctrl.load(_signals())
@@ -513,7 +463,7 @@ class TestControllerStateMachine:
 
     async def test_start_when_already_running_is_noop(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start()
         await ctrl.start()  # second call
@@ -521,7 +471,7 @@ class TestControllerStateMachine:
 
     async def test_load_identical_signals_noop(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         sig = _signals()
         await ctrl.load(sig)
         first_arrays = ao.last_arrays
@@ -532,7 +482,7 @@ class TestControllerStateMachine:
 
     async def test_hotswap_preserves_running(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start()
         # Change only waveform values — structural fields unchanged
@@ -552,7 +502,7 @@ class TestControllerStateMachine:
 
     async def test_rebuild_preserves_running(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start()
         new_signals = _signals(sample_rate=20_000.0)  # structural change forces rebuild
@@ -562,7 +512,7 @@ class TestControllerStateMachine:
 
     async def test_wait_until_done_requires_running_state(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         # fresh
         with pytest.raises(RuntimeError, match="running state"):
             await ctrl.wait_until_done(timeout_s=1.0)
@@ -573,14 +523,14 @@ class TestControllerStateMachine:
 
     async def test_wait_until_done_delegates_to_driver(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start(repeat=3)
         await ctrl.wait_until_done(timeout_s=1.0)  # sim returns immediately
 
     async def test_wait_until_done_raises_on_continuous_start(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         await ctrl.start()  # continuous
         with pytest.raises(RuntimeError, match="finite acquisition"):
@@ -588,7 +538,7 @@ class TestControllerStateMachine:
 
     async def test_driver_exception_resets_state(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         await ctrl.load(_signals())
         # Break the driver — next write raises
         original_write = ao.write
@@ -609,14 +559,14 @@ class TestControllerStateMachine:
 class TestControllerValidation:
     async def test_rejects_unknown_port(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         sig = _signals(waveforms={"not_a_port": validate_waveform(_triangle())})
         with pytest.raises(ValueError, match="Waveform keys not declared as ports"):
             await ctrl.load(sig)
 
     async def test_rejects_voltage_exceeding_hw_range(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         sig = _signals(
             waveforms={
                 "galvo": validate_waveform(_triangle(vmin=-100, vmax=100)),
@@ -626,37 +576,9 @@ class TestControllerValidation:
         with pytest.raises(ValueError, match="exceeds AO range"):
             await ctrl.load(sig)
 
-    async def test_rejects_unknown_external_trigger(self):
-        _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
-        sig = _signals(clock_src=ExternalClock(source="no_such_trigger"))
-        with pytest.raises(ValueError, match="not in triggers"):
-            await ctrl.load(sig)
-
-    async def test_accepts_known_external_trigger(self):
-        _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
-        sig = _signals(clock_src=ExternalClock(source="camera"))
-        await ctrl.load(sig)  # should not raise
-        assert ctrl.state == "ready"
-
-    async def test_rejects_unknown_internal_out_pin(self):
-        _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
-        sig = _signals(clock_src=InternalClock(out_pin="no_such_line"))
-        with pytest.raises(ValueError, match="not in triggers"):
-            await ctrl.load(sig)
-
-    async def test_accepts_known_internal_out_pin(self):
-        _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
-        sig = _signals(clock_src=InternalClock(out_pin="camera"))
-        await ctrl.load(sig)  # should not raise; pin reserved on hub
-        assert ctrl.state == "ready"
-
     async def test_rejects_derived_cycle_through_validator(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         sig = _signals(
             waveforms={
                 "galvo": validate_waveform({"type": "derived", "operation": "mirror", "source": "etl"}),
@@ -668,7 +590,7 @@ class TestControllerValidation:
 
     async def test_rejects_derived_missing_source(self):
         _, ao = _make_ao()
-        ctrl = AnalogOutputController(ao)
+        ctrl = AOController(ao)
         sig = _signals(
             waveforms={
                 "galvo": validate_waveform(_triangle()),
@@ -679,41 +601,39 @@ class TestControllerValidation:
             await ctrl.load(sig)
 
 
-# ==================== NiAnalogOutput pure-Python helpers ====================
+# ==================== NiAO pure-Python helpers ====================
 
 
-class TestNiAnalogOutputHelpers:
-    """Pure-Python parts of ``NiAnalogOutput`` testable without NI hardware."""
+class TestNiAOHelpers:
+    """Pure-Python parts of ``NiAO`` testable without NI hardware."""
 
     def test_can_hotswap_always_false(self):
         """Pinned to False: see can_hotswap docstring on NI-DAQmx error -200547."""
-        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        ao = NiAO.__new__(NiAO)
         ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
-        ao._triggers = {}  # type: ignore[attr-defined]
         # Identical signals — would have been hotswappable before the buffer-error workaround.
         assert ao.can_hotswap(_signals(), _signals()) is False
         # Different waveforms — also False under the disabled-hotswap policy.
         assert ao.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
 
     def test_can_hotswap_false_when_nothing_loaded(self):
-        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        ao = NiAO.__new__(NiAO)
         ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
-        ao._triggers = {}  # type: ignore[attr-defined]
         assert ao.can_hotswap(None, _signals()) is False
 
-    def test_start_external_clock_with_repeat_raises(self):
-        # External-clock + repeat requires counter-gate hardware support that
+    def test_start_input_trigger_with_repeat_raises(self):
+        # InputTrigger + repeat requires counter-gate hardware support that
         # isn't implemented yet — start() must raise cleanly rather than silently
-        # ignore the bound. No CO task = external clock.
-        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        # ignore the bound. No CO task = input-triggered operation.
+        ao = NiAO.__new__(NiAO)
         ao.uid = "ao_test"  # type: ignore[attr-defined]
         ao._ao_task = object()  # type: ignore[attr-defined]  # truthy: passes "is not None" check
         ao._co_task = None  # type: ignore[attr-defined]
-        with pytest.raises(NotImplementedError, match="external-clock repeat"):
+        with pytest.raises(NotImplementedError, match="input-trigger repeat"):
             ao.start(repeat=10)
 
     def test_wait_until_done_raises_without_finite_repeat(self):
-        ao = NiAnalogOutput.__new__(NiAnalogOutput)
+        ao = NiAO.__new__(NiAO)
         ao.uid = "ao_test"  # type: ignore[attr-defined]
         ao._finite_repeat = None  # type: ignore[attr-defined]
         with pytest.raises(RuntimeError, match="finite acquisition"):

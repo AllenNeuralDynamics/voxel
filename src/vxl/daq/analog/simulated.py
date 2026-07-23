@@ -1,8 +1,8 @@
 """Simulated analog-output engines for tests and local runs.
 
-``SimulatedAnalogOutput`` (clocked) implements the ``AnalogOutput`` contract in memory
+``SimulatedAO`` (clocked) implements the ``AO`` contract in memory
 — records the last-written arrays, running flag, and last-applied ``AOSignals`` for
-assertions. ``SimulatedAnalogOnDemandOutput`` (untimed) records the held voltage per
+assertions. ``SimulatedOnDemandAO`` (untimed) records the held voltage per
 port. Both reserve pins on a ``SimulatedDaqmx`` hub (``vxl.daq.hub_sim``), passed in at
 construction.
 """
@@ -15,12 +15,12 @@ from vxlib.quantity import VoltageRange
 
 from vxl.daq.hub_sim import SimulatedDaqmx
 
-from .base import AnalogOnDemandOutput, AnalogOutput, AOState
-from .models import AOSignals, ExternalClock, InternalClock
+from .base import AO, AOState, OnDemandAO
+from .models import AOSignals
 
 
-class SimulatedAnalogOutput(AnalogOutput):
-    """In-memory ``AnalogOutput`` implementation for tests + simulated rigs.
+class SimulatedAO(AO):
+    """In-memory ``AO`` implementation for tests + simulated rigs.
 
     Records the last-written arrays, last-applied ``AOSignals``, and the current
     state so tests can assert what the controller dispatched.
@@ -32,17 +32,16 @@ class SimulatedAnalogOutput(AnalogOutput):
         *,
         hub: SimulatedDaqmx,
         ports: Mapping[str, str],
-        triggers: Mapping[str, str] | None = None,
     ) -> None:
-        super().__init__(uid=uid, ports=ports, triggers=triggers)
+        super().__init__(uid=uid, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.SimulatedAnalogOutput")
+        self._log = logging.getLogger(f"{uid}.SimulatedAO")
 
         # Driver-local state
         self._sim_state: AOState = "fresh"
         self._last_arrays: dict[str, np.ndarray] = {}
         self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
-        self._clock_reserved: str | None = None  # path to reserved internal-clock counter
+        self._counter_reserved: str | None = None
 
     # ---- introspection ----
 
@@ -61,32 +60,17 @@ class SimulatedAnalogOutput(AnalogOutput):
     # ---- hardware primitives ----
 
     def setup(self, signals: AOSignals) -> None:
+        del signals
         if self._sim_state != "fresh":
             raise RuntimeError(f"setup() requires fresh state, got {self._sim_state}")
-
-        clock_src = signals.clock_src
 
         # Reserve AO pins on the hub (fails if another engine already owns one)
         for port_name, physical_pin in self._ports.items():
             self._hub.assign_pin(self.uid, physical_pin)
             self._log.debug("reserved port %s -> %s", port_name, physical_pin)
 
-        # For internal clock, reserve a counter (simulating NI's CO-task requirement)
-        if isinstance(clock_src, InternalClock):
-            self._clock_reserved = self._hub.reserve_counter(self.uid)
-            # If out_pin is requested, validate it resolves and reserve it on the hub
-            # so multi-engine pin-contention tests exercise the real allocation path.
-            if clock_src.out_pin is not None:
-                physical = self._triggers.get(clock_src.out_pin)
-                if physical is None:
-                    raise ValueError(f"Unknown trigger '{clock_src.out_pin}' on {self.uid}")
-                self._hub.assign_pin(self.uid, physical)
-        elif isinstance(clock_src, ExternalClock):
-            # Validate the trigger name resolves on the hub
-            pin = self._triggers.get(clock_src.source)
-            if pin is None:
-                raise ValueError(f"Unknown trigger '{clock_src.source}' on {self.uid}")
-            self._hub.get_pfi_path(pin)
+        # Simulated clocked output is always internally paced.
+        self._counter_reserved = self._hub.reserve_counter(self.uid)
 
         self._sim_state = "ready"
 
@@ -101,7 +85,7 @@ class SimulatedAnalogOutput(AnalogOutput):
     def teardown(self) -> None:
         self._hub.release_pins_for_owner(self.uid)
         self._last_arrays = {}
-        self._clock_reserved = None
+        self._counter_reserved = None
         self._finite_repeat = None
         self._sim_state = "fresh"
 
@@ -134,13 +118,11 @@ class SimulatedAnalogOutput(AnalogOutput):
             return False
         if old.rest_time != new.rest_time:
             return False
-        if old.clock_src != new.clock_src:
-            return False
         return set(old.waveforms.keys()) == set(new.waveforms.keys())
 
 
-class SimulatedAnalogOnDemandOutput(AnalogOnDemandOutput):
-    """In-memory ``AnalogOnDemandOutput`` implementation.
+class SimulatedOnDemandAO(OnDemandAO):
+    """In-memory ``OnDemandAO`` implementation.
 
     ``levels`` exposes the current held voltage per port for assertions.
     """
@@ -148,7 +130,7 @@ class SimulatedAnalogOnDemandOutput(AnalogOnDemandOutput):
     def __init__(self, uid: str, *, hub: SimulatedDaqmx, ports: Mapping[str, str]) -> None:
         super().__init__(uid=uid, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.SimulatedAnalogOnDemandOutput")
+        self._log = logging.getLogger(f"{uid}.SimulatedOnDemandAO")
         self._levels: dict[str, float] = {}  # port -> currently held voltage
 
     @property
@@ -172,4 +154,4 @@ class SimulatedAnalogOnDemandOutput(AnalogOnDemandOutput):
         self._hub.release_pins_for_owner(self.uid)
 
 
-__all__ = ["SimulatedAnalogOnDemandOutput", "SimulatedAnalogOutput"]
+__all__ = ["SimulatedAO", "SimulatedOnDemandAO"]

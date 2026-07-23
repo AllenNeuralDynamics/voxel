@@ -31,7 +31,7 @@ from vxlib import (
 
 from .axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from .camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, SensorROI, StorageSpec
-from .daq.analog import AnalogOutputHandle, AOSignals
+from .daq.analog import AOHandle, AOSignals
 from .metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from .traversal import Tile, TileOrder
 
@@ -166,7 +166,7 @@ class HAL:
         self.continuous_axes: dict[str, ContinuousAxisHandle] = {}
         self.discrete_axes: dict[str, DeviceHandle] = {}
         self.fws: dict[str, DeviceHandle] = {}
-        self.analog_outs: dict[str, AnalogOutputHandle] = {}
+        self.analog_outs: dict[str, AOHandle] = {}
         self._stage: Stage | None = None
 
     @property
@@ -194,8 +194,8 @@ class HAL:
             match device_type:
                 case "camera":
                     self.cameras[uid] = CameraHandle.wrap(handle)
-                case "daq_analog_output":
-                    self.analog_outs[uid] = AnalogOutputHandle.wrap(handle)
+                case "daq_ao":
+                    self.analog_outs[uid] = AOHandle.wrap(handle)
                 case "laser":
                     self.lasers[uid] = handle
                 case "aotf":

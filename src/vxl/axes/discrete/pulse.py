@@ -3,7 +3,7 @@ from collections.abc import Mapping
 
 from vxlib.quantity import VoltageRange
 
-from vxl.daq.analog import AnalogOnDemandOutput
+from vxl.daq.analog import OnDemandAO
 
 from .base import DiscreteAxis
 
@@ -22,7 +22,7 @@ class PulseDiscreteAxis(DiscreteAxis):
     position select. Open-loop: position reflects the last commanded slot, not sensed
     feedback.
 
-    The generator is an ``AnalogOnDemandOutput`` — the pulse is software-timed and claims
+    The generator is an ``OnDemandAO`` — the pulse is software-timed and claims
     no clock or trigger, so the axis can select a slot while a clocked acquisition
     owns the same card's AO timing only when the vendor permits the two tasks to use
     disjoint output resources. On NI 6738/6739 cards, the pulse channels must occupy
@@ -40,7 +40,7 @@ class PulseDiscreteAxis(DiscreteAxis):
         self,
         uid: str,
         *,
-        generator: AnalogOnDemandOutput,
+        generator: OnDemandAO,
         slots: Mapping[int | str, str | None],
         slot_count: int | None = None,
         pulse_voltage: VoltageRange | None = None,

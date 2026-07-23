@@ -7,7 +7,7 @@ hal:
           init:
             device_name: "MockDev1"
         ao_main:
-          target: vxl.daq.SimulatedAnalogOutput
+          target: vxl.daq.SimulatedAO
           init:
             hub: nidaq_1
             ports:
@@ -169,8 +169,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: &camera_waveform_ch1
                 type: pulse
@@ -202,8 +200,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_405: *laser_waveform_ch1
@@ -220,8 +216,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_561: *laser_waveform_ch1
@@ -238,8 +232,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_561: *laser_waveform_ch1
@@ -256,8 +248,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_405: *laser_waveform_ch1
@@ -272,8 +262,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_2: *camera_waveform_ch1
               laser_488: *laser_waveform_ch1
@@ -288,8 +276,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_561: *laser_waveform_ch1
@@ -304,8 +290,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_2: *camera_waveform_ch1
               laser_640: *laser_waveform_ch1
@@ -321,8 +305,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src:
-              type: internal
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_730: *laser_waveform_ch1

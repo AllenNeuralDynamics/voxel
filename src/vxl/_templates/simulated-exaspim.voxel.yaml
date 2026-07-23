@@ -1,7 +1,7 @@
 hal:
   devices:
     ao_main:
-      target: vxl.daq.SimulatedAnalogOutput
+      target: vxl.daq.SimulatedAO
       init:
         hub: nidaq_1
         ports:
@@ -116,8 +116,6 @@ default:
             sample_rate: "10 kHz"
             duration: "544 ms"
             rest_time: "0 s"
-            clock_src:
-              type: internal
             waveforms:
               camera: &camera_waveform
                 type: pulse
@@ -178,8 +176,6 @@ default:
             sample_rate: "10 kHz"
             duration: "544 ms"
             rest_time: "0 s"
-            clock_src:
-              type: internal
             waveforms:
               camera: *camera_waveform
               laser_561: *laser_waveform
@@ -201,8 +197,6 @@ default:
             sample_rate: "10 kHz"
             duration: "544 ms"
             rest_time: "0 s"
-            clock_src:
-              type: internal
             waveforms:
               camera: *camera_waveform
               laser_640: *laser_waveform

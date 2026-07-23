@@ -10,7 +10,7 @@
   import { Button, Select } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import type { SelectOption } from '$lib/kit/Select.svelte';
-  import type { AOSignals, ClockSource, DerivedWaveform, Waveform } from '$lib/model';
+  import type { AOSignals, DerivedWaveform, Waveform } from '$lib/model';
   import { getVoxelApp } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
   import { createPaneSize, sanitizeString, toastError } from '$lib/utils';
@@ -62,14 +62,12 @@
     sample_rate: number;
     duration: number;
     rest_time: number;
-    clock_src: ClockSource;
   }
 
   const defaultTiming: Timing = {
     sample_rate: 100000,
     duration: 0.01,
-    rest_time: 0,
-    clock_src: { type: 'internal' }
+    rest_time: 0
   };
 
   // ──────────────────────────────── Pure helpers ────────────────────────────────
@@ -193,21 +191,6 @@
     const ports = dev?.init?.ports as Record<string, string> | undefined;
     return ports ?? {};
   });
-
-  const aoTriggers = $derived.by<Record<string, string>>(() => {
-    if (!selectedAoUid) return {};
-    const dev = instrument?.hal.devices[selectedAoUid];
-    const triggers = dev?.init?.triggers as Record<string, string> | undefined;
-    return triggers ?? {};
-  });
-
-  const clockSourceOptions = $derived<SelectOption[]>([
-    { value: '__internal__', label: 'Internal' },
-    ...Object.entries(aoTriggers).map(([name, pin]) => ({
-      value: name,
-      label: `${sanitizeString(name)} (${pin})`
-    }))
-  ]);
 
   // ──────────────────────────────── Sidebar: waveform devices ────────────────────────────────
 
@@ -351,8 +334,7 @@
         localTiming = {
           sample_rate: signals.sample_rate,
           duration: signals.duration,
-          rest_time: signals.rest_time,
-          clock_src: signals.clock_src
+          rest_time: signals.rest_time
         };
       }
       timingDirty = false;
@@ -365,24 +347,12 @@
     timingDirty = true;
   }
 
-  function updateClockSource(value: string) {
-    const clock_src: ClockSource =
-      value === '__internal__' ? { type: 'internal' } : { type: 'external', source: value };
-    localTiming = { ...localTiming, clock_src };
-    timingDirty = true;
-  }
-
-  const selectedClockValue = $derived(
-    localTiming.clock_src.type === 'internal' ? '__internal__' : localTiming.clock_src.source
-  );
-
   async function commitTiming() {
     if (!canEdit || !timingDirty || !selectedAoUid || !configSignals) return;
     const next: AOSignals = {
       sample_rate: localTiming.sample_rate,
       duration: localTiming.duration,
       rest_time: localTiming.rest_time,
-      clock_src: localTiming.clock_src,
       waveforms: configSignals.waveforms
     };
     try {
@@ -400,8 +370,7 @@
       localTiming = {
         sample_rate: configSignals.sample_rate,
         duration: configSignals.duration,
-        rest_time: configSignals.rest_time,
-        clock_src: configSignals.clock_src
+        rest_time: configSignals.rest_time
       };
     }
     timingDirty = false;
@@ -452,7 +421,6 @@
           sample_rate: base.sample_rate,
           duration: base.duration,
           rest_time: base.rest_time,
-          clock_src: base.clock_src,
           waveforms: { ...base.waveforms, [channelId]: nextWf }
         };
         toastError(instrument?.updateAoSignals(aoUid, merged));
@@ -1054,14 +1022,6 @@
                 </div>
               </div>
               <div class="grid grid-cols-1 items-end gap-2 gap-y-3">
-                <Select
-                  prefix="Clock"
-                  size="xs"
-                  value={selectedClockValue}
-                  options={clockSourceOptions}
-                  disabled={!canEdit}
-                  onchange={(v) => updateClockSource(v)}
-                />
                 <SpinBox
                   model={{
                     value: sampleRate,

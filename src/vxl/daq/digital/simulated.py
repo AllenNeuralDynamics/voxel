@@ -4,10 +4,10 @@ from collections.abc import Mapping
 
 from vxl.daq.hub_sim import SimulatedDaqmx
 
-from .base import DigitalOnDemandOutput
+from .base import OnDemandDO
 
 
-class SimulatedDigitalOnDemandOutput(DigitalOnDemandOutput):
+class SimulatedOnDemandDO(OnDemandDO):
     """Digital output simulator that records the currently held state per line."""
 
     def __init__(self, uid: str, *, hub: SimulatedDaqmx, lines: Mapping[str, str]) -> None:
@@ -36,4 +36,4 @@ class SimulatedDigitalOnDemandOutput(DigitalOnDemandOutput):
         self._hub.release_pins_for_owner(self.uid)
 
 
-__all__ = ["SimulatedDigitalOnDemandOutput"]
+__all__ = ["SimulatedOnDemandDO"]

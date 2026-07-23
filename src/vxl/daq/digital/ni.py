@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from nidaqmx.constants import LineGrouping
 from nidaqmx.task import Task as NiTask
 
-from .base import DigitalOnDemandOutput
+from .base import OnDemandDO
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from vxl.daq.hub_ni.resources import NiTaskLease
 
 
-class NiDigitalOnDemandOutput(DigitalOnDemandOutput):
+class NiOnDemandDO(OnDemandDO):
     """Static digital output on an NI card.
 
     One lazy NI task owns all declared lines. Partial logical updates are merged
@@ -27,7 +27,7 @@ class NiDigitalOnDemandOutput(DigitalOnDemandOutput):
     def __init__(self, uid: str, *, hub: NiDaqmx, lines: Mapping[str, str]) -> None:
         super().__init__(uid=uid, lines=lines)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiDigitalOnDemandOutput")
+        self._log = logging.getLogger(f"{uid}.NiOnDemandDO")
         self._task: NiTask | None = None
         self._lease: NiTaskLease | None = None
         self._order: list[str] = []
@@ -89,4 +89,4 @@ class NiDigitalOnDemandOutput(DigitalOnDemandOutput):
             self._lease = None
 
 
-__all__ = ["NiDigitalOnDemandOutput"]
+__all__ = ["NiOnDemandDO"]

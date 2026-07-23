@@ -13,10 +13,9 @@
 
   const ao = $derived(instrument.analogOuts.get(deviceId));
 
-  // Ports / triggers live on the AO device's init (HAL config), not on the instrument top level
+  // Ports live on the AO device's init (HAL config), not on the instrument top level
   const initCfg = $derived((instrument.hal.devices[deviceId]?.init ?? {}) as Record<string, unknown>);
   const ports = $derived(Object.entries((initCfg.ports ?? {}) as Record<string, string>));
-  const triggers = $derived(Object.entries((initCfg.triggers ?? {}) as Record<string, string>));
 
   const loaded = $derived(ao?.loaded);
   const engineState = $derived(ao?.state);
@@ -55,21 +54,6 @@
     </div>
   {/if}
 
-  <!-- Trigger inputs -->
-  {#if triggers.length > 0}
-    <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Trigger Inputs</h4>
-      <div class="grid gap-1.5">
-        {#each triggers as [name, pin] (name)}
-          <div class="flex items-center justify-between">
-            <span class="text-fg">{name}</span>
-            <span class="font-mono text-fg-muted">{pin}</span>
-          </div>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
   <!-- Loaded signals summary -->
   {#if loaded}
     <div class="rounded border border-border bg-card p-3">
@@ -86,12 +70,6 @@
         <div class="flex items-center justify-between">
           <span class="text-fg-muted">Rest time</span>
           <span class="font-mono text-fg">{loaded.rest_time} s</span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-fg-muted">Clock</span>
-          <span class="font-mono text-fg">
-            {loaded.clock_src.type === 'internal' ? 'internal' : `external (${loaded.clock_src.source})`}
-          </span>
         </div>
         <div class="flex items-center justify-between">
           <span class="text-fg-muted">Waveforms</span>

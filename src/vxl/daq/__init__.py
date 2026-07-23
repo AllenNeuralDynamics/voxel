@@ -1,10 +1,10 @@
-from .analog.simulated import SimulatedAnalogOnDemandOutput, SimulatedAnalogOutput
-from .digital.simulated import SimulatedDigitalOnDemandOutput
+from .analog.simulated import SimulatedAO, SimulatedOnDemandAO
+from .digital.simulated import SimulatedOnDemandDO
 from .hub_sim import SimulatedDaqmx
 
 __all__ = [
-    "SimulatedAnalogOnDemandOutput",
-    "SimulatedAnalogOutput",
+    "SimulatedAO",
     "SimulatedDaqmx",
-    "SimulatedDigitalOnDemandOutput",
+    "SimulatedOnDemandAO",
+    "SimulatedOnDemandDO",
 ]

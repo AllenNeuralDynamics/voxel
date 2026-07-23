@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from pydantic import BaseModel
 from vxlib.quantity import VoltageRange
 
-from vxl.daq.analog.ni import NiAnalogOnDemandOutput
+from vxl.daq.analog.ni import NiOnDemandAO
 from vxl.daq.hub_ni import NiDaqmx
 
 from .pulse import PulseDiscreteAxis
@@ -19,7 +19,7 @@ class SlotSpec(BaseModel):
 class NiDiscreteAxis(PulseDiscreteAxis):
     """Discrete axis driven directly by an NI-DAQmx card, one output pin per slot.
 
-    Builds a dedicated ``NiAnalogOnDemandOutput`` on ``hub`` from the per-slot pins, then
+    Builds a dedicated ``NiOnDemandAO`` on ``hub`` from the per-slot pins, then
     pulses it like any other on-demand generator. The initial home acquires the
     required AO-bank lease, which remains held for the device lifetime so every move
     has deterministic access to its outputs. ``halt`` restores the inactive voltage
@@ -48,7 +48,7 @@ class NiDiscreteAxis(PulseDiscreteAxis):
             pulse_voltage: Select-pulse levels (``max`` peak, ``min`` rest). Defaults to 0-5 V.
         """
         specs = {int(k): SlotSpec.model_validate(v) for k, v in slots.items()}
-        generator = NiAnalogOnDemandOutput(uid=f"{uid}_od", hub=hub, ports={str(i): s.pin for i, s in specs.items()})
+        generator = NiOnDemandAO(uid=f"{uid}_od", hub=hub, ports={str(i): s.pin for i, s in specs.items()})
         try:
             super().__init__(
                 uid=uid,
