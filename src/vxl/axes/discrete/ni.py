@@ -20,8 +20,13 @@ class NiDiscreteAxis(PulseDiscreteAxis):
     """Discrete axis driven directly by an NI-DAQmx card, one output pin per slot.
 
     Builds a dedicated ``NiAnalogOnDemandOutput`` on ``hub`` from the per-slot pins, then
-    pulses it like any other on-demand generator. Each slot's pin and label are
-    declared together via ``slots``. Homes to slot 0 at construction.
+    pulses it like any other on-demand generator. The initial home acquires the
+    required AO-bank lease, which remains held for the device lifetime so every move
+    has deterministic access to its outputs. ``halt`` restores the inactive voltage
+    without releasing the lease; ``close`` releases the task and lease.
+
+    Each slot's pin and label are declared together via ``slots``. Homes to slot 0 at
+    construction.
     """
 
     def __init__(
@@ -44,10 +49,14 @@ class NiDiscreteAxis(PulseDiscreteAxis):
         """
         specs = {int(k): SlotSpec.model_validate(v) for k, v in slots.items()}
         generator = NiAnalogOnDemandOutput(uid=f"{uid}_od", hub=hub, ports={str(i): s.pin for i, s in specs.items()})
-        super().__init__(
-            uid=uid,
-            generator=generator,
-            slots={i: s.label for i, s in specs.items()},
-            slot_count=slot_count,
-            pulse_voltage=pulse_voltage,
-        )
+        try:
+            super().__init__(
+                uid=uid,
+                generator=generator,
+                slots={i: s.label for i, s in specs.items()},
+                slot_count=slot_count,
+                pulse_voltage=pulse_voltage,
+            )
+        except Exception:
+            generator.reset()
+            raise

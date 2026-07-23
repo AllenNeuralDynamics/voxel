@@ -24,12 +24,16 @@ class PulseDiscreteAxis(DiscreteAxis):
 
     The generator is an ``AnalogOnDemandOutput`` — the pulse is software-timed and claims
     no clock or trigger, so the axis can select a slot while a clocked acquisition
-    owns the same card's AO timing. (A clocked pulse here would contend for the
-    card's single start-trigger route and fail.) Signal type lives in the generator,
-    so this one axis serves analog on-demand today and digital on-demand later
-    without a separate implementation.
+    owns the same card's AO timing only when the vendor permits the two tasks to use
+    disjoint output resources. On NI 6738/6739 cards, the pulse channels must occupy
+    different four-channel AO banks from the acquisition. Signal type lives in the
+    generator, so this one axis serves analog on-demand today and digital on-demand
+    later without a separate implementation.
 
-    Homes to slot 0 at construction so the position is commanded, never assumed.
+    The axis owns its generator for its lifetime. ``halt`` returns every line to the
+    rest level without releasing the generator; ``close`` resets it and releases its
+    resources. Homes to slot 0 at construction so the position is commanded, never
+    assumed.
     """
 
     def __init__(
@@ -101,8 +105,18 @@ class PulseDiscreteAxis(DiscreteAxis):
         self.move(0, wait=wait, timeout=timeout)
 
     def halt(self) -> None:
-        self._generator.reset()
-        self._is_moving = False
+        rest = self._pulse_voltage.min
+        try:
+            self._generator.set_voltages({str(i): rest for i in range(self.slot_count)})
+        finally:
+            self._is_moving = False
+
+    def close(self) -> None:
+        """Reset the owned generator and release its resources."""
+        try:
+            self._generator.reset()
+        finally:
+            self._is_moving = False
 
     def await_movement(self, timeout: float | None = None) -> None:
         start = time.time()

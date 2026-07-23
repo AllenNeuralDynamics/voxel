@@ -8,8 +8,9 @@ controller owns the state machine (``fresh`` / ``ready`` / ``running``), validat
 and the no-op / hot-swap / rebuild diff. Waveform resolution lives on ``AOSignals``.
 
 ``AnalogOnDemandOutput`` — untimed, software-paced output (``set_voltages`` / ``pulse``
-/ ``play``). It claims no clock or trigger, so it can coexist with a clocked task on
-another card, but NOT a second AO task on the same card (one AO generator per device).
+/ ``play``). It claims no clock or trigger. Whether it can coexist with another AO
+task on the same card is vendor-specific; NI 6738/6739 devices permit coexistence
+when the tasks use separate four-channel AO banks.
 
 Vendor subclasses (e.g. ``NiAnalogOutput`` / ``NiAnalogOnDemandOutput``) implement the
 primitives; the handles are the typed async API used by application code.

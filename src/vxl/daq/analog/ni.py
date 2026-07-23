@@ -5,27 +5,35 @@ task whose output terminal is routed to the AO task's start trigger — that's h
 hardware generates a periodic retriggerable AO cycle.
 
 ``NiAnalogOnDemandOutput`` (untimed) owns one AO task with no sample-clock timing,
-holding all its ports' channels; writes go straight to the DAC. It contends with any
-other AO task on the same card (one AO generator per device), so it only coexists with
-a clocked task on a *different* card.
+holding all its ports' channels; writes go straight to the DAC. NI 6738/6739 AO
+resources are banked in groups of four, so it can coexist with other AO tasks only
+when their banks do not overlap. A card can still host only one hardware-timed AO
+task.
 
 Both take a ``NiDaqmx`` hub (``vxl.daq.hub_ni``) at construction; the card and pins
 live there.
 """
 
+from __future__ import annotations
+
 import logging
-from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 import numpy as np
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import Edge, RegenerationMode
 from nidaqmx.task import Task as NiTask
-from vxlib.quantity import VoltageRange
-
-from vxl.daq.hub_ni import NiDaqmx
 
 from .base import AnalogOnDemandOutput, AnalogOutput
 from .models import AOSignals, ExternalClock, InternalClock
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from vxlib.quantity import VoltageRange
+
+    from vxl.daq.hub_ni import NiDaqmx
+    from vxl.daq.hub_ni.resources import NiTaskLease
 
 
 class NiAnalogOutput(AnalogOutput):
@@ -53,8 +61,8 @@ class NiAnalogOutput(AnalogOutput):
         # Hardware handles — populated on setup, cleared on teardown
         self._ao_task: NiTask | None = None
         self._co_task: NiTask | None = None
+        self._lease: NiTaskLease | None = None
         self._ao_channel_order: list[str] = []  # port names in the order NI applied them
-        self._reserved_counter: str | None = None
 
         self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
 
@@ -67,7 +75,7 @@ class NiAnalogOutput(AnalogOutput):
     # ---- hardware primitives ----
 
     def setup(self, signals: AOSignals) -> None:
-        if self._ao_task is not None:
+        if self._ao_task is not None or self._co_task is not None or self._lease is not None:
             raise RuntimeError("setup() called with live AO task; teardown() first")
 
         sample_rate = signals.sample_rate
@@ -78,24 +86,50 @@ class NiAnalogOutput(AnalogOutput):
         num_samples = int(float(sample_rate) * float(duration))
         frame_freq = 1.0 / (float(duration) + float(rest_time))
 
-        # Resolve any requested out_pin up front so failure doesn't partially configure hardware
+        # Resolve logical trigger mappings before asking the hub for one atomic
+        # reservation. Input PFIs are validated but not exclusively claimed; an
+        # output PFI driven by the counter is part of the lease.
         physical_out_pin: str | None = None
+        physical_input_pins: tuple[str, ...] = ()
         if isinstance(clock_src, InternalClock) and clock_src.out_pin is not None:
             physical_out_pin = self._triggers.get(clock_src.out_pin)
             if physical_out_pin is None:
                 raise ValueError(f"Unknown trigger '{clock_src.out_pin}' on {self.uid}")
+        elif isinstance(clock_src, ExternalClock):
+            physical_input_pin = self._triggers.get(clock_src.source)
+            if physical_input_pin is None:
+                raise ValueError(f"Unknown trigger '{clock_src.source}' on {self.uid}")
+            physical_input_pins = (physical_input_pin,)
 
-        # Create AO task and add one voltage channel per port (preserve config order)
-        ao_task = NiTask(f"{self.uid}_ao")
+        lease = self._hub.reserve_ao_task(
+            self.uid,
+            tuple(self._ports.values()),
+            hardware_timed=True,
+            needs_counter=isinstance(clock_src, InternalClock),
+            output_pfi=physical_out_pin,
+            input_pfis=physical_input_pins,
+        )
+        self._lease = lease
+
+        internal_clock_resources: tuple[str, str] | None = None
+        if isinstance(clock_src, InternalClock):
+            if lease.counter_path is None or lease.output_pfi_path is None:
+                lease.release()
+                self._lease = None
+                raise RuntimeError("Internal-clock reservation did not provide a counter and output route")
+            internal_clock_resources = (lease.counter_path, lease.output_pfi_path)
+
         try:
-            for port_name, physical_pin in self._ports.items():
-                path = self._hub.assign_pin(self.uid, physical_pin)
-                ao_task.ao_channels.add_ao_voltage_chan(path)
+            # Acquire the complete lease before creating any NI task. Keep task
+            # handles on self immediately so cleanup can retry a failed close.
+            self._ao_task = NiTask(f"{self.uid}_ao")
+            for port_name, path in zip(self._ports, lease.ao_paths, strict=True):
+                self._ao_task.ao_channels.add_ao_voltage_chan(path)
                 self._ao_channel_order.append(port_name)
 
             # Finite + retriggerable for both internal and external clocks — each
             # trigger plays one buffer cycle, then arms for the next trigger.
-            ao_task.timing.cfg_samp_clk_timing(
+            self._ao_task.timing.cfg_samp_clk_timing(
                 rate=float(sample_rate),
                 sample_mode=NiAcqType.FINITE,
                 samps_per_chan=num_samples,
@@ -103,50 +137,34 @@ class NiAnalogOutput(AnalogOutput):
 
             # Enable regeneration so retriggered finite playback re-reads the same
             # buffer on each trigger cycle.
-            ao_task.out_stream.regen_mode = RegenerationMode.ALLOW_REGENERATION
+            self._ao_task.out_stream.regen_mode = RegenerationMode.ALLOW_REGENERATION
 
-            if isinstance(clock_src, InternalClock):
-                ctr_name, ctr_path = self._hub.reserve_counter(self.uid)
-                self._reserved_counter = ctr_name
-                # If an output pin is requested, resolve and reserve it on the hub
-                # so the CO pulse can be routed to a physical PFI (downstream devices
-                # can then ride the frame clock).
-                out_pfi_path: str | None = None
-                if physical_out_pin is not None:
-                    out_pfi_path = self._hub.assign_pin(self.uid, physical_out_pin)
-                self._co_task = self._create_internal_clock(ctr_path, frame_freq, out_pfi_path)
+            if internal_clock_resources is not None:
+                self._create_internal_clock(
+                    internal_clock_resources[0],
+                    frame_freq,
+                    internal_clock_resources[1],
+                )
 
-            self._ao_task = ao_task
-            if isinstance(clock_src, InternalClock) and self._reserved_counter is not None:
-                trig_src = f"/{self._hub.device_name}/{self._reserved_counter.upper()}InternalOutput"
+            if isinstance(clock_src, InternalClock) and lease.counter_name is not None:
+                trig_src = f"/{self._hub.device_name}/{lease.counter_name.upper()}InternalOutput"
                 self._ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                     trigger_source=trig_src,
                     trigger_edge=Edge.RISING,
                 )
                 self._ao_task.triggers.start_trigger.retriggerable = True
             elif isinstance(clock_src, ExternalClock):
-                pfi_path = self._resolve_trigger_pfi(clock_src.source)
+                pfi_path = lease.input_pfi_paths[0]
                 self._ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                     trigger_source=pfi_path,
                     trigger_edge=Edge.RISING,
                 )
                 self._ao_task.triggers.start_trigger.retriggerable = True
         except Exception:
-            ao_task.close()
-            if self._co_task is not None:
-                self._co_task.close()
-                self._co_task = None
-            self._hub.release_pins_for_owner(self.uid)
-            self._ao_channel_order = []
-            self._reserved_counter = None
+            self._close_tasks_and_release(suppress_close_errors=True)
+            if self._lease is None:
+                self._ao_channel_order = []
             raise
-
-    def _resolve_trigger_pfi(self, logical_source: str) -> str:
-        """Resolve a logical trigger name to a full PFI path via the hub."""
-        pin = self._triggers.get(logical_source)
-        if pin is None:
-            raise ValueError(f"Unknown trigger '{logical_source}' on {self.uid}")
-        return self._hub.get_pfi_path(pin)
 
     def _create_internal_clock(self, counter_path: str, frequency_hz: float, out_pfi_path: str | None = None) -> NiTask:
         """Create a CO task that emits a continuous pulse train at ``frequency_hz``.
@@ -156,18 +174,15 @@ class NiAnalogOutput(AnalogOutput):
         devices.
         """
         co_task = NiTask(f"{self.uid}_clock")
-        try:
-            chan = co_task.co_channels.add_co_pulse_chan_freq(
-                counter_path,
-                freq=frequency_hz,
-                duty_cycle=0.5,
-            )
-            if out_pfi_path is not None:
-                chan.co_pulse_term = out_pfi_path
-            co_task.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
-        except Exception:
-            co_task.close()
-            raise
+        self._co_task = co_task
+        chan = co_task.co_channels.add_co_pulse_chan_freq(
+            counter_path,
+            freq=frequency_hz,
+            duty_cycle=0.5,
+        )
+        if out_pfi_path is not None:
+            chan.co_pulse_term = out_pfi_path
+        co_task.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
         return co_task
 
     def write(self, port_arrays: Mapping[str, np.ndarray]) -> None:
@@ -193,20 +208,36 @@ class NiAnalogOutput(AnalogOutput):
         self.teardown()
 
     def teardown(self) -> None:
-        if self._co_task is not None:
+        self._close_tasks_and_release(suppress_close_errors=False)
+        if self._lease is None:
+            self._ao_channel_order = []
+            self._finite_repeat = None
+
+    def _close_tasks_and_release(self, *, suppress_close_errors: bool) -> None:
+        """Close every configured NI task before releasing the task-scoped lease.
+
+        A handle whose ``close`` raises is retained and its lease stays claimed so
+        a later teardown can retry without advertising hardware resources as free.
+        """
+        close_errors: list[Exception] = []
+        for attribute in ("_co_task", "_ao_task"):
+            task = getattr(self, attribute)
+            if task is None:
+                continue
             try:
-                self._co_task.close()
-            finally:
-                self._co_task = None
-        if self._ao_task is not None:
-            try:
-                self._ao_task.close()
-            finally:
-                self._ao_task = None
-        self._hub.release_pins_for_owner(self.uid)
-        self._ao_channel_order = []
-        self._reserved_counter = None
-        self._finite_repeat = None
+                task.close()
+            except Exception as error:
+                close_errors.append(error)
+                self._log.warning("failed to close NI task during cleanup", exc_info=True)
+            else:
+                setattr(self, attribute, None)
+
+        if self._co_task is None and self._ao_task is None and self._lease is not None:
+            self._lease.release()
+            self._lease = None
+
+        if close_errors and not suppress_close_errors:
+            raise close_errors[0]
 
     def start(self, repeat: int | None = None) -> None:
         if self._ao_task is None:
@@ -292,6 +323,7 @@ class NiAnalogOnDemandOutput(AnalogOnDemandOutput):
         self._hub = hub
         self._log = logging.getLogger(f"{uid}.NiAnalogOnDemandOutput")
         self._task: NiTask | None = None
+        self._lease: NiTaskLease | None = None
         self._order: list[str] = []  # port names in AO channel order
         self._levels: dict[str, float] = {}  # port -> currently held voltage
 
@@ -303,21 +335,26 @@ class NiAnalogOnDemandOutput(AnalogOnDemandOutput):
         """Create the single AO task with one channel per declared port (lazy, once)."""
         if self._task is not None:
             return self._task
-        task = NiTask(f"{self.uid}_od")
+        lease = self._hub.reserve_ao_task(
+            self.uid,
+            tuple(self._ports.values()),
+            hardware_timed=False,
+        )
+        self._lease = lease
         try:
-            for port, physical in self._ports.items():
-                path = self._hub.assign_pin(self.uid, physical)
+            self._task = NiTask(f"{self.uid}_od")
+            for port, path in zip(self._ports, lease.ao_paths, strict=True):
                 # No cfg_samp_clk_timing: on-demand mode, writes go straight to the DAC.
-                task.ao_channels.add_ao_voltage_chan(path)
+                self._task.ao_channels.add_ao_voltage_chan(path)
                 self._order.append(port)
                 self._levels.setdefault(port, 0.0)
         except Exception:
-            task.close()
-            self._hub.release_pins_for_owner(self.uid)
-            self._order = []
+            self._close_task_and_release(suppress_close_errors=True)
+            if self._lease is None:
+                self._order = []
+                self._levels = {}
             raise
-        self._task = task
-        return task
+        return self._task
 
     def set_voltages(self, port_values: Mapping[str, float]) -> None:
         self._validate(port_values)
@@ -331,15 +368,24 @@ class NiAnalogOnDemandOutput(AnalogOnDemandOutput):
         task.write(vector[0] if len(vector) == 1 else vector)
 
     def reset(self) -> None:
+        self._close_task_and_release(suppress_close_errors=True)
+        if self._lease is None:
+            self._order = []
+            self._levels = {}
+
+    def _close_task_and_release(self, *, suppress_close_errors: bool) -> None:
         if self._task is not None:
             try:
                 self._task.close()
             except Exception:
                 self._log.warning("failed to close on-demand task", exc_info=True)
-            self._task = None
-        self._order = []
-        self._levels = {}
-        self._hub.release_pins_for_owner(self.uid)
+                if not suppress_close_errors:
+                    raise
+            else:
+                self._task = None
+        if self._task is None and self._lease is not None:
+            self._lease.release()
+            self._lease = None
 
 
 __all__ = [
