@@ -114,24 +114,11 @@ export type DerivedWaveform = DerivedMirror | DerivedScale | DerivedOffset | Der
 export type Waveform =
   PulseWaveform | SquareWaveform | SineWaveform | TriangleWaveform | MultiPointWaveform | CSVWaveform | DerivedWaveform;
 
-/** Internal clock: the AO device generates its own frame clock. */
-export interface InternalClock {
-  type: 'internal';
-  out_pin?: string | null;
-}
-/** External clock: the AO device triggers off a logical input pin. */
-export interface ExternalClock {
-  type: 'external';
-  source: string;
-}
-export type ClockSource = InternalClock | ExternalClock;
-
 /** One AO device's declarative signal config. */
 export interface AOSignals {
   sample_rate: number;
   duration: number;
   rest_time: number;
-  clock_src: ClockSource;
   waveforms: Record<string, Waveform>;
 }
 

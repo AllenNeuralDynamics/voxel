@@ -1,53 +1,17 @@
-"""Pydantic models for analog-output signals.
+"""Pydantic models for vendor-neutral analog-output signals.
 
-Defines the declarative ``AOSignals`` config handed to ``AnalogOutputController.load()``,
-plus the ``ClockSource`` discriminated union and the derived-waveform resolution
-machinery (``AOSignals.arrays`` + ``DerivedResolutionError``).
+Defines the declarative ``AOSignals`` config handed to ``AOController.load()``
+and the derived-waveform resolution machinery (``AOSignals.arrays`` +
+``DerivedResolutionError``).
 """
 
 from collections.abc import Mapping
-from typing import Annotated, Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Discriminator, Field
+from pydantic import BaseModel, ConfigDict, Field
 from vxlib.quantity import Frequency, Time
 
 from .wave import BaseWaveform, DerivedMirror, DerivedOffset, DerivedScale, DerivedShift, Waveform
-
-
-class InternalClock(BaseModel):
-    """DAQ-generated clock. Frequency derives from ``duration + rest_time``.
-
-    ``out_pin`` (optional) is a logical trigger name present in the device's
-    init-time ``triggers`` map. When set, the driver routes the internal clock's
-    rising edge to that physical PFI pin so downstream devices (e.g. cameras) can
-    ride the frame clock. Leave it ``None`` when no external consumer needs the
-    pulse — the AO task will still be retriggered by the card-internal terminal.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    type: Literal["internal"] = "internal"
-    out_pin: str | None = None
-
-
-class ExternalClock(BaseModel):
-    """Trigger comes from an input pin on the AO device.
-
-    ``source`` is a logical name that must exist in the device's init-time
-    ``triggers`` map; the driver resolves it to a physical PFI at load-time.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    type: Literal["external"] = "external"
-    source: str
-
-
-ClockSource = Annotated[InternalClock | ExternalClock, Discriminator("type")]
-
-
-# ==================== Derived waveform resolution ====================
 
 
 class DerivedResolutionError(ValueError):
@@ -133,13 +97,10 @@ def resolve_to_arrays(waveforms: Mapping[str, Waveform], num_samples: int) -> di
     return arrays
 
 
-# ==================== AOSignals ====================
-
-
 class AOSignals(BaseModel):
     """Declarative description of one AO device's output configuration.
 
-    The profile manager hands an ``AOSignals`` to ``AnalogOutputController.load()``
+    The profile manager hands an ``AOSignals`` to ``AOController.load()``
     per profile activation, per waveform edit. The controller diffs against its
     cached copy and picks the cheapest hardware path (no-op / hot-swap / rebuild).
     """
@@ -149,7 +110,6 @@ class AOSignals(BaseModel):
     sample_rate: Frequency = Field(..., gt=0)
     duration: Time = Field(..., gt=0)
     rest_time: Time = Field(default=Time(0.0), ge=0)
-    clock_src: ClockSource = Field(default_factory=InternalClock)
     waveforms: dict[str, Waveform]
 
     @property

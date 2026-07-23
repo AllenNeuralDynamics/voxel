@@ -495,7 +495,7 @@ class _NiResourceManager:
 
         if requested_output is None and all(pfi is None for pfi in self._capabilities.default_counter_output_pfis):
             raise RuntimeError(
-                f"Internal-clock AO on unknown device {self._device_name} requires an explicit output PFI "
+                f"Counter-triggered AO on unknown device {self._device_name} requires an explicit output PFI "
                 "because the counter's default output route is unknown"
             )
         raise RuntimeError(f"No free counter and output-PFI route combination on {self._device_name}")

@@ -2,17 +2,17 @@
 
 Two device families, both driving voltage:
 
-``AnalogOutput`` — hardware-timed (clocked) output. The driver exposes primitives
+``AO`` — hardware-timed (clocked) output. The driver exposes primitives
 (``setup``, ``write``, ``teardown``, ``start``, ``stop``, ``can_hotswap``); the
 controller owns the state machine (``fresh`` / ``ready`` / ``running``), validation,
 and the no-op / hot-swap / rebuild diff. Waveform resolution lives on ``AOSignals``.
 
-``AnalogOnDemandOutput`` — untimed, software-paced output (``set_voltages`` / ``pulse``
+``OnDemandAO`` — untimed, software-paced output (``set_voltages`` / ``pulse``
 / ``play``). It claims no clock or trigger. Whether it can coexist with another AO
 task on the same card is vendor-specific; NI 6738/6739 devices permit coexistence
 when the tasks use separate four-channel AO banks.
 
-Vendor subclasses (e.g. ``NiAnalogOutput`` / ``NiAnalogOnDemandOutput``) implement the
+Vendor subclasses (e.g. ``NiAO`` / ``NiOnDemandAO``) implement the
 primitives; the handles are the typed async API used by application code.
 """
 
@@ -28,14 +28,14 @@ from vxlib.quantity import QuantityRange, VoltageRange
 from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.device import DeviceType
 
-from .models import AOSignals, DerivedResolutionError, ExternalClock, InternalClock
+from .models import AOSignals, DerivedResolutionError
 from .wave import BaseWaveform
 
 AOState = Literal["fresh", "ready", "running"]
 
 
-class AnalogOutputController(DeviceController["AnalogOutput"]):
-    """Orchestrates an ``AnalogOutput`` driver: state machine + validation + diffing.
+class AOController(DeviceController["AO"]):
+    """Orchestrates an ``AO`` driver: state machine + validation + diffing.
 
     Owns the streamed ``loaded`` property — it's set from inside ``load()`` on both
     hot-swap and rebuild paths, cleared on teardown / error recovery. Drivers are
@@ -46,11 +46,11 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
     ``state`` + ``loaded`` properties.
     """
 
-    def __init__(self, device: "AnalogOutput", stream_interval: float = 0.1) -> None:
+    def __init__(self, device: "AO", stream_interval: float = 0.1) -> None:
         super().__init__(device, stream_interval=stream_interval)
         self._state: AOState = "fresh"
         self._loaded: AOSignals | None = None
-        self._log = logging.getLogger(f"{device.uid}.AnalogOutputController")
+        self._log = logging.getLogger(f"{device.uid}.AOController")
 
     @property
     @describe(label="State", desc="AO engine state", stream=True)
@@ -149,21 +149,6 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
         except DerivedResolutionError as e:
             raise ValueError(str(e)) from e
 
-        if isinstance(signals.clock_src, ExternalClock) and signals.clock_src.source not in self.device.triggers:
-            raise ValueError(
-                f"External clock source '{signals.clock_src.source}' not in "
-                f"triggers of {self.device.uid}: {sorted(self.device.triggers)}"
-            )
-        if (
-            isinstance(signals.clock_src, InternalClock)
-            and signals.clock_src.out_pin is not None
-            and signals.clock_src.out_pin not in self.device.triggers
-        ):
-            raise ValueError(
-                f"Internal clock out_pin '{signals.clock_src.out_pin}' not in "
-                f"triggers of {self.device.uid}: {sorted(self.device.triggers)}"
-            )
-
         ao_range = self.device.voltage_range
         for name, wf in signals.waveforms.items():
             if isinstance(wf, BaseWaveform) and (wf.voltage.min < ao_range.min or wf.voltage.max > ao_range.max):
@@ -173,38 +158,25 @@ class AnalogOutputController(DeviceController["AnalogOutput"]):
                 )
 
 
-class AnalogOutput(Device):
+class AO(Device):
     """Abstract analog-output device.
 
-    Driver subclasses implement the primitives. Port and trigger mappings are
-    init-time logical->physical maps; the driver stores them for its own use and
-    exposes them so the controller can validate waveform/trigger references.
+    Driver subclasses implement the primitives. Port mappings are init-time
+    logical-to-physical maps. Timing sources and routes are concrete-driver
+    configuration rather than part of this vendor-neutral interface.
     """
 
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_ANALOG_OUTPUT
-    __CONTROLLER_TYPE__: ClassVar[type] = AnalogOutputController
+    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_AO
+    __CONTROLLER_TYPE__: ClassVar[type] = AOController
 
-    def __init__(self, uid: str, *, ports: Mapping[str, str], triggers: Mapping[str, str] | None = None) -> None:
+    def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
         super().__init__(uid=uid)
         self._ports: dict[str, str] = dict(ports)
-        self._triggers: dict[str, str] = dict(triggers) if triggers else {}
 
     @property
     @describe(label="Ports", desc="Logical name -> physical AO pin")
     def ports(self) -> dict[str, str]:
         return dict(self._ports)
-
-    @property
-    @describe(label="Triggers", desc="Logical name -> physical PFI pin (bidirectional)")
-    def triggers(self) -> dict[str, str]:
-        """Logical-name to physical-PFI mapping.
-
-        Used in either direction: ``ExternalClock.source`` looks up an input PFI the
-        AO task watches for edges; ``InternalClock.out_pin`` looks up an output PFI
-        the internal clock pulse is routed to. NI PFIs are bidirectional, so one map
-        covers both roles.
-        """
-        return dict(self._triggers)
 
     @property
     @abstractmethod
@@ -213,17 +185,12 @@ class AnalogOutput(Device):
 
     @abstractmethod
     def setup(self, signals: AOSignals) -> None:
-        """Reserve hardware resources and configure timing / triggering from ``signals``.
+        """Reserve hardware resources and configure output from ``signals``.
 
-        Drivers consume the structural fields (``sample_rate``, ``clock_src``,
-        ``duration``, ``rest_time``) to program the card. The controller tracks the
+        Drivers consume the signal timing fields to program the hardware and apply
+        their concrete timing-source configuration. The controller tracks the
         currently-loaded signals itself (via the streamed ``loaded`` property on
-        ``AnalogOutputController``); drivers do not need to remember them.
-
-        For internal clock, the driver generates a repeating edge at
-        ``1 / (duration + rest_time)`` internally (vendor-specific: NI uses a CO task).
-        For external clock, resolve ``clock_src.source`` via ``self._triggers`` and
-        configure the hardware to trigger on that physical input pin.
+        ``AOController``); drivers do not need to remember them.
         """
 
     @abstractmethod
@@ -298,8 +265,8 @@ class AnalogOutput(Device):
             self.teardown()
 
 
-class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
-    """Typed async handle for ``AnalogOutput`` devices.
+class AOHandle(DeviceHandle["AO"]):
+    """Typed async handle for ``AO`` devices.
 
     Callers (profile manager, preview / acquisition controllers) use this handle's
     methods rather than calling ``run_command`` with string names directly.
@@ -334,10 +301,6 @@ class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
         val = await self.props.get_value("ports")
         return dict(val) if val else {}
 
-    async def get_triggers(self) -> dict[str, str]:
-        val = await self.props.get_value("triggers")
-        return dict(val) if val else {}
-
     async def get_voltage_range(self) -> VoltageRange:
         val = await self.props.get_value("voltage_range")
         if isinstance(val, QuantityRange):
@@ -351,17 +314,17 @@ class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
 _DEFAULT_UPDATE_HZ = 100.0
 
 
-class AnalogOnDemandOutputController(DeviceController["AnalogOnDemandOutput"]):
-    """Thin async orchestration for an ``AnalogOnDemandOutput`` driver.
+class OnDemandAOController(DeviceController["OnDemandAO"]):
+    """Thin async orchestration for an ``OnDemandAO`` driver.
 
     On-demand output has no running state to track (no clock, no cycle), so unlike
-    ``AnalogOutputController`` there is no state machine or diffing here — each call
+    ``AOController`` there is no state machine or diffing here — each call
     dispatches straight to the driver on the thread pool.
     """
 
-    def __init__(self, device: "AnalogOnDemandOutput", stream_interval: float = 0.1) -> None:
+    def __init__(self, device: "OnDemandAO", stream_interval: float = 0.1) -> None:
         super().__init__(device, stream_interval=stream_interval)
-        self._log = logging.getLogger(f"{device.uid}.AnalogOnDemandOutputController")
+        self._log = logging.getLogger(f"{device.uid}.OnDemandAOController")
 
     @describe(label="Set Voltage", desc="Drive a port to a static voltage; it holds until changed")
     async def set_voltage(self, port: str, volts: float) -> None:
@@ -382,16 +345,16 @@ class AnalogOnDemandOutputController(DeviceController["AnalogOnDemandOutput"]):
         await self._run_sync(self.device.reset)
 
 
-class AnalogOnDemandOutput(Device):
+class OnDemandAO(Device):
     """Abstract on-demand (unclocked) voltage output.
 
     Subclasses implement the hardware primitives; ``ports`` maps logical names to
-    physical AO pins, exactly as for ``AnalogOutput``, but there are no triggers —
+    physical AO pins, exactly as for ``AO``, but there are no triggers —
     an on-demand output neither watches for nor emits a clock edge.
     """
 
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_ANALOG_ON_DEMAND_OUTPUT
-    __CONTROLLER_TYPE__: ClassVar[type] = AnalogOnDemandOutputController
+    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_ON_DEMAND_AO
+    __CONTROLLER_TYPE__: ClassVar[type] = OnDemandAOController
 
     def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
         super().__init__(uid=uid)
@@ -467,7 +430,7 @@ class AnalogOnDemandOutput(Device):
         With no sample clock, the shape is sampled at ``update_hz`` and written one
         point at a time with a sleep between. Coarse and jittery (OS scheduling), so
         only for slow, non-critical profiles — e.g. a ramp on aux pins while a clocked
-        task owns the card's timing. Use a clocked ``AnalogOutput`` when precision
+        task owns the card's timing. Use a clocked ``AO`` when precision
         matters. Blocking; runs for ``duration_s``.
 
         ``waveform`` must be a concrete shape (``BaseWaveform``), not a derived
@@ -491,8 +454,8 @@ class AnalogOnDemandOutput(Device):
             time.sleep(dt)
 
 
-class AnalogOnDemandOutputHandle(DeviceHandle["AnalogOnDemandOutput"]):
-    """Typed async handle for ``AnalogOnDemandOutput`` devices."""
+class OnDemandAOHandle(DeviceHandle["OnDemandAO"]):
+    """Typed async handle for ``OnDemandAO`` devices."""
 
     async def set_voltage(self, port: str, volts: float) -> None:
         await self.call("set_voltage", port, volts)
@@ -510,11 +473,11 @@ class AnalogOnDemandOutputHandle(DeviceHandle["AnalogOnDemandOutput"]):
 
 
 __all__ = [
+    "AO",
+    "AOController",
+    "AOHandle",
     "AOState",
-    "AnalogOnDemandOutput",
-    "AnalogOnDemandOutputController",
-    "AnalogOnDemandOutputHandle",
-    "AnalogOutput",
-    "AnalogOutputController",
-    "AnalogOutputHandle",
+    "OnDemandAO",
+    "OnDemandAOController",
+    "OnDemandAOHandle",
 ]

@@ -5,17 +5,17 @@ line grouping, and task allocation remain driver-specific.
 """
 
 from .base import (
-    DigitalOnDemandOutput,
-    DigitalOnDemandOutputController,
-    DigitalOnDemandOutputHandle,
+    OnDemandDO,
+    OnDemandDOController,
+    OnDemandDOHandle,
 )
-from .ni import NiDigitalOnDemandOutput
-from .simulated import SimulatedDigitalOnDemandOutput
+from .ni import NiOnDemandDO
+from .simulated import SimulatedOnDemandDO
 
 __all__ = [
-    "DigitalOnDemandOutput",
-    "DigitalOnDemandOutputController",
-    "DigitalOnDemandOutputHandle",
-    "NiDigitalOnDemandOutput",
-    "SimulatedDigitalOnDemandOutput",
+    "NiOnDemandDO",
+    "OnDemandDO",
+    "OnDemandDOController",
+    "OnDemandDOHandle",
+    "SimulatedOnDemandDO",
 ]

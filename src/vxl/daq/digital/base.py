@@ -9,7 +9,7 @@ from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.device import DeviceType
 
 
-class DigitalOnDemandOutputController(DeviceController["DigitalOnDemandOutput"]):
+class OnDemandDOController(DeviceController["OnDemandDO"]):
     """Thin async orchestration for software-timed digital output."""
 
     @describe(label="Set State", desc="Set one digital output line high or low")
@@ -35,7 +35,7 @@ class DigitalOnDemandOutputController(DeviceController["DigitalOnDemandOutput"])
         await self._run_sync(self.device.reset)
 
 
-class DigitalOnDemandOutput(Device):
+class OnDemandDO(Device):
     """Abstract software-timed digital output.
 
     ``lines`` maps stable logical names to vendor-specific physical terminals.
@@ -44,8 +44,8 @@ class DigitalOnDemandOutput(Device):
     omitted lines retain their current state.
     """
 
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_DIGITAL_ON_DEMAND_OUTPUT
-    __CONTROLLER_TYPE__: ClassVar[type] = DigitalOnDemandOutputController
+    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_ON_DEMAND_DO
+    __CONTROLLER_TYPE__: ClassVar[type] = OnDemandDOController
 
     def __init__(self, uid: str, *, lines: Mapping[str, str]) -> None:
         super().__init__(uid=uid)
@@ -101,7 +101,7 @@ class DigitalOnDemandOutput(Device):
             self.set_state(line, rest)
 
 
-class DigitalOnDemandOutputHandle(DeviceHandle["DigitalOnDemandOutput"]):
+class OnDemandDOHandle(DeviceHandle["OnDemandDO"]):
     """Typed async handle for on-demand digital output."""
 
     async def set_state(self, line: str, state: bool) -> None:
@@ -125,7 +125,7 @@ class DigitalOnDemandOutputHandle(DeviceHandle["DigitalOnDemandOutput"]):
 
 
 __all__ = [
-    "DigitalOnDemandOutput",
-    "DigitalOnDemandOutputController",
-    "DigitalOnDemandOutputHandle",
+    "OnDemandDO",
+    "OnDemandDOController",
+    "OnDemandDOHandle",
 ]

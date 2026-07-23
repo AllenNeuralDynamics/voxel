@@ -1,10 +1,10 @@
 """NI-DAQmx analog-output engines — clocked and on-demand.
 
-``NiAnalogOutput`` (clocked) owns a single NI AO task plus, for internal clock, a CO
-task whose output terminal is routed to the AO task's start trigger — that's how NI
-hardware generates a periodic retriggerable AO cycle.
+``NiAO`` (clocked) owns a single NI AO task. A ``CounterTrigger`` adds a
+counter-output task whose pulses retrigger finite AO cycles; an ``InputTrigger``
+restarts a cycle for each edge received from a configured PFI.
 
-``NiAnalogOnDemandOutput`` (untimed) owns one AO task with no sample-clock timing,
+``NiOnDemandAO`` (untimed) owns one AO task with no sample-clock timing,
 holding all its ports' channels; writes go straight to the DAC. NI 6738/6739 AO
 resources are banked in groups of four, so it can coexist with other AO tasks only
 when their banks do not overlap. A card can still host only one hardware-timed AO
@@ -17,15 +17,46 @@ live there.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import numpy as np
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import Edge, RegenerationMode
 from nidaqmx.task import Task as NiTask
+from pydantic import BaseModel, ConfigDict, Discriminator, TypeAdapter
 
-from .base import AnalogOnDemandOutput, AnalogOutput
-from .models import AOSignals, ExternalClock, InternalClock
+from .base import AO, OnDemandAO
+
+
+class CounterTrigger(BaseModel):
+    """Periodically retrigger AO cycles using an NI counter.
+
+    The trigger frequency derives from ``AOSignals.duration + rest_time``.
+    ``output`` optionally specifies the NI terminal to which the counter pulse is
+    routed for downstream devices.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["counter"] = "counter"
+    output: str | None = None
+
+
+class InputTrigger(BaseModel):
+    """Retrigger one finite AO cycle for each rising edge from an NI input.
+
+    ``source`` specifies the NI terminal that supplies the trigger edges.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["input"] = "input"
+    source: str
+
+
+Trigger = Annotated[CounterTrigger | InputTrigger, Discriminator("type")]
+
+_TRIGGER_ADAPTER = TypeAdapter(Trigger)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -35,15 +66,22 @@ if TYPE_CHECKING:
     from vxl.daq.hub_ni import NiDaqmx
     from vxl.daq.hub_ni.resources import NiTaskLease
 
+    from .models import AOSignals
 
-class NiAnalogOutput(AnalogOutput):
+
+class NiAO(AO):
     """NI-DAQmx analog-output engine.
 
-    For internal clock, creates a CO task on a reserved counter and routes its
-    internal output terminal to the AO task's start trigger, retriggerable.
-    For external clock, configures the AO task's start trigger directly to the
-    resolved PFI pin. Enables regeneration on the AO stream so hot-swaps (buffer
-    rewrites while running) stay safe.
+    ``trigger`` controls how each finite AO buffer cycle starts. ``CounterTrigger``
+    generates periodic cycle triggers using an NI counter; ``InputTrigger`` starts
+    a cycle for each rising edge received from its configured source. This does not
+    select the AO sample clock, which runs at ``AOSignals.sample_rate``.
+
+    Omitting ``trigger`` selects ``CounterTrigger``. ``InputTrigger`` currently
+    supports unbounded external pacing only; ``start(repeat=N)`` is unsupported.
+
+    Enables regeneration on the AO stream so each trigger can replay the same
+    finite buffer.
     """
 
     def __init__(
@@ -52,11 +90,12 @@ class NiAnalogOutput(AnalogOutput):
         *,
         hub: NiDaqmx,
         ports: Mapping[str, str],
-        triggers: Mapping[str, str] | None = None,
+        trigger: Trigger | Mapping[str, object] | None = None,
     ) -> None:
-        super().__init__(uid=uid, ports=ports, triggers=triggers)
+        super().__init__(uid=uid, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiAnalogOutput")
+        self._trigger = CounterTrigger() if trigger is None else _TRIGGER_ADAPTER.validate_python(trigger)
+        self._log = logging.getLogger(f"{uid}.NiAO")
 
         # Hardware handles — populated on setup, cleared on teardown
         self._ao_task: NiTask | None = None
@@ -79,45 +118,35 @@ class NiAnalogOutput(AnalogOutput):
             raise RuntimeError("setup() called with live AO task; teardown() first")
 
         sample_rate = signals.sample_rate
-        clock_src = signals.clock_src
+        trigger = self._trigger
         duration = signals.duration
         rest_time = signals.rest_time
 
         num_samples = int(float(sample_rate) * float(duration))
         frame_freq = 1.0 / (float(duration) + float(rest_time))
 
-        # Resolve logical trigger mappings before asking the hub for one atomic
-        # reservation. Input PFIs are validated but not exclusively claimed; an
-        # output PFI driven by the counter is part of the lease.
-        physical_out_pin: str | None = None
-        physical_input_pins: tuple[str, ...] = ()
-        if isinstance(clock_src, InternalClock) and clock_src.out_pin is not None:
-            physical_out_pin = self._triggers.get(clock_src.out_pin)
-            if physical_out_pin is None:
-                raise ValueError(f"Unknown trigger '{clock_src.out_pin}' on {self.uid}")
-        elif isinstance(clock_src, ExternalClock):
-            physical_input_pin = self._triggers.get(clock_src.source)
-            if physical_input_pin is None:
-                raise ValueError(f"Unknown trigger '{clock_src.source}' on {self.uid}")
-            physical_input_pins = (physical_input_pin,)
+        # Input PFIs are validated but not exclusively claimed; an output PFI
+        # driven by the counter is part of the lease.
+        physical_output = trigger.output if isinstance(trigger, CounterTrigger) else None
+        physical_input_pins = (trigger.source,) if isinstance(trigger, InputTrigger) else ()
 
         lease = self._hub.reserve_ao_task(
             self.uid,
             tuple(self._ports.values()),
             hardware_timed=True,
-            needs_counter=isinstance(clock_src, InternalClock),
-            output_pfi=physical_out_pin,
+            needs_counter=isinstance(trigger, CounterTrigger),
+            output_pfi=physical_output,
             input_pfis=physical_input_pins,
         )
         self._lease = lease
 
-        internal_clock_resources: tuple[str, str] | None = None
-        if isinstance(clock_src, InternalClock):
+        counter_trigger_resources: tuple[str, str] | None = None
+        if isinstance(trigger, CounterTrigger):
             if lease.counter_path is None or lease.output_pfi_path is None:
                 lease.release()
                 self._lease = None
-                raise RuntimeError("Internal-clock reservation did not provide a counter and output route")
-            internal_clock_resources = (lease.counter_path, lease.output_pfi_path)
+                raise RuntimeError("Counter-trigger reservation did not provide a counter and output route")
+            counter_trigger_resources = (lease.counter_path, lease.output_pfi_path)
 
         try:
             # Acquire the complete lease before creating any NI task. Keep task
@@ -127,8 +156,8 @@ class NiAnalogOutput(AnalogOutput):
                 self._ao_task.ao_channels.add_ao_voltage_chan(path)
                 self._ao_channel_order.append(port_name)
 
-            # Finite + retriggerable for both internal and external clocks — each
-            # trigger plays one buffer cycle, then arms for the next trigger.
+            # Each counter or input trigger plays one finite buffer cycle, then
+            # the task arms for the next trigger.
             self._ao_task.timing.cfg_samp_clk_timing(
                 rate=float(sample_rate),
                 sample_mode=NiAcqType.FINITE,
@@ -139,21 +168,21 @@ class NiAnalogOutput(AnalogOutput):
             # buffer on each trigger cycle.
             self._ao_task.out_stream.regen_mode = RegenerationMode.ALLOW_REGENERATION
 
-            if internal_clock_resources is not None:
-                self._create_internal_clock(
-                    internal_clock_resources[0],
+            if counter_trigger_resources is not None:
+                self._create_counter_trigger(
+                    counter_trigger_resources[0],
                     frame_freq,
-                    internal_clock_resources[1],
+                    counter_trigger_resources[1],
                 )
 
-            if isinstance(clock_src, InternalClock) and lease.counter_name is not None:
+            if isinstance(trigger, CounterTrigger) and lease.counter_name is not None:
                 trig_src = f"/{self._hub.device_name}/{lease.counter_name.upper()}InternalOutput"
                 self._ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                     trigger_source=trig_src,
                     trigger_edge=Edge.RISING,
                 )
                 self._ao_task.triggers.start_trigger.retriggerable = True
-            elif isinstance(clock_src, ExternalClock):
+            elif isinstance(trigger, InputTrigger):
                 pfi_path = lease.input_pfi_paths[0]
                 self._ao_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                     trigger_source=pfi_path,
@@ -166,11 +195,16 @@ class NiAnalogOutput(AnalogOutput):
                 self._ao_channel_order = []
             raise
 
-    def _create_internal_clock(self, counter_path: str, frequency_hz: float, out_pfi_path: str | None = None) -> NiTask:
+    def _create_counter_trigger(
+        self,
+        counter_path: str,
+        frequency_hz: float,
+        output_pfi_path: str | None = None,
+    ) -> NiTask:
         """Create a CO task that emits a continuous pulse train at ``frequency_hz``.
 
-        When ``out_pfi_path`` is provided, the CO pulse is routed to that physical
-        terminal via ``co_pulse_term``, making the frame clock visible to external
+        When ``output_pfi_path`` is provided, the CO pulse is routed to that physical
+        terminal via ``co_pulse_term``, making the cycle trigger visible to downstream
         devices.
         """
         co_task = NiTask(f"{self.uid}_clock")
@@ -180,8 +214,8 @@ class NiAnalogOutput(AnalogOutput):
             freq=frequency_hz,
             duty_cycle=0.5,
         )
-        if out_pfi_path is not None:
-            chan.co_pulse_term = out_pfi_path
+        if output_pfi_path is not None:
+            chan.co_pulse_term = output_pfi_path
         co_task.timing.cfg_implicit_timing(sample_mode=NiAcqType.CONTINUOUS)
         return co_task
 
@@ -244,7 +278,7 @@ class NiAnalogOutput(AnalogOutput):
             raise RuntimeError("start() called before setup()")
 
         if self._co_task is not None:
-            # Internal clock — reprogram CO timing just-in-time. CONTINUOUS pumps
+            # Counter trigger — reprogram CO timing just-in-time. CONTINUOUS pumps
             # forever; FINITE stops after exactly `repeat` edges, which bounds the
             # retriggered AO task to N cycles. NI allows cfg_implicit_timing on an
             # idle task, so we flip between modes across start() calls without
@@ -257,17 +291,17 @@ class NiAnalogOutput(AnalogOutput):
                     samps_per_chan=repeat,
                 )
         elif repeat is not None:
-            # External clock — no internal counter to bound the trigger count.
+            # Input trigger — no owned counter to bound the trigger count.
             # Implementing this would require a counter-gate: reserve a second
             # counter in FINITE edge-count mode on the trigger PFI and route its
             # InternalOutput as the AO start trigger, so the AO only arms for the
             # first N external edges. Not yet implemented.
             raise NotImplementedError(
-                f"{self.uid}: external-clock repeat bounding is not supported yet. "
-                "Use repeat=None and count cycles externally, or switch to internal clock."
+                f"{self.uid}: input-trigger repeat bounding is not supported yet. "
+                "Use repeat=None and count cycles externally, or switch to a counter trigger."
             )
 
-        # AO arms first (waits for trigger), CO starts generating the clock edges.
+        # AO arms first (waits for a trigger), then the optional CO task starts.
         self._ao_task.start()
         if self._co_task is not None:
             self._co_task.start()
@@ -284,8 +318,8 @@ class NiAnalogOutput(AnalogOutput):
         if self._co_task is not None:
             self._co_task.wait_until_done(timeout=timeout_s)
         else:
-            # Defensive: should not reach here — external-clock + repeat raises in start().
-            raise RuntimeError(f"{self.uid}: no CO task to wait on (external-clock path)")
+            # Defensive: should not reach here — InputTrigger + repeat raises in start().
+            raise RuntimeError(f"{self.uid}: no CO task to wait on (input-trigger path)")
 
     def stop(self) -> None:
         # NI AO tasks hold the last written sample on the DAC after stop. Waveforms are
@@ -315,13 +349,13 @@ class NiAnalogOutput(AnalogOutput):
         return False
 
 
-class NiAnalogOnDemandOutput(AnalogOnDemandOutput):
+class NiOnDemandAO(OnDemandAO):
     """On-demand voltage output on an NI card: one AO task, all ports held together."""
 
     def __init__(self, uid: str, *, hub: NiDaqmx, ports: Mapping[str, str]) -> None:
         super().__init__(uid=uid, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiAnalogOnDemandOutput")
+        self._log = logging.getLogger(f"{uid}.NiOnDemandAO")
         self._task: NiTask | None = None
         self._lease: NiTaskLease | None = None
         self._order: list[str] = []  # port names in AO channel order
@@ -389,6 +423,9 @@ class NiAnalogOnDemandOutput(AnalogOnDemandOutput):
 
 
 __all__ = [
-    "NiAnalogOnDemandOutput",
-    "NiAnalogOutput",
+    "CounterTrigger",
+    "InputTrigger",
+    "NiAO",
+    "NiOnDemandAO",
+    "Trigger",
 ]

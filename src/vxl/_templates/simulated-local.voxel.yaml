@@ -8,7 +8,7 @@ hal:
       target: vxl.daq.SimulatedDaqmx
       init: { device_name: "MockDev1" }
     daq:
-      target: vxl.daq.SimulatedAnalogOutput
+      target: vxl.daq.SimulatedAO
       init:
         hub: daq_hub
         ports:
@@ -95,7 +95,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src: { type: internal }
             waveforms:
               camera_1: &camera_waveform
                 type: pulse
@@ -118,7 +117,6 @@ default:
             sample_rate: "100 kHz"
             duration: "0.2 s"
             rest_time: "0.05 s"
-            clock_src: { type: internal }
             waveforms:
               camera_1: *camera_waveform
               laser_561:
