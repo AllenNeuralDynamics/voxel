@@ -1,7 +1,7 @@
 hal:
   devices:
     ao_main:
-      target: vxl.analog_out.simulated.SimulatedAnalogOutput
+      target: vxl.daq.SimulatedAnalogOutput
       init:
         hub: nidaq_1
         ports:
@@ -49,7 +49,7 @@ hal:
       target: *axis_target
       init: { lower_limit: 0, upper_limit: 50000 }
     nidaq_1:
-      target: vxl.analog_out.simulated.SimulatedDaqmx
+      target: vxl.daq.SimulatedDaqmx
       init:
         device_name: "MockDev1"
 

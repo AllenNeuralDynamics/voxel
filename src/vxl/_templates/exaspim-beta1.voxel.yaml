@@ -1,7 +1,7 @@
 hal:
   devices:
     ao_main:
-      target: vxl.analog_out.ni.NiAnalogOutput
+      target: vxl.daq.analog.ni.NiAnalogOutput
       init:
         hub: nidaq_1
         ports:
@@ -56,7 +56,7 @@ hal:
       target: vxl.aotf.simulated.SimulatedAotf
       init: {blanking_mode: "external"}
     nidaq_1:
-      target: vxl.analog_out.ni.NiDaqmx
+      target: vxl.daq.hub_ni.NiDaqmx
       init:
         device_name: Dev3
 

@@ -1,181 +1,31 @@
-"""NI-DAQmx analog-output hub + engine.
+"""NI-DAQmx analog-output engines — clocked and on-demand.
 
-``NiDaqmx`` is a rigup Device wrapping the NI SDK: manages pin discovery, PFI
-mapping, device-level voltage range, and pin-allocation bookkeeping. Shared across
-multiple engines on the same physical card.
+``NiAnalogOutput`` (clocked) owns a single NI AO task plus, for internal clock, a CO
+task whose output terminal is routed to the AO task's start trigger — that's how NI
+hardware generates a periodic retriggerable AO cycle.
 
-``NiAnalogOutput`` is the ``AnalogOutput`` implementation. Each instance owns a
-single NI AO task plus (for internal clock) a CO task whose output terminal is
-routed to the AO task's start trigger — that's how NI hardware generates a periodic
-retriggerable AO cycle.
+``NiAnalogOnDemandOutput`` (untimed) owns one AO task with no sample-clock timing,
+holding all its ports' channels; writes go straight to the DAC. It contends with any
+other AO task on the same card (one AO generator per device), so it only coexists with
+a clocked task on a *different* card.
+
+Both take a ``NiDaqmx`` hub (``vxl.daq.hub_ni``) at construction; the card and pins
+live there.
 """
 
 import logging
 from collections.abc import Mapping
-from enum import StrEnum
 
 import numpy as np
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import Edge, RegenerationMode
-from nidaqmx.errors import DaqError
-from nidaqmx.system import System as NiSystem
-from nidaqmx.system.device import Device as NiDevice
 from nidaqmx.task import Task as NiTask
 from vxlib.quantity import VoltageRange
 
-from rigup import Device
+from vxl.daq.hub_ni import NiDaqmx
 
-from .base import AnalogOutput
+from .base import AnalogOnDemandOutput, AnalogOutput
 from .models import AOSignals, ExternalClock, InternalClock
-
-
-class NiDaqModel(StrEnum):
-    """Supported NI DAQ models."""
-
-    NI6738 = "PCIe-6738"
-    NI6739 = "PCIe-6739"
-    OTHER = "other"
-
-
-# ==================== Hub ====================
-
-
-class NiDaqmx(Device):
-    """NI-DAQmx hub. Owns the card, pin namespace, and pin-allocation bookkeeping.
-
-    Passed into ``NiAnalogOutput`` (and future ``NiAnalogInput`` / ``NiDigitalOutput``)
-    instances. Multiple engines can share one hub safely; allocations are tracked here.
-    """
-
-    def __init__(self, uid: str, *, device_name: str) -> None:
-        super().__init__(uid=uid)
-        self._device_name = device_name
-        self._system = NiSystem.local()
-        self._inst, self._model = self._connect(device_name)
-
-        self._ao_pins: list[str] = []
-        self._pfi_pins: list[str] = []
-        self._counter_pins: list[str] = []
-        self._pfi_map: dict[str, str] = {}  # logical pfi name (lowercase) -> /Dev/PFIn
-        self._assigned: dict[str, str] = {}  # pin (lowercase) -> owner_uid
-
-        self._initialize_pins()
-
-    def __repr__(self) -> str:
-        return f"NiDaqmx(uid={self.uid}, device={self._device_name}, model={self._model})"
-
-    def _connect(self, name: str) -> tuple[NiDevice, NiDaqModel]:
-        try:
-            ni = NiDevice(name)
-            ni.reset_device()
-            product = ni.product_type
-            if "6738" in product:
-                model = NiDaqModel.NI6738
-            elif "6739" in product:
-                model = NiDaqModel.NI6739
-            else:
-                model = NiDaqModel.OTHER
-                self.log.warning("NI DAQ %s may not be fully supported.", product)
-        except DaqError as e:
-            raise RuntimeError(f"Unable to connect to NI DAQ '{name}': {e}") from e
-        return ni, model
-
-    def _initialize_pins(self) -> None:
-        for ao_path in self._inst.ao_physical_chans.channel_names:
-            self._ao_pins.append(ao_path.split("/")[-1])
-
-        for co_path in self._inst.co_physical_chans.channel_names:
-            self._counter_pins.append(co_path.split("/")[-1])
-
-        for dio_path in self._inst.do_lines.channel_names:
-            parts = dio_path.upper().split("/")
-            port_num = int(parts[-2].replace("PORT", ""))
-            line_num = int(parts[-1].replace("LINE", ""))
-            if port_num > 0:
-                pfi_index = (port_num - 1) * 8 + line_num
-                pfi_name = f"pfi{pfi_index}"
-                full_path = f"/{self._device_name}/PFI{pfi_index}"
-                self._pfi_pins.append(pfi_name)
-                self._pfi_map[pfi_name] = full_path
-
-    # ---- introspection ----
-
-    @property
-    def device_name(self) -> str:
-        return self._device_name
-
-    @property
-    def voltage_range(self) -> VoltageRange:
-        try:
-            rng = self._inst.ao_voltage_rngs
-            return VoltageRange(min=rng[0], max=rng[1])
-        except (DaqError, IndexError):
-            self.log.warning("Failed to read voltage range, defaulting to -10V/+10V")
-            return VoltageRange(min=-10.0, max=10.0)
-
-    @property
-    def ao_pins(self) -> list[str]:
-        return list(self._ao_pins)
-
-    @property
-    def pfi_pins(self) -> list[str]:
-        return list(self._pfi_pins)
-
-    @property
-    def counter_pins(self) -> list[str]:
-        return list(self._counter_pins)
-
-    @property
-    def assigned_pins(self) -> dict[str, str]:
-        """Snapshot of currently-claimed pins (pin_name -> owner_uid)."""
-        return dict(self._assigned)
-
-    @property
-    def available_pins(self) -> list[str]:
-        """AO + PFI + counter pins not currently assigned."""
-        all_pins = self._ao_pins + self._pfi_pins + self._counter_pins
-        return [p for p in all_pins if p not in self._assigned]
-
-    # ---- pin allocation ----
-
-    def assign_pin(self, owner_uid: str, pin: str) -> str:
-        """Claim ``pin`` for ``owner_uid``. Returns the physical path for NI-DAQmx calls."""
-        pin_lower = pin.lower()
-        if pin_lower in self._assigned:
-            raise ValueError(f"Pin '{pin}' already assigned to '{self._assigned[pin_lower]}'")
-        if pin_lower.startswith("ao") and pin_lower in self._ao_pins:
-            path = f"/{self._device_name}/{pin_lower}"
-        elif pin_lower.startswith("pfi") and pin_lower in self._pfi_pins:
-            path = self._pfi_map[pin_lower]
-        elif pin_lower.startswith("ctr") and pin_lower in self._counter_pins:
-            path = f"/{self._device_name}/{pin_lower}"
-        else:
-            raise ValueError(f"Unknown pin '{pin}' on {self._device_name}")
-        self._assigned[pin_lower] = owner_uid
-        return path
-
-    def release_pins_for_owner(self, owner_uid: str) -> None:
-        for pin in [p for p, owner in self._assigned.items() if owner == owner_uid]:
-            del self._assigned[pin]
-
-    def get_pfi_path(self, pin: str) -> str:
-        key = pin.lower()
-        if key in self._pfi_map:
-            return self._pfi_map[key]
-        if key.startswith("pfi"):
-            return f"/{self._device_name}/{pin.upper()}"
-        raise ValueError(f"Pin '{pin}' is not a valid PFI pin on {self._device_name}")
-
-    def reserve_counter(self, owner_uid: str) -> tuple[str, str]:
-        """Reserve the first free counter. Returns ``(counter_name, counter_path)``."""
-        for ctr in self._counter_pins:
-            if ctr not in self._assigned:
-                self._assigned[ctr] = owner_uid
-                return ctr, f"/{self._device_name}/{ctr}"
-        raise RuntimeError(f"No free counters on {self._device_name}")
-
-
-# ==================== Engine ====================
 
 
 class NiAnalogOutput(AnalogOutput):
@@ -434,8 +284,65 @@ class NiAnalogOutput(AnalogOutput):
         return False
 
 
+class NiAnalogOnDemandOutput(AnalogOnDemandOutput):
+    """On-demand voltage output on an NI card: one AO task, all ports held together."""
+
+    def __init__(self, uid: str, *, hub: NiDaqmx, ports: Mapping[str, str]) -> None:
+        super().__init__(uid=uid, ports=ports)
+        self._hub = hub
+        self._log = logging.getLogger(f"{uid}.NiAnalogOnDemandOutput")
+        self._task: NiTask | None = None
+        self._order: list[str] = []  # port names in AO channel order
+        self._levels: dict[str, float] = {}  # port -> currently held voltage
+
+    @property
+    def voltage_range(self) -> VoltageRange:
+        return self._hub.voltage_range
+
+    def _ensure_task(self) -> NiTask:
+        """Create the single AO task with one channel per declared port (lazy, once)."""
+        if self._task is not None:
+            return self._task
+        task = NiTask(f"{self.uid}_od")
+        try:
+            for port, physical in self._ports.items():
+                path = self._hub.assign_pin(self.uid, physical)
+                # No cfg_samp_clk_timing: on-demand mode, writes go straight to the DAC.
+                task.ao_channels.add_ao_voltage_chan(path)
+                self._order.append(port)
+                self._levels.setdefault(port, 0.0)
+        except Exception:
+            task.close()
+            self._hub.release_pins_for_owner(self.uid)
+            self._order = []
+            raise
+        self._task = task
+        return task
+
+    def set_voltages(self, port_values: Mapping[str, float]) -> None:
+        self._validate(port_values)
+        task = self._ensure_task()
+
+        self._levels.update(port_values)
+        vector = [self._levels[p] for p in self._order]
+        # One sample per channel; nidaqmx auto-starts a single-sample write, committing
+        # + emitting immediately on this untimed task. A scalar is required for a
+        # one-channel task, a per-channel list otherwise.
+        task.write(vector[0] if len(vector) == 1 else vector)
+
+    def reset(self) -> None:
+        if self._task is not None:
+            try:
+                self._task.close()
+            except Exception:
+                self._log.warning("failed to close on-demand task", exc_info=True)
+            self._task = None
+        self._order = []
+        self._levels = {}
+        self._hub.release_pins_for_owner(self.uid)
+
+
 __all__ = [
+    "NiAnalogOnDemandOutput",
     "NiAnalogOutput",
-    "NiDaqModel",
-    "NiDaqmx",
 ]

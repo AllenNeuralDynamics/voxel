@@ -1,17 +1,22 @@
-"""Abstract ``AnalogOutput`` device + controller + handle.
+"""Abstract analog-output devices (device + controller + handle for each).
 
-The driver exposes hardware primitives only: ``setup``, ``write``, ``teardown``,
-``start``, ``stop``, ``can_hotswap``. Vendor-specific subclasses (e.g. ``NiAnalogOutput``)
-implement these.
+Two device families, both driving voltage:
 
-The controller is vendor-agnostic. It owns the state machine
-(``fresh`` / ``ready`` / ``running``), validation, and the diff that picks between
-no-op / hot-swap / full rebuild. Waveform resolution lives on ``AOSignals``.
+``AnalogOutput`` — hardware-timed (clocked) output. The driver exposes primitives
+(``setup``, ``write``, ``teardown``, ``start``, ``stop``, ``can_hotswap``); the
+controller owns the state machine (``fresh`` / ``ready`` / ``running``), validation,
+and the no-op / hot-swap / rebuild diff. Waveform resolution lives on ``AOSignals``.
 
-The handle is the typed async API used by application code.
+``AnalogOnDemandOutput`` — untimed, software-paced output (``set_voltages`` / ``pulse``
+/ ``play``). It claims no clock or trigger, so it can coexist with a clocked task on
+another card, but NOT a second AO task on the same card (one AO generator per device).
+
+Vendor subclasses (e.g. ``NiAnalogOutput`` / ``NiAnalogOnDemandOutput``) implement the
+primitives; the handles are the typed async API used by application code.
 """
 
 import logging
+import time
 from abc import abstractmethod
 from collections.abc import Mapping
 from typing import ClassVar, Literal
@@ -175,7 +180,7 @@ class AnalogOutput(Device):
     exposes them so the controller can validate waveform/trigger references.
     """
 
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.ANALOG_OUTPUT
+    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_ANALOG_OUTPUT
     __CONTROLLER_TYPE__: ClassVar[type] = AnalogOutputController
 
     def __init__(self, uid: str, *, ports: Mapping[str, str], triggers: Mapping[str, str] | None = None) -> None:
@@ -339,8 +344,175 @@ class AnalogOutputHandle(DeviceHandle["AnalogOutput"]):
         return VoltageRange.model_validate(val)
 
 
+# Software update rate for shaped playback. Sleep granularity on a general-purpose
+# OS is coarse (single-digit to ~15 ms), so this is a modest default — on-demand
+# shape playback is for slow, non-critical profiles, not precise waveforms.
+_DEFAULT_UPDATE_HZ = 100.0
+
+
+class AnalogOnDemandOutputController(DeviceController["AnalogOnDemandOutput"]):
+    """Thin async orchestration for an ``AnalogOnDemandOutput`` driver.
+
+    On-demand output has no running state to track (no clock, no cycle), so unlike
+    ``AnalogOutputController`` there is no state machine or diffing here — each call
+    dispatches straight to the driver on the thread pool.
+    """
+
+    def __init__(self, device: "AnalogOnDemandOutput", stream_interval: float = 0.1) -> None:
+        super().__init__(device, stream_interval=stream_interval)
+        self._log = logging.getLogger(f"{device.uid}.AnalogOnDemandOutputController")
+
+    @describe(label="Set Voltage", desc="Drive a port to a static voltage; it holds until changed")
+    async def set_voltage(self, port: str, volts: float) -> None:
+        await self._run_sync(self.device.set_voltage, port, volts)
+
+    @describe(label="Pulse", desc="Drive a port to a voltage for a duration, then to rest")
+    async def pulse(self, port: str, volts: float, duration_s: float, rest_volts: float = 0.0) -> None:
+        await self._run_sync(self.device.pulse, port, volts, duration_s, rest_volts)
+
+    @describe(label="Play Waveform", desc="Play a shaped waveform software-paced (coarse; no clock)")
+    async def play(
+        self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ
+    ) -> None:
+        await self._run_sync(self.device.play, port, waveform, duration_s, update_hz)
+
+    @describe(label="Reset", desc="Release all outputs to a safe state")
+    async def reset(self) -> None:
+        await self._run_sync(self.device.reset)
+
+
+class AnalogOnDemandOutput(Device):
+    """Abstract on-demand (unclocked) voltage output.
+
+    Subclasses implement the hardware primitives; ``ports`` maps logical names to
+    physical AO pins, exactly as for ``AnalogOutput``, but there are no triggers —
+    an on-demand output neither watches for nor emits a clock edge.
+    """
+
+    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_ANALOG_ON_DEMAND_OUTPUT
+    __CONTROLLER_TYPE__: ClassVar[type] = AnalogOnDemandOutputController
+
+    def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
+        super().__init__(uid=uid)
+        self._ports: dict[str, str] = dict(ports)
+
+    @property
+    @describe(label="Ports", desc="Logical name -> physical AO pin")
+    def ports(self) -> dict[str, str]:
+        return dict(self._ports)
+
+    @property
+    @abstractmethod
+    @describe(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
+    def voltage_range(self) -> VoltageRange: ...
+
+    # ---- validation helpers (protect the direct-call path, not just the controller) ----
+
+    def _resolve_port(self, port: str) -> str:
+        """Return the physical pin for ``port`` or raise if it isn't a declared port."""
+        if port not in self._ports:
+            raise ValueError(f"Unknown port '{port}' on {self.uid}: {sorted(self._ports)}")
+        return self._ports[port]
+
+    def _check_voltage(self, volts: float) -> None:
+        rng = self.voltage_range
+        if volts < rng.min or volts > rng.max:
+            raise ValueError(f"Voltage {volts}V out of range [{rng.min}, {rng.max}]V on {self.uid}")
+
+    def _validate(self, port_values: Mapping[str, float]) -> None:
+        """Check every port + voltage, so a bad entry raises before any pin is driven."""
+        for port, volts in port_values.items():
+            self._resolve_port(port)
+            self._check_voltage(volts)
+
+    # ---- hardware primitives ----
+
+    @abstractmethod
+    def set_voltages(self, port_values: Mapping[str, float]) -> None:
+        """Drive each given port to its voltage in one atomic hardware write; the pins
+        hold until the next write or a ``reset``. Ports absent from ``port_values`` keep
+        their current level. Untimed — output changes as soon as the call reaches the
+        hardware."""
+
+    @abstractmethod
+    def reset(self) -> None:
+        """Release all pins and hardware handles, returning outputs to a safe state."""
+
+    def close(self) -> None:
+        """Framework shutdown hook (``DeviceController.close`` → ``Device.close``).
+
+        Delegates to ``reset`` so an orderly rig shutdown releases the AO task and its
+        pins. Without this, ``Device.close`` is a no-op and the tasks/pins leak on
+        every shutdown (a hard crash is the OS/driver's problem, not ours)."""
+        self.reset()
+
+    # ---- composed ----
+
+    def set_voltage(self, port: str, volts: float) -> None:
+        """Drive a single ``port`` to ``volts`` — a one-entry :meth:`set_voltages`."""
+        self.set_voltages({port: volts})
+
+    def pulse(self, port: str, volts: float, duration_s: float, rest_volts: float = 0.0) -> None:
+        """Drive ``port`` to ``volts``, hold for ``duration_s``, then drive it to
+        ``rest_volts``. Blocking; timed by the CPU, so ``duration_s`` carries
+        OS-scheduling jitter (fine for select pulses, not for precise waveforms)."""
+        self.set_voltage(port, volts)
+        time.sleep(duration_s)
+        self.set_voltage(port, rest_volts)
+
+    def play(self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ) -> None:
+        """Play a shaped ``waveform`` on ``port`` by software-paced sampling.
+
+        With no sample clock, the shape is sampled at ``update_hz`` and written one
+        point at a time with a sleep between. Coarse and jittery (OS scheduling), so
+        only for slow, non-critical profiles — e.g. a ramp on aux pins while a clocked
+        task owns the card's timing. Use a clocked ``AnalogOutput`` when precision
+        matters. Blocking; runs for ``duration_s``.
+
+        ``waveform`` must be a concrete shape (``BaseWaveform``), not a derived
+        waveform — deriving needs sibling channels, which single-port playback has none of.
+        """
+        self._resolve_port(port)
+        if duration_s <= 0:
+            raise ValueError(f"duration_s must be > 0, got {duration_s}")
+        if update_hz <= 0:
+            raise ValueError(f"update_hz must be > 0, got {update_hz}")
+
+        n = max(1, round(duration_s * update_hz))
+        samples = waveform.get_array(n)
+        # Fail before emitting anything if the shape leaves the hardware range.
+        self._check_voltage(float(np.min(samples)))
+        self._check_voltage(float(np.max(samples)))
+
+        dt = duration_s / n
+        for v in samples:
+            self.set_voltage(port, float(v))
+            time.sleep(dt)
+
+
+class AnalogOnDemandOutputHandle(DeviceHandle["AnalogOnDemandOutput"]):
+    """Typed async handle for ``AnalogOnDemandOutput`` devices."""
+
+    async def set_voltage(self, port: str, volts: float) -> None:
+        await self.call("set_voltage", port, volts)
+
+    async def pulse(self, port: str, volts: float, duration_s: float, rest_volts: float = 0.0) -> None:
+        await self.call("pulse", port, volts, duration_s, rest_volts)
+
+    async def play(
+        self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ
+    ) -> None:
+        await self.call("play", port, waveform, duration_s, update_hz)
+
+    async def reset(self) -> None:
+        await self.call("reset")
+
+
 __all__ = [
     "AOState",
+    "AnalogOnDemandOutput",
+    "AnalogOnDemandOutputController",
+    "AnalogOnDemandOutputHandle",
     "AnalogOutput",
     "AnalogOutputController",
     "AnalogOutputHandle",

@@ -186,7 +186,9 @@
   }
 
   @supports selector(::-webkit-scrollbar) {
-    /* Thin scrollbars — webkit (Chrome, Safari, Edge) */
+    /* Thin scrollbars — webkit (Chrome, Safari, Edge).
+     * Hover-reveal: the thumb is transparent at rest and only paints while the
+     * pointer is over the scroll area (or something in it is focused). */
     ::-webkit-scrollbar {
       width: 4px !important;
       height: 4px !important;
@@ -195,18 +197,27 @@
       background: transparent !important;
     }
     ::-webkit-scrollbar-thumb {
-      background: var(--scrollbar-thumb) !important;
+      background: transparent !important;
       border-radius: 8px !important;
     }
-    ::-webkit-scrollbar-thumb:hover {
+    :hover::-webkit-scrollbar-thumb,
+    :focus-within::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb) !important;
+    }
+    :hover::-webkit-scrollbar-thumb:hover,
+    :focus-within::-webkit-scrollbar-thumb:hover {
       background: var(--scrollbar-thumb-hover) !important;
     }
   }
 
   @supports (scrollbar-width: auto) {
-    /* Thin scrollbars — Firefox */
+    /* Thin scrollbars — Firefox. Hover-reveal via the same states. */
     * {
       scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    *:hover,
+    *:focus-within {
       scrollbar-color: var(--scrollbar-thumb) transparent;
     }
   }

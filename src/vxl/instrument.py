@@ -29,9 +29,9 @@ from vxlib import (
     atomic_write,
 )
 
-from .analog_out import AnalogOutputHandle, AOSignals
 from .axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from .camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, SensorROI, StorageSpec
+from .daq.analog import AnalogOutputHandle, AOSignals
 from .metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from .traversal import Tile, TileOrder
 
@@ -194,7 +194,7 @@ class HAL:
             match device_type:
                 case "camera":
                     self.cameras[uid] = CameraHandle.wrap(handle)
-                case "analog_output":
+                case "daq_analog_output":
                     self.analog_outs[uid] = AnalogOutputHandle.wrap(handle)
                 case "laser":
                     self.lasers[uid] = handle

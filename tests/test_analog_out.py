@@ -1,21 +1,20 @@
-"""Tests for ``vxl.analog_out`` — models, controller, simulated driver."""
+"""Tests for ``vxl.daq.analog`` — models, controller, simulated driver."""
 
 import numpy as np
 import pytest
 from vxlib.quantity import Frequency, Time
 
-from vxl.analog_out import (
+from vxl.daq import SimulatedAnalogOutput, SimulatedDaqmx
+from vxl.daq.analog import (
     AnalogOutputController,
     AOSignals,
     DerivedResolutionError,
     ExternalClock,
     InternalClock,
-    SimulatedAnalogOutput,
-    SimulatedDaqmx,
     resolve_to_arrays,
 )
-from vxl.analog_out.ni import NiAnalogOutput
-from vxl.analog_out.wave import (
+from vxl.daq.analog.ni import NiAnalogOutput
+from vxl.daq.analog.wave import (
     DerivedMirror,
     DerivedOffset,
     DerivedScale,

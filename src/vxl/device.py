@@ -10,4 +10,5 @@ class DeviceType(StrEnum):
     LINEAR_AXIS = "linear_axis"
     ROTATION_AXIS = "rotation_axis"
     DISCRETE_AXIS = "discrete_axis"
-    ANALOG_OUTPUT = "analog_output"
+    DAQ_ANALOG_OUTPUT = "daq_analog_output"
+    DAQ_ANALOG_ON_DEMAND_OUTPUT = "daq_analog_on_demand_output"

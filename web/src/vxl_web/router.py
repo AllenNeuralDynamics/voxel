@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from pydantic import BaseModel
 
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
-from vxl.analog_out import AOSignals
+from vxl.daq.analog import AOSignals
 from vxl.instrument import (
     AcquisitionRecord,
     AcquisitionRequest,

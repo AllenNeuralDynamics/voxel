@@ -1,5 +1,4 @@
-from .analog_out import AnalogOutDiscreteAxis
 from .base import DiscreteAxis
-from .ni import NiDiscreteAxis, SlotSpec
+from .pulse import PulseDiscreteAxis
 
-__all__ = ["AnalogOutDiscreteAxis", "DiscreteAxis", "NiDiscreteAxis", "SlotSpec"]
+__all__ = ["DiscreteAxis", "PulseDiscreteAxis"]
