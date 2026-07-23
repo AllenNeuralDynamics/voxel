@@ -98,11 +98,13 @@
           </div>
         </details>
       {:else}
-        <div class="flex items-baseline flex-wrap gap-2 rounded px-1 py-0.5 {diverged(value, b) ? 'bg-warning/10' : ''}">
+        <div
+          class="flex flex-wrap items-baseline gap-2 rounded px-1 py-0.5 {diverged(value, b) ? 'bg-warning/10' : ''}"
+        >
           <span class="shrink-0 text-fg-muted">{key}:</span>
           <span class="font-mono {primitiveClass(value)}">{primitiveText(value)}</span>
           {#if diverged(value, b)}
-            <span class="font-mono text-fg-muted ml-auto">({primitiveText(b)})</span>
+            <span class="ml-auto font-mono text-fg-muted">({primitiveText(b)})</span>
           {/if}
         </div>
       {/if}

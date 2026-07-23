@@ -4,6 +4,10 @@
 # plus Astral's external uv-lock hook to keep the lockfile in sync with
 # pyproject.toml. See ./CLAUDE.md for tool versions and rationale.
 #
+# Frontend (web/ui) hooks shell out to bunx and are scoped by `files:` so they
+# only fire when web/ui sources are staged. Fast checks run pre-commit, slower
+# whole-project analysis runs pre-push — same split as ruff vs basedpyright.
+#
 # First-time setup (per clone):
 #     uvx pre-commit install        # wires up both pre-commit and pre-push
 #
@@ -35,6 +39,14 @@ repos:
         types_or: [python, pyi]
         require_serial: true
 
+      - id: prettier
+        name: prettier (web/ui)
+        entry: bun --cwd=web/ui run lint:prettier
+        language: system
+        files: ^web/ui/.*\.(ts|js|svelte|css|json|html)$
+        pass_filenames: false
+        require_serial: true
+
       - id: basedpyright
         name: basedpyright
         entry: uv run basedpyright
@@ -49,6 +61,15 @@ repos:
         entry: uv run pytest -m "not slow"
         language: system
         types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-push]
+
+      - id: eslint
+        name: eslint (web/ui)
+        entry: bun --cwd=web/ui run lint:eslint
+        language: system
+        files: ^web/ui/.*\.(ts|js|svelte)$
         pass_filenames: false
         require_serial: true
         stages: [pre-push]

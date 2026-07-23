@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "prettier --write . && eslint . && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && eslint . --fix",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && bun run lint",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "format": "prettier --write .",
-    "lint": "prettier --write . && prettier --check . && eslint . --fix"
+    "format": "prettier --write . && eslint . --fix",
+    "lint": "prettier --check . && eslint .",
+    "lint:prettier": "prettier --check .",
+    "lint:eslint": "eslint ."
   },
   "devDependencies": {
     "@eslint/compat": "^1.4.1",

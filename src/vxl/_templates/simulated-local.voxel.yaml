@@ -5,10 +5,10 @@
 hal:
   devices:
     daq_hub:
-      target: vxl.analog_out.simulated.SimulatedDaqmx
+      target: vxl.daq.SimulatedDaqmx
       init: { device_name: "MockDev1" }
     daq:
-      target: vxl.analog_out.simulated.SimulatedAnalogOutput
+      target: vxl.daq.SimulatedAnalogOutput
       init:
         hub: daq_hub
         ports:

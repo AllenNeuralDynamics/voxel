@@ -422,7 +422,7 @@ export function createDevice(client: Client, snapshot: DeviceSnapshot): DeviceHa
       return new AxisHandle(client, snapshot);
     case 'discrete_axis':
       return new DiscreteAxisHandle(client, snapshot);
-    case 'analog_output':
+    case 'daq_analog_output':
       return new AnalogOutHandle(client, snapshot);
     default:
       return new DeviceHandle(client, snapshot);

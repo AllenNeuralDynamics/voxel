@@ -3,11 +3,11 @@ hal:
     primary:
       devices:
         nidaq_1:
-          target: vxl.analog_out.simulated.SimulatedDaqmx
+          target: vxl.daq.SimulatedDaqmx
           init:
             device_name: "MockDev1"
         ao_main:
-          target: vxl.analog_out.simulated.SimulatedAnalogOutput
+          target: vxl.daq.SimulatedAnalogOutput
           init:
             hub: nidaq_1
             ports:

@@ -30,6 +30,11 @@ class _Capture(logging.Handler):
         return [m for _, _, m, _ in self.records]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="ZMQ ipc:// transport needs Unix domain sockets, unsupported on Windows (libzmq raises "
+    "'Protocol not supported'). Covered on Linux/macOS; TCP transport is exercised in test_daemon.",
+)
 async def test_relay_over_transport() -> None:
     """A record emitted by the publisher handler reaches the local root logger via the subscriber,
     preserving logger name, level, and the node_id extra field."""
