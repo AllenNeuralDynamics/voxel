@@ -156,3 +156,17 @@ class NiDaqmx(Device):
             output_pfi=output_pfi,
             input_pfis=input_pfis,
         )
+
+    def reserve_do_task(
+        self,
+        owner_uid: str,
+        do_terminals: Sequence[str],
+        *,
+        hardware_timed: bool = False,
+    ) -> NiTaskLease:
+        """Atomically reserve the lines and optional timing engine for one NI DO task."""
+        return self._resource_manager.reserve_do_task(
+            owner_uid=owner_uid,
+            do_terminals=do_terminals,
+            hardware_timed=hardware_timed,
+        )

@@ -26,7 +26,8 @@ class NiDaqCapabilities:
     ``digital_port_line_counts`` is indexed by port number. Ports after Port 0
     alias PFI terminals in ascending order. ``ao_bank_size=None`` is the
     conservative unknown-device policy: all discovered AO channels share one
-    synthetic bank.
+    synthetic bank. ``hardware_do_ports`` lists the ports backed by the digital
+    waveform engine; remaining digital lines support static I/O only.
     """
 
     ao_channel_count: int
@@ -34,6 +35,8 @@ class NiDaqCapabilities:
     digital_port_line_counts: tuple[int, ...]
     counter_count: int
     hardware_ao_task_count: int
+    hardware_do_task_count: int
+    hardware_do_ports: tuple[int, ...]
     default_counter_output_pfis: tuple[int | None, ...]
 
     def __post_init__(self) -> None:
@@ -47,6 +50,10 @@ class NiDaqCapabilities:
             raise ValueError("counter_count must be non-negative")
         if self.hardware_ao_task_count < 0:
             raise ValueError("hardware_ao_task_count must be non-negative")
+        if self.hardware_do_task_count < 0:
+            raise ValueError("hardware_do_task_count must be non-negative")
+        if any(not 0 <= port < len(self.digital_port_line_counts) for port in self.hardware_do_ports):
+            raise ValueError("hardware DO ports must refer to discovered digital ports")
         if len(self.default_counter_output_pfis) != self.counter_count:
             raise ValueError("default_counter_output_pfis must contain one entry per counter")
 
@@ -85,10 +92,22 @@ class NiDaqCapabilities:
             return None
         return sum(self.digital_port_line_counts[1:port]) + line
 
+    def port_line_for_pfi(self, pfi_index: int) -> tuple[int, int]:
+        """Return the static digital port/line alias for one PFI terminal."""
+        if not 0 <= pfi_index < self.pfi_count:
+            raise ValueError(f"PFI index {pfi_index} is outside 0..{self.pfi_count - 1}")
+        offset = 0
+        for port, line_count in enumerate(self.digital_port_line_counts[1:], start=1):
+            if pfi_index < offset + line_count:
+                return port, pfi_index - offset
+            offset += line_count
+        raise AssertionError(f"PFI index {pfi_index} has no digital port alias")
+
 
 # OTHER is an explicit synthetic template. Discovery fills in its terminal counts,
 # while the behavioral fallback remains deliberately strict: one synthetic AO bank,
-# at most one hardware-timed AO task, and no assumed counter-to-PFI routes.
+# at most one hardware-timed AO task, no hardware-timed DO, and no assumed
+# counter-to-PFI routes.
 _CAPABILITIES_BY_MODEL: dict[NiDaqModel, NiDaqCapabilities] = {
     NiDaqModel.NI6738: NiDaqCapabilities(
         ao_channel_count=32,
@@ -96,6 +115,8 @@ _CAPABILITIES_BY_MODEL: dict[NiDaqModel, NiDaqCapabilities] = {
         digital_port_line_counts=(2, 8),
         counter_count=4,
         hardware_ao_task_count=1,
+        hardware_do_task_count=1,
+        hardware_do_ports=(0,),
         default_counter_output_pfis=(7, 2, 7, 2),
     ),
     NiDaqModel.NI6739: NiDaqCapabilities(
@@ -104,6 +125,8 @@ _CAPABILITIES_BY_MODEL: dict[NiDaqModel, NiDaqCapabilities] = {
         digital_port_line_counts=(4, 8, 8),
         counter_count=4,
         hardware_ao_task_count=1,
+        hardware_do_task_count=1,
+        hardware_do_ports=(0,),
         default_counter_output_pfis=(7, 2, 15, 10),
     ),
     NiDaqModel.OTHER: NiDaqCapabilities(
@@ -112,6 +135,8 @@ _CAPABILITIES_BY_MODEL: dict[NiDaqModel, NiDaqCapabilities] = {
         digital_port_line_counts=(),
         counter_count=0,
         hardware_ao_task_count=0,
+        hardware_do_task_count=0,
+        hardware_do_ports=(),
         default_counter_output_pfis=(),
     ),
 }
@@ -176,6 +201,7 @@ class NiTaskLease:
         lease_id: int,
         owner_uid: str,
         ao_paths: tuple[str, ...],
+        do_paths: tuple[str, ...],
         counter_name: str | None,
         counter_path: str | None,
         output_pfi_path: str | None,
@@ -185,6 +211,7 @@ class NiTaskLease:
         self.lease_id = lease_id
         self.owner_uid = owner_uid
         self.ao_paths = ao_paths
+        self.do_paths = do_paths
         self.counter_name = counter_name
         self.counter_path = counter_path
         self.output_pfi_path = output_pfi_path
@@ -268,6 +295,15 @@ class _NiResourceManager:
         return [f"ctr{index}" for index in sorted(self._available_counters)]
 
     @property
+    def digital_pins(self) -> list[str]:
+        """Canonical Port 0 lines; later ports already appear through their PFI aliases."""
+        return [
+            f"port{port}/line{line}"
+            for port, line in sorted(self._available_port_lines)
+            if self._capabilities.pfi_for_port_line(port, line) is None
+        ]
+
+    @property
     def assigned_pins(self) -> dict[str, str]:
         with self._lock:
             return {
@@ -280,7 +316,8 @@ class _NiResourceManager:
     def available_pins(self) -> list[str]:
         with self._lock:
             claimed = {str(name) for kind, name in self._claims if kind == "terminal"}
-            return [pin for pin in self.ao_pins + self.pfi_pins + self.counter_pins if pin not in claimed]
+            all_pins = self.ao_pins + self.digital_pins + self.pfi_pins + self.counter_pins
+            return [pin for pin in all_pins if pin not in claimed]
 
     def reserve_ao_task(
         self,
@@ -345,6 +382,7 @@ class _NiResourceManager:
                 lease_id=lease_id,
                 owner_uid=owner_uid,
                 ao_paths=tuple(terminal.physical_path for terminal in resolved_ao),
+                do_paths=(),
                 counter_name=counter.canonical_name if counter is not None else None,
                 counter_path=counter.physical_path if counter is not None else None,
                 output_pfi_path=resolved_output.physical_path if resolved_output is not None else None,
@@ -357,6 +395,77 @@ class _NiResourceManager:
             for resource in resources:
                 self._claims[resource] = lease_id
             return lease
+
+    def reserve_do_task(
+        self,
+        *,
+        owner_uid: str,
+        do_terminals: Sequence[str],
+        hardware_timed: bool,
+    ) -> NiTaskLease:
+        """Resolve and atomically claim every line required by one digital-output task."""
+        with self._lock:
+            if not do_terminals:
+                raise ValueError("An NI DO task must contain at least one digital terminal")
+
+            resolved_do = tuple(self._resolve_locked(terminal) for terminal in do_terminals)
+            if any(terminal.kind not in {_TerminalKind.DIGITAL, _TerminalKind.PFI} for terminal in resolved_do):
+                raise ValueError("Every DO task terminal must resolve to a digital-output line")
+            canonical_do = [terminal.canonical_name for terminal in resolved_do]
+            if len(set(canonical_do)) != len(canonical_do):
+                raise ValueError(f"DO task contains duplicate terminal aliases: {list(do_terminals)}")
+
+            if hardware_timed and any(
+                terminal.kind is not _TerminalKind.DIGITAL or terminal.port not in self._capabilities.hardware_do_ports
+                for terminal in resolved_do
+            ):
+                raise ValueError(
+                    f"Hardware-timed DO on {self._device_name} is limited to "
+                    f"ports {list(self._capabilities.hardware_do_ports)}"
+                )
+
+            resources: set[_ResourceKey] = {("terminal", terminal.canonical_name) for terminal in resolved_do}
+            if hardware_timed:
+                engine = self._first_free_slot_locked("do_timing_engine", self._capabilities.hardware_do_task_count)
+                if engine is None:
+                    raise ValueError(f"No hardware DO timing engine is available on {self._device_name}")
+                resources.add(("do_timing_engine", engine))
+
+            self._raise_for_claim_conflicts_locked(resources)
+
+            lease_id = self._next_lease_id
+            lease_resources = frozenset(resources)
+            lease = NiTaskLease(
+                manager=self,
+                lease_id=lease_id,
+                owner_uid=owner_uid,
+                ao_paths=(),
+                do_paths=tuple(self._digital_path_locked(terminal) for terminal in resolved_do),
+                counter_name=None,
+                counter_path=None,
+                output_pfi_path=None,
+                input_pfi_paths=(),
+            )
+
+            self._next_lease_id += 1
+            self._leases[lease_id] = lease
+            self._lease_resources[lease_id] = lease_resources
+            for resource in resources:
+                self._claims[resource] = lease_id
+            return lease
+
+    def _digital_path_locked(self, terminal: _ResolvedTerminal) -> str:
+        if terminal.kind is _TerminalKind.DIGITAL:
+            if terminal.port is None or terminal.line is None:
+                raise AssertionError(f"Digital terminal {terminal.canonical_name} has no port/line identity")
+            port, line = terminal.port, terminal.line
+        elif terminal.kind is _TerminalKind.PFI:
+            if terminal.index is None:
+                raise AssertionError(f"PFI terminal {terminal.canonical_name} has no index")
+            port, line = self._capabilities.port_line_for_pfi(terminal.index)
+        else:
+            raise ValueError(f"Terminal '{terminal.canonical_name}' is not a digital-output line")
+        return f"/{self._device_name}/port{port}/line{line}"
 
     def _select_counter_locked(
         self,
@@ -410,6 +519,8 @@ class _NiResourceManager:
             return f"AO bank {value}"
         if kind == "ao_timing_engine":
             return f"AO timing engine {value}"
+        if kind == "do_timing_engine":
+            return f"DO timing engine {value}"
         return f"{kind} {value}"
 
     def release(self, lease: NiTaskLease) -> None:
