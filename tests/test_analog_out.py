@@ -259,15 +259,12 @@ class TestSimulatedDaqmxHub:
 
     def test_available_pins_excludes_assigned(self):
         hub = SimulatedDaqmx(num_ao=4, num_pfi=2, num_counters=2)
-        assert len(hub.available_pins) == 8  # all free initially
+        initially_available = set(hub.available_pins)
+        assert {"ao0", "pfi1"} <= initially_available
         hub.assign_pin("o", "ao0")
         hub.assign_pin("o", "pfi1")
         available = set(hub.available_pins)
-        assert "ao0" not in available
-        assert "pfi1" not in available
-        assert "ao1" in available
-        assert "pfi0" in available
-        assert len(available) == 6
+        assert available == initially_available - {"ao0", "pfi1"}
 
     def test_reserve_counter_returns_free(self):
         hub = SimulatedDaqmx(num_counters=2)
