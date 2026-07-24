@@ -3,9 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from vxl.daq.analog.ni import NiOnDemandAO
-from vxl.daq.digital.ni import NiOnDemandDO
 from vxl.daq.hub_ni import NiDaqmx
+from vxl.daq.on_demand.ni import NiOnDemandAO, NiOnDemandDO
 
 from .pulse import PulseDiscreteAxis
 

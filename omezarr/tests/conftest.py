@@ -17,11 +17,10 @@ import boto3
 import pytest
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
-
 from ome_zarr_writer import S3Store
 
 _USER = "minioadmin"
-_PASSWORD = "minioadmin"
+_PASSWORD = "minioadmin"  # noqa: S105 - disposable credential for the isolated test container
 _ENDPOINT = "http://127.0.0.1:9000"
 _CONTAINER = "voxel-minio-test"
 _BUCKET = "voxel-test"
@@ -67,11 +66,12 @@ def _await_ready(server: Minio, timeout_s: float = 30.0) -> None:
 
 @pytest.fixture(scope="module")
 def minio() -> Iterator[Minio]:
-    if shutil.which("docker") is None:
+    docker = shutil.which("docker")
+    if docker is None:
         pytest.skip("docker not available")
-    subprocess.run(["docker", "rm", "-f", _CONTAINER], capture_output=True, check=False)
+    subprocess.run([docker, "rm", "-f", _CONTAINER], capture_output=True, check=False)
     started = subprocess.run(
-        ["docker", "run", "-d", "--name", _CONTAINER, "-p", "9000:9000",
+        [docker, "run", "-d", "--name", _CONTAINER, "-p", "9000:9000",
          "-e", f"MINIO_ROOT_USER={_USER}", "-e", f"MINIO_ROOT_PASSWORD={_PASSWORD}",
          "quay.io/minio/minio", "server", "/data"],
         capture_output=True, text=True, check=False,
@@ -86,4 +86,4 @@ def minio() -> Iterator[Minio]:
             client.create_bucket(Bucket=server.bucket)
         yield server
     finally:
-        subprocess.run(["docker", "rm", "-f", _CONTAINER], capture_output=True, check=False)
+        subprocess.run([docker, "rm", "-f", _CONTAINER], capture_output=True, check=False)

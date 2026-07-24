@@ -1,10 +1,7 @@
-"""Simulated analog-output engines for tests and local runs.
+"""Simulated clocked signal generator for local runs.
 
-``SimulatedAO`` (clocked) implements the ``AO`` contract in memory
-— records the last-written arrays, running flag, and last-applied ``AOSignals`` for
-assertions. ``SimulatedOnDemandAO`` (untimed) records the held voltage per
-port. Both reserve pins on a ``SimulatedDaqmx`` hub (``vxl.daq.hub_sim``), passed in at
-construction.
+``SimulatedSignalGenerator`` implements the ``SignalGenerator`` contract in
+memory and reserves pins on a ``SimulatedDaqmx`` hub.
 """
 
 import logging
@@ -15,14 +12,13 @@ from vxlib.quantity import VoltageRange
 
 from vxl.daq.hub_sim import SimulatedDaqmx
 
-from .base import AO, AOState, OnDemandAO
-from .models import AOSignals
+from .base import GeneratorState, SignalGenerator, Signals
 
 
-class SimulatedAO(AO):
-    """In-memory ``AO`` implementation for tests + simulated rigs.
+class SimulatedSignalGenerator(SignalGenerator):
+    """In-memory ``SignalGenerator`` implementation for tests + simulated rigs.
 
-    Records the last-written arrays, last-applied ``AOSignals``, and the current
+    Records the last-written arrays, last-applied ``Signals``, and the current
     state so tests can assert what the controller dispatched.
     """
 
@@ -35,10 +31,10 @@ class SimulatedAO(AO):
     ) -> None:
         super().__init__(uid=uid, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.SimulatedAO")
+        self._log = logging.getLogger(f"{uid}.SimulatedSignalGenerator")
 
         # Driver-local state
-        self._sim_state: AOState = "fresh"
+        self._sim_state: GeneratorState = "fresh"
         self._last_arrays: dict[str, np.ndarray] = {}
         self._finite_repeat: int | None = None  # last start()'s repeat arg; None = continuous
         self._counter_reserved: str | None = None
@@ -59,7 +55,7 @@ class SimulatedAO(AO):
 
     # ---- hardware primitives ----
 
-    def setup(self, signals: AOSignals) -> None:
+    def setup(self, signals: Signals) -> None:
         del signals
         if self._sim_state != "fresh":
             raise RuntimeError(f"setup() requires fresh state, got {self._sim_state}")
@@ -108,7 +104,7 @@ class SimulatedAO(AO):
         if self._sim_state == "running":
             self._sim_state = "ready"
 
-    def can_hotswap(self, old: AOSignals | None, new: AOSignals) -> bool:
+    def can_hotswap(self, old: Signals | None, new: Signals) -> bool:
         """Structural equality check against the previously loaded config."""
         if old is None:
             return False
@@ -121,37 +117,4 @@ class SimulatedAO(AO):
         return set(old.waveforms.keys()) == set(new.waveforms.keys())
 
 
-class SimulatedOnDemandAO(OnDemandAO):
-    """In-memory ``OnDemandAO`` implementation.
-
-    ``levels`` exposes the current held voltage per port for assertions.
-    """
-
-    def __init__(self, uid: str, *, hub: SimulatedDaqmx, ports: Mapping[str, str]) -> None:
-        super().__init__(uid=uid, ports=ports)
-        self._hub = hub
-        self._log = logging.getLogger(f"{uid}.SimulatedOnDemandAO")
-        self._levels: dict[str, float] = {}  # port -> currently held voltage
-
-    @property
-    def voltage_range(self) -> VoltageRange:
-        return self._hub.voltage_range
-
-    @property
-    def levels(self) -> dict[str, float]:
-        return dict(self._levels)
-
-    def set_voltages(self, port_values: Mapping[str, float]) -> None:
-        self._validate(port_values)
-        for port, volts in port_values.items():
-            if port not in self._levels:
-                # First touch of this port claims its pin; held until reset().
-                self._hub.assign_pin(self.uid, self._ports[port])
-            self._levels[port] = volts
-
-    def reset(self) -> None:
-        self._levels = {}
-        self._hub.release_pins_for_owner(self.uid)
-
-
-__all__ = ["SimulatedAO", "SimulatedOnDemandAO"]
+__all__ = ["SimulatedSignalGenerator"]

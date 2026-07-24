@@ -28,8 +28,9 @@ from pydantic import (
     PlainSerializer,
     model_validator,
 )
-from vxlib import Dtype, SchemaModel
 from vxlib.vec import UIVec3D, UVec3D
+
+from vxlib import Dtype, SchemaModel
 
 
 class ScaleLevel(IntEnum):
@@ -337,7 +338,7 @@ Axis = Annotated[SpaceAxis | TimeAxis | ChannelAxis, Field(discriminator="type")
 def _validate_multiscale_axes(value: list) -> list[Axis]:
     """OME-NGFF axis ordering and count constraints.
 
-    2–5 axes total, 2–3 space axes, ≤1 time axis, ≤1 channel axis. Order is
+    2-5 axes total, 2-3 space axes, ≤1 time axis, ≤1 channel axis. Order is
     time (if present), channel (if present), then space.
     """
     if not isinstance(value, list):
@@ -430,7 +431,7 @@ class Dataset(SchemaModel):
     """
 
     path: str
-    coordinateTransformations: CoordinateTransformations
+    coordinateTransformations: CoordinateTransformations  # noqa: N815 - OME-NGFF schema field
 
     @property
     def resolution(self) -> tuple[float, ...]:
@@ -451,7 +452,7 @@ class Multiscale(SchemaModel):
     name: str | None = None
     type: DownscaleType | None = None
     metadata: dict | None = None
-    coordinateTransformations: CoordinateTransformations | None = None
+    coordinateTransformations: CoordinateTransformations | None = None  # noqa: N815 - OME-NGFF schema field
 
     @model_validator(mode="after")
     def _validate_dataset_ordering(self) -> "Multiscale":

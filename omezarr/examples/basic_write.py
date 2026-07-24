@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-
 from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, UIVec3D, UVec3D, WriterConfig
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.writer import _as_ome_zarr
@@ -36,11 +35,12 @@ def main(directory: Path | None = None, filename: str = "stack") -> None:
     dataset = _as_ome_zarr(storage.target)  # writer.target is None after close(); derive from the storage
     l0 = TSArrayReader(dataset / "0").read_3d(z0=0, z1=z)
     assert l0.shape == (z, y, x), l0.shape
-    assert int(l0[0].max()) == 1 and int(l0[z - 1].max()) == z
+    assert int(l0[0].max()) == 1
+    assert int(l0[z - 1].max()) == z
     print(f"wrote + verified {z} frames at {dataset}")
 
 
 if __name__ == "__main__":
     from datetime import datetime
 
-    main(directory=Path(__file__).parent / "tmp", filename=datetime.now().strftime("%Y%m%d_%H%M%S"))
+    main(directory=Path(__file__).parent / "tmp", filename=datetime.now().astimezone().strftime("%Y%m%d_%H%M%S"))

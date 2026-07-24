@@ -8,17 +8,16 @@ with Neuroglancer.
 from pathlib import Path
 
 from fastapi import FastAPI
-from rich import print
-
 from ome_zarr_writer.viewer.ng_view import NGLUT, NGLayerConfig, ng_quick_view
 from ome_zarr_writer.viewer.zarr_server.fastapi import FastAPIZarrServer
+from rich import print
 
 
 def ng_quick_view_fastapi(
     configs: list[NGLayerConfig],
     http_port: int = 9000,
     viewer_port: int = 8080,
-    viewer_token: str = "ng_example",
+    viewer_token: str = "ng_example",  # noqa: S107 - public URL identifier, not an authentication secret
     app: FastAPI | None = None,
 ):
     """
@@ -38,7 +37,7 @@ def ng_quick_view_fastapi(
         If blocking=False, returns (server, viewer) tuple for programmatic control
     """
     # Create FastAPI server
-    server = FastAPIZarrServer(host="0.0.0.0", port=http_port, app=app)
+    server = FastAPIZarrServer(host="0.0.0.0", port=http_port, app=app)  # noqa: S104 - serves remote viewers
 
     # Use common ng_quick_view
     return ng_quick_view(

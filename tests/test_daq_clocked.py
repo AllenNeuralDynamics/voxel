@@ -1,23 +1,19 @@
-"""Tests for ``vxl.daq.analog`` — models, controller, simulated driver."""
+"""Hardware-free tests for ``vxl.daq.clocked``."""
 
 import numpy as np
 import pytest
 from vxlib.quantity import Frequency, Time
 
-from vxl.daq import SimulatedAO, SimulatedDaqmx
-from vxl.daq.analog import (
-    AOController,
-    AOSignals,
-    DerivedResolutionError,
-    resolve_to_arrays,
-)
-from vxl.daq.analog.ni import NiAO
-from vxl.daq.analog.wave import (
+from vxl.daq import SimulatedDaqmx
+from vxl.daq.clocked import SignalGeneratorController, Signals
+from vxl.daq.clocked.ni import NiSignalGenerator
+from vxl.daq.clocked.simulated import SimulatedSignalGenerator
+from vxl.daq.clocked.waveform import (
     DerivedMirror,
     DerivedOffset,
     DerivedScale,
     TriangleWave,
-    is_derived,
+    WaveformResolutionError,
     validate_waveform,
 )
 
@@ -86,14 +82,6 @@ class TestWaveformUnion:
         with pytest.raises(Exception):  # noqa: PT011, B017
             validate_waveform({"type": "derived", "operation": "flibber", "source": "src"})
 
-    def test_is_derived_predicate(self):
-        assert is_derived(DerivedMirror(source="a"))
-        assert is_derived({"type": "derived", "operation": "mirror", "source": "a"})
-        primitive = validate_waveform(
-            {"type": "sine", "voltage": {"min": 0, "max": 1}, "window": {"min": 0, "max": 1.0}, "cycles": 1}
-        )
-        assert not is_derived(primitive)
-
 
 # ==================== Derived resolution ====================
 
@@ -109,10 +97,10 @@ def _triangle(vmin: float = -2, vmax: float = 2, rest: float = 0.0) -> dict:
     }
 
 
-class TestResolveToArrays:
+class TestSignalArrays:
     def test_primitives_match_direct_get_array(self):
         wf = validate_waveform(_triangle())
-        arrays = resolve_to_arrays({"x": wf}, num_samples=50)
+        arrays = Signals(sample_rate=Frequency(50), duration=Time(1), waveforms={"x": wf}).arrays()
         assert arrays["x"].shape == (50,)
         assert isinstance(wf, TriangleWave)  # narrow away Derived for type checker
         np.testing.assert_allclose(arrays["x"], wf.get_array(50))
@@ -122,16 +110,15 @@ class TestResolveToArrays:
             "src": validate_waveform(_triangle(vmin=-2, vmax=2, rest=0.0)),
             "mir": validate_waveform({"type": "derived", "operation": "mirror", "source": "src"}),
         }
-        arr = resolve_to_arrays(wfs, 100)
+        arr = Signals(sample_rate=Frequency(100), duration=Time(1), waveforms=wfs).arrays()
         np.testing.assert_allclose(arr["mir"], -arr["src"])
 
-    def test_mirror_respects_nonzero_rest(self):
+    def test_mirror_uses_explicit_center(self):
         wfs = {
             "src": validate_waveform(_triangle(vmin=0, vmax=4, rest=2.0)),
-            "mir": validate_waveform({"type": "derived", "operation": "mirror", "source": "src"}),
+            "mir": validate_waveform({"type": "derived", "operation": "mirror", "source": "src", "about": 2.0}),
         }
-        arr = resolve_to_arrays(wfs, 100)
-        # Mirror around rest=2: mir = 2*2 - src = 4 - src
+        arr = Signals(sample_rate=Frequency(100), duration=Time(1), waveforms=wfs).arrays()
         np.testing.assert_allclose(arr["mir"], 4.0 - arr["src"])
 
     def test_scale_around_rest(self):
@@ -139,7 +126,7 @@ class TestResolveToArrays:
             "src": validate_waveform(_triangle(vmin=-2, vmax=2, rest=0.0)),
             "half": validate_waveform({"type": "derived", "operation": "scale", "source": "src", "factor": 0.5}),
         }
-        arr = resolve_to_arrays(wfs, 100)
+        arr = Signals(sample_rate=Frequency(100), duration=Time(1), waveforms=wfs).arrays()
         np.testing.assert_allclose(arr["half"], 0.5 * arr["src"])
 
     def test_offset_adds_delta(self):
@@ -147,7 +134,7 @@ class TestResolveToArrays:
             "src": validate_waveform(_triangle(vmin=-1, vmax=1, rest=0.0)),
             "bi": validate_waveform({"type": "derived", "operation": "offset", "source": "src", "delta": 0.5}),
         }
-        arr = resolve_to_arrays(wfs, 50)
+        arr = Signals(sample_rate=Frequency(50), duration=Time(1), waveforms=wfs).arrays()
         np.testing.assert_allclose(arr["bi"], arr["src"] + 0.5)
 
     def test_shift_rolls_circularly(self):
@@ -155,8 +142,10 @@ class TestResolveToArrays:
             "src": validate_waveform(_triangle()),
             "s25": validate_waveform({"type": "derived", "operation": "shift", "source": "src", "fraction": 0.25}),
         }
-        arr = resolve_to_arrays(wfs, 100)
-        np.testing.assert_allclose(arr["s25"], np.roll(arr["src"], 25))
+        arr = Signals(sample_rate=Frequency(100), duration=Time(1), waveforms=wfs).arrays()
+        expected = np.roll(arr["src"], 25)
+        expected[-1] = arr["src"][-1]
+        np.testing.assert_allclose(arr["s25"], expected)
 
     def test_chain_a_to_b_to_c(self):
         wfs = {
@@ -164,7 +153,7 @@ class TestResolveToArrays:
             "b": validate_waveform({"type": "derived", "operation": "scale", "source": "a", "factor": 0.5}),
             "c": validate_waveform({"type": "derived", "operation": "mirror", "source": "b"}),
         }
-        arr = resolve_to_arrays(wfs, 40)
+        arr = Signals(sample_rate=Frequency(40), duration=Time(1), waveforms=wfs).arrays()
         np.testing.assert_allclose(arr["b"], 0.5 * arr["a"])
         np.testing.assert_allclose(arr["c"], -arr["b"])
 
@@ -173,23 +162,23 @@ class TestResolveToArrays:
             "a": validate_waveform({"type": "derived", "operation": "mirror", "source": "b"}),
             "b": validate_waveform({"type": "derived", "operation": "mirror", "source": "a"}),
         }
-        with pytest.raises(DerivedResolutionError, match="Cycle"):
-            resolve_to_arrays(wfs, 10)
+        with pytest.raises(WaveformResolutionError, match="Cycle"):
+            Signals(sample_rate=Frequency(10), duration=Time(1), waveforms=wfs).arrays()
 
     def test_missing_source_raises(self):
         wfs = {
             "a": validate_waveform({"type": "derived", "operation": "mirror", "source": "nonexistent"}),
         }
-        with pytest.raises(DerivedResolutionError, match="unknown source"):
-            resolve_to_arrays(wfs, 10)
+        with pytest.raises(WaveformResolutionError, match="unknown source"):
+            Signals(sample_rate=Frequency(10), duration=Time(1), waveforms=wfs).arrays()
 
 
-# ==================== AOSignals model ====================
+# ==================== Signals model ====================
 
 
-class TestAOSignals:
+class TestSignals:
     def test_num_samples_is_rate_times_duration(self):
-        sig = AOSignals(
+        sig = Signals(
             sample_rate=Frequency(100_000.0),
             duration=Time(0.01),
             waveforms={"x": validate_waveform(_triangle())},
@@ -197,7 +186,7 @@ class TestAOSignals:
         assert sig.num_samples == 1000
 
     def test_frame_frequency_uses_duration_plus_rest(self):
-        sig = AOSignals(
+        sig = Signals(
             sample_rate=Frequency(100_000.0),
             duration=Time(0.02),
             rest_time=Time(0.03),
@@ -207,12 +196,12 @@ class TestAOSignals:
         assert sig.frame_frequency == pytest.approx(20.0)
 
     def test_equality_by_value(self):
-        a = AOSignals(
+        a = Signals(
             sample_rate=Frequency(100_000.0),
             duration=Time(0.01),
             waveforms={"x": validate_waveform(_triangle())},
         )
-        b = AOSignals(
+        b = Signals(
             sample_rate=Frequency(100_000.0),
             duration=Time(0.01),
             waveforms={"x": validate_waveform(_triangle())},
@@ -285,20 +274,22 @@ class TestSimulatedDaqmxHub:
         assert hub.get_pfi_path("pfi0") == "/Dev1/PFI0"
 
 
-# ==================== SimulatedAO ====================
+# ==================== SimulatedSignalGenerator ====================
 
 
-def _make_ao(ports: dict[str, str] | None = None) -> tuple[SimulatedDaqmx, SimulatedAO]:
+def _make_generator(
+    ports: dict[str, str] | None = None,
+) -> tuple[SimulatedDaqmx, SimulatedSignalGenerator]:
     hub = SimulatedDaqmx(num_ao=8, num_pfi=4, num_counters=2)
-    ao = SimulatedAO(
+    generator = SimulatedSignalGenerator(
         uid="ao_main",
         hub=hub,
         ports=ports or {"galvo": "ao0", "etl": "ao1"},
     )
-    return hub, ao
+    return hub, generator
 
 
-def _signals(**overrides) -> AOSignals:
+def _signals(**overrides) -> Signals:
     defaults = {
         "sample_rate": 10_000.0,
         "duration": 0.01,
@@ -309,82 +300,82 @@ def _signals(**overrides) -> AOSignals:
         },
     }
     defaults.update(overrides)
-    return AOSignals(**defaults)
+    return Signals(**defaults)
 
 
-class TestSimulatedAO:
+class TestSimulatedSignalGenerator:
     def test_setup_reserves_ports_on_hub(self):
-        hub, ao = _make_ao()
-        ao.setup(_signals())
+        hub, generator = _make_generator()
+        generator.setup(_signals())
         assert hub.assigned_pins["ao0"] == "ao_main"
         assert hub.assigned_pins["ao1"] == "ao_main"
 
     def test_setup_reserves_counter_for_internal_pacing(self):
-        hub, ao = _make_ao()
-        ao.setup(_signals())
+        hub, generator = _make_generator()
+        generator.setup(_signals())
         counters = [p for p, owner in hub.assigned_pins.items() if p.startswith("ctr") and owner == "ao_main"]
         assert len(counters) == 1
 
     def test_write_stores_arrays(self):
-        _, ao = _make_ao()
-        ao.setup(_signals())
+        _, generator = _make_generator()
+        generator.setup(_signals())
         arrays = {"galvo": np.arange(100, dtype=np.float64), "etl": np.zeros(100)}
-        ao.write(arrays)
-        assert "galvo" in ao.last_arrays
-        np.testing.assert_allclose(ao.last_arrays["galvo"], arrays["galvo"])
+        generator.write(arrays)
+        assert "galvo" in generator.last_arrays
+        np.testing.assert_allclose(generator.last_arrays["galvo"], arrays["galvo"])
 
     def test_write_rejects_unknown_port(self):
-        _, ao = _make_ao()
-        ao.setup(_signals())
+        _, generator = _make_generator()
+        generator.setup(_signals())
         with pytest.raises(ValueError, match="Unknown port"):
-            ao.write({"galvo": np.zeros(10), "bogus": np.zeros(10)})
+            generator.write({"galvo": np.zeros(10), "bogus": np.zeros(10)})
 
     def test_teardown_releases_pins_and_resets_state(self):
-        hub, ao = _make_ao()
-        ao.setup(_signals())
-        ao.teardown()
+        hub, generator = _make_generator()
+        generator.setup(_signals())
+        generator.teardown()
         assert hub.assigned_pins == {}
-        assert not ao.running
+        assert not generator.running
 
     def test_start_stop_toggles_running(self):
-        _, ao = _make_ao()
-        ao.setup(_signals())
-        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
-        assert not ao.running
-        ao.start()
-        assert ao.running
-        ao.stop()
-        assert not ao.running
+        _, generator = _make_generator()
+        generator.setup(_signals())
+        generator.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        assert not generator.running
+        generator.start()
+        assert generator.running
+        generator.stop()
+        assert not generator.running
 
     def test_wait_until_done_raises_when_no_finite_repeat(self):
-        _, ao = _make_ao()
-        ao.setup(_signals())
-        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
-        ao.start()  # continuous (repeat=None)
+        _, generator = _make_generator()
+        generator.setup(_signals())
+        generator.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        generator.start()  # continuous (repeat=None)
         with pytest.raises(RuntimeError, match="finite acquisition"):
-            ao.wait_until_done(timeout_s=1.0)
+            generator.wait_until_done(timeout_s=1.0)
 
     def test_wait_until_done_succeeds_after_finite_start(self):
-        _, ao = _make_ao()
-        ao.setup(_signals())
-        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
-        ao.start(repeat=5)
-        ao.wait_until_done(timeout_s=1.0)  # sim returns immediately
+        _, generator = _make_generator()
+        generator.setup(_signals())
+        generator.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        generator.start(repeat=5)
+        generator.wait_until_done(timeout_s=1.0)  # sim returns immediately
 
     def test_stop_clears_finite_repeat(self):
-        _, ao = _make_ao()
-        ao.setup(_signals())
-        ao.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
-        ao.start(repeat=5)
-        ao.stop()
+        _, generator = _make_generator()
+        generator.setup(_signals())
+        generator.write({"galvo": np.zeros(10), "etl": np.zeros(10)})
+        generator.start(repeat=5)
+        generator.stop()
         # After stop, _finite_repeat is cleared — wait_until_done would raise
-        ao.start(repeat=3)  # must explicitly re-arm
-        ao.stop()
+        generator.start(repeat=3)  # must explicitly re-arm
+        generator.stop()
         with pytest.raises(RuntimeError, match="finite acquisition"):
-            ao.wait_until_done(timeout_s=1.0)
+            generator.wait_until_done(timeout_s=1.0)
 
     def test_can_hotswap_true_when_only_waveforms_change(self):
-        _, ao = _make_ao()
+        _, generator = _make_generator()
         old = _signals()
         new = _signals(
             waveforms={
@@ -392,66 +383,66 @@ class TestSimulatedAO:
                 "etl": validate_waveform(_triangle(vmin=0, vmax=2)),
             }
         )
-        assert ao.can_hotswap(old, new) is True
+        assert generator.can_hotswap(old, new) is True
 
     def test_can_hotswap_false_when_sample_rate_changes(self):
-        _, ao = _make_ao()
-        assert ao.can_hotswap(_signals(), _signals(sample_rate=20_000.0)) is False
+        _, generator = _make_generator()
+        assert generator.can_hotswap(_signals(), _signals(sample_rate=20_000.0)) is False
 
     def test_can_hotswap_false_when_duration_changes(self):
-        _, ao = _make_ao()
-        assert ao.can_hotswap(_signals(), _signals(duration=0.02)) is False
+        _, generator = _make_generator()
+        assert generator.can_hotswap(_signals(), _signals(duration=0.02)) is False
 
     def test_can_hotswap_false_when_ports_change(self):
-        _, ao = _make_ao()
-        assert ao.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+        _, generator = _make_generator()
+        assert generator.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
 
     def test_can_hotswap_false_when_nothing_loaded(self):
-        _, ao = _make_ao()
-        assert ao.can_hotswap(None, _signals()) is False
+        _, generator = _make_generator()
+        assert generator.can_hotswap(None, _signals()) is False
 
 
-# ==================== AOController state machine ====================
+# ==================== SignalGeneratorController state machine ====================
 
 
 class TestControllerStateMachine:
     async def test_starts_fresh_with_no_loaded(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         assert ctrl.state == "fresh"
         assert ctrl.loaded is None
 
     async def test_load_fresh_to_ready(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         assert ctrl.state == "ready"
         assert ctrl.loaded == _signals()
 
     async def test_start_requires_load(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         with pytest.raises(RuntimeError, match="no signals loaded"):
             await ctrl.start()
 
     async def test_start_ready_to_running(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start()
         assert ctrl.state == "running"
 
     async def test_stop_running_to_ready(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start()
         await ctrl.stop()
         assert ctrl.state == "ready"
 
     async def test_stop_when_not_running_is_noop(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.stop()  # fresh
         assert ctrl.state == "fresh"
         await ctrl.load(_signals())
@@ -459,27 +450,29 @@ class TestControllerStateMachine:
         assert ctrl.state == "ready"
 
     async def test_start_when_already_running_is_noop(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start()
         await ctrl.start()  # second call
         assert ctrl.state == "running"
 
     async def test_load_identical_signals_noop(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         sig = _signals()
         await ctrl.load(sig)
-        first_arrays = ao.last_arrays
+
+        def unexpected_write(_):
+            raise AssertionError("identical signals should not be written again")
+
+        generator.write = unexpected_write  # type: ignore[method-assign]
         await ctrl.load(sig)  # identical — no hardware work
-        # If it were a rebuild, the arrays object would be replaced; identity check
-        # is a reasonable proxy for "didn't call write again".
-        assert ao.last_arrays is first_arrays or ao.last_arrays == first_arrays
+        assert ctrl.loaded == sig
 
     async def test_hotswap_preserves_running(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start()
         # Change only waveform values — structural fields unchanged
@@ -498,8 +491,8 @@ class TestControllerStateMachine:
         assert ctrl.loaded == new_signals
 
     async def test_rebuild_preserves_running(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start()
         new_signals = _signals(sample_rate=20_000.0)  # structural change forces rebuild
@@ -508,8 +501,8 @@ class TestControllerStateMachine:
         assert ctrl.loaded == new_signals
 
     async def test_wait_until_done_requires_running_state(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         # fresh
         with pytest.raises(RuntimeError, match="running state"):
             await ctrl.wait_until_done(timeout_s=1.0)
@@ -519,63 +512,63 @@ class TestControllerStateMachine:
             await ctrl.wait_until_done(timeout_s=1.0)
 
     async def test_wait_until_done_delegates_to_driver(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start(repeat=3)
         await ctrl.wait_until_done(timeout_s=1.0)  # sim returns immediately
 
     async def test_wait_until_done_raises_on_continuous_start(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         await ctrl.start()  # continuous
         with pytest.raises(RuntimeError, match="finite acquisition"):
             await ctrl.wait_until_done(timeout_s=1.0)
 
     async def test_driver_exception_resets_state(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         await ctrl.load(_signals())
         # Break the driver — next write raises
-        original_write = ao.write
+        original_write = generator.write
 
         def broken(_):
             raise RuntimeError("simulated hw fault")
 
-        ao.write = broken  # type: ignore[method-assign]
+        generator.write = broken  # type: ignore[method-assign]
         # Force a rebuild (sample_rate change) so write is called
         with pytest.raises(RuntimeError, match="simulated hw fault"):
             await ctrl.load(_signals(sample_rate=20_000.0))
         assert ctrl.state == "fresh"
         assert ctrl.loaded is None
         # Restore for further assertions
-        ao.write = original_write  # type: ignore[method-assign]
+        generator.write = original_write  # type: ignore[method-assign]
 
 
 class TestControllerValidation:
     async def test_rejects_unknown_port(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         sig = _signals(waveforms={"not_a_port": validate_waveform(_triangle())})
         with pytest.raises(ValueError, match="Waveform keys not declared as ports"):
             await ctrl.load(sig)
 
     async def test_rejects_voltage_exceeding_hw_range(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         sig = _signals(
             waveforms={
                 "galvo": validate_waveform(_triangle(vmin=-100, vmax=100)),
                 "etl": validate_waveform(_triangle()),
             }
         )
-        with pytest.raises(ValueError, match="exceeds AO range"):
+        with pytest.raises(ValueError, match="values out of range"):
             await ctrl.load(sig)
 
     async def test_rejects_derived_cycle_through_validator(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         sig = _signals(
             waveforms={
                 "galvo": validate_waveform({"type": "derived", "operation": "mirror", "source": "etl"}),
@@ -586,8 +579,8 @@ class TestControllerValidation:
             await ctrl.load(sig)
 
     async def test_rejects_derived_missing_source(self):
-        _, ao = _make_ao()
-        ctrl = AOController(ao)
+        _, generator = _make_generator()
+        ctrl = SignalGeneratorController(generator)
         sig = _signals(
             waveforms={
                 "galvo": validate_waveform(_triangle()),
@@ -598,40 +591,40 @@ class TestControllerValidation:
             await ctrl.load(sig)
 
 
-# ==================== NiAO pure-Python helpers ====================
+# ==================== NiSignalGenerator pure-Python helpers ====================
 
 
-class TestNiAOHelpers:
-    """Pure-Python parts of ``NiAO`` testable without NI hardware."""
+class TestNiSignalGeneratorHelpers:
+    """Pure-Python parts of ``NiSignalGenerator`` testable without NI hardware."""
 
     def test_can_hotswap_always_false(self):
         """Pinned to False: see can_hotswap docstring on NI-DAQmx error -200547."""
-        ao = NiAO.__new__(NiAO)
-        ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
+        generator = NiSignalGenerator.__new__(NiSignalGenerator)
+        generator._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
         # Identical signals — would have been hotswappable before the buffer-error workaround.
-        assert ao.can_hotswap(_signals(), _signals()) is False
+        assert generator.can_hotswap(_signals(), _signals()) is False
         # Different waveforms — also False under the disabled-hotswap policy.
-        assert ao.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
+        assert generator.can_hotswap(_signals(), _signals(waveforms={"galvo": validate_waveform(_triangle())})) is False
 
     def test_can_hotswap_false_when_nothing_loaded(self):
-        ao = NiAO.__new__(NiAO)
-        ao._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
-        assert ao.can_hotswap(None, _signals()) is False
+        generator = NiSignalGenerator.__new__(NiSignalGenerator)
+        generator._ports = {"galvo": "ao0"}  # type: ignore[attr-defined]
+        assert generator.can_hotswap(None, _signals()) is False
 
     def test_start_input_trigger_with_repeat_raises(self):
         # InputTrigger + repeat requires counter-gate hardware support that
         # isn't implemented yet — start() must raise cleanly rather than silently
         # ignore the bound. No CO task = input-triggered operation.
-        ao = NiAO.__new__(NiAO)
-        ao.uid = "ao_test"  # type: ignore[attr-defined]
-        ao._ao_task = object()  # type: ignore[attr-defined]  # truthy: passes "is not None" check
-        ao._co_task = None  # type: ignore[attr-defined]
+        generator = NiSignalGenerator.__new__(NiSignalGenerator)
+        generator.uid = "ao_test"  # type: ignore[attr-defined]
+        generator._ao_task = object()  # type: ignore[attr-defined]  # truthy: passes "is not None" check
+        generator._co_task = None  # type: ignore[attr-defined]
         with pytest.raises(NotImplementedError, match="input-trigger repeat"):
-            ao.start(repeat=10)
+            generator.start(repeat=10)
 
     def test_wait_until_done_raises_without_finite_repeat(self):
-        ao = NiAO.__new__(NiAO)
-        ao.uid = "ao_test"  # type: ignore[attr-defined]
-        ao._finite_repeat = None  # type: ignore[attr-defined]
+        generator = NiSignalGenerator.__new__(NiSignalGenerator)
+        generator.uid = "ao_test"  # type: ignore[attr-defined]
+        generator._finite_repeat = None  # type: ignore[attr-defined]
         with pytest.raises(RuntimeError, match="finite acquisition"):
-            ao.wait_until_done(timeout_s=1.0)
+            generator.wait_until_done(timeout_s=1.0)

@@ -10,7 +10,7 @@
   import { Button, Select } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import type { SelectOption } from '$lib/kit/Select.svelte';
-  import type { AOSignals, DerivedWaveform, Waveform } from '$lib/model';
+  import type { DerivedWaveform, Signals, Waveform } from '$lib/model';
   import { getVoxelApp } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
   import { createPaneSize, sanitizeString, toastError } from '$lib/utils';
@@ -124,26 +124,28 @@
     return { type: newType, voltage, window, rest_voltage, ...extra } as Waveform;
   }
 
-  // ──────────────────────────────── AO tab state ────────────────────────────────
+  // ──────────────────────────────── Signal-generator tab state ────────────────────────────────
 
-  /** All AO devices referenced by this profile's sync block. */
-  const aoUids = $derived<string[]>(profile ? Object.keys(profile.sync) : []);
+  /** All signal generators referenced by this profile's sync block. */
+  const generatorUids = $derived<string[]>(profile ? Object.keys(profile.sync) : []);
 
-  /** Options for the AO device <Select>. Maps each uid to a display label. */
-  const aoOptions = $derived<SelectOption[]>(aoUids.map((uid) => ({ value: uid, label: sanitizeString(uid) })));
+  /** Options for the signal-generator <Select>. Maps each uid to a display label. */
+  const generatorOptions = $derived<SelectOption[]>(
+    generatorUids.map((uid) => ({ value: uid, label: sanitizeString(uid) }))
+  );
 
-  /** Currently selected AO tab. Defaults to the first AO uid once available. */
-  let selectedAoUid = $state<string | null>(null);
+  /** Currently selected signal-generator tab. Defaults to the first uid once available. */
+  let selectedGeneratorUid = $state<string | null>(null);
 
   watch(
-    () => aoUids,
+    () => generatorUids,
     (uids) => {
       if (uids.length === 0) {
-        selectedAoUid = null;
+        selectedGeneratorUid = null;
         return;
       }
-      if (!selectedAoUid || !uids.includes(selectedAoUid)) {
-        selectedAoUid = uids[0];
+      if (!selectedGeneratorUid || !uids.includes(selectedGeneratorUid)) {
+        selectedGeneratorUid = uids[0];
       }
     }
   );
@@ -160,14 +162,14 @@
 
   // ──────────────────────────────── Source of truth (streamed loaded + config) ────────────────────────────────
 
-  const loadedSignals = $derived.by<AOSignals | null>(() => {
-    if (!selectedAoUid) return null;
-    return instrument?.analogOuts.get(selectedAoUid)?.loaded ?? null;
+  const loadedSignals = $derived.by<Signals | null>(() => {
+    if (!selectedGeneratorUid) return null;
+    return instrument?.signalGenerators.get(selectedGeneratorUid)?.loaded ?? null;
   });
 
-  const configSignals = $derived.by<AOSignals | null>(() => {
-    if (!profile || !selectedAoUid) return null;
-    return profile.sync[selectedAoUid] ?? null;
+  const configSignals = $derived.by<Signals | null>(() => {
+    if (!profile || !selectedGeneratorUid) return null;
+    return profile.sync[selectedGeneratorUid] ?? null;
   });
 
   /**
@@ -180,21 +182,21 @@
     return loadedSignals?.waveforms ?? {};
   });
 
-  const aoRange = $derived.by<{ min: number; max: number } | null>(() => {
-    if (!selectedAoUid) return null;
-    return instrument?.analogOuts.get(selectedAoUid)?.voltageRange ?? null;
+  const voltageRange = $derived.by<{ min: number; max: number } | null>(() => {
+    if (!selectedGeneratorUid) return null;
+    return instrument?.signalGenerators.get(selectedGeneratorUid)?.voltageRange ?? null;
   });
 
-  const aoPorts = $derived.by<Record<string, string>>(() => {
-    if (!selectedAoUid) return {};
-    const dev = instrument?.hal.devices[selectedAoUid];
+  const generatorPorts = $derived.by<Record<string, string>>(() => {
+    if (!selectedGeneratorUid) return {};
+    const dev = instrument?.hal.devices[selectedGeneratorUid];
     const ports = dev?.init?.ports as Record<string, string> | undefined;
     return ports ?? {};
   });
 
   // ──────────────────────────────── Sidebar: waveform devices ────────────────────────────────
 
-  /** Device ids that have a waveform entry in the current AO tab's signals.
+  /** Device ids that have a waveform entry in the current generator tab's signals.
    *  Real devices in the active profile come first (in profile-discovery order); pure DAQ
    *  port labels (no backing Device) appear after, in waveform-key order. */
   const tabWaveformIds = $derived.by<string[]>(() => {
@@ -296,10 +298,10 @@
     editingWaveform = cloneWaveform(source);
   }
 
-  // Auto-select: whenever the tab's waveform list changes (new profile, new AO tab,
+  // Auto-select: whenever the tab's waveform list changes (new profile, new generator tab,
   // or ``baseWaveforms`` shift), re-anchor ``selectedDeviceId`` to a valid row —
   // defaulting to the first — or clear it only when there's nothing to select.
-  // Subsumes the old ``selectedAoUid`` / ``cancelEditing`` watch.
+  // Subsumes the old selection / ``cancelEditing`` watch.
   watch(
     () => tabWaveformIds,
     (ids) => {
@@ -348,15 +350,15 @@
   }
 
   async function commitTiming() {
-    if (!canEdit || !timingDirty || !selectedAoUid || !configSignals) return;
-    const next: AOSignals = {
+    if (!canEdit || !timingDirty || !selectedGeneratorUid || !configSignals) return;
+    const next: Signals = {
       sample_rate: localTiming.sample_rate,
       duration: localTiming.duration,
       rest_time: localTiming.rest_time,
       waveforms: configSignals.waveforms
     };
     try {
-      await instrument?.updateAoSignals(selectedAoUid, next);
+      await instrument?.updateSignals(selectedGeneratorUid, next);
       timingDirty = false;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update timing');
@@ -406,24 +408,24 @@
   watch(
     () => editFingerprint,
     (fp) => {
-      if (!fp || !canEdit || !selectedAoUid || !configSignals || !editingWaveform || !selectedDeviceId) {
+      if (!fp || !canEdit || !selectedGeneratorUid || !configSignals || !editingWaveform || !selectedDeviceId) {
         return;
       }
       if (pendingPatchTimer) clearTimeout(pendingPatchTimer);
-      const aoUid = selectedAoUid;
+      const generatorUid = selectedGeneratorUid;
       const channelId = selectedDeviceId;
       const nextWf = cloneWaveform(editingWaveform);
       const base = configSignals;
 
       pendingPatchTimer = setTimeout(() => {
         pendingPatchTimer = null;
-        const merged: AOSignals = {
+        const merged: Signals = {
           sample_rate: base.sample_rate,
           duration: base.duration,
           rest_time: base.rest_time,
           waveforms: { ...base.waveforms, [channelId]: nextWf }
         };
-        toastError(instrument?.updateAoSignals(aoUid, merged));
+        toastError(instrument?.updateSignals(generatorUid, merged));
       }, 150);
 
       return () => {
@@ -446,7 +448,7 @@
 
   function setEditingVoltage(key: 'min' | 'max', value: number) {
     if (!editingWaveform || isDerivedWaveform(editingWaveform) || !isFinite(value)) return;
-    if (aoRange) value = Math.max(aoRange.min, Math.min(aoRange.max, value));
+    if (voltageRange) value = Math.max(voltageRange.min, Math.min(voltageRange.max, value));
     editingWaveform.voltage[key] = value;
     const rest = editingWaveform.rest_voltage ?? 0;
     editingWaveform.rest_voltage = Math.max(editingWaveform.voltage.min, Math.min(editingWaveform.voltage.max, rest));
@@ -516,7 +518,7 @@
   const plotContext = $derived<import('./WaveformPanel.svelte').PlotContext>({
     duration,
     restTime,
-    aoRange,
+    voltageRange,
     syncKey: 'tune'
   });
 
@@ -543,16 +545,16 @@
 
 {#if profile}
   <div class="flex h-full flex-col">
-    <!-- Top bar: AO selector + derived readouts. Timing moved to sidebar footer. -->
+    <!-- Top bar: signal-generator selector + derived readouts. Timing moved to sidebar footer. -->
     <div class="flex shrink-0 flex-wrap items-center gap-6 border-b px-4 py-1.5">
       <Select
-        prefix="AO"
+        prefix="Generator"
         size="xs"
         class="w-48"
-        value={selectedAoUid ?? ''}
-        options={aoOptions}
-        disabled={aoOptions.length === 0}
-        onchange={(v) => (selectedAoUid = v)}
+        value={selectedGeneratorUid ?? ''}
+        options={generatorOptions}
+        disabled={generatorOptions.length === 0}
+        onchange={(v) => (selectedGeneratorUid = v)}
       />
       <div class="ml-auto flex min-h-8 items-center gap-4 text-base text-fg-muted">
         <p>Freq <span class="font-mono text-nowrap text-fg">{formatFrequency(frequency)}</span></p>
@@ -618,7 +620,7 @@
       <Pane {...sidebarSize}>
         <div class="flex h-full flex-col border-l">
           {#if selectedDeviceId && editingWaveform}
-            {@const port = aoPorts[selectedDeviceId]}
+            {@const port = generatorPorts[selectedDeviceId]}
             {@const wf = editingWaveform}
             <!-- Device header: id + port -->
             <div class="flex shrink-0 items-center gap-1.5 border-b px-4 py-2 text-base font-medium">
@@ -735,7 +737,7 @@
                           model={{
                             value: wf.voltage.min,
                             onChange: (v) => setEditingVoltage('min', v),
-                            min: aoRange?.min,
+                            min: voltageRange?.min,
                             max: wf.voltage.max,
                             step: 0.005
                           }}
@@ -752,7 +754,7 @@
                             value: wf.voltage.max,
                             onChange: (v) => setEditingVoltage('max', v),
                             min: wf.voltage.min,
-                            max: aoRange?.max,
+                            max: voltageRange?.max,
                             step: 0.001
                           }}
                           prefix="Max"
@@ -770,8 +772,8 @@
                           model={{
                             value: (wf.voltage.max + wf.voltage.min) / 2,
                             onChange: (v) => setEditingOffset(v),
-                            min: aoRange?.min,
-                            max: aoRange?.max,
+                            min: voltageRange?.min,
+                            max: voltageRange?.max,
                             step: 0.001
                           }}
                           prefix="Offset"

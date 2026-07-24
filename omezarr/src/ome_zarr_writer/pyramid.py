@@ -13,7 +13,7 @@ JIT-specialized twice (serial + parallel) at module import. `prange` on the
 outermost loop degenerates to `range` under `@jit(parallel=False)`, so a single
 source supports both variants without duplication.
 
-`mean`/`max`/`min` reduce each 2×2×2 block independently, in one `(vol, out)` kernel.
+`mean`/`max`/`min` reduce each 2x2x2 block independently, in one `(vol, out)` kernel.
 `gaussian` is a genuine anti-aliasing downscale — the rest of this docstring is how it works.
 
 How the gaussian math works
@@ -27,7 +27,7 @@ whole point: decimation (dropping every other sample) folds frequencies above th
 in as aliasing; blurring first removes them. `mean` is a 2-tap box [1,1]/2 — a crude low-pass that
 leaks high frequencies, so it aliases more.
 
-One 2× step, in 1-D: for output `i`, centre the 4 taps on the 2-block `(2i, 2i+1)`, reading indices
+One 2x step, in 1-D: for output `i`, centre the 4 taps on the 2-block `(2i, 2i+1)`, reading indices
 {2i-1, 2i, 2i+1, 2i+2} (edge-clamped), weights (1,3,3,1), then divide by 8. Worked example on
 `v = [10,12,40,42,44,46,12,10]`:
 
@@ -38,20 +38,20 @@ The weights sum to 8, so ÷8 makes it a weighted average — a constant field st
 The taps are symmetric about `2i+0.5`, the midpoint of the block `mean` averages, so `gaussian` and
 `mean` land on the *same* output grid (no half-pixel shift; the classic 5-tap [1,4,6,4,1] centres on
 `2i` and would shift). Chaining the step across levels widens the effective Gaussian, exactly as a
-Burt–Adelson pyramid does.
+Burt-Adelson pyramid does.
 
-3-D via separability: the 3-D kernel is the outer product `w[dz]·w[dy]·w[dx]` (4×4×4 = 64 weights),
+3-D via separability: the 3-D kernel is the outer product `w[dz]·w[dy]·w[dx]` (4x4x4 = 64 weights),
 but because it factors, applying the 1-D filter along X then Y then Z gives the identical result for
 only 4+4+4 = 12 taps/voxel instead of 64. `_binom_x`/`_binom_y` do the X/Y passes (sums only, ÷8
 deferred); `_binom_z` combines the four planes and applies the single ÷512 (= ÷8³) that normalises
 all three passes at once.
 
-Cost & memory: the fused 64-tap form was measured ~5.4× `mean` (strided gathers thrash cache) and
+Cost & memory: the fused 64-tap form was measured ~5.4x `mean` (strided gathers thrash cache) and
 became the pipeline's binding stage, missing capture rate. Separable is 12 taps/voxel but its 1-D
 passes are contiguous and SIMD-friendly, so measured wall-time is *on par with* `mean` (even a touch
 faster). To get that speed *without* separability's usual full-size float32 intermediate (~half of L0
 as f32, materialised per active worker — unsafe next to the ring), `_gaussian_downscale` streams by
-Z-plane: each input plane is X/Y-reduced exactly once into a small rolling cache (≈4–5 planes) and the
+Z-plane: each input plane is X/Y-reduced exactly once into a small rolling cache (≈4-5 planes) and the
 Z pass combines cached planes. Peak scratch is ~1 GB per worker regardless of Z or slot count, and no
 input plane is reduced twice.
 
@@ -68,7 +68,6 @@ from numba import jit, prange
 
 from ome_zarr_writer.dataset import DownscaleType, ScaleLevel
 
-
 # ---------------------------------------------------------------------------
 # Kernel bodies — one per reduction, JIT-specialized below. Written with
 # prange on the outermost loop so the same source compiles to both a serial
@@ -78,11 +77,11 @@ from ome_zarr_writer.dataset import DownscaleType, ScaleLevel
 
 
 def _kernel_3d_mean(vol: np.ndarray, out: np.ndarray) -> None:
-    """2×2×2 box-average reduction: out[t, i, j] = mean of the 8 covering voxels."""
-    T_out, H_out, W_out = out.shape
-    for t in prange(T_out):
-        for i in range(H_out):
-            for j in range(W_out):
+    """2x2x2 box-average reduction: out[t, i, j] = mean of the 8 covering voxels."""
+    depth_out, height_out, width_out = out.shape
+    for t in prange(depth_out):
+        for i in range(height_out):
+            for j in range(width_out):
                 t2 = t * 2
                 i2 = i * 2
                 j2 = j * 2
@@ -95,11 +94,11 @@ def _kernel_3d_mean(vol: np.ndarray, out: np.ndarray) -> None:
 
 
 def _kernel_3d_max(vol: np.ndarray, out: np.ndarray) -> None:
-    """2×2×2 max-projection reduction: out[t, i, j] = max of the 8 covering voxels."""
-    T_out, H_out, W_out = out.shape
-    for t in prange(T_out):
-        for i in range(H_out):
-            for j in range(W_out):
+    """2x2x2 max-projection reduction: out[t, i, j] = max of the 8 covering voxels."""
+    depth_out, height_out, width_out = out.shape
+    for t in prange(depth_out):
+        for i in range(height_out):
+            for j in range(width_out):
                 t2 = t * 2
                 i2 = i * 2
                 j2 = j * 2
@@ -108,17 +107,16 @@ def _kernel_3d_max(vol: np.ndarray, out: np.ndarray) -> None:
                     for di in range(2):
                         for dj in range(2):
                             v = vol[t2 + dt, i2 + di, j2 + dj]
-                            if v > m:
-                                m = v
+                            m = max(m, v)
                 out[t, i, j] = m
 
 
 def _kernel_3d_min(vol: np.ndarray, out: np.ndarray) -> None:
-    """2×2×2 min-projection reduction: out[t, i, j] = min of the 8 covering voxels."""
-    T_out, H_out, W_out = out.shape
-    for t in prange(T_out):
-        for i in range(H_out):
-            for j in range(W_out):
+    """2x2x2 min-projection reduction: out[t, i, j] = min of the 8 covering voxels."""
+    depth_out, height_out, width_out = out.shape
+    for t in prange(depth_out):
+        for i in range(height_out):
+            for j in range(width_out):
                 t2 = t * 2
                 i2 = i * 2
                 j2 = j * 2
@@ -127,49 +125,48 @@ def _kernel_3d_min(vol: np.ndarray, out: np.ndarray) -> None:
                     for di in range(2):
                         for dj in range(2):
                             v = vol[t2 + dt, i2 + di, j2 + dj]
-                            if v < m:
-                                m = v
+                            m = min(m, v)
                 out[t, i, j] = m
 
 
 # --- gaussian: three separable 1-D binomial [1,3,3,1] decimate-by-2 passes ---
 # Each pass reads 4 clamped taps per output element. X and Y run on a single (Y,X) input plane; Z
 # combines four already-X/Y-reduced planes. The /8 per pass is folded into the final /512 in the Z
-# pass, so X and Y leave their sums un-normalised (values grow ≤64×; exact in float32).
+# pass, so X and Y leave their sums un-normalised (values grow ≤64x; exact in float32).
 
 
 def _binom_x(plane: np.ndarray, out: np.ndarray) -> None:
     """X pass: (Y, X) input plane → (Y, Xo) with X decimated by 2. Sum only (no /8)."""
-    Y, X = plane.shape
-    Xo = out.shape[1]
-    for y in prange(Y):
-        for xo in range(Xo):
+    height, width = plane.shape
+    width_out = out.shape[1]
+    for y in prange(height):
+        for xo in range(width_out):
             c = xo * 2
             x0 = max(c - 1, 0)
-            x2 = min(c + 1, X - 1)
-            x3 = min(c + 2, X - 1)
+            x2 = min(c + 1, width - 1)
+            x3 = min(c + 2, width - 1)
             out[y, xo] = plane[y, x0] + 3.0 * plane[y, c] + 3.0 * plane[y, x2] + plane[y, x3]
 
 
 def _binom_y(tmp: np.ndarray, out: np.ndarray) -> None:
     """Y pass: (Y, Xo) X-reduced plane → (Yo, Xo) with Y decimated by 2. Sum only (no /8)."""
-    Y, Xo = tmp.shape
-    Yo = out.shape[0]
-    for yo in prange(Yo):
+    height, width_out = tmp.shape
+    height_out = out.shape[0]
+    for yo in prange(height_out):
         c = yo * 2
         y0 = max(c - 1, 0)
-        y2 = min(c + 1, Y - 1)
-        y3 = min(c + 2, Y - 1)
-        for xo in range(Xo):
+        y2 = min(c + 1, height - 1)
+        y3 = min(c + 2, height - 1)
+        for xo in range(width_out):
             out[yo, xo] = tmp[y0, xo] + 3.0 * tmp[c, xo] + 3.0 * tmp[y2, xo] + tmp[y3, xo]
 
 
 def _binom_z(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, out: np.ndarray) -> None:
     """Z pass: combine four X/Y-reduced planes (weights 1,3,3,1) into one output plane, applying the
     single /512 that normalises all three separable passes at once."""
-    Yo, Xo = out.shape
-    for yo in prange(Yo):
-        for xo in range(Xo):
+    height_out, width_out = out.shape
+    for yo in prange(height_out):
+        for xo in range(width_out):
             out[yo, xo] = (p0[yo, xo] + 3.0 * p1[yo, xo] + 3.0 * p2[yo, xo] + p3[yo, xo]) * (1.0 / 512.0)
 
 
@@ -208,15 +205,15 @@ _SUPPORTED_REDUCTIONS = frozenset({DownscaleType.MEAN, DownscaleType.MAX, Downsc
 
 
 def _gaussian_downscale(vol: np.ndarray, out: np.ndarray, parallel: bool) -> None:
-    """Separable binomial 2× downscale of `vol` (Z, Y, X) into `out` (Zo, Yo, Xo), streamed by Z-plane.
+    """Separable binomial 2x downscale of `vol` (Z, Y, X) into `out` (Zo, Yo, Xo), streamed by Z-plane.
 
     Each input plane is X- then Y-reduced exactly once into a small rolling cache; the Z pass combines
     the four cached planes an output plane needs (indices 2zo-1..2zo+2, edge-clamped). Peak scratch is
-    the cache (≈4–5 planes of shape (Yo, Xo)) plus one (Y, Xo) X-pass buffer — ~1 GB for a 151 MP frame,
+    the cache (≈4-5 planes of shape (Yo, Xo)) plus one (Y, Xo) X-pass buffer — ~1 GB for a 151 MP frame,
     independent of Z and of how many workers run concurrently.
     """
     binom_x, binom_y, binom_z = _GAUSS_X[parallel], _GAUSS_Y[parallel], _GAUSS_Z[parallel]
-    z_in, y_in, x_in = vol.shape
+    z_in, y_in, _ = vol.shape
     z_out, y_out, x_out = out.shape
     x_buf = np.empty((y_in, x_out), dtype=np.float32)  # reused scratch for the X pass of one plane
     cache: dict[int, np.ndarray] = {}  # global input z → its X/Y-reduced (Yo, Xo) plane (un-normalised)
@@ -252,7 +249,7 @@ def pyramids_3d_numba(
     reduction: DownscaleType = DownscaleType.MEAN,
     parallel: bool = False,
 ) -> dict[ScaleLevel, np.ndarray]:
-    """Compute a 3D multi-scale pyramid via chained 2×2×2 reductions.
+    """Compute a 3D multi-scale pyramid via chained 2x2x2 reductions.
 
     Args:
         block: L0 input volume with shape (Z, Y, X). Any numeric dtype — internally

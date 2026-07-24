@@ -26,10 +26,10 @@ import numpy as np
 import zarr
 import zarrs  # noqa: F401 — registers the zarrs codec pipeline
 from cloudpathlib import S3Path
-from vxlib import AnonymousCredentials, ProfileCredentials
 from zarr.storage import LocalStore, ObjectStore
 
 from ome_zarr_writer.storage import S3Store
+from vxlib import AnonymousCredentials, ProfileCredentials
 
 from .base import ArrayWriter
 
@@ -80,7 +80,7 @@ def _apply_s3_env(store: S3Store) -> None:
     if isinstance(creds, AnonymousCredentials):
         os.environ["AWS_SKIP_SIGNATURE"] = "true"
     elif isinstance(creds, ProfileCredentials):
-        import botocore.session
+        import botocore.session  # noqa: PLC0415
 
         session = botocore.session.Session(profile=creds.name)
         if creds.config_file is not None:
@@ -109,7 +109,7 @@ class ZarrsArrayWriter(ArrayWriter):
         if isinstance(target, S3Path):
             if store is None:
                 raise ValueError("ZarrsArrayWriter requires an S3Store for an S3 target")
-            from obstore.store import S3Store as ObstoreS3Store
+            from obstore.store import S3Store as ObstoreS3Store  # noqa: PLC0415
 
             _apply_s3_env(store)
             obs = ObstoreS3Store(bucket=target.bucket, prefix=target.key)  # config read from AWS_* env

@@ -90,9 +90,10 @@ The report needs the `analysis` deps — present after `uv sync --all-packages -
 Loaders are plain pandas (no writer stack, no creds) if you prefer a REPL:
 
 ```python
-from bench.write.loaders import load, batch_timeline   # run from the repo root
-df = load()               # one row per backend x mode run, derived cols (eff_fps, mb_s, ratio, drain_s)
-bt = batch_timeline()     # one row per batch: stage start/end offsets + durations (Gantt + flush growth)
+from bench.write.loaders import load, batch_timeline  # run from the repo root
+
+df = load()  # one row per backend x mode run, derived cols (eff_fps, mb_s, ratio, drain_s)
+bt = batch_timeline()  # one row per batch: stage start/end offsets + durations (Gantt + flush growth)
 ```
 
 ## Adding a new bench

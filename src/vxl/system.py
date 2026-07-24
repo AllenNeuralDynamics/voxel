@@ -5,35 +5,26 @@ the RAM budget (:class:`System.Ram`), and the local storage roots (``store``/``s
 Machine-specific knobs are sourced from ``VOXEL_*`` env vars, deliberately kept out of
 the portable app config.
 
-``load_yaml``/``save_yaml`` are the project's YAML helpers: pyyaml for loading,
-ruyaml for comment-preserving writes.
+``load_yaml``/``save_yaml`` are re-exported from :mod:`vxlib` for compatibility.
 """
 
-import io
 import logging
 import socket
 import sys
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import psutil
-import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     YamlConfigSettingsSource,
 )
-from ruyaml import YAML
 
-from vxlib import S3Store, atomic_write
-
-try:
-    from yaml import CSafeLoader as _YamlLoader
-except ImportError:
-    from yaml import SafeLoader as _YamlLoader
+from vxlib import S3Store
 
 log = logging.getLogger(__name__)
 
@@ -165,40 +156,3 @@ class System(BaseSettings):
                 raise KeyError(consumer_id)
             total_weight = sum(cls._consumers.values()) or 1.0
             return int(cls.max_bytes() * cls._consumers[consumer_id] / total_weight)
-
-
-def load_yaml[T: BaseModel](path: Path, model_cls: type[T]) -> T:
-    """Load and validate a YAML file into ``model_cls`` (pyyaml, load-only)."""
-    if not path.exists():
-        raise FileNotFoundError(f"No {model_cls.__name__} found at {path}")
-    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_YamlLoader)
-    return model_cls.model_validate(data)
-
-
-def save_yaml(path: Path, model: BaseModel) -> None:
-    """Write ``model`` to ``path`` as YAML, preserving any comments already in the file (ruyaml)."""
-    # text = yaml.safe_dump(model.model_dump(mode="json"), sort_keys=False, default_flow_style=False, width=4096)
-
-    def _merge(dst: Any, src: Any) -> Any:
-        """Overlay ``src`` (plain dict from a model dump) onto ``dst`` (a ruyaml CommentedMap),
-        keeping ``dst``'s comments. Mappings merge key-by-key; everything else replaces."""
-        if isinstance(dst, dict) and isinstance(src, dict):
-            for key in [k for k in dst if k not in src]:
-                del dst[key]  # field dropped from the model
-            for key, value in src.items():
-                cur = dst.get(key)
-                dst[key] = _merge(cur, value) if isinstance(cur, dict) and isinstance(value, dict) else value
-            return dst
-        return src
-
-    rt = YAML()  # round-trip mode: keeps comments, quotes, key order
-    rt.preserve_quotes = True  # pyright: ignore[reportAttributeAccessIssue]
-    rt.width = 4096  # pyright: ignore[reportAttributeAccessIssue]  # prevent unwanted line wrapping
-    data: Any = model.model_dump(mode="json")
-    if path.exists():
-        data = _merge(rt.load(path.read_text(encoding="utf-8")), data)
-    buf = io.StringIO()
-    rt.dump(data, buf)
-    text = buf.getvalue()
-
-    atomic_write(path, text)

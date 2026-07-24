@@ -8,7 +8,7 @@ hal:
       target: vxl.daq.SimulatedDaqmx
       init: { device_name: "MockDev1" }
     daq:
-      target: vxl.daq.SimulatedAO
+      target: vxl.daq.SimulatedSignalGenerator
       init:
         hub: daq_hub
         ports:

@@ -36,9 +36,9 @@
   const cameraIds = $derived(instrument ? [...instrument.cameras.keys()] : []);
   const laserIds = $derived(instrument ? [...instrument.lasers.keys()] : []);
   const stageIds = $derived(instrument ? [instrument.hal.stage.x, instrument.hal.stage.y, instrument.hal.stage.z] : []);
-  const analogOutIds = $derived(instrument ? [...instrument.analogOuts.keys()] : []);
+  const signalGeneratorIds = $derived(instrument ? [...instrument.signalGenerators.keys()] : []);
 
-  const groupedIds = $derived(new Set([...cameraIds, ...laserIds, ...stageIds, ...analogOutIds]));
+  const groupedIds = $derived(new Set([...cameraIds, ...laserIds, ...stageIds, ...signalGeneratorIds]));
   const otherIds = $derived(instrument ? [...instrument.devices.keys()].filter((id) => !groupedIds.has(id)) : []);
 
   const overviewActive = $derived(page.url.pathname === '/');
@@ -124,11 +124,11 @@
       </section>
     {/if}
 
-    {#if analogOutIds.length > 0}
+    {#if signalGeneratorIds.length > 0}
       <section>
-        {@render sectionHeader('Analog Out')}
+        {@render sectionHeader('Signal Generators')}
         <div class="flex flex-col gap-0.5 px-2">
-          {#each analogOutIds as id (id)}
+          {#each signalGeneratorIds as id (id)}
             {@render deviceRow(id)}
           {/each}
         </div>

@@ -19,8 +19,8 @@
     duration: number;
     /** Rest-period duration; rest region extends this far past ``duration``. */
     restTime: number;
-    /** Hardware AO voltage limits — rendered as red dashed lines when in range. */
-    aoRange: { min: number; max: number } | null;
+    /** Hardware voltage limits — rendered as red dashed lines when in range. */
+    voltageRange: { min: number; max: number } | null;
     /** Cursor-sync group key. Panels sharing this key share crosshair + x-zoom. */
     syncKey: string | null;
   }
@@ -88,7 +88,7 @@
     const initW = Math.max(1, rect.width);
     const initH = Math.max(1, rect.height);
 
-    /** Draw hook for overlays (rest region + AO limits). Closure captures the
+    /** Draw hook for overlays (rest region + voltage limits). Closure captures the
      *  current tracked values; hook is recreated whenever the outer effect re-runs. */
     const drawAnnotations = (u: uPlot) => {
       const ctx = u.ctx;
@@ -102,14 +102,14 @@
         ctx.fillRect(x1, top, x2 - x1, h);
       }
 
-      // AO hardware voltage limit lines (red dashed, only when visible in Y range).
-      if (_ctx.aoRange) {
+      // Hardware voltage limit lines (red dashed, only when visible in Y range).
+      if (_ctx.voltageRange) {
         ctx.save();
         ctx.setLineDash([6, 3]);
         ctx.strokeStyle = chrome.limit;
         ctx.globalAlpha = 0.4;
         ctx.lineWidth = 1;
-        for (const v of [_ctx.aoRange.min, _ctx.aoRange.max]) {
+        for (const v of [_ctx.voltageRange.min, _ctx.voltageRange.max]) {
           if (v < _yRange.min || v > _yRange.max) continue;
           const y = u.valToPos(v, 'y', true);
           ctx.beginPath();

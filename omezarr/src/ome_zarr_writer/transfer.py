@@ -21,6 +21,7 @@ from importlib.metadata import distribution
 from pathlib import Path
 
 from cloudpathlib import S3Path
+
 from vxlib import AnonymousCredentials, ProfileCredentials, S3Store
 
 
@@ -73,7 +74,14 @@ def run_s5cmd(jobs: list[TransferJob], store: S3Store | None, *, numworkers: int
         "run",
     ]
     env = os.environ | ({"AWS_REGION": store.region} if store and store.region else {})
-    proc = subprocess.run(args, input=script, capture_output=True, text=True, check=False, env=env)
+    proc = subprocess.run(  # noqa: S603 - resolved executable, argument list, and no shell
+        args,
+        input=script,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
     if proc.returncode != 0:
         raise TransferError(f"upload failed:\n{proc.stderr or proc.stdout}")
     return total_bytes

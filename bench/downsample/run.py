@@ -19,6 +19,7 @@ from statistics import median
 
 import numba
 import numpy as np
+from numba.np.ufunc.parallel import threading_layer
 from ome_zarr_writer.dataset import DownscaleType, ScaleLevel
 from ome_zarr_writer.pyramid import pyramids_3d_numba
 from pydantic import BaseModel
@@ -91,7 +92,7 @@ def run(
         for n in thread_counts:
             numba.set_num_threads(n)
             times = _time(block, max_level, reduction, repeats)
-            layer = numba.threading_layer()  # valid only after a parallel region has run
+            layer = threading_layer()  # valid only after a parallel region has run
             med = median(times)
             results.append(
                 DownsampleRun(

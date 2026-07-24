@@ -24,7 +24,7 @@ import json
 import logging
 import math
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -282,7 +282,7 @@ class Ring:
     def __len__(self) -> int:
         return len(self.slots)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[BatchSlot]:
         return iter(self.slots)
 
     def __getitem__(self, idx: int) -> BatchSlot:

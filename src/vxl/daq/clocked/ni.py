@@ -1,14 +1,8 @@
-"""NI-DAQmx analog-output engines — clocked and on-demand.
+"""NI-DAQmx clocked analog signal generator.
 
-``NiAO`` (clocked) owns a single NI AO task. A ``CounterTrigger`` adds a
+``NiSignalGenerator`` (clocked) owns a single NI AO task. A ``CounterTrigger`` adds a
 counter-output task whose pulses retrigger finite AO cycles; an ``InputTrigger``
 restarts a cycle for each edge received from a configured PFI.
-
-``NiOnDemandAO`` (untimed) owns one AO task with no sample-clock timing,
-holding all its ports' channels; writes go straight to the DAC. NI 6738/6739 AO
-resources are banked in groups of four, so it can coexist with other AO tasks only
-when their banks do not overlap. A card can still host only one hardware-timed AO
-task.
 
 Both take a ``NiDaqmx`` hub (``vxl.daq.hub_ni``) at construction; the card and pins
 live there.
@@ -25,13 +19,23 @@ from nidaqmx.constants import Edge, RegenerationMode
 from nidaqmx.task import Task as NiTask
 from pydantic import BaseModel, ConfigDict, Discriminator, TypeAdapter
 
-from .base import AO, OnDemandAO
+from .base import SignalGenerator
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from vxlib.quantity import VoltageRange
+
+    from vxl.daq.hub_ni import NiDaqmx
+    from vxl.daq.hub_ni.resources import NiTaskLease
+
+    from .base import Signals
 
 
 class CounterTrigger(BaseModel):
     """Periodically retrigger AO cycles using an NI counter.
 
-    The trigger frequency derives from ``AOSignals.duration + rest_time``.
+    The trigger frequency derives from ``Signals.duration + rest_time``.
     ``output`` optionally specifies the NI terminal to which the counter pulse is
     routed for downstream devices.
     """
@@ -58,24 +62,14 @@ Trigger = Annotated[CounterTrigger | InputTrigger, Discriminator("type")]
 
 _TRIGGER_ADAPTER = TypeAdapter(Trigger)
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
-    from vxlib.quantity import VoltageRange
-
-    from vxl.daq.hub_ni import NiDaqmx
-    from vxl.daq.hub_ni.resources import NiTaskLease
-
-    from .models import AOSignals
-
-
-class NiAO(AO):
+class NiSignalGenerator(SignalGenerator):
     """NI-DAQmx analog-output engine.
 
     ``trigger`` controls how each finite AO buffer cycle starts. ``CounterTrigger``
     generates periodic cycle triggers using an NI counter; ``InputTrigger`` starts
     a cycle for each rising edge received from its configured source. This does not
-    select the AO sample clock, which runs at ``AOSignals.sample_rate``.
+    select the AO sample clock, which runs at ``Signals.sample_rate``.
 
     Omitting ``trigger`` selects ``CounterTrigger``. ``InputTrigger`` currently
     supports unbounded external pacing only; ``start(repeat=N)`` is unsupported.
@@ -95,7 +89,7 @@ class NiAO(AO):
         super().__init__(uid=uid, ports=ports)
         self._hub = hub
         self._trigger = CounterTrigger() if trigger is None else _TRIGGER_ADAPTER.validate_python(trigger)
-        self._log = logging.getLogger(f"{uid}.NiAO")
+        self._log = logging.getLogger(f"{uid}.NiSignalGenerator")
 
         # Hardware handles — populated on setup, cleared on teardown
         self._ao_task: NiTask | None = None
@@ -113,7 +107,7 @@ class NiAO(AO):
 
     # ---- hardware primitives ----
 
-    def setup(self, signals: AOSignals) -> None:
+    def setup(self, signals: Signals) -> None:
         if self._ao_task is not None or self._co_task is not None or self._lease is not None:
             raise RuntimeError("setup() called with live AO task; teardown() first")
 
@@ -333,7 +327,7 @@ class NiAO(AO):
             self._ao_task.stop()
         self._finite_repeat = None
 
-    def can_hotswap(self, old: AOSignals | None, new: AOSignals) -> bool:
+    def can_hotswap(self, old: Signals | None, new: Signals) -> bool:
         """Always False for this driver — every load takes the full rebuild path.
 
         NI-DAQmx rejects writes to a task whose buffer was auto-sized by a prior
@@ -349,83 +343,9 @@ class NiAO(AO):
         return False
 
 
-class NiOnDemandAO(OnDemandAO):
-    """On-demand voltage output on an NI card: one AO task, all ports held together."""
-
-    def __init__(self, uid: str, *, hub: NiDaqmx, ports: Mapping[str, str]) -> None:
-        super().__init__(uid=uid, ports=ports)
-        self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiOnDemandAO")
-        self._task: NiTask | None = None
-        self._lease: NiTaskLease | None = None
-        self._order: list[str] = []  # port names in AO channel order
-        self._levels: dict[str, float] = {}  # port -> currently held voltage
-
-    @property
-    def voltage_range(self) -> VoltageRange:
-        return self._hub.voltage_range
-
-    def _ensure_task(self) -> NiTask:
-        """Create the single AO task with one channel per declared port (lazy, once)."""
-        if self._task is not None:
-            return self._task
-        lease = self._hub.reserve_ao_task(
-            self.uid,
-            tuple(self._ports.values()),
-            hardware_timed=False,
-        )
-        self._lease = lease
-        try:
-            self._task = NiTask(f"{self.uid}_od")
-            for port, path in zip(self._ports, lease.ao_paths, strict=True):
-                # No cfg_samp_clk_timing: on-demand mode, writes go straight to the DAC.
-                self._task.ao_channels.add_ao_voltage_chan(path)
-                self._order.append(port)
-                self._levels.setdefault(port, 0.0)
-        except Exception:
-            self._close_task_and_release(suppress_close_errors=True)
-            if self._lease is None:
-                self._order = []
-                self._levels = {}
-            raise
-        return self._task
-
-    def set_voltages(self, port_values: Mapping[str, float]) -> None:
-        self._validate(port_values)
-        task = self._ensure_task()
-
-        self._levels.update(port_values)
-        vector = [self._levels[p] for p in self._order]
-        # One sample per channel; nidaqmx auto-starts a single-sample write, committing
-        # + emitting immediately on this untimed task. A scalar is required for a
-        # one-channel task, a per-channel list otherwise.
-        task.write(vector[0] if len(vector) == 1 else vector)
-
-    def reset(self) -> None:
-        self._close_task_and_release(suppress_close_errors=True)
-        if self._lease is None:
-            self._order = []
-            self._levels = {}
-
-    def _close_task_and_release(self, *, suppress_close_errors: bool) -> None:
-        if self._task is not None:
-            try:
-                self._task.close()
-            except Exception:
-                self._log.warning("failed to close on-demand task", exc_info=True)
-                if not suppress_close_errors:
-                    raise
-            else:
-                self._task = None
-        if self._task is None and self._lease is not None:
-            self._lease.release()
-            self._lease = None
-
-
 __all__ = [
     "CounterTrigger",
     "InputTrigger",
-    "NiAO",
-    "NiOnDemandAO",
+    "NiSignalGenerator",
     "Trigger",
 ]

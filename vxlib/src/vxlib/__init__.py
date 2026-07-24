@@ -1,5 +1,6 @@
 """vxlib: Shared types and utilities."""
 
+from ._yaml import load_yaml, save_yaml
 from .coalescer import Coalescer
 from .color import (
     COLORMAP_CATALOG,
@@ -90,8 +91,10 @@ __all__ = [
     "get_colormap_catalog",
     "get_local_ip",
     "get_uvicorn_log_config",
+    "load_yaml",
     "merge_dicts",
     "resolve_colormap",
+    "save_yaml",
     "slugify",
     "thread_safe_singleton",
 ]

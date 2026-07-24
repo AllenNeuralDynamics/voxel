@@ -15,7 +15,7 @@ from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettin
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
 
 from rigup import CommandRequest, DeviceHandle, Rig, RigConfig
-from vxl.system import System, load_yaml, save_yaml
+from vxl.system import System
 from vxlib import (
     Cell,
     Color,
@@ -27,11 +27,13 @@ from vxlib import (
     Subscribable,
     Teardown,
     atomic_write,
+    load_yaml,
+    save_yaml,
 )
 
 from .axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from .camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, SensorROI, StorageSpec
-from .daq.analog import AOHandle, AOSignals
+from .daq.clocked import SignalGeneratorHandle, Signals
 from .metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from .traversal import Tile, TileOrder
 
@@ -166,7 +168,7 @@ class HAL:
         self.continuous_axes: dict[str, ContinuousAxisHandle] = {}
         self.discrete_axes: dict[str, DeviceHandle] = {}
         self.fws: dict[str, DeviceHandle] = {}
-        self.analog_outs: dict[str, AOHandle] = {}
+        self.signal_generators: dict[str, SignalGeneratorHandle] = {}
         self._stage: Stage | None = None
 
     @property
@@ -194,8 +196,8 @@ class HAL:
             match device_type:
                 case "camera":
                     self.cameras[uid] = CameraHandle.wrap(handle)
-                case "daq_ao":
-                    self.analog_outs[uid] = AOHandle.wrap(handle)
+                case "signal_generator":
+                    self.signal_generators[uid] = SignalGeneratorHandle.wrap(handle)
                 case "laser":
                     self.lasers[uid] = handle
                 case "aotf":
@@ -239,7 +241,7 @@ class HAL:
         self.continuous_axes.clear()
         self.discrete_axes.clear()
         self.fws.clear()
-        self.analog_outs.clear()
+        self.signal_generators.clear()
         await self._rig.close()
 
     def _validate_camera_paths(self) -> list[str]:
@@ -280,7 +282,7 @@ class HAL:
             | set(self.lasers.keys())
             | set(self._cfg.filter_wheels)
             | {self._cfg.stage.x, self._cfg.stage.y, self._cfg.stage.z}
-            | set(self.analog_outs.keys())
+            | set(self.signal_generators.keys())
         )
 
         errors = []
@@ -325,15 +327,15 @@ class ChannelPatch(Patch):
 
 
 class ProfileConfig(SchemaModel):
-    """A named microscope profile: which channels + how each AO device drives signals.
+    """A named microscope profile: active channels and clocked signal configurations.
 
-    ``sync`` is keyed by AO device UID. Each entry is a full ``AOSignals`` config.
-    A profile may drive any subset of the AO devices present in the rig.
+    ``sync`` is keyed by signal-generator UID. A profile may drive any subset of
+    the generators present in the rig.
     """
 
     channels: list[str]
     z_step: float = Field(..., gt=0, description="Axial step between frames in µm (one scan-axis move per frame)")
-    sync: dict[str, AOSignals] = Field(default_factory=dict)
+    sync: dict[str, Signals] = Field(default_factory=dict)
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
     setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
     rois: dict[str, SensorROI] = Field(default_factory=dict)
@@ -403,8 +405,8 @@ class ImagingProtocol(SchemaModel):
                 ids.update(hal.detection[ch.detection].aux_devices)
             if ch.illumination in hal.illumination:
                 ids.update(hal.illumination[ch.illumination].aux_devices)
-        for ao in profile.sync.values():
-            ids.update(ao.waveforms.keys())
+        for signals in profile.sync.values():
+            ids.update(signals.waveforms.keys())
         return ids - hal.filter_wheels
 
     def check_hal_compatibility(self, hal: HALConfig) -> list[str]:
@@ -422,9 +424,11 @@ class ImagingProtocol(SchemaModel):
                     errors.append(f"Filter wheel '{fw_id}' is not physically wired to detection '{ch.detection}'.")
 
         for profile_id, profile in self.profiles.items():
-            for ao_uid in profile.sync:
-                if ao_uid not in hal.device_uids:
-                    errors.append(f"Profile '{profile_id}' sync references AO device '{ao_uid}' which is missing.")
+            for generator_uid in profile.sync:
+                if generator_uid not in hal.device_uids:
+                    errors.append(
+                        f"Profile '{profile_id}' sync references signal generator '{generator_uid}' which is missing."
+                    )
 
             settable = self.get_profile_settable_devices(profile_id, hal)
             # setup runs arbitrary device commands (not props), so it may legitimately target filter
@@ -610,11 +614,16 @@ PROMOTABLE_FIELDS = frozenset(InstrumentDefaults.model_fields)
 """Baseline fields that ``save_as_default`` / ``restore_default`` can move between bench and config."""
 
 
-class InstrumentConfig(SchemaModel):
+class InstrumentConfig(BaseModel):
     """A complete instrument spec: the hardware blueprint (:class:`HALConfig`) plus a baseline
     acquisition state (``default``). Shared by shipped ``.voxel.yaml`` templates and each instrument's
     on-disk ``config.yaml`` — a template is just a config without a ``.voxel`` home yet."""
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        frozen=True,
+        arbitrary_types_allowed=False,
+    )
     hal: HALConfig
     default: InstrumentDefaults
 
@@ -1012,7 +1021,7 @@ class Instrument:
             for ch_id, ch in self.active_channels.items():
                 ch.camera.preview_colormap.update(self._channel_config(ch_id).colormap)
             await self._run_setup_commands()
-            await self._apply_ao()
+            await self._apply_signals()
             self.update_viewport()
         except Exception:
             await self._active_profile_id.set(previous_id)
@@ -1045,7 +1054,7 @@ class Instrument:
         with suppress(NotImplementedError, RuntimeError):
             await self._hal.stage.scanning_axis.reset_ttl_stepper()
 
-        await self._start_ao()
+        await self._start_signal_generators()
         await self._mode.set(AcquisitionMode.PREVIEW)
         logger.info("Preview started (%d cameras)", started)
 
@@ -1065,7 +1074,7 @@ class Instrument:
             if isinstance(result, BaseException):
                 logger.error("Channel %s failed to stop preview", ch.uid, exc_info=result)
 
-        await self._stop_ao()
+        await self._stop_signal_generators()
         await self._mode.set(AcquisitionMode.IDLE)
         logger.info("Preview stopped")
 
@@ -1140,15 +1149,15 @@ class Instrument:
         default = self._default.value
         await self._bench.update(**{f: getattr(default, f) for f in fields})
 
-    async def update_ao_signals(self, ao_uid: str, signals: AOSignals) -> None:
-        """Apply one AO signal config to hardware, then persist it into the active profile."""
+    async def update_signals(self, generator_uid: str, signals: Signals) -> None:
+        """Apply one clocked signal config, then persist it into the active profile."""
         self._ensure_not_capturing()
-        handle = self._hal.analog_outs.get(ao_uid)
+        handle = self._hal.signal_generators.get(generator_uid)
         if handle is None:
-            raise ProtocolError([f"AO device '{ao_uid}' not provisioned"])
+            raise ProtocolError([f"Signal generator '{generator_uid}' not provisioned"])
         await handle.load(signals)
         await self._update_active_profile_config(
-            self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, ao_uid: signals}})
+            self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_uid: signals}})
         )
 
     async def update_profile(self, patch: ProfilePatch) -> None:
@@ -1403,15 +1412,15 @@ class Instrument:
                 for _ in range(frames_in_batch):
                     await scanning_axis.queue_relative_move(z_step)
                 # begin_batch waits for a free writer slot and arms the camera before returning,
-                # so the AO is safe to fire once these resolve.
+                # so the signal generator is safe to fire once these resolve.
                 await asyncio.gather(*(ch.camera.begin_batch(frames_in_batch) for ch in channels.values()))
-                await self._start_ao()
+                await self._start_signal_generators()
                 while True:
                     states = await asyncio.gather(*(ch.camera.capture_state() for ch in channels.values()))
                     if all(state is CaptureState.DONE for state in states):
                         break
                     await asyncio.sleep(0.05)
-                await self._stop_ao()
+                await self._stop_signal_generators()
                 done = min((batch_idx + 1) * batch_z, num_frames)
                 await self.progress.emit(progress.updated(done=done))
         finally:
@@ -1478,22 +1487,28 @@ class Instrument:
                 coros.append(fw.call("select", slot, wait=True))
         await asyncio.gather(*coros)
 
-    async def _apply_ao(self) -> None:
+    async def _apply_signals(self) -> None:
         for uid, signals in self.active_profile.sync.items():
-            handle = self._hal.analog_outs.get(uid)
+            handle = self._hal.signal_generators.get(uid)
             if handle is None:
                 logger.warning(
-                    "Profile '%s' references AO '%s' which is not provisioned", self._active_profile_id.value, uid
+                    "Profile '%s' references signal generator '%s' which is not provisioned",
+                    self._active_profile_id.value,
+                    uid,
                 )
                 continue
             await handle.load(signals)
 
-    async def _start_ao(self) -> None:
-        handles = [self._hal.analog_outs[uid] for uid in self.active_profile.sync if uid in self._hal.analog_outs]
+    async def _start_signal_generators(self) -> None:
+        handles = [
+            self._hal.signal_generators[uid] for uid in self.active_profile.sync if uid in self._hal.signal_generators
+        ]
         await asyncio.gather(*(h.start() for h in handles))
 
-    async def _stop_ao(self) -> None:
-        handles = [self._hal.analog_outs[uid] for uid in self.active_profile.sync if uid in self._hal.analog_outs]
+    async def _stop_signal_generators(self) -> None:
+        handles = [
+            self._hal.signal_generators[uid] for uid in self.active_profile.sync if uid in self._hal.signal_generators
+        ]
         await asyncio.gather(*(h.stop() for h in handles))
 
     async def _run_setup_commands(self) -> None:

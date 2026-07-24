@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from pydantic import BaseModel
 
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
-from vxl.daq.analog import AOSignals
+from vxl.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRecord,
     AcquisitionRequest,
@@ -256,9 +256,9 @@ async def update_profile(patch: ProfilePatch, inst: InstrumentDep) -> None:
     await inst.update_profile(patch)
 
 
-@instrument_router.patch("/profile/sync/{ao_uid}", status_code=204)
-async def update_ao_signals(ao_uid: str, signals: AOSignals, inst: InstrumentDep) -> None:
-    await inst.update_ao_signals(ao_uid, signals)
+@instrument_router.patch("/profile/sync/{generator_uid}", status_code=204)
+async def update_signals(generator_uid: str, signals: Signals, inst: InstrumentDep) -> None:
+    await inst.update_signals(generator_uid, signals)
 
 
 @instrument_router.post("/settings/apply", status_code=204)

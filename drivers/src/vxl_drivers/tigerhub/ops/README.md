@@ -34,8 +34,8 @@ Parameter access is generic over a `TigerParam` spec:
 ```python
 @dataclass(frozen=True)
 class TigerParam[T: (int | float | str | bool)]:
-    name: str        # "SPEED"
-    verb: str        # "S"
+    name: str  # "SPEED"
+    verb: str  # "S"
     typ: Callable[[str], T]  # converter applied to each reply value
     per_axis: bool = True
 ```
@@ -118,7 +118,10 @@ All scan ops are card-addressed and raise `ASIDecodeError` on an error reply. Th
 
 ```python
 class RingBufferMode(Enum):
-    TTL = 0; ONE_SHOT = 1; REPEATING = 2
+    TTL = 0
+    ONE_SHOT = 1
+    REPEATING = 2
+
 
 class TTLIn0Mode(Enum):
     OFF = 0
@@ -135,8 +138,11 @@ class TTLIn0Mode(Enum):
     MOVE_TO_NEXT_REL_POSITION = 12
     SINGLE_AXIS_FUNCTION = 30
 
+
 class TTLOut0Mode(Enum):
-    ALWAYS_LOW = 0; ALWAYS_HIGH = 1; PULSE_AFTER_MOVING = 2
+    ALWAYS_LOW = 0
+    ALWAYS_HIGH = 1
+    PULSE_AFTER_MOVING = 2
 ```
 
 ## Card — [`card.py`](card.py)

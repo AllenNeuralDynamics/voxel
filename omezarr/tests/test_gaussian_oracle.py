@@ -14,7 +14,6 @@ with uv's ephemeral overlay, which keeps the workspace env intact:
 
 import numpy as np
 import pytest
-
 from ome_zarr_writer.dataset import DownscaleType, ScaleLevel
 from ome_zarr_writer.pyramid import pyramids_3d_numba
 

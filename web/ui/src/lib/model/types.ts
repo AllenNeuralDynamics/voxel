@@ -114,8 +114,8 @@ export type DerivedWaveform = DerivedMirror | DerivedScale | DerivedOffset | Der
 export type Waveform =
   PulseWaveform | SquareWaveform | SineWaveform | TriangleWaveform | MultiPointWaveform | CSVWaveform | DerivedWaveform;
 
-/** One AO device's declarative signal config. */
-export interface AOSignals {
+/** One clocked signal generator's declarative configuration. */
+export interface Signals {
   sample_rate: number;
   duration: number;
   rest_time: number;
@@ -151,7 +151,7 @@ export interface ChannelConfig {
 export interface ProfileConfig {
   channels: string[];
   z_step: number;
-  sync: Record<string, AOSignals>;
+  sync: Record<string, Signals>;
   props: Record<string, Record<string, unknown>>;
   setup: Record<string, CommandRequest[]>;
   rois: Record<string, SensorROI>;

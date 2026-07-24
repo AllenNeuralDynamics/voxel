@@ -11,8 +11,6 @@ from pathlib import Path
 
 import numpy as np
 from cloudpathlib import S3Path
-from vxlib import ProfileCredentials
-
 from ome_zarr_writer import (
     DirectS3,
     OMEZarrWriter,
@@ -26,6 +24,8 @@ from ome_zarr_writer import (
 )
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.writer import _as_ome_zarr
+
+from vxlib import ProfileCredentials
 
 
 def write_volume(storage: Storage) -> None:
@@ -59,7 +59,13 @@ def example_minio_staged() -> None:
     """S3-compatible endpoint (MinIO / Vast) with local staging before upload."""
     store = S3Store(endpoint="http://localhost:9000", region="us-east-1")
     target = S3Path("s3://my-bucket/minio_experiment.ome.zarr")
-    write_volume(StagedS3(scratch=Path("/tmp/ozw-scratch"), target=target, store=store))
+    write_volume(
+        StagedS3(
+            scratch=Path("/tmp/ozw-scratch"),  # noqa: S108 - explicit disposable path for this example
+            target=target,
+            store=store,
+        )
+    )
 
 
 def example_read(target: S3Path, store: S3Store) -> np.ndarray:

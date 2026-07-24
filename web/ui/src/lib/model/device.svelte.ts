@@ -15,7 +15,7 @@ import {
   Prop,
   type PropSnapshot
 } from './prop.svelte';
-import type { AOSignals, DeviceInterface, DeviceSnapshot, PropResult, PropResults, SensorROI } from './types';
+import type { DeviceInterface, DeviceSnapshot, PropResult, PropResults, SensorROI, Signals } from './types';
 
 /**
  * A single device: its introspected interface plus a live, reactive cache of property models.
@@ -209,15 +209,15 @@ export class LaserHandle extends DeviceHandle {
   }
 }
 
-export type AOState = 'fresh' | 'ready' | 'running';
+export type GeneratorState = 'fresh' | 'ready' | 'running';
 
-export class AnalogOutHandle extends DeviceHandle {
+export class SignalGeneratorHandle extends DeviceHandle {
   /** Currently loaded signals; `null` when fresh or after a failed load. */
-  loaded = $derived.by<AOSignals | null>(() => (this.getProp('loaded')?.value ?? null) as AOSignals | null);
+  loaded = $derived.by<Signals | null>(() => (this.getProp('loaded')?.value ?? null) as Signals | null);
 
-  state = $derived.by<AOState>(() => {
+  state = $derived.by<GeneratorState>(() => {
     const v = this.getProp('state')?.value;
-    return (typeof v === 'string' ? v : 'fresh') as AOState;
+    return (typeof v === 'string' ? v : 'fresh') as GeneratorState;
   });
 
   voltageRange = $derived.by<{ min: number; max: number } | null>(() => {
@@ -422,8 +422,8 @@ export function createDevice(client: Client, snapshot: DeviceSnapshot): DeviceHa
       return new AxisHandle(client, snapshot);
     case 'discrete_axis':
       return new DiscreteAxisHandle(client, snapshot);
-    case 'daq_ao':
-      return new AnalogOutHandle(client, snapshot);
+    case 'signal_generator':
+      return new SignalGeneratorHandle(client, snapshot);
     default:
       return new DeviceHandle(client, snapshot);
   }

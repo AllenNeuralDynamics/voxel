@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from cloudpathlib import S3Path
-
+from conftest import Minio
 from ome_zarr_writer import (
     DirectS3,
     OMEZarrWriter,
@@ -26,8 +26,6 @@ from ome_zarr_writer import (
 )
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.array.ts import TSArrayReader
-
-from conftest import Minio
 
 pytestmark = pytest.mark.slow
 
@@ -74,7 +72,11 @@ def test_s3_roundtrip(minio: Minio, kind: str, tmp_path: Path, monkeypatch: pyte
     assert int(arr[z - 1].max()) == z
 
 
-def test_s3_roundtrip_zarrs_backend(minio: Minio, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_s3_roundtrip_zarrs_backend(
+    minio: Minio,
+    tmp_path: Path,  # noqa: ARG001 - preserve the existing fixture setup
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """DirectS3 with the ZARRS backend: the worker writes arrays to S3 through the zarrs Rust pipeline
     (obstore S3Store behind zarr's ObjectStore, configured via AWS_* env). Written by zarrs, read back
     by TensorStore — a cross-backend check that the on-disk Zarr v3 bytes are correct."""

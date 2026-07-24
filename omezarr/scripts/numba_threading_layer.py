@@ -17,6 +17,7 @@ import time
 
 import numba
 import numpy as np
+from numba.np.ufunc.parallel import threading_layer
 from ome_zarr_writer.dataset import ScaleLevel
 from ome_zarr_writer.pyramid import pyramids_3d_numba
 
@@ -35,8 +36,8 @@ def _probe_one() -> None:
         for _ in range(REPEATS):
             pyramids_3d_numba(blk, ScaleLevel.L3, parallel=True)
         ms = (time.perf_counter() - t) / REPEATS * 1000
-        print(f"OK   selected={numba.threading_layer():<10} threads={numba.get_num_threads():<4} {ms:6.1f} ms/call")
-    except Exception as e:  # report any load/selection failure, don't crash the sweep
+        print(f"OK   selected={threading_layer():<10} threads={numba.get_num_threads():<4} {ms:6.1f} ms/call")
+    except Exception as e:  # report any load/selection failure; don't crash the sweep
         print(f"UNAVAILABLE  ({type(e).__name__}: {str(e).splitlines()[0]})")
 
 

@@ -29,9 +29,11 @@ A device is a subclass of `Device` whose exposed members are marked with decorat
 from enum import StrEnum
 from rigup.device import Device, describe, numeric
 
+
 class LaserState(StrEnum):
     OFF = "off"
     ON = "on"
+
 
 class MyLaser(Device[LaserState]):
     __DEVICE_TYPE__ = "laser"
@@ -50,8 +52,7 @@ class MyLaser(Device[LaserState]):
         self._power = value  # clamped and step-snapped before it reaches here
 
     @describe(label="Enable")
-    def enable(self) -> None:
-        ...
+    def enable(self) -> None: ...
 ```
 
 `@describe` is what makes a member visible over the wire — undecorated methods and properties stay private. `stream=True` publishes the value on a timer so subscribers get live updates. The bounds on `@numeric` are serialized alongside the value, so a UI can render the right control without hard-coding limits.

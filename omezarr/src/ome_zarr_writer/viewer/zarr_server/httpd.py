@@ -11,6 +11,7 @@ import os
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from typing import ClassVar
 from urllib.parse import unquote
 
 from .base import ZarrServer, get_host_ip
@@ -29,7 +30,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
     """
 
     # Class variable to store mount points
-    mount_points: dict[str, Path] = {}
+    mount_points: ClassVar[dict[str, Path]] = {}
 
     def end_headers(self):
         """Add CORS headers before ending headers."""
@@ -67,8 +68,8 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
                 # Security check - ensure path is within root_dir
                 try:
                     file_path = file_path.resolve()
-                    root_dir = root_dir.resolve()
-                    if not str(file_path).startswith(str(root_dir)):
+                    resolved_root = root_dir.resolve()
+                    if not str(file_path).startswith(str(resolved_root)):
                         self.send_error(403, "Access denied")
                         return
                 except (ValueError, OSError):
@@ -97,8 +98,8 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
 
                 try:
                     file_path = file_path.resolve()
-                    root_dir = root_dir.resolve()
-                    if not str(file_path).startswith(str(root_dir)):
+                    resolved_root = root_dir.resolve()
+                    if not str(file_path).startswith(str(resolved_root)):
                         self.send_error(403, "Access denied")
                         return
                 except (ValueError, OSError):
@@ -114,10 +115,10 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
     def _send_head(self, file_path: Path):
         """Send HEAD response for a file."""
         try:
-            f = open(file_path, "rb")
+            f = file_path.open("rb")
         except OSError:
             self.send_error(404, "File not found")
-            return None
+            return
 
         try:
             fs = os.fstat(f.fileno())
@@ -133,7 +134,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
     def _serve_file(self, file_path: Path):
         """Serve a file with range request support."""
         try:
-            f = open(file_path, "rb")
+            f = file_path.open("rb")
         except OSError:
             self.send_error(404, "File not found")
             return
@@ -186,7 +187,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         finally:
             f.close()
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - stdlib override parameter name
         """Log HTTP requests for debugging."""
         msg = format % args
         # Suppress 404 errors for chunk files (common for Zarr chunk probing)
@@ -205,7 +206,11 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
 class HTTPDZarrServer(ZarrServer):
     """Manages HTTP server in a separate thread with mount points."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9000):
+    def __init__(
+        self,
+        host: str = "0.0.0.0",  # noqa: S104 - serves remote viewers
+        port: int = 9000,
+    ):
         self.host = host
         self._port = port
         self.server: HTTPServer | None = None

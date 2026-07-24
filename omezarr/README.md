@@ -48,7 +48,7 @@ config = WriterConfig(
 )
 
 writer = OMEZarrWriter(config, slots=6)
-for frame in camera.stream():      # each frame is a [y, x] ndarray
+for frame in camera.stream():  # each frame is a [y, x] ndarray
     writer.add_frame(frame)
 writer.close()
 ```

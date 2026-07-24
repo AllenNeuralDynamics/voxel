@@ -5,10 +5,10 @@
   import { getVoxelApp } from '$lib/model';
   import { cn, sanitizeString } from '$lib/utils';
 
-  import AnalogOutInspector from './AnalogOutInspector.svelte';
   import CameraInspector from './CameraInspector.svelte';
   import DeviceBrowser from './DeviceBrowser.svelte';
   import LaserInspector from './LaserInspector.svelte';
+  import SignalGeneratorInspector from './SignalGeneratorInspector.svelte';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
@@ -29,8 +29,8 @@
       <CameraInspector {instrument} {deviceId} />
     {:else if instrument.lasers.has(deviceId)}
       <LaserInspector {instrument} {deviceId} />
-    {:else if instrument.analogOuts.has(deviceId)}
-      <AnalogOutInspector {instrument} {deviceId} />
+    {:else if instrument.signalGenerators.has(deviceId)}
+      <SignalGeneratorInspector {instrument} {deviceId} />
     {:else}
       <!-- Generic device config -->
       <div class="flex h-full flex-col gap-6">

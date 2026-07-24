@@ -7,7 +7,7 @@ hal:
           init:
             device_name: "MockDev1"
         ao_main:
-          target: vxl.daq.SimulatedAO
+          target: vxl.daq.SimulatedSignalGenerator
           init:
             hub: nidaq_1
             ports:

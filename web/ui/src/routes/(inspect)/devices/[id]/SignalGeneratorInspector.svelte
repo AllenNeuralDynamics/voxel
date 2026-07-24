@@ -11,22 +11,22 @@
 
   let { instrument, deviceId }: Props = $props();
 
-  const ao = $derived(instrument.analogOuts.get(deviceId));
+  const generator = $derived(instrument.signalGenerators.get(deviceId));
 
-  // Ports live on the AO device's init (HAL config), not on the instrument top level
+  // Ports live on the signal generator's init (HAL config), not on the instrument top level
   const initCfg = $derived((instrument.hal.devices[deviceId]?.init ?? {}) as Record<string, unknown>);
   const ports = $derived(Object.entries((initCfg.ports ?? {}) as Record<string, string>));
 
-  const loaded = $derived(ao?.loaded);
-  const engineState = $derived(ao?.state);
+  const loaded = $derived(generator?.loaded);
+  const engineState = $derived(generator?.state);
 </script>
 
 <!-- Header -->
 <div class="mb-6 flex items-center justify-between">
   <h2 class="text-2xl text-fg">{sanitizeString(deviceId)}</h2>
   <span
-    class={cn('h-2 w-2 rounded-full', ao?.connected ? 'bg-success' : 'bg-fg-muted/30')}
-    title={ao?.connected ? 'Connected' : 'Disconnected'}
+    class={cn('h-2 w-2 rounded-full', generator?.connected ? 'bg-success' : 'bg-fg-muted/30')}
+    title={generator?.connected ? 'Connected' : 'Disconnected'}
   ></span>
 </div>
 
@@ -79,11 +79,11 @@
     </div>
   {/if}
 
-  {#if ao?.connected}
-    <DeviceBrowser device={ao} />
+  {#if generator?.connected}
+    <DeviceBrowser device={generator} />
   {:else}
     <div class="flex items-center justify-center py-12">
-      <p class="text-xl text-fg-muted">AO device not available</p>
+      <p class="text-xl text-fg-muted">Signal generator not available</p>
     </div>
   {/if}
 </div>

@@ -37,6 +37,7 @@ ignore = [
     'FBT002',  # Boolean-typed default value in function definition
     'FBT003',  # Boolean positional value in function call
     'PLR0913', # Too many arguments in function definition
+    'PLR0917', # Too many positional arguments
     'PLR0911', # Too many return statements - early returns/guard clauses are preferred
     'PLR0912', # Too many branches - C901 (cyclomatic complexity) is a better metric
     'TD',      # Missing issue link for this TODO, Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>:
@@ -49,6 +50,7 @@ ignore = [
     'DTZ006',  # datetime.fromtimestamp() without tz
     'ERA001',  # Commented-out code - useful for hardware driver debugging/reference
     'ASYNC240', # Async functions should not use pathlib.Path methods, use trio.Path or anyio.path
+    'CPY001', # Missing copyright notice at top of file
 ]
 
 fixable = ['ALL']

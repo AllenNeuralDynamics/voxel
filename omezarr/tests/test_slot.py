@@ -13,16 +13,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 from cloudpathlib import S3Path
-from vxlib.vec import UIVec3D, UVec3D
-
 from ome_zarr_writer import DirectS3, S3Store, ScaleLevel, WriterConfig
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.slot import BatchSlot, OutputSetup
+from vxlib.vec import UIVec3D, UVec3D
 
 
 def _roundtrip(setup: OutputSetup) -> OutputSetup:
-    return pickle.loads(pickle.dumps(setup))
+    return pickle.loads(pickle.dumps(setup))  # noqa: S301 - round-trips trusted in-process test data
 
 
 def test_output_setup_pickle_local() -> None:
@@ -53,7 +52,9 @@ def test_output_setup_pickle_direct_s3() -> None:
     r = _roundtrip(setup)
     assert str(r.author_root) == str(setup.author_root)
     assert r.store == setup.store
-    assert r.backend == setup.backend and r.levels == setup.levels and r.channel == setup.channel
+    assert r.backend == setup.backend
+    assert r.levels == setup.levels
+    assert r.channel == setup.channel
 
 
 @pytest.mark.slow
@@ -66,7 +67,8 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
         volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L1
     )
     batch_z = cfg.batch_z
-    assert batch_z == 2 and z % batch_z == 0  # three full batches
+    assert batch_z == 2
+    assert z % batch_z == 0  # three full batches
 
     root = Path(f"{tmp_path / 'ds'}.ome.zarr")
     cfg.dataset.write_metadata(root)  # arrays must exist before the worker opens them
@@ -96,7 +98,8 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
     arr = TSArrayReader(root / "0").read_3d(z0=0, n=z)
     assert arr.shape == (z, y, x)
     for k in range(z):
-        assert int(arr[k].min()) == k + 1 and int(arr[k].max()) == k + 1, f"frame {k} corrupted"
+        assert int(arr[k].min()) == k + 1, f"frame {k} corrupted"
+        assert int(arr[k].max()) == k + 1, f"frame {k} corrupted"
 
 
 @pytest.mark.slow
@@ -111,7 +114,8 @@ def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
     cfg = WriterConfig(
         volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L6
     )
-    assert cfg.batch_z == batch_z and cfg.shard_shape.z == batch_z  # shard-aligned: one batch = whole shard(s)
+    assert cfg.batch_z == batch_z
+    assert cfg.shard_shape.z == batch_z  # shard-aligned: one batch = whole shard(s)
 
     root = Path(f"{tmp_path / 'ds'}.ome.zarr")
     cfg.dataset.write_metadata(root)
@@ -148,4 +152,5 @@ def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
     arr = TSArrayReader(root / "0").read_3d(z0=0, n=z)
     assert arr.shape == (z, y, x)
     for k in range(z):
-        assert int(arr[k].min()) == k + 1 and int(arr[k].max()) == k + 1, f"slice {k} corrupted"
+        assert int(arr[k].min()) == k + 1, f"slice {k} corrupted"
+        assert int(arr[k].max()) == k + 1, f"slice {k} corrupted"

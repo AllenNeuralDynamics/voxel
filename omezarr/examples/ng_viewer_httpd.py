@@ -8,9 +8,8 @@ with Neuroglancer.
 from pathlib import Path
 
 from cloudpathlib import S3Path
-from rich import print
-
 from ome_zarr_writer.viewer.ng_view import NGLUT, NGLayerConfig, ng_quick_view
+from rich import print
 
 
 def create_multi_tile_s3_urls(
@@ -67,7 +66,7 @@ def example_local_v3():
 def example_aind_exaspim_s3():
     """Example: View AIND exaSPIM S3 dataset."""
     ng_quick_view(
-        viewer_token="ng_example",
+        viewer_token="ng_example",  # noqa: S106
         configs=[
             NGLayerConfig(
                 "s3",

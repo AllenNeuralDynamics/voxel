@@ -2,7 +2,7 @@
 #
 # Layout: mostly local hooks (ruff, basedpyright) so versions track uv.lock,
 # plus Astral's external uv-lock hook to keep the lockfile in sync with
-# pyproject.toml. See ./CLAUDE.md for tool versions and rationale.
+# pyproject.toml.
 #
 # Frontend (web/ui) hooks shell out to bunx and are scoped by `files:` so they
 # only fire when web/ui sources are staged. Fast checks run pre-commit, slower

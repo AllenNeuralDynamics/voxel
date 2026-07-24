@@ -1,11 +1,12 @@
 import csv
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
 import numpy as np
-from pydantic import BaseModel, Discriminator, Field, Tag, TypeAdapter, model_validator
-from vxlib.quantity import Angle, Frequency, NormalizedRange, Voltage, VoltageRange
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, TypeAdapter, model_validator
+from vxlib.quantity import Angle, Frequency, NormalizedRange, Time, Voltage, VoltageRange
 
 
 class BaseWaveform(BaseModel, ABC):
@@ -19,17 +20,17 @@ class BaseWaveform(BaseModel, ABC):
         return self
 
     def get_array(self, total_samples: int) -> np.ndarray:
-        """Generate the waveform array for the entire task duration."""
+        """Generate the waveform array, ending on the configured rest voltage."""
+        if total_samples < 1:
+            raise ValueError("Waveforms require at least one sample")
+
         arr = np.full(total_samples, float(self.rest_voltage))
         start_idx = int(self.window.min * total_samples)
         end_idx = int(self.window.max * total_samples)
         n = end_idx - start_idx
-        if n <= 0:
-            return arr
-
-        waveform_segment = self._generate_waveform(n)
-
-        arr[start_idx:end_idx] = waveform_segment
+        if n > 0:
+            arr[start_idx:end_idx] = self._generate_waveform(n)
+        arr[-1] = float(self.rest_voltage)
         return arr
 
     @abstractmethod
@@ -38,40 +39,21 @@ class BaseWaveform(BaseModel, ABC):
 
 
 class PeriodicWaveform(BaseWaveform, ABC):
-    """Base for waveforms with frequency/cycles periodicity.
+    """Base for waveforms that repeat a configured number of cycles.
 
-    Specify either `cycles` (integer, guarantees clean periodicity) or
-    `frequency` (Hz, for exact frequency control). If both are set,
-    `cycles` takes precedence. Defaults to 1 cycle if neither is set.
+    Integer values complete whole cycles within the active window; fractional
+    values intentionally end at an intermediate phase.
     """
 
-    frequency: Frequency | None = None
-    cycles: int | None = None
+    cycles: float = Field(default=1.0, gt=0)
     phase: Angle = Angle(0.0)
 
-    @property
-    def effective_frequency(self) -> float:
-        """Resolve frequency from cycles or direct frequency setting."""
-        span = self.window.span
-        if self.cycles is not None:
-            return self.cycles / span if span > 0 else 0
-        if self.frequency is not None:
-            return float(self.frequency)
-        return 1 / span if span > 0 else 0
-
-    def _effective_sample_rate(self, n: int) -> float:
-        """Compute the effective sample rate for the windowed segment."""
-        span = self.window.span
-        return n / span if span > 0 else 0
-
     def _phase_array(self, n: int) -> np.ndarray:
-        """Generate a normalized phase array [0..1) repeating at effective_frequency."""
-        fs = self._effective_sample_rate(n)
-        if fs <= 0:
+        """Generate normalized phase for ``cycles`` across ``n`` samples."""
+        if n < 1:
             return np.zeros(n)
-        t = np.arange(n) / fs
-        phase_offset = self.phase / (2 * np.pi)
-        return (t * self.effective_frequency + phase_offset) % 1.0
+        phase_offset = float(self.phase) / (2 * np.pi)
+        return (np.arange(n) * self.cycles / n + phase_offset) % 1.0
 
 
 class SquareWave(PeriodicWaveform):
@@ -91,10 +73,8 @@ class SineWave(PeriodicWaveform):
     def _generate_waveform(self, n: int) -> np.ndarray:
         if self.window.span == 0:
             return np.array([])
-        # Sine uses phase directly in the sin() call rather than _phase_array
-        fs = self._effective_sample_rate(n)
-        t = np.arange(n) / fs
-        shape = np.sin(2 * np.pi * self.effective_frequency * t + self.phase)
+        phi = self._phase_array(n)
+        shape = np.sin(2 * np.pi * phi)
         return (shape + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
 
 
@@ -118,11 +98,7 @@ class TriangleWave(PeriodicWaveform):
         return (raw + 1) / 2 * (self.voltage.max - self.voltage.min) + self.voltage.min
 
 
-def generate_multi_point_waveform(
-    n: int,
-    points: list[list[float]],
-    voltage_range: VoltageRange,
-) -> np.ndarray:
+def generate_multi_point_waveform(n: int, points: list[list[float]], voltage_range: VoltageRange) -> np.ndarray:
     """Generate a waveform by interpolating between a series of normalized time-voltage points.
 
     :param n: Number of samples to generate.
@@ -221,30 +197,40 @@ class CSVWaveform(BaseWaveform):
 # ==================== Derived Waveforms ====================
 
 
-class _DerivedBase(BaseModel):
+class _DerivedBase(BaseModel, ABC):
     """Shared fields for waveforms derived from another channel.
 
-    Derived waveforms do not carry ``voltage`` / ``window`` / ``rest_voltage`` — those
-    are inherited from the resolved ``source``. Resolution happens at controller
-    load-time by looking up ``source`` among sibling waveforms and applying the
-    operation.
+    Resolution happens at controller load-time by looking up ``source`` among
+    sibling waveforms and applying the operation to its resolved samples.
     """
 
     type: Literal["derived"] = "derived"
     source: str
 
+    @abstractmethod
+    def apply(self, src_array: np.ndarray) -> np.ndarray: ...
+
 
 class DerivedMirror(_DerivedBase):
-    """Negate source voltage around its ``rest_voltage``. Push-pull / differential pair."""
+    """Reflect the source voltage around ``about``. Push-pull / differential pair."""
 
     operation: Literal["mirror"] = "mirror"
+    about: Voltage = Voltage(0.0)
+
+    def apply(self, src_array: np.ndarray) -> np.ndarray:
+        return 2.0 * float(self.about) - src_array
 
 
 class DerivedScale(_DerivedBase):
-    """Scale source amplitude around its ``rest_voltage`` by ``factor``."""
+    """Scale the source voltage around ``about`` by ``factor``."""
 
     operation: Literal["scale"] = "scale"
     factor: float
+    about: Voltage = Voltage(0.0)
+
+    def apply(self, src_array: np.ndarray) -> np.ndarray:
+        about = float(self.about)
+        return about + self.factor * (src_array - about)
 
 
 class DerivedOffset(_DerivedBase):
@@ -252,6 +238,9 @@ class DerivedOffset(_DerivedBase):
 
     operation: Literal["offset"] = "offset"
     delta: Voltage
+
+    def apply(self, src_array: np.ndarray) -> np.ndarray:
+        return src_array + self.delta
 
 
 class DerivedShift(_DerivedBase):
@@ -262,6 +251,16 @@ class DerivedShift(_DerivedBase):
 
     operation: Literal["shift"] = "shift"
     fraction: float = Field(ge=0.0, le=1.0)
+
+    def apply(self, src_array: np.ndarray) -> np.ndarray:
+        n = len(src_array)
+        if n < 1:
+            raise ValueError("Derived waveforms require at least one source sample")
+        rest_voltage = src_array[-1]
+        shift_samples = round(self.fraction * n) % n
+        shifted = np.roll(src_array, shift_samples)
+        shifted[-1] = rest_voltage
+        return shifted
 
 
 def _waveform_discriminator(v: Any) -> str | None:
@@ -298,17 +297,114 @@ Waveform = Annotated[
     Discriminator(_waveform_discriminator),
 ]
 
-Derived = DerivedMirror | DerivedScale | DerivedOffset | DerivedShift
-
-
-def is_derived(wf: Any) -> bool:
-    """True if ``wf`` is a derived waveform (references another channel)."""
-    return isinstance(wf, _DerivedBase) or (isinstance(wf, dict) and wf.get("type") == "derived")
-
-
 _WaveformAdapter = TypeAdapter(Waveform)
 
 
 def validate_waveform(data: dict) -> Waveform:
     """Validate a single waveform dict into the appropriate Waveform subtype."""
     return _WaveformAdapter.validate_python(data)
+
+
+class TransitionPattern(BaseModel):
+    type: Literal["transitions"] = "transitions"
+    start: bool = False
+    rest: bool = False
+    transitions: tuple[float, ...] = ()
+
+
+DigitalPattern = TransitionPattern
+
+
+def _topo_order(waveforms: Mapping[str, Waveform]) -> list[str]:
+    """Return waveform keys in dependency order (sources before derived).
+
+    Raises ``WaveformResolutionError`` on missing sources or cycles.
+    """
+    unresolved: list[str] = []
+    for name, wf in waveforms.items():
+        if isinstance(wf, _DerivedBase):
+            if wf.source not in waveforms:
+                raise WaveformResolutionError(f"Derived waveform '{name}' references unknown source '{wf.source}'")
+            unresolved.append(name)
+
+    order: list[str] = [name for name, wf in waveforms.items() if not isinstance(wf, _DerivedBase)]
+    resolved: set[str] = set(order)
+
+    while unresolved:
+        made_progress = False
+        still_unresolved: list[str] = []
+        for name in unresolved:
+            wf = waveforms[name]
+            if not isinstance(wf, _DerivedBase):
+                continue
+            if wf.source in resolved:
+                order.append(name)
+                resolved.add(name)
+                made_progress = True
+            else:
+                still_unresolved.append(name)
+        if not made_progress:
+            raise WaveformResolutionError(
+                f"Cycle or unresolvable source among derived waveforms: {sorted(still_unresolved)}"
+            )
+        unresolved = still_unresolved
+
+    return order
+
+
+class WaveformResolutionError(ValueError):
+    """Raised when derived waveforms cannot be resolved (missing source / cycle)."""
+
+
+class Signals(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    sample_rate: Frequency = Field(..., gt=0)
+    duration: Time = Field(..., gt=0)
+    rest_time: Time = Field(default=Time(0.0), ge=0)
+    waveforms: dict[str, Waveform]
+
+    @model_validator(mode="after")
+    def at_least_one_sample(self) -> "Signals":
+        if self.num_samples < 1:
+            raise ValueError("num_samples must be at least 1")
+        return self
+
+    @property
+    def num_samples(self) -> int:
+        """Total AO samples per cycle (duration * sample_rate, floor)."""
+        return int(float(self.sample_rate) * float(self.duration))
+
+    @property
+    def frame_frequency(self) -> float:
+        """Cycle frequency: 1 / (duration + rest_time). Zero when total span is zero."""
+        total = float(self.duration) + float(self.rest_time)
+        return 1.0 / total if total > 0 else 0.0
+
+    def arrays(self, voltage_range: VoltageRange | None = None) -> dict[str, np.ndarray]:
+        """Resolve ``self.waveforms`` to sample arrays at this config's ``num_samples``.
+
+        Raises ``WaveformResolutionError`` on cycles or missing sources among derived
+        waveforms.
+        """
+        arrays: dict[str, np.ndarray] = {}
+        for name in _topo_order(self.waveforms):
+            waveform = self.waveforms[name]
+            if isinstance(waveform, BaseWaveform):
+                arrays[name] = waveform.get_array(self.num_samples)
+            elif isinstance(waveform, _DerivedBase):
+                arrays[name] = waveform.apply(arrays[waveform.source])
+            else:
+                raise WaveformResolutionError(f"Unknown waveform type for '{name}': {type(waveform).__name__}")
+
+        errors: list[str] = []
+        for name, array in arrays.items():
+            if not np.all(np.isfinite(array)):
+                errors.append(f"non-finite values in array for {name}")
+            minimum = float(np.min(array))
+            maximum = float(np.max(array))
+            if voltage_range is not None and (minimum < voltage_range.min or maximum > voltage_range.max):
+                errors.append(f"values out of range for {name}")
+        if errors:
+            raise WaveformResolutionError("\n".join(errors))
+        return arrays

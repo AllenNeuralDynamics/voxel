@@ -15,7 +15,7 @@ from .zarr_server import HTTPDZarrServer
 from .zarr_server.base import ZarrServer, get_host_ip, get_host_name
 
 
-def replace_hostname_with_ip(viewer):
+def replace_hostname_with_ip(viewer: object) -> str:
     return str(viewer).replace(f"http://{get_host_name()}:", f"http://{get_host_ip()}:")
 
 
@@ -94,7 +94,7 @@ def build_viewer(
     Returns:
         Configured neuroglancer viewer
     """
-    ng.set_server_bind_address("0.0.0.0", viewer_port)
+    ng.set_server_bind_address("0.0.0.0", viewer_port)  # noqa: S104 - remote viewers must reach this server
     viewer = ng.Viewer(token=viewer_token)
 
     with viewer.txn() as state:
@@ -134,7 +134,7 @@ def ng_quick_view(
     configs: list[NGLayerConfig],
     server: ZarrServer | None = None,
     viewer_port: int = 8080,
-    viewer_token: str = "ng",
+    viewer_token: str = "ng",  # noqa: S107 - public URL identifier, not an authentication secret
 ):
     """
     Quick viewer for neuroglancer that works with any ZarrServer implementation.
@@ -145,10 +145,10 @@ def ng_quick_view(
         viewer_port: Port for neuroglancer viewer
         viewer_token: Token for neuroglancer viewer
     """
-    from rich import print
+    from rich import print  # noqa: PLC0415 - Rich is needed only by this interactive CLI helper
 
     if server is None:
-        server = HTTPDZarrServer(host="0.0.0.0", port=9000)
+        server = HTTPDZarrServer(host="0.0.0.0", port=9000)  # noqa: S104 - serves remote viewers
 
     # Start server if not already running
     server.start()
@@ -160,14 +160,15 @@ def ng_quick_view(
     host_ip = get_host_ip()
     viewer_url = replace_hostname_with_ip(viewer)
     print(
-        f"\nRun port forwarding command: ssh -L {server.port}:localhost:{server.port} -L {viewer_port}:localhost:{viewer_port} {host_ip}"
+        f"\nRun port forwarding command: ssh -L {server.port}:localhost:{server.port} "
+        f"-L {viewer_port}:localhost:{viewer_port} {host_ip}"
     )
     print(f"\n[bold green]Neuroglancer viewer: {viewer_url}[/bold green]")
     print(f"[green]HTTP server: http://{host_ip}:{server.port}/[/green]")
     print("\n[yellow]Press Ctrl+C to stop[/yellow]\n")
 
     try:
-        import time
+        import time  # noqa: PLC0415 - used only by this blocking interactive helper
 
         while True:
             time.sleep(1)

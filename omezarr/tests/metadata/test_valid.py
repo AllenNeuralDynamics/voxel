@@ -5,7 +5,6 @@ Type checkers may warn about dict inputs, but this is expected behavior.
 For maximum type safety in production code, construct models explicitly.
 """
 # pyright: reportArgumentType=false, reportOptionalSubscript=false
-# ruff: noqa: PGH003
 
 from ome_zarr_writer.dataset import (
     ChannelAxis,

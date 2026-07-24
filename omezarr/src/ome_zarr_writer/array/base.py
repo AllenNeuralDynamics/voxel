@@ -34,11 +34,11 @@ class ArrayWriter(ABC):
 
         def __call__(self) -> "ArrayWriter":
             if self is ArrayWriter.Backend.TS:
-                from .ts import TSArrayWriter
+                from .ts import TSArrayWriter  # noqa: PLC0415
 
                 return TSArrayWriter()
             if self is ArrayWriter.Backend.ZARRS:
-                from .zarrs import ZarrsArrayWriter
+                from .zarrs import ZarrsArrayWriter  # noqa: PLC0415
 
                 return ZarrsArrayWriter()
             raise ValueError(f"Unsupported ArrayWriter.Backend: {self}")

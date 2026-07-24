@@ -11,7 +11,7 @@ def get_host_name() -> str:
 
 
 def get_host_ip() -> str:
-    global _HOST_IP
+    global _HOST_IP  # noqa: PLW0603 - process-local lazy cache
 
     if _HOST_IP == "localhost":
         try:
@@ -22,7 +22,7 @@ def get_host_ip() -> str:
             if ip is not None:
                 _HOST_IP = ip
         except Exception:
-            pass
+            return _HOST_IP
 
     return _HOST_IP
 

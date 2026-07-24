@@ -27,7 +27,12 @@ class FastAPIZarrServer(ZarrServer):
     allowing it to be used with the common ng_quick_view function.
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9000, app: FastAPI | None = None):
+    def __init__(
+        self,
+        host: str = "0.0.0.0",  # noqa: S104 - serves remote viewers
+        port: int = 9000,
+        app: FastAPI | None = None,
+    ):
         self.host = host
         self._port = port
         self.app = app if app is not None else FastAPI()

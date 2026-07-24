@@ -5,7 +5,6 @@ can never name a reduction the writer doesn't actually compute).
 
 import numpy as np
 import pytest
-
 from ome_zarr_writer.dataset import DownscaleType, ScaleLevel
 from ome_zarr_writer.pyramid import _KERNELS, _SUPPORTED_REDUCTIONS, pyramids_3d_numba, pyramids_3d_numpy
 
@@ -25,10 +24,11 @@ def test_every_downscale_type_is_supported() -> None:
     """The merge of `Reduction` into `DownscaleType`: every declarable metadata value is handled by the
     step dispatcher, so the writer can pass `config.downscale_type` straight through with no translation
     table and the on-disk `type` can never name a reduction we don't compute."""
-    assert _SUPPORTED_REDUCTIONS == set(DownscaleType)
+    assert set(DownscaleType) == _SUPPORTED_REDUCTIONS
     # Block reductions (all but gaussian, which is separable) have a (vol, out) kernel per specialization.
     for dt in set(DownscaleType) - {DownscaleType.GAUSSIAN}:
-        assert (dt, False) in _KERNELS and (dt, True) in _KERNELS, dt
+        assert (dt, False) in _KERNELS, dt
+        assert (dt, True) in _KERNELS, dt
 
 
 def test_numpy_reductions_shapes_and_gaussian_normalized() -> None:

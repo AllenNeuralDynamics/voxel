@@ -1,8 +1,7 @@
 import time
 from collections.abc import Mapping
 
-from vxl.daq.analog import OnDemandAO
-from vxl.daq.digital import OnDemandDO
+from vxl.daq.on_demand import OnDemandAO, OnDemandDO
 
 from .base import DiscreteAxis
 

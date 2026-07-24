@@ -33,8 +33,10 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 
 import numba
+import numba.core.config as numba_config
 import numpy as np
 from cloudpathlib import S3Path
+from numba.np.ufunc.parallel import threading_layer
 from pydantic import BaseModel, ConfigDict
 from vxlib.vec import UIVec3D
 
@@ -56,7 +58,7 @@ _PREFAULT_MIN_BYTES = 1 << 28  # 256 MiB
 # *slower* (measured ~3x slower at 256 vs 16 threads on a 256-core host). Left uncapped numba grabs the
 # whole machine, so with several slots downsampling at once the memory system is badly oversubscribed.
 # Env-tunable (`VOXEL_NUMBA_THREADS`) so the in-pipeline optimum can be swept; clamped to the pool max.
-_NUMBA_POOL_MAX = int(getattr(numba.config, "NUMBA_NUM_THREADS", os.cpu_count() or 1))  # runtime-only attr
+_NUMBA_POOL_MAX = int(getattr(numba_config, "NUMBA_NUM_THREADS", os.cpu_count() or 1))  # runtime-only attr
 _NUMBA_THREADS = max(1, min(int(os.environ.get("VOXEL_NUMBA_THREADS", "16")), _NUMBA_POOL_MAX))
 
 
@@ -174,12 +176,12 @@ def _worker_close_output() -> None:
 
 def _warn_if_slow_threading_layer() -> None:
     """After the first parallel region, log once if numba fell back to the slowest layer (workqueue).
-    `numba.threading_layer()` is only valid once a parallel region has run, so call it after the pyramid."""
+    `threading_layer()` is only valid once a parallel region has run, so call it after the pyramid."""
     if _LAYER_WARNED:
         return
     _LAYER_WARNED.append(True)
     try:
-        layer = numba.threading_layer()
+        layer = threading_layer()
     except ValueError:
         return  # no parallel region ran yet; nothing to report
     if layer == "workqueue":

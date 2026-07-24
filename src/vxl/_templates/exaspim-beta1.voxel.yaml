@@ -1,7 +1,7 @@
 hal:
   devices:
     ao_main:
-      target: vxl.daq.analog.ni.NiAO
+      target: vxl.daq.clocked.ni.NiSignalGenerator
       init:
         hub: nidaq_1
         ports:

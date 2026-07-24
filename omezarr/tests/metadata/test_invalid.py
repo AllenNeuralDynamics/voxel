@@ -4,12 +4,10 @@ Note: Pydantic automatically validates and converts dicts to model instances.
 Type checkers may warn about dict inputs, but this is expected behavior.
 """
 # pyright: reportArgumentType=false, reportOptionalSubscript=false
-# ruff: noqa: PGH003
 
 import pytest
-from pydantic import ValidationError
-
 from ome_zarr_writer.dataset import Multiscale
+from pydantic import ValidationError
 
 
 class TestAxisValidation:

@@ -8,13 +8,13 @@ import { pref, sanitizeString } from '$lib/utils';
 
 import { Client, type ClientOptions, errorMessage, type Unsub } from './client.svelte';
 import {
-  AnalogOutHandle,
   AxisHandle,
   CameraHandle,
   createDevice,
   type DeviceHandle,
   DiscreteAxisHandle,
-  LaserHandle
+  LaserHandle,
+  SignalGeneratorHandle
 } from './device.svelte';
 import { Inpainter } from './inpaint.svelte';
 import { Preview } from './preview.svelte';
@@ -24,7 +24,6 @@ import type {
   AcquisitionProgress,
   AcquisitionRecord,
   AcquisitionRequest,
-  AOSignals,
   AppStatus,
   ChannelPatch,
   DeviceSnapshot,
@@ -37,6 +36,7 @@ import type {
   ProfilePatch,
   Remote,
   SensorROI,
+  Signals,
   StageOrientation,
   StencilPatch,
   TaskPatch,
@@ -277,7 +277,7 @@ export class Instrument {
   readonly lasers = $derived.by(() => this.#devicesOfType(LaserHandle));
   readonly axes = $derived.by(() => this.#devicesOfType(AxisHandle));
   readonly discreteAxes = $derived.by(() => this.#devicesOfType(DiscreteAxisHandle));
-  readonly analogOuts = $derived.by(() => this.#devicesOfType(AnalogOutHandle));
+  readonly signalGenerators = $derived.by(() => this.#devicesOfType(SignalGeneratorHandle));
 
   // Discrete axes any detection path declares as a filter wheel — config-authoritative, across all profiles.
   readonly filterWheels = $derived.by<DiscreteAxisHandle[]>(() => {
@@ -496,8 +496,8 @@ export class Instrument {
     return this.#client.patch('/instrument/profile', patch);
   }
 
-  updateAoSignals(aoUid: string, signals: AOSignals): Promise<void> {
-    return this.#client.patch(`/instrument/profile/sync/${encodeURIComponent(aoUid)}`, signals);
+  updateSignals(generatorUid: string, signals: Signals): Promise<void> {
+    return this.#client.patch(`/instrument/profile/sync/${encodeURIComponent(generatorUid)}`, signals);
   }
 
   applySettings(): Promise<void> {
