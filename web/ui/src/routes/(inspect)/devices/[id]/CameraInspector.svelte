@@ -94,7 +94,7 @@
   {#if camera?.connected}
     <div class="flex flex-wrap justify-between gap-8">
       <!-- LEFT COLUMN: controls, sensor ROI, dynamic rw, commands -->
-      <div class="min-w-86 flex-1 space-y-5">
+      <div class="min-w-82 flex-1 space-y-5">
         <!-- Exposure Time -->
         {#if camera.exposure}
           {@const exposure = camera.exposure}

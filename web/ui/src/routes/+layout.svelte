@@ -25,7 +25,6 @@
   import LogViewer from '$lib/LogViewer.svelte';
   import { type PreviewMode, setVoxelApp, VoxelApp } from '$lib/model';
   import PreviewCanvas from '$lib/preview/PreviewCanvas.svelte';
-  import SnapCanvas from '$lib/preview/SnapCanvas.svelte';
   import SnapshotFlyOverlay from '$lib/preview/SnapshotFlyOverlay.svelte';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
@@ -118,11 +117,12 @@
   // Pane sizes
 
   const leftPane = createPaneSize(() => shellRef, {
-    min: 43,
-    default: 57,
+    min: 40,
+    default: 40,
+    max: 54,
     fallback: { min: 30, default: 30, max: 50 }
   });
-  const rightPane = createPaneSize(() => shellRef, { min: 27, max: 30, fallback: { min: 15, max: 18 } });
+  const rightPane = createPaneSize(() => shellRef, { min: 24, default: 24, max: 30, fallback: { min: 15, max: 18 } });
 
   // Vertical split inside the right pane: monitors (top) over the stage gizmo (bottom).
   let rightSplitEl = $state<HTMLElement | null>(null);
@@ -168,7 +168,7 @@
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          class="z-50 min-w-56 rounded-md border border-border bg-elevated p-1 text-lg shadow-lg outline-none"
+          class="z-50 min-w-56 rounded-md border border-border bg-floating p-1 text-lg shadow-lg outline-none"
         >
           <DropdownMenu.Item
             class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-highlighted:bg-element-hover"
@@ -228,84 +228,76 @@
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell">
       <!-- Mode controls: nav + routed content + logs -->
-      <Pane {...leftPane}>
-        <div class="grid h-full grid-rows-[auto_1fr] bg-surface">
-          <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border px-4">
-            {@render appMenu()}
-            <nav class="flex items-center">
-              {@render segmented(navSegments)}
-            </nav>
-          </header>
-          <div class="flex h-full min-h-0 min-w-0 flex-col bg-canvas/35">
-            {@render children()}
-          </div>
+      <Pane {...leftPane} class="grid h-full grid-rows-[auto_1fr] bg-surface">
+        <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
+          {@render appMenu()}
+          <nav class="flex items-center">
+            {@render segmented(navSegments)}
+          </nav>
+        </header>
+        <div class="flex h-full min-h-0 min-w-0 flex-col">
+          {@render children()}
         </div>
       </Pane>
       <PaneDivider direction="vertical" />
 
       <!-- Viewer: Preview + Logs (centerpiece) -->
-      <Pane defaultSize={45}>
-        <div class="flex h-full flex-col bg-canvas">
-          <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
-            <div class="flex items-center gap-2">
-              {@render segmented(modeSegments)}
-              <button
-                onclick={toggleLogs}
-                class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-lg whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-              >
-                {logsOpen ? 'Hide logs' : 'Show logs'}
-              </button>
-            </div>
-            <RunButton {app} />
-          </header>
-          <main class="min-h-0 flex-1 overflow-hidden">
-            <PaneGroup direction="vertical" autoSaveId="shell:viewer">
-              <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
-                <div class="flex h-full flex-col bg-canvas">
-                  <div class="relative flex-1 overflow-hidden" data-fly-origin>
-                    {#if app.view.mode === 'snaps'}
-                      <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                        <SnapCanvas />
-                      </div>
-                    {:else if app.view.mode === 'stage'}
-                      <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                        <StageView bind:viewport={stageViewport} />
-                      </div>
-                    {:else}
-                      <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                        <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
-                      </div>
-                    {/if}
-                  </div>
-
-                  <SnapshotFlyOverlay />
+      <Pane defaultSize={45} class="flex h-full flex-col bg-canvas">
+        <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-elevated px-4">
+          <div class="flex items-center gap-2">
+            {@render segmented(modeSegments)}
+            <button
+              onclick={toggleLogs}
+              class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-lg whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+            >
+              {logsOpen ? 'Hide logs' : 'Show logs'}
+            </button>
+          </div>
+          <RunButton {app} />
+        </header>
+        <main class="min-h-0 flex-1 overflow-hidden">
+          <PaneGroup direction="vertical" autoSaveId="shell:viewer">
+            <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
+              <div class="flex h-full flex-col bg-canvas">
+                <div class="relative flex-1 overflow-hidden" data-fly-origin>
+                  {#if app.view.mode === 'stage'}
+                    <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                      <StageView bind:viewport={stageViewport} />
+                    </div>
+                  {:else}
+                    <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                      <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                    </div>
+                  {/if}
                 </div>
-              </Pane>
-              <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
-              <Pane
-                bind:this={bottomPane}
-                collapsible
-                collapsedSize={0}
-                defaultSize={35}
-                minSize={20}
-                maxSize={55}
-                class="bg-surface"
-              >
-                <LogViewer {logs} class="bg-canvas/35" />
-              </Pane>
-            </PaneGroup>
-          </main>
-        </div>
+
+                <SnapshotFlyOverlay />
+              </div>
+            </Pane>
+            <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
+            <Pane
+              bind:this={bottomPane}
+              collapsible
+              collapsedSize={0}
+              defaultSize={35}
+              minSize={20}
+              maxSize={55}
+              class="bg-surface"
+            >
+              <LogViewer {logs} class="bg-canvas/35" />
+            </Pane>
+          </PaneGroup>
+        </main>
       </Pane>
       <PaneDivider direction="vertical" />
 
       <!-- Monitors: run controls + device telemetry -->
       <Pane defaultSize={16} {...rightPane} class="flex flex-col bg-surface">
-        <header class="flex h-15 shrink-0 items-center border-b border-border px-4">
+        <header class="flex h-15 shrink-0 items-center border-b border-border bg-elevated px-4">
           <ProfileSelector {instrument} size="md" class="w-full" />
         </header>
         <PaneGroup direction="vertical" bind:ref={rightSplitEl} autoSaveId="monitors" class="min-h-0 flex-1">
-          <Pane class="min-h-0 bg-canvas/35">
+          <Pane class="min-h-0">
             <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
               {#if instrument.cameras.size > 0}
                 <CamerasMonitor {instrument} />
