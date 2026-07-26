@@ -20,7 +20,7 @@
 
   const { logs, class: className }: { logs: LogMessage[]; class?: string } = $props();
 
-  const filtered = $derived(logs.filter((log) => LEVELS.indexOf(log.level) >= LEVELS.indexOf(minLevel.current)));
+  const filtered = $derived(logs.filter((log) => LEVELS.indexOf(log.level) >= LEVELS.indexOf(minLevel.get())));
 
   let container: HTMLDivElement;
 
@@ -74,11 +74,11 @@
   <div class="flex shrink-0 items-center gap-2 py-2">
     <div class="flex items-center gap-3">
       <label
-        class="flex cursor-pointer items-center gap-1.5 text-base transition-colors {wrap.current
+        class="flex cursor-pointer items-center gap-1.5 text-base transition-colors {wrap.get()
           ? 'text-fg'
           : 'text-fg-muted'} hover:text-fg"
       >
-        <Checkbox size="xs" bind:checked={wrap.current} />
+        <Checkbox size="xs" bind:checked={wrap.get, wrap.set} />
         Wrap
       </label>
     </div>
@@ -87,9 +87,9 @@
       <Select
         size="xs"
         class="ml-auto border-transparent hover:border-accent"
-        value={minLevel.current}
+        value={minLevel.get()}
         options={LEVEL_OPTIONS}
-        onchange={(v) => (minLevel.current = v as Level)}
+        onchange={(v) => minLevel.set(v as Level)}
         prefix="Level ≥"
       />
     </div>
@@ -106,9 +106,9 @@
       <div class="space-y-0.5 p-2">
         {#each filtered as log, i (i)}
           {@const LevelIcon = levelIcons[log.level] ?? CircleSmall}
-          <div class="flex gap-2 {wrap.current ? 'items-start' : 'items-center'}">
+          <div class="flex gap-2 {wrap.get() ? 'items-start' : 'items-center'}">
             <span class="w-[8ch] shrink-0 text-fg-muted/65">{formatTime(log.timestamp)}</span>
-            <span class="min-w-0 flex-1 {wrap.current ? 'wrap-break-word' : 'truncate'}">
+            <span class="min-w-0 flex-1 {wrap.get() ? 'wrap-break-word' : 'truncate'}">
               <span class="mr-2 {getLevelColor(log.level)}" title={log.logger}>{truncateMiddle(log.logger, 42)}</span>
               <span class="text-fg/80">{log.message}</span>
             </span>

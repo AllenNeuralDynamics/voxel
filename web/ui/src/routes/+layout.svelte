@@ -75,7 +75,7 @@
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
     { id: '/', label: 'Inspect', icon: Microscope },
-    { id: '/tune', label: 'Tune', icon: WaveformsIcon },
+    { id: '/sync', label: 'Sync', icon: WaveformsIcon },
     { id: '/configure', label: 'Configure', icon: TuneVertical },
     { id: '/plan', label: 'Plan', icon: Layers }
   ];
@@ -109,17 +109,17 @@
     previewModes.map((m) => ({
       key: m.mode,
       label: m.label,
-      active: app.view.mode === m.mode,
-      select: () => app.view.setMode(m.mode)
+      active: app.viewMode.get() === m.mode,
+      select: () => app.viewMode.set(m.mode)
     }))
   );
 
   // Pane sizes
 
   const leftPane = createPaneSize(() => shellRef, {
-    min: 40,
-    default: 40,
-    max: 54,
+    min: 42,
+    default: 42,
+    max: 64,
     fallback: { min: 30, default: 30, max: 50 }
   });
   const rightPane = createPaneSize(() => shellRef, { min: 24, default: 24, max: 30, fallback: { min: 15, max: 18 } });
@@ -260,7 +260,7 @@
             <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
               <div class="flex h-full flex-col bg-canvas">
                 <div class="relative flex-1 overflow-hidden" data-fly-origin>
-                  {#if app.view.mode === 'stage'}
+                  {#if app.viewMode.get() === 'stage'}
                     <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
                       <StageView bind:viewport={stageViewport} />
                     </div>

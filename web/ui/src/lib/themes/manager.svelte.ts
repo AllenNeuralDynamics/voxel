@@ -91,14 +91,13 @@ class ThemeManager {
   systemDark = $state(typeof window !== 'undefined' && window.matchMedia(MEDIA).matches);
 
   /** Resolved mode after applying system preference. */
-  readonly resolvedMode: 'light' | 'dark' = $derived(
-    this.prefs.current.mode === 'auto' ? (this.systemDark ? 'dark' : 'light') : this.prefs.current.mode
-  );
+  readonly resolvedMode: 'light' | 'dark' = $derived.by(() => {
+    const mode = this.prefs.get().mode;
+    return mode === 'auto' ? (this.systemDark ? 'dark' : 'light') : mode;
+  });
 
   /** The theme id currently in effect. */
-  readonly active: ThemeId = $derived(
-    this.resolvedMode === 'dark' ? this.prefs.current.dark : this.prefs.current.light
-  );
+  readonly active: ThemeId = $derived(this.resolvedMode === 'dark' ? this.prefs.get().dark : this.prefs.get().light);
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -122,25 +121,25 @@ class ThemeManager {
 
       // Density
       $effect(() => {
-        document.documentElement.style.fontSize = `${DENSITY_PERCENT[this.prefs.current.density]}%`;
+        document.documentElement.style.fontSize = `${DENSITY_PERCENT[this.prefs.get().density]}%`;
       });
     });
   }
 
   setMode(mode: Mode) {
-    this.prefs.current = { ...this.prefs.current, mode };
+    this.prefs.set({ ...this.prefs.get(), mode });
   }
 
   setLight(id: ThemeId) {
-    this.prefs.current = { ...this.prefs.current, light: id };
+    this.prefs.set({ ...this.prefs.get(), light: id });
   }
 
   setDark(id: ThemeId) {
-    this.prefs.current = { ...this.prefs.current, dark: id };
+    this.prefs.set({ ...this.prefs.get(), dark: id });
   }
 
   setDensity(density: Density) {
-    this.prefs.current = { ...this.prefs.current, density };
+    this.prefs.set({ ...this.prefs.get(), density });
   }
 }
 

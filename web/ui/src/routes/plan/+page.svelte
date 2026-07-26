@@ -38,7 +38,7 @@
   const SPACE_UNIT_OPTIONS = SPACE_UNITS.map((u) => ({ value: u.value, label: u.label }));
 
   const spaceUnit = pref<SpaceUnit['value']>('plan:space-unit', 'mm');
-  const unit = $derived(SPACE_UNITS.find((u) => u.value === spaceUnit.current) ?? SPACE_UNITS[0]);
+  const unit = $derived(SPACE_UNITS.find((u) => u.value === spaceUnit.get()) ?? SPACE_UNITS[0]);
 
   const TILE_ORDER_OPTIONS: { value: TileOrder; label: string }[] = [
     { value: 'sweep_row', label: 'Sweep Row' },
@@ -392,9 +392,9 @@
           size="xs"
           class="w-24"
           prefix="Units"
-          value={spaceUnit.current}
+          value={spaceUnit.get()}
           options={SPACE_UNIT_OPTIONS}
-          onchange={(v) => (spaceUnit.current = v as SpaceUnit['value'])}
+          onchange={(v) => spaceUnit.set(v as SpaceUnit['value'])}
         />
         <div class="flex items-center gap-1.5">
           <SpinBox

@@ -59,11 +59,11 @@
     id: 'live',
     z: 1, // "now" sits above snapshots (0) and inpaint (-1); the green pose marker is chrome above all
     get visible() {
-      return previewing && show.current;
+      return previewing && show.get();
     },
     draw,
     hitTest,
-    onActivate: () => app.view.goLive(), // double-click the live tile → full live view
+    onActivate: () => app.viewMode.set('live'), // double-click the live tile → full live view
     menu: liveMenu,
     maxScale: () => preview?.nativeScale() ?? null // zoom in to the camera's native resolution, no further
   };
@@ -71,13 +71,13 @@
 
   // Repaint on every new frame / detail view / channel change, and whenever visibility flips.
   watch(
-    () => [preview?.redrawGeneration, previewing, show.current] as const,
+    () => [preview?.redrawGeneration, previewing, show.get()] as const,
     () => scene.invalidate()
   );
 </script>
 
 {#snippet liveMenu()}
-  <ContextMenu.Item onSelect={() => app.view.goLive()}>
+  <ContextMenu.Item onSelect={() => app.viewMode.set('live')}>
     <VideoCamera width="14" height="14" />
     Open live view
   </ContextMenu.Item>
@@ -89,10 +89,10 @@
     <Button
       variant="ghost"
       size="icon-xs"
-      title={show.current ? 'Hide live' : 'Show live'}
-      onclick={() => (show.current = !show.current)}
+      title={show.get() ? 'Hide live' : 'Show live'}
+      onclick={() => show.set(!show.get())}
     >
-      {#if show.current}<Eye width="16" height="16" />{:else}<EyeOff width="16" height="16" />{/if}
+      {#if show.get()}<Eye width="16" height="16" />{:else}<EyeOff width="16" height="16" />{/if}
     </Button>
   </div>
 </div>

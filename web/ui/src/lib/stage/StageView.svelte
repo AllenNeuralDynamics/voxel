@@ -395,8 +395,8 @@
             <Button
               variant="ghost"
               size="icon-xs"
-              title={collapsed.current ? 'Show panel' : 'Hide panel'}
-              onclick={() => (collapsed.current = !collapsed.current)}
+              title={collapsed.get() ? 'Show panel' : 'Hide panel'}
+              onclick={() => collapsed.set(!collapsed.get())}
             >
               <PanelRight width="16" height="16" />
             </Button>
@@ -507,9 +507,9 @@
     </ContextMenu.Content>
   </ContextMenu.Root>
   <div
-    class="shrink-0 overflow-hidden bg-surface/80 transition-[width] duration-200 {collapsed.current
+    class="shrink-0 overflow-hidden bg-surface transition-[width] duration-200 {collapsed.get()
       ? 'w-0'
-      : 'w-62 border-l border-border'}"
+      : 'w-56 border-l border-border'}"
   >
     <div class="flex h-full w-full flex-col gap-4 overflow-y-auto py-1.5">
       <Live />

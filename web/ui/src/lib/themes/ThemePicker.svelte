@@ -42,7 +42,7 @@
 {#snippet themeSelect(variant: 'light' | 'dark')}
   {@const themeList = variant === 'light' ? lightThemes : darkThemes}
   {@const items = variant === 'light' ? lightItems : darkItems}
-  {@const currentId = variant === 'light' ? themes.prefs.current.light : themes.prefs.current.dark}
+  {@const currentId = variant === 'light' ? themes.prefs.get().light : themes.prefs.get().dark}
   {@const setTheme = variant === 'light' ? themes.setLight.bind(themes) : themes.setDark.bind(themes)}
   <Select.Root type="single" value={currentId} onValueChange={(v) => v && setTheme(v as ThemeId)} {items}>
     <Select.Trigger class={triggerClass}>
@@ -82,7 +82,7 @@
       {#each densities as d (d)}
         <button
           class="flex-1 cursor-pointer rounded-md border px-2 py-1.5 text-lg capitalize transition-colors {pillClass(
-            themes.prefs.current.density === d
+            themes.prefs.get().density === d
           )}"
           onclick={() => themes.setDensity(d)}
         >
@@ -101,7 +101,7 @@
       {#each modes as m (m)}
         <button
           class="cursor-pointer rounded-md border px-2 py-1 text-base capitalize transition-colors {pillClass(
-            themes.prefs.current.mode === m
+            themes.prefs.get().mode === m
           )}"
           onclick={() => themes.setMode(m)}
         >
@@ -111,18 +111,18 @@
     </div>
   </div>
 
-  {#if themes.prefs.current.mode === 'light' || themes.prefs.current.mode === 'auto'}
+  {#if themes.prefs.get().mode === 'light' || themes.prefs.get().mode === 'auto'}
     <div class="flex flex-col gap-1.5">
-      {#if themes.prefs.current.mode === 'auto'}
+      {#if themes.prefs.get().mode === 'auto'}
         <Label>Light</Label>
       {/if}
       {@render themeSelect('light')}
     </div>
   {/if}
 
-  {#if themes.prefs.current.mode === 'dark' || themes.prefs.current.mode === 'auto'}
+  {#if themes.prefs.get().mode === 'dark' || themes.prefs.get().mode === 'auto'}
     <div class="flex flex-col gap-1.5">
-      {#if themes.prefs.current.mode === 'auto'}
+      {#if themes.prefs.get().mode === 'auto'}
         <Label>Dark</Label>
       {/if}
       {@render themeSelect('dark')}

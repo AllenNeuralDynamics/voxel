@@ -605,49 +605,49 @@ export class Instrument {
 }
 
 /** Top-level view mode. Snaps and Inpaint hold their own item selection (on their stores); Live is the stream. */
-export type PreviewMode = 'live' | 'snaps' | 'inpaint' | 'stage';
+export type PreviewMode = 'live' | 'stage';
 
 /**
  * The center viewer's top-level mode. Item selection lives on the stores — `snaps.activeSnap`,
  * `inpaint.viewed` — so toggling modes preserves each mode's selection for free.
  */
-export class PreviewView {
-  readonly #snaps!: SnapshotStore;
-  // Persisted so the chosen view (Live / Snaps / Inpaint) survives a page refresh.
-  readonly #mode = pref<PreviewMode>('preview:mode', 'live');
+// export class PreviewView {
+//   readonly #snaps!: SnapshotStore;
+//   // Persisted so the chosen view (Live / Snaps / Inpaint) survives a page refresh.
+//   readonly #mode = pref<PreviewMode>('preview:mode', 'live');
 
-  constructor(snaps: SnapshotStore) {
-    this.#snaps = snaps;
-  }
+//   constructor(snaps: SnapshotStore) {
+//     this.#snaps = snaps;
+//   }
 
-  get mode(): PreviewMode {
-    return this.#mode.current;
-  }
+//   get mode(): PreviewMode {
+//     return this.#mode.current;
+//   }
 
-  set mode(value: PreviewMode) {
-    this.#mode.current = value;
-  }
+//   set mode(value: PreviewMode) {
+//     this.#mode.current = value;
+//   }
 
-  get isLive(): boolean {
-    return this.mode === 'live';
-  }
+//   get isLive(): boolean {
+//     return this.mode === 'live';
+//   }
 
-  /** Whether there's saved snapshot content to enter Snaps mode with. */
-  get hasSnaps(): boolean {
-    return this.#snaps.hasSnaps;
-  }
+//   /** Whether there's saved snapshot content to enter Snaps mode with. */
+//   get hasSnaps(): boolean {
+//     return this.#snaps.hasSnaps;
+//   }
 
-  /** Switch top-level mode; entering Snaps auto-selects an item if the store has none yet. */
-  setMode(mode: PreviewMode): void {
-    this.mode = mode;
-    if (mode === 'snaps' && !this.#snaps.activeSnap) this.#snaps.selectMostRecent();
-    // 'inpaint' auto-select lands with the Inpaint canvas in a later phase.
-  }
+//   /** Switch top-level mode; entering Snaps auto-selects an item if the store has none yet. */
+//   setMode(mode: PreviewMode): void {
+//     this.mode = mode;
+//     if (mode === 'snaps' && !this.#snaps.activeSnap) this.#snaps.selectMostRecent();
+//     // 'inpaint' auto-select lands with the Inpaint canvas in a later phase.
+//   }
 
-  goLive(): void {
-    this.mode = 'live';
-  }
-}
+//   goLive(): void {
+//     this.mode = 'live';
+//   }
+// }
 
 export class VoxelApp {
   readonly #client: Client;
@@ -665,8 +665,9 @@ export class VoxelApp {
   /** App-lifetime in-paint mosaics (live-painted per-channel MIP maps). */
   readonly inpaint = new Inpainter();
 
-  /** Center viewer's top-level mode (Live / Snaps / Inpaint); item selection lives on the stores. */
-  readonly view = new PreviewView(this.snaps);
+  // /** Center viewer's top-level mode (Live / Snaps / Inpaint); item selection lives on the stores. */
+  // readonly view = new PreviewView(this.snaps);
+  readonly viewMode = pref<PreviewMode>('preview:mode', 'live');
 
   #unsubs: Unsub[] = [];
   #desired: string | null = null; // latest presence (app.status / GET /app)
@@ -689,7 +690,7 @@ export class VoxelApp {
 
   /** The last instrument opened in this browser — used to default the launch picker after closing. */
   get lastInstrument(): string | null {
-    return this.#lastInstrument.current;
+    return this.#lastInstrument.get();
   }
 
   async initialize(): Promise<void> {
@@ -919,7 +920,7 @@ export class VoxelApp {
           this.#openName = null;
           this.snaps.scope = null;
           this.inpaint.scope = null;
-          this.view.goLive(); // the previous instrument's view shouldn't linger
+          this.viewMode.set('live'); // the previous instrument's view shouldn't linger
         }
         if (target === null) continue;
         let opened: Instrument | null = null;
@@ -938,7 +939,7 @@ export class VoxelApp {
         this.snaps.scope = target;
         this.inpaint.scope = target;
         opened.preview.bindInpaint(this.inpaint);
-        this.#lastInstrument.current = target;
+        this.#lastInstrument.set(target);
       }
     } finally {
       this.#reconciling = false;

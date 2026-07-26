@@ -975,7 +975,11 @@ class Instrument:
     async def set_active_profile(self, profile_id: str) -> str:
         """Select ``profile_id`` and drive hardware to it, keeping preview running across the switch."""
         async with self._lock:
-            self._ensure_not_capturing()
+            self._ensure_mode(
+                "select the active profile",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
             if profile_id == self._active_profile_id.value:
                 return profile_id  # already active — avoid preview flicker and hardware churn
             was_previewing = self._mode.value == AcquisitionMode.PREVIEW
@@ -1097,7 +1101,11 @@ class Instrument:
 
     async def save_settings(self) -> None:
         """Persist current rw props and camera ROIs into the active profile."""
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "save device settings",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         profile = self.active_profile
         settable = self._settable_devices()
         props = {**profile.props}
@@ -1127,7 +1135,11 @@ class Instrument:
         ``include`` must be a subset of :data:`PROMOTABLE_FIELDS`; fields outside it keep their current
         on-disk baseline value. Defaults to every promotable field.
         """
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "save instrument defaults",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         fields = set(include)
         if unknown := fields - PROMOTABLE_FIELDS:
             raise ProtocolError([f"cannot promote non-default fields: {sorted(unknown)}"])
@@ -1142,7 +1154,11 @@ class Instrument:
         ``include`` must be a subset of :data:`PROMOTABLE_FIELDS`. Run state (tasks, metadata) and any
         field outside ``include`` are left untouched. Defaults to every promotable field.
         """
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "restore instrument defaults",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         fields = set(include)
         if unknown := fields - PROMOTABLE_FIELDS:
             raise ProtocolError([f"cannot restore non-default fields: {sorted(unknown)}"])
@@ -1151,22 +1167,31 @@ class Instrument:
 
     async def update_signals(self, generator_uid: str, signals: Signals) -> None:
         """Apply one clocked signal config, then persist it into the active profile."""
-        self._ensure_not_capturing()
-        handle = self._hal.signal_generators.get(generator_uid)
-        if handle is None:
-            raise ProtocolError([f"Signal generator '{generator_uid}' not provisioned"])
-        await handle.load(signals)
-        await self._update_active_profile_config(
-            self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_uid: signals}})
-        )
+        async with self._lock:
+            self._ensure_mode("update synchronized outputs", AcquisitionMode.IDLE)
+            handle = self._hal.signal_generators.get(generator_uid)
+            if handle is None:
+                raise ProtocolError([f"Signal generator '{generator_uid}' not provisioned"])
+            await handle.load(signals)
+            await self._update_active_profile_config(
+                self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_uid: signals}})
+            )
 
     async def update_profile(self, patch: ProfilePatch) -> None:
         """Persist mutable fields on the active profile."""
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "update the active profile",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         await self._update_active_profile_config(self.active_profile.model_copy(update=patch.changes()))
 
     async def update_channel(self, channel_id: str, patch: ChannelPatch) -> None:
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "update a channel",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         imaging = self._bench.value.imaging
         if channel_id not in imaging.channels:
             raise ProtocolError([f"no such channel '{channel_id}'"])
@@ -1178,12 +1203,20 @@ class Instrument:
             self.active_channels[channel_id].camera.preview_colormap.update(updated.colormap)
 
     async def update_output(self, patch: WriterPatch) -> None:
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "update output settings",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         output = self._bench.value.output.model_copy(update=patch.changes())
         await self._bench.update(output=output)
 
     async def update_stencil(self, patch: StencilPatch) -> None:
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "update the stencil",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         stencil = self._bench.value.stencil.model_copy(update=patch.changes())
         await self._bench.update(stencil=stencil)
 
@@ -1194,7 +1227,11 @@ class Instrument:
         it rather than a static ``Patch`` model: unknown keys and bad values are rejected as a
         :class:`ProtocolError`.
         """
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "update metadata",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         state = self._bench.value
         merged = {**state.metadata, **fields}
         try:
@@ -1210,7 +1247,11 @@ class Instrument:
         base↔subclass) are kept; if they don't validate, ``metadata`` falls back to the new schema's
         defaults so the switch always succeeds.
         """
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "change the metadata schema",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         cls = resolve_metadata_class(schema) if isinstance(schema, str) else schema
         carried = {k: v for k, v in self._bench.value.metadata.items() if k in cls.model_fields}
         try:
@@ -1220,12 +1261,20 @@ class Instrument:
         await self._bench.update(metadata_cls=cls, metadata=metadata)
 
     async def set_traversal(self, order: TileOrder) -> None:
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "change the traversal order",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         await self._bench.update(traversal=order)
 
     async def add_tasks(self, xy: Sequence[tuple[float, float]], *, profile_ids: Sequence[str] | None = None) -> None:
         """Add a task at each (x, y), defaulting to the active profile."""
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "add tasks",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         state = self._bench.value
         profiles = list(profile_ids) if profile_ids is not None else [self._active_profile_id.value]
         if not profiles:
@@ -1240,7 +1289,11 @@ class Instrument:
 
     async def remove_tasks(self, task_ids: Sequence[str]) -> None:
         """Delete one or more tasks in a single bench update."""
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "remove tasks",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         tasks = self._bench.value.tasks
         if unknown := [tid for tid in task_ids if tid not in tasks]:
             raise ProtocolError([f"no such task '{tid}'" for tid in unknown])
@@ -1249,7 +1302,11 @@ class Instrument:
 
     async def update_tasks(self, patches: Mapping[str, TaskPatch]) -> None:
         """Apply a per-task patch to one or more tasks in a single bench update."""
-        self._ensure_not_capturing()
+        self._ensure_mode(
+            "update tasks",
+            AcquisitionMode.IDLE,
+            AcquisitionMode.PREVIEW,
+        )
         tasks = self._bench.value.tasks
         if unknown := [tid for tid in patches if tid not in tasks]:
             raise ProtocolError([f"no such task '{tid}'" for tid in unknown])
@@ -1558,9 +1615,12 @@ class Instrument:
             for pid in tasks[tile.task_id].profile_ids
         ]
 
-    def _ensure_not_capturing(self) -> None:
-        if self._mode.value == AcquisitionMode.CAPTURE:
-            raise RuntimeError("Cannot mutate instrument state while acquisition is running")
+    def _ensure_mode(self, operation: str, *allowed: AcquisitionMode) -> None:
+        current = self._mode.value
+        if current in allowed:
+            return
+        expected = " or ".join(mode.value for mode in allowed)
+        raise RuntimeError(f"Unable to {operation}: requires mode {expected}; current mode is {current.value}")
 
     def _settable_devices(self) -> set[str]:
         return self._bench.value.imaging.get_profile_settable_devices(self._active_profile_id.value, self._hal.config)
