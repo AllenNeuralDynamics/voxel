@@ -114,5 +114,45 @@ class RigConfig(BaseModel, frozen=True):
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     nodes: dict[str, NodeConfig] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _validate_device_graph(self) -> Self:
+        """Require globally unique UIDs and keep injected object references within one process."""
+        scopes = [("local", self.devices), *((f"node:{node_id}", node.devices) for node_id, node in self.nodes.items())]
+        locations: dict[str, list[str]] = {}
+        for scope, devices in scopes:
+            for uid in devices:
+                locations.setdefault(uid, []).append(scope)
+
+        errors = [
+            f"Device UID '{uid}' is duplicated across scopes: {', '.join(device_scopes)}"
+            for uid, device_scopes in locations.items()
+            if len(device_scopes) > 1
+        ]
+
+        unique_owner = {uid: device_scopes[0] for uid, device_scopes in locations.items() if len(device_scopes) == 1}
+
+        def references(value: Any) -> set[str]:
+            if isinstance(value, str):
+                return {value} if value in unique_owner else set()
+            if isinstance(value, list):
+                return {reference for item in value for reference in references(item)}
+            if isinstance(value, dict):
+                return {reference for item in value.values() for reference in references(item)}
+            return set()
+
+        for scope, devices in scopes:
+            for uid, config in devices.items():
+                for dependency in references(config.init) - {uid}:
+                    owner = unique_owner[dependency]
+                    if owner != scope:
+                        errors.append(
+                            f"Device '{uid}' in scope '{scope}' references device '{dependency}' in scope '{owner}'; "
+                            "constructor-injected device dependencies must be on the same node"
+                        )
+
+        if errors:
+            raise ValueError("\n".join(errors))
+        return self
+
 
 __all__ = ["DeviceConfig", "NodeConfig", "NodeKind", "RigConfig"]

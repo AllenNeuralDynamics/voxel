@@ -35,7 +35,7 @@ class BuildError(BaseModel):
     """Error information for a failed obj build."""
 
     uid: str
-    error_type: Literal["import", "instantiation", "defaults", "dependency", "circular"]
+    error_type: Literal["import", "instantiation", "defaults", "dependency", "circular", "internal"]
     message: str
     traceback: str | None = None
 
@@ -57,7 +57,14 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildO
         Tuple of (successful_objects, build_errors)
     """
     built: dict[str, T] = {}
-    errors: dict[str, BuildError] = {}
+    errors = {
+        uid: BuildError(
+            uid=uid,
+            error_type="circular",
+            message=f"Circular dependency detected for obj '{uid}'",
+        )
+        for uid in _find_cyclic_uids(cfgs)
+    }
     building: set[str] = set()
 
     def _resolve_references(value: Any) -> Any:
@@ -250,6 +257,39 @@ def _extract_deps(cfgs: BuildGroupSpec, uid: str) -> set[str]:
     return deps
 
 
+def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
+    """Return exactly the UIDs participating in dependency cycles.
+
+    Devices merely downstream of a cycle are excluded; the builders report
+    those as dependency failures instead.
+    """
+    state: dict[str, Literal["visiting", "visited"]] = {}
+    stack: list[str] = []
+    stack_index: dict[str, int] = {}
+    cyclic: set[str] = set()
+
+    def visit(uid: str) -> None:
+        state[uid] = "visiting"
+        stack_index[uid] = len(stack)
+        stack.append(uid)
+        for dependency in _extract_deps(cfgs, uid):
+            match state.get(dependency):
+                case None:
+                    visit(dependency)
+                case "visiting":
+                    cyclic.update(stack[stack_index[dependency] :])
+                case "visited":
+                    pass
+        stack.pop()
+        stack_index.pop(uid)
+        state[uid] = "visited"
+
+    for uid in cfgs:
+        if uid not in state:
+            visit(uid)
+    return cyclic
+
+
 def _topological_layers(cfgs: BuildGroupSpec) -> list[list[list[str]]]:
     """Sort devices into dependency layers, grouped by target within each layer.
 
@@ -411,10 +451,18 @@ async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: type[T] = objec
     if not cfgs:
         return {}, {}
 
-    _prewarm_parent_modules(cfgs)
-    layers = _topological_layers(cfgs)
+    cyclic = _find_cyclic_uids(cfgs)
+    errors = {
+        uid: BuildError(
+            uid=uid,
+            error_type="circular",
+            message=f"Circular dependency detected for obj '{uid}'",
+        )
+        for uid in cyclic
+    }
+    buildable = {uid: cfg for uid, cfg in cfgs.items() if uid not in cyclic}
+    layers = _topological_layers(buildable)
     built: dict[str, T] = {}
-    errors: dict[str, BuildError] = {}
 
     for layer in layers:
         # Skip devices whose dependencies failed
@@ -438,15 +486,28 @@ async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: type[T] = objec
         if not valid_groups:
             continue
 
+        valid_configs = {uid: cfgs[uid] for group in valid_groups for uid in group}
+        _prewarm_parent_modules(valid_configs)
+
         # Build groups concurrently, each group sequential in its own thread
         group_results = await asyncio.gather(
             *(asyncio.to_thread(_build_group_sync, group, cfgs, built, base_cls) for group in valid_groups),
             return_exceptions=True,
         )
 
-        for group_result in group_results:
+        for group, group_result in zip(valid_groups, group_results, strict=True):
             if isinstance(group_result, BaseException):
                 logger.error("Unexpected error during device build: %s", group_result)
+                formatted_traceback = "".join(
+                    traceback.format_exception(type(group_result), group_result, group_result.__traceback__)
+                )
+                for uid in group:
+                    errors[uid] = BuildError(
+                        uid=uid,
+                        error_type="internal",
+                        message=f"Unexpected error during device build: {group_result}",
+                        traceback=formatted_traceback,
+                    )
                 continue
             for uid, result in group_result:
                 if isinstance(result, BuildError):

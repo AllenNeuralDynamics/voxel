@@ -70,3 +70,56 @@ class TestRigConfig:
         assert "stage" in cfg.devices
         assert cfg.nodes["cam_host"].kind == "remote"
         assert cfg.nodes["cam_host"].address == "tcp://10.0.0.2:5555"
+
+    def test_device_uids_must_be_unique_across_nodes(self):
+        with pytest.raises(ValidationError, match="Device UID 'camera' is duplicated"):
+            RigConfig.model_validate(
+                {
+                    "devices": {"camera": {"target": "some.Camera"}},
+                    "nodes": {
+                        "remote": {
+                            "kind": "subprocess",
+                            "devices": {"camera": {"target": "some.OtherCamera"}},
+                        }
+                    },
+                }
+            )
+
+    def test_same_node_device_reference_is_valid(self):
+        cfg = RigConfig.model_validate(
+            {
+                "nodes": {
+                    "motion": {
+                        "kind": "subprocess",
+                        "devices": {
+                            "hub": {"target": "some.Hub"},
+                            "axis": {"target": "some.Axis", "init": {"hub": "hub"}},
+                        },
+                    }
+                }
+            }
+        )
+
+        assert cfg.nodes["motion"].devices["axis"].init["hub"] == "hub"
+
+    def test_cross_node_device_reference_is_rejected(self):
+        with pytest.raises(ValidationError, match="constructor-injected device dependencies must be on the same node"):
+            RigConfig.model_validate(
+                {
+                    "nodes": {
+                        "motion": {
+                            "kind": "subprocess",
+                            "devices": {"hub": {"target": "some.Hub"}},
+                        },
+                        "camera": {
+                            "kind": "subprocess",
+                            "devices": {
+                                "camera": {
+                                    "target": "some.Camera",
+                                    "init": {"trigger_source": {"devices": ["hub"]}},
+                                }
+                            },
+                        },
+                    }
+                }
+            )

@@ -4,8 +4,8 @@
 entry points build on it:
 
 - :func:`run_node` — the public CLI for manually-run remote daemons. Backs the ``rigup-node``
-  console script (exported as ``rigup.node.run``) and ``vxl-node`` (``vxl.node:main``, which first
-  loads ambient env). A standalone process owns its terminal, so it configures logging.
+  console script. Voxel's ``vxl node`` command wraps the programmatic launcher to load its ambient
+  environment first. A standalone process owns its terminal, so it configures logging.
 - ``python -m rigup.node`` (see ``__main__``) — invoked by the :class:`SubprocessNode` the
   orchestrator spawns. A subprocess node shares the parent's terminal, so it configures no logging
   and calls :func:`_run` directly.
