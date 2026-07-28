@@ -293,28 +293,26 @@
         <!-- Catalog -->
         <aside
           class={cn(
-            'shrink-0 overflow-hidden border-border bg-surface transition-[width,border-color] duration-200 ease-out',
-            sidebarOpen ? 'w-56 border-r' : 'w-0 border-transparent'
+            'shrink-0 overflow-hidden border-r bg-surface transition-[width,border-color] duration-200 ease-out',
+            sidebarOpen ? 'w-56 border-border' : 'w-0 border-transparent'
           )}
           aria-hidden={!sidebarOpen}
           inert={!sidebarOpen}
         >
           <div class="flex h-full w-56 flex-col overflow-hidden">
-            <div class="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-              <span class="min-w-0 flex-1 text-sm tracking-wide text-fg-faint uppercase">Catalog</span>
-              <button
-                class="flex size-7 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-                title="Collapse catalog"
-                aria-label="Collapse catalog"
-                onclick={() => (sidebarOpen = false)}
-              >
-                <PanelLeft width="16" height="16" />
-              </button>
-            </div>
-
-            <div class="min-h-0 flex-1 overflow-y-auto py-2">
+            <div class="min-h-0 flex-1 overflow-y-auto">
               <section>
-                <div class="mb-1 px-3 text-sm tracking-wide text-fg-faint uppercase">Instruments</div>
+                <div class="flex h-12 shrink-0 items-center gap-2 px-3">
+                  <span class="min-w-0 flex-1 text-sm tracking-wide text-fg-faint uppercase">Instruments</span>
+                  <button
+                    class="flex size-7 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+                    title="Collapse catalog"
+                    aria-label="Collapse catalog"
+                    onclick={() => (sidebarOpen = false)}
+                  >
+                    <PanelLeft width="16" height="16" />
+                  </button>
+                </div>
                 <div class="flex flex-col gap-0.5 px-2">
                   {#each instrumentEntries as [name, info] (name)}
                     <button
@@ -460,7 +458,7 @@
                               >
                             {/if}
                             {#if violation.code}
-                              <span class="font-mono text-sm text-fg-faint">[{violation.code}]</span>
+                              <span class="font-mono text-sm text-fg-muted">[{violation.code}]</span>
                             {/if}
                           </div>
                           <p class="text-base text-danger">{violation.msg}</p>

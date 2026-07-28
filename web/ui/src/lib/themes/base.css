@@ -223,8 +223,8 @@
   --fg-muted: oklch(0.705 0.015 286.067);
   /* zed: text.muted — zinc-400 */
 
-  --fg-faint: oklch(0.552 0.016 285.938);
-  /* zed: text.placeholder — zinc-500 */
+  --fg-faint: oklch(0.62 0.015 286);
+  /* zed: text.placeholder — lifted above zinc-500 for better dark-mode legibility */
 
   --fg-accent: oklch(0.623 0.214 259.815);
   /* zed: text.accent — blue-500 */
@@ -237,7 +237,7 @@
   --border-variant: oklch(1 0 0 / 18%);
   /* white/18 — a touch subtler than border, but close enough that inputs stay defined (was white/14) */
 
-  --border-faint: oklch(0.552 0.016 285.938 / 0.7);
+  --border-faint: oklch(0.62 0.015 286 / 0.6);
   /* faint guide line — grid plane outlines, subtle rules */
 
   --border-focused: oklch(0.488 0.243 264.376);

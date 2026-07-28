@@ -26,14 +26,14 @@
 
   --fg: #f0f6fc; /* zed: text */
   --fg-muted: #9198a1; /* zed: icon.muted, text.placeholder */
-  --fg-faint: #656c76; /* zed: text.disabled */
+  --fg-faint: #747b85; /* zed: text.disabled, lifted for dark-mode legibility */
   --fg-accent: #4493f8; /* zed: text.accent */
 
   /* ── Borders ───────────────────────────────────────────────────────── */
 
   --border: #414850; /* zed: border (was #3d444d) */
   --border-variant: #414850b3; /* zed: border.variant (70% alpha; was #3d444db3) */
-  --border-faint: #656c76b3; /* faint guide line — grid outlines, subtle rules */
+  --border-faint: #747b8599; /* faint guide line — grid outlines, subtle rules */
   --border-focused: #1f6feb; /* zed: border.focused */
   --border-selected: #1f6feb; /* zed: border.selected */
   --border-disabled: #3d444d66; /* zed: border.disabled (40% alpha) */
