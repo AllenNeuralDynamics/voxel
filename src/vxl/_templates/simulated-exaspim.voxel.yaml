@@ -26,10 +26,17 @@ hal:
       target: vxl.axes.simulated.SimulatedDiscreteAxis
       init:
         slots: {"0": "BP525", "1": "BP600", "2": "BP700"}
+    excitation_side_axis:
+      target: vxl.axes.simulated.SimulatedContinuousAxis
+      init: {lower_limit: 0, upper_limit: 100, has_ttl_stepper: false}
     excitation_side_selector:
-      target: vxl.axes.simulated.SimulatedDiscreteAxis
+      target: vxl.axes.discrete.MappedDiscreteAxis
       init:
-        slots: {"0": "left", "1": "right"}
+        axis: excitation_side_axis
+        tolerance: 1
+        slots:
+          "0": {label: "left", position: 0}
+          "1": {label: "right", position: 100}
     laser_488:
       target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
       init: {wavelength: 488, aotf: aotf_1, aotf_channel: 2, aotf_frequency_mhz: 98.2}

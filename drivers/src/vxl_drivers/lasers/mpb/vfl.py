@@ -19,7 +19,6 @@ References:
     https://github.com/ograsdijk/MPBC-VYFA-SF
 """
 
-import threading
 from enum import StrEnum
 
 from rigup.device.props import enumerated, numeric
@@ -112,7 +111,6 @@ class MpbVfl(Laser):
         self._max_power_mw = max_power_mw
         self._max_current_ma = max_current_ma
         self._t = SerialTransport(port, baud=baud)
-        self._lock = threading.Lock()
 
         super().__init__(uid=uid, wavelength=wavelength)
 
@@ -148,10 +146,10 @@ class MpbVfl(Laser):
         fault (``F >``) prompt. Raises :class:`MpbCommandError` if the device
         responds with a recognized error marker.
         """
-        with self._lock:
-            self._t.ser.reset_input_buffer()
-            self._t.write(f"{msg}\r".encode("ascii"))
-            line = self._t.readline() or b""
+        with self._t.transaction() as port:
+            port.reset_input_buffer()
+            port.write(f"{msg}\r".encode("ascii"))
+            line = port.readline() or b""
 
         text = line.decode("ascii", errors="replace").strip()
         for prompt in _PROMPTS:

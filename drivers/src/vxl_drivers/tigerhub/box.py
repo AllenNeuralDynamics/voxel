@@ -1,5 +1,4 @@
 import contextlib
-import threading
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -111,7 +110,6 @@ class TigerBox:
         self._scan_session: ScanSession | None = None
         self._step_shoot_session: StepShootState | None = None
         self._array_scan_card_addr = None
-        self._comm_lock = threading.Lock()
         if not self._enable_tiger_mode():
             raise RuntimeError("Failed to enable Tiger mode")
         self._cached_joystick_mapping = self._fetch_joystick_mapping()
@@ -123,9 +121,9 @@ class TigerBox:
 
     def _t_once(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
         """Send a command and read+parse the reply."""
-        with self._comm_lock:
-            self.t.write(payload)
-            raw = self.t.readline() or b""
+        with self.t.transaction() as port:
+            port.write(payload)
+            raw = port.readline() or b""
         reply, mode = asi_parse(raw, requested_axes=requested_axes)
         self._last_mode = mode
         return reply
