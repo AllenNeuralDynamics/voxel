@@ -11,7 +11,7 @@ from typing import Any
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from rigup import DeviceHandle, PropertyModel, PropResults
-from vxl.instrument import HAL
+from vxl.instrument.hal import HAL
 from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)

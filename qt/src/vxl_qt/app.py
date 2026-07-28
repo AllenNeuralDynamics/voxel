@@ -15,10 +15,8 @@ bind to the instrument's reactive primitives (``state``, ``active_profile_id``) 
 the :class:`LaunchWindow`.
 """
 
-import argparse
 import asyncio
 import logging
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -28,8 +26,9 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QEnterEvent, QIcon, QMouseEvent, QPalette
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 
-from vxl.app import InstrumentInfo, VoxelApp
+from vxl.app import VoxelApp
 from vxl.instrument import Instrument
+from vxl.instrument.bench import InstrumentInspection
 from vxl.system import load_voxel_env
 from vxl_qt.devices import DevicesStore
 from vxl_qt.devices.stage import StageStore
@@ -359,7 +358,7 @@ class LaunchWindow(QWidget):
             for name in discovered.templates:
                 self._templates.add(self._template_row(name))
 
-    def _row(self, name: str, info: InstrumentInfo) -> QWidget:
+    def _row(self, name: str, info: InstrumentInspection) -> QWidget:
         launch = Button("Launch")
         launch.setEnabled(info.ok)
         launch.clicked.connect(lambda: self._launch(name))
@@ -452,9 +451,9 @@ def create_qapp() -> QApplication:
     return qapp
 
 
-def run_app(_config_path: Path | None = None) -> int:
+def run_app(_config_path: Path | None = None, *, log_level: int = logging.INFO) -> int:
     """Run the Voxel application with the qasync event loop. Returns the process exit code."""
-    configure_logging(logging.INFO)
+    configure_logging(log_level)
     qapp = create_qapp()
     loop = qasync.QEventLoop(qapp)
     asyncio.set_event_loop(loop)
@@ -472,22 +471,7 @@ def run_app(_config_path: Path | None = None) -> int:
     return 0
 
 
-def main() -> None:
-    """CLI entry point."""
+def launch(config: Path | None = None, *, verbose: bool = False) -> int:
+    """Run the Qt application after loading Voxel's ambient environment."""
     load_voxel_env()  # ambient env from ~/.voxel/.env before anything reads it (System, S3 clients)
-    parser = argparse.ArgumentParser(
-        description="Voxel - Microscope control application",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("config", nargs="?", type=Path, help="Path to rig configuration YAML file")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
-    args = parser.parse_args()
-
-    if args.verbose:
-        configure_logging(logging.DEBUG)
-
-    sys.exit(run_app(args.config))
-
-
-if __name__ == "__main__":
-    main()
+    return run_app(config, log_level=logging.DEBUG if verbose else logging.INFO)

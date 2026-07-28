@@ -29,7 +29,6 @@ self.addEventListener("fetch", (event) => {
 	if (
 		url.pathname.startsWith("/api") ||
 		url.pathname.startsWith("/ws") ||
-		url.pathname.startsWith("/config") ||
 		url.pathname.startsWith("/devices") ||
 		url.pathname.startsWith("/profiles") ||
 		url.pathname.startsWith("/roots") ||

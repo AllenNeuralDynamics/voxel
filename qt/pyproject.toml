@@ -14,10 +14,6 @@ dependencies = [
     "qtawesome>=1.4.0",
 ]
 
-[project.scripts]
-vxl-qt = "vxl_qt.app:main"
-voxel-qt = "vxl_qt.app:main"
-
 [tool.uv.sources]
 vxl = { workspace = true }
 

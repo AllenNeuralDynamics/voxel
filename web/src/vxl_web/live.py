@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from rigup import PropResults
 from vxl.app import VoxelApp
 from vxl.camera import PreviewLevels, PreviewViewport
-from vxl.instrument import AcquisitionMode, Instrument, InstrumentState, TaskTile
+from vxl.instrument import AcquisitionMode, Instrument, InstrumentState
+from vxl.instrument.core import TaskTile
 
 from .wire import ClientId, MsgBus
 
@@ -41,6 +42,7 @@ class InstrumentStatus(BaseModel):
     active_profile_id: str
     preview_epoch: int
     fov: tuple[float, float] | None
+    routing_targets: dict[str, str]
     state: InstrumentState
     task_tiles: list[TaskTile]
 
@@ -81,6 +83,7 @@ class InstrumentFeed:
             i.preview_epoch.subscribe(lambda _e: self.broadcast_status()),
             i.task_tiles.subscribe(lambda _t: self.broadcast_status()),
             i.fov.subscribe(lambda _f: self.broadcast_status()),
+            i.routing_targets.subscribe(lambda _r: self.broadcast_status()),
             i.progress.subscribe(lambda p: bus.broadcast("acquisition.progress", p)),
             i.default.subscribe(lambda _d: self.broadcast_default()),
             i.frames.subscribe(self._on_frame),
@@ -118,6 +121,7 @@ class InstrumentFeed:
                 active_profile_id=i.active_profile_id.value,
                 preview_epoch=i.preview_epoch.value,
                 fov=i.fov.cache,
+                routing_targets=i.routing_targets.value,
                 state=i.state.value,
                 task_tiles=i.task_tiles.value,
             ),

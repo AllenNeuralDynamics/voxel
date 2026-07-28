@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Instrument } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
 
   import DeviceBrowser from './DeviceBrowser.svelte';
 
@@ -20,15 +19,6 @@
   const loaded = $derived(generator?.loaded);
   const engineState = $derived(generator?.state);
 </script>
-
-<!-- Header -->
-<div class="mb-6 flex items-center justify-between">
-  <h2 class="text-2xl text-fg">{sanitizeString(deviceId)}</h2>
-  <span
-    class={cn('h-2 w-2 rounded-full', generator?.connected ? 'bg-success' : 'bg-fg-muted/30')}
-    title={generator?.connected ? 'Connected' : 'Disconnected'}
-  ></span>
-</div>
 
 <div class="max-w-xl space-y-6">
   <!-- Engine state -->

@@ -1,0 +1,31 @@
+[project]
+name = "vxl-cli"
+version = "0.1.0"
+description = "Unified command-line interface for Voxel"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "vxl",
+]
+
+[project.optional-dependencies]
+web = ["vxl-web"]
+qt = ["vxl-qt"]
+all = ["vxl-web", "vxl-qt"]
+
+[project.scripts]
+vxl = "vxl_cli:main"
+voxel = "vxl_cli:main"
+
+[tool.uv.sources]
+vxl = { workspace = true }
+vxl-web = { workspace = true }
+vxl-qt = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

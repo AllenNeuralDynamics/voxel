@@ -24,7 +24,7 @@ The frontend is built once, then served by the backend:
 
 ```bash
 cd web/ui && bun install && bun run build && cd ../..
-uv run vxl
+uv run vxl serve
 ```
 
 Open http://localhost:8000 and launch the `simulated-local` template to explore the full interface with no hardware attached.
@@ -32,7 +32,7 @@ Open http://localhost:8000 and launch the `simulated-local` template to explore 
 ### Desktop interface (PySide6)
 
 ```bash
-uv run vxl-qt                 # optionally: uv run vxl-qt config.yaml
+uv run vxl qt                 # optionally: uv run vxl qt config.yaml
 ```
 
 ## Development
@@ -78,6 +78,7 @@ Voxel is a [uv](https://docs.astral.sh/uv/) workspace. The `vxl` package at the 
 
 | Package | Description |
 |---------|-------------|
+| [vxl-cli](cli/) | Unified `vxl` command with optional web and Qt applications |
 | [vxl](src/vxl/) | Microscope orchestration, instrument/acquisition model, and configuration (root package) |
 | [rigup](rigup/) | Distributed device control framework |
 | [vxl-drivers](drivers/) | Hardware drivers (ASI Tiger stages, Vieworks/Hamamatsu/PCO/Ximea cameras, lasers, AA Opto AOTFs) |

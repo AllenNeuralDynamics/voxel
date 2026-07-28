@@ -8,9 +8,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
-
-from vxl.instrument import Instrument, InstrumentConfig, InstrumentState
+from vxl.errors import Loaded
+from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection, InstrumentState
 from vxl.system import Remote, System
 from vxlib import Cell, Readable, load_yaml, save_yaml
 
@@ -18,6 +17,25 @@ logger = logging.getLogger(__name__)
 
 
 TEMPLATES_DIR = Path(__file__).parent / "_templates"
+
+
+def _discover_templates(root: Path) -> dict[str, InstrumentConfig]:
+    """Return valid templates while reporting every structured failure."""
+    found: dict[str, InstrumentConfig] = {}
+    if not root.is_dir():
+        return found
+    for path in sorted(root.glob("*.voxel.yaml")):
+        name = path.name.removesuffix(".voxel.yaml")
+        checked = InstrumentBench.check_config(path)
+        if checked.ok and isinstance(checked.config, Loaded):
+            found[name] = checked.config.value
+            continue
+        logger.warning(
+            "Skipping config '%s.voxel.yaml': %s",
+            name,
+            "; ".join(violation.msg for violation in checked.violations),
+        )
+    return found
 
 
 class PresetLibrary:
@@ -46,7 +64,7 @@ class PresetLibrary:
 
     def load(self, name: str) -> InstrumentState:
         """Return the named template. The instance is SHARED with the cache — do not mutate it in place;
-        pass it to ``Bench.set``/``update`` (which builds a fresh validated graph)."""
+        pass it to ``InstrumentBench.set``/``update`` (which builds a fresh validated graph)."""
         if name not in self.templates:
             raise FileNotFoundError(f"Template '{name}' not found.")
         return self.templates[name]
@@ -57,52 +75,11 @@ class PresetLibrary:
         self.reload()
 
 
-class InstrumentInfo(BaseModel):
-    """Fault-tolerant read of an on-disk instrument: its ``config.yaml`` (parsed or per-field errors)
-    plus the live ``bench.json`` if present. Used to list instruments without opening hardware."""
-
-    config: InstrumentConfig | dict[str, str]
-    bench: InstrumentState | dict[str, str] | None = None
-
-    @property
-    def ok(self) -> bool:
-        return isinstance(self.config, InstrumentConfig) and not isinstance(self.bench, dict)
-
-    @staticmethod
-    def _load[T: BaseModel](path: Path, model: type[T]) -> T | dict[str, str]:
-        """Parse ``path`` into ``model``, or return ``{loc: message}`` on failure.
-
-        Field errors are keyed by their dotted location; model-level errors (empty ``loc``) by
-        ``"<model>"``; file-level errors (the ``except Exception`` arm) by ``""``.
-        """
-        try:
-            return load_yaml(path, model)
-        except ValidationError as e:
-            return {(".".join(str(p) for p in err["loc"]) or "<model>"): err["msg"] for err in e.errors()}
-        except Exception as e:
-            return {"": str(e)}
-
-    @classmethod
-    def read(cls, directory: Path | str) -> "InstrumentInfo":
-        directory = Path(directory)
-        bench = directory / "bench.json"
-        return cls(
-            config=cls._load(directory / "config.yaml", InstrumentConfig),
-            bench=cls._load(bench, InstrumentState) if bench.exists() else None,
-        )
-
-    @classmethod
-    def discover(cls, root: Path | str) -> dict[str, "InstrumentInfo"]:
-        if not Path(root).is_dir():
-            return {}
-        return {d.stem: cls.read(d) for d in sorted(Path(root).iterdir()) if d.is_dir() and d.suffix == ".voxel"}
-
-
 @dataclass(frozen=True)
 class Discovered:
     """What the launcher can open: existing instruments (fault-tolerant) and shipped templates (valid)."""
 
-    instruments: dict[str, InstrumentInfo]
+    instruments: dict[str, InstrumentInspection]
     templates: dict[str, InstrumentConfig]
 
 
@@ -143,9 +120,18 @@ class VoxelApp:
 
     def discover(self) -> Discovered:
         """Existing instruments (under ``instruments_dir``) + shipped templates. No hardware."""
+        instruments = (
+            {
+                directory.stem: InstrumentBench.check(directory)
+                for directory in sorted(self.instruments_dir.glob("*.voxel"))
+                if directory.is_dir()
+            }
+            if self.instruments_dir.is_dir()
+            else {}
+        )
         return Discovered(
-            instruments=InstrumentInfo.discover(self.instruments_dir),
-            templates=InstrumentConfig.discover(TEMPLATES_DIR),
+            instruments=instruments,
+            templates=_discover_templates(TEMPLATES_DIR),
         )
 
     async def launch(self, name: str) -> Instrument:
@@ -155,7 +141,7 @@ class VoxelApp:
         directory = self.instruments_dir / f"{name}.voxel"
         if not directory.is_dir():
             raise FileNotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
-        instrument = Instrument(directory)
+        instrument = Instrument.from_path(directory)
         await instrument.open()
         await self._active.set(instrument)
         return instrument
@@ -168,18 +154,17 @@ class VoxelApp:
         """
         if (active := self._active.value) is not None:
             raise RuntimeError(f"'{active.path.stem}' is active; close it first")
-        if (config := InstrumentConfig.discover(TEMPLATES_DIR).get(template)) is None:
+        if (config := _discover_templates(TEMPLATES_DIR).get(template)) is None:
             raise KeyError(f"No template '{template}'")
         target = name or template
         config.instantiate(target, self.instruments_dir)
         return await self.launch(target)
 
-    def reset_bench(self, name: str, label: str) -> Path:
-        """Archive ``<name>.voxel/bench.json`` to ``bench.<label>.json`` so the next launch repopulates a
-        fresh bench from ``config.default``.
+    def archive_bench(self, name: str) -> Path:
+        """Archive ``bench.json`` under the next available backup name.
 
-        ``label`` is lowercased with spaces replaced by dashes. Raises if the instrument is active, missing,
-        has no ``bench.json``, or an archive with that label already exists.
+        The next launch uses ``config.default`` because no live bench remains. Raises if the instrument is
+        active, missing, or has no ``bench.json``.
         """
         if (active := self._active.value) is not None and active.path.stem == name:
             raise RuntimeError(f"'{name}' is active; close it first")
@@ -188,13 +173,13 @@ class VoxelApp:
             raise FileNotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
         bench = directory / "bench.json"
         if not bench.exists():
-            raise FileNotFoundError(f"No bench.json to reset for '{name}'")
-        slug = label.strip().lower().replace(" ", "-")
-        if not slug:
-            raise ValueError("label must not be empty")
-        archive = directory / f"bench.{slug}.json"
-        if archive.exists():
-            raise FileExistsError(f"Archive '{archive.name}' already exists")
+            raise FileNotFoundError(f"No bench.json to archive for '{name}'")
+
+        archive = directory / "bench.bak.json"
+        index = 2
+        while archive.exists():
+            archive = directory / f"bench.bak.{index}.json"
+            index += 1
         bench.rename(archive)
         return archive
 

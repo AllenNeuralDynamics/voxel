@@ -26,6 +26,10 @@ hal:
       target: vxl.axes.simulated.SimulatedDiscreteAxis
       init:
         slots: {"0": "BP525", "1": "BP600", "2": "BP700"}
+    excitation_side_selector:
+      target: vxl.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": "left", "1": "right"}
     laser_488:
       target: &aotf_laser_target vxl.laser.simulated.SimulatedAOTFShutteredLaser
       init: {wavelength: 488, aotf: aotf_1, aotf_channel: 2, aotf_frequency_mhz: 98.2}
@@ -76,12 +80,33 @@ hal:
   illumination:
     laser_488:
       aux_devices: [left_focus, right_focus]
+      routing:
+        excitation_side: [left, right]
     laser_561:
       aux_devices: [left_focus, right_focus]
+      routing:
+        excitation_side: [left, right]
     laser_640:
       aux_devices: [left_focus, right_focus]
+      routing:
+        excitation_side: [left, right]
+
+  optical_routing:
+    excitation_side:
+      left:
+        excitation_side_selector: left
+      right:
+        excitation_side_selector: right
 
 default:
+  routing:
+    excitation_side:
+      type: split
+      axis: x
+      threshold: 20000
+      lower: left
+      upper: right
+
   imaging:
     channels:
       gfp:

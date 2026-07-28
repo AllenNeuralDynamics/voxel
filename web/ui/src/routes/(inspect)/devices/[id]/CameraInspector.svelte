@@ -3,7 +3,7 @@
   import type { Instrument } from '$lib/model';
   import { Enumerated, PropInput } from '$lib/prop';
   import { SpinBox } from '$lib/prop/numeric';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn } from '$lib/utils';
 
   import DeviceBrowser from './DeviceBrowser.svelte';
 
@@ -82,15 +82,6 @@
 </script>
 
 <section class="space-y-5">
-  <!-- Header -->
-  <div class="flex items-center justify-between">
-    <h2 class="text-2xl text-fg">{sanitizeString(deviceId)}</h2>
-    <span
-      class={cn('h-2 w-2 rounded-full', camera?.connected ? 'bg-success' : 'bg-fg-muted/30')}
-      title={camera?.connected ? 'Connected' : 'Disconnected'}
-    ></span>
-  </div>
-
   {#if camera?.connected}
     <div class="flex flex-wrap justify-between gap-8">
       <!-- LEFT COLUMN: controls, sensor ROI, dynamic rw, commands -->

@@ -10,6 +10,8 @@ from vxlib.quantity import Angle, Frequency, NormalizedRange, Time, Voltage, Vol
 
 
 class BaseWaveform(BaseModel, ABC):
+    model_config = ConfigDict(extra="forbid")
+
     voltage: VoltageRange
     window: NormalizedRange
     rest_voltage: Voltage = Voltage(0.0)
@@ -204,6 +206,8 @@ class _DerivedBase(BaseModel, ABC):
     sibling waveforms and applying the operation to its resolved samples.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["derived"] = "derived"
     source: str
 
@@ -306,6 +310,8 @@ def validate_waveform(data: dict) -> Waveform:
 
 
 class TransitionPattern(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["transitions"] = "transitions"
     start: bool = False
     rest: bool = False
@@ -357,7 +363,7 @@ class WaveformResolutionError(ValueError):
 
 
 class Signals(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     sample_rate: Frequency = Field(..., gt=0)
     duration: Time = Field(..., gt=0)

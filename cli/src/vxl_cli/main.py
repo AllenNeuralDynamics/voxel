@@ -1,0 +1,95 @@
+"""Argument parsing and lazy dispatch for the unified ``vxl`` command."""
+
+import argparse
+import sys
+from collections.abc import Sequence
+from importlib import import_module, util
+from ipaddress import IPv4Address
+from pathlib import Path
+from typing import TextIO
+
+from .check import run_check
+from .node import serve as serve_node
+
+_COMMANDS = {"check", "serve", "web", "qt", "node"}
+_DEFAULT_HOST = str(IPv4Address(0))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="vxl", description="Voxel microscope control")
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    check = commands.add_parser("check", help="statically validate instrument configs")
+    check.add_argument("paths", nargs="*", type=Path, help="config files, instrument directories, or collections")
+    check.add_argument("--json", action="store_true", dest="as_json", help="emit machine-readable JSON")
+
+    serve = commands.add_parser("serve", aliases=["web"], help="launch the web application")
+    serve.add_argument("--host", default=_DEFAULT_HOST, help="bind address (default: all interfaces)")
+    serve.add_argument("--port", type=int, default=8000, help="web server port")
+    serve.add_argument("--debug", action="store_true", help="enable debug logging")
+
+    qt = commands.add_parser("qt", help="launch the Qt application")
+    qt.add_argument("config", nargs="?", type=Path, help="instrument configuration path")
+    qt.add_argument("-v", "--verbose", action="store_true", help="enable verbose logging")
+
+    node = commands.add_parser("node", help="run a remote device node")
+    node.add_argument("node_id", help="node identifier from the instrument config")
+    node.add_argument("--address", "-a", required=True, help="ZMQ bind address")
+    node.add_argument("--debug", action="store_true", help="enable debug logging")
+    return parser
+
+
+def _normalized_argv(argv: Sequence[str]) -> list[str]:
+    args = list(argv)
+    if not args:
+        return ["serve"]
+    if args[0] in _COMMANDS or args[0] in {"-h", "--help"}:
+        return args
+    if args[0].startswith("-"):
+        return ["serve", *args]
+    return args
+
+
+def _require(module: str, extra: str, stderr: TextIO) -> bool:
+    if util.find_spec(module) is not None:
+        return True
+    stderr.write(f"This command requires optional {extra} support. Install it with `pip install 'vxl-cli[{extra}]'`.\n")
+    return False
+
+
+def run(
+    argv: Sequence[str] | None = None,
+    *,
+    stdout: TextIO | None = None,
+    stderr: TextIO | None = None,
+) -> int:
+    """Dispatch one CLI invocation and return its process exit code."""
+    args = build_parser().parse_args(_normalized_argv(sys.argv[1:] if argv is None else argv))
+    output = sys.stdout if stdout is None else stdout
+    errors = sys.stderr if stderr is None else stderr
+
+    if args.command == "check":
+        return run_check(args.paths, as_json=args.as_json, output=output)
+
+    if args.command in {"serve", "web"}:
+        if not _require("vxl_web", "web", errors):
+            return 2
+        web_app = import_module("vxl_web.app")
+        web_app.serve(host=args.host, port=args.port, debug=args.debug)
+        return 0
+
+    if args.command == "qt":
+        if not _require("vxl_qt", "qt", errors):
+            return 2
+        qt_app = import_module("vxl_qt.app")
+        return qt_app.launch(args.config, verbose=args.verbose)
+
+    if args.command == "node":
+        serve_node(args.node_id, args.address, debug=args.debug)
+        return 0
+
+    raise AssertionError(f"Unhandled command: {args.command}")
+
+
+def main() -> None:
+    raise SystemExit(run())

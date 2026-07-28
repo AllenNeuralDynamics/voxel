@@ -3,19 +3,27 @@
 import asyncio
 import time
 
+from pydantic import TypeAdapter
+from rigup.device.handle import Adapter, DeviceProperty
+
 from rigup import DeviceHandle
 from vxl.axes.continuous.base import ContinuousAxis, TTLStepperConfig
 
 _POLL_INTERVAL = 0.05  # 50 ms - matches the 20 Hz stream rate
+_FLOAT_ADAPTER = TypeAdapter(float)
 
 
 class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
     """Continuous axis handle with typed methods for motion and TTL stepping."""
 
+    def __init__(self, adapter: Adapter[ContinuousAxis]) -> None:
+        super().__init__(adapter)
+        self.position: DeviceProperty[float] = self.props.property("position", _FLOAT_ADAPTER.validate_python)
+
     # Property accessors
 
     async def get_position(self) -> float:
-        return await self.props.get_value("position")
+        return await self.position.get()
 
     async def get_lower_limit(self) -> float:
         return await self.props.get_value("lower_limit")

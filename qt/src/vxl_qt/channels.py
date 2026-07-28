@@ -15,7 +15,9 @@ import logging
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QScrollArea, QWidget
 
-from vxl.instrument import AcquisitionMode, Channel, ChannelConfig, Instrument
+from vxl.instrument import AcquisitionMode, Instrument
+from vxl.instrument.core import Channel
+from vxl.instrument.state import ChannelConfig
 from vxl_qt.devices import DevicesStore
 from vxl_qt.devices.widgets.camera import CameraControl
 from vxl_qt.devices.widgets.laser import LaserControl

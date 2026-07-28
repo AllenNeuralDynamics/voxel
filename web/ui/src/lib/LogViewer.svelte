@@ -86,7 +86,7 @@
     <div class="ml-auto">
       <Select
         size="xs"
-        class="ml-auto border-transparent hover:border-accent"
+        class="ml-auto border-transparent bg-transparent hover:border-accent"
         value={minLevel.get()}
         options={LEVEL_OPTIONS}
         onchange={(v) => minLevel.set(v as Level)}

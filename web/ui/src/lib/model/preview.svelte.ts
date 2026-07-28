@@ -3,7 +3,7 @@ import { SvelteMap } from 'svelte/reactivity';
 
 import type {
   ChannelConfig,
-  DetectionPathConfig,
+  DetectionAssemblyConfig,
   InstrumentStatus,
   PreviewLevels,
   PreviewUpdate,
@@ -396,7 +396,7 @@ export class PreviewChannel {
   colormap: string | null = $state<string | null>(null);
   initAutoLevelDone = false;
 
-  /** Camera rotation relative to stage axes (from DetectionPathConfig). */
+  /** Camera rotation relative to stage axes (from DetectionAssemblyConfig). */
   rotationDeg: number = $state<number>(0);
 
   /** Full sensor dimensions in pixels (set from frame info). */
@@ -429,12 +429,12 @@ export class LiveFeed {
   redrawGeneration = $state(0);
 
   #client: Client;
-  #detection: Record<string, DetectionPathConfig>;
+  #detection: Record<string, DetectionAssemblyConfig>;
   #frameListeners: ((channelName: string) => void)[] = [];
   #unsubscribers: Array<() => void> = [];
   #previewEpoch = -1;
 
-  constructor(client: Client, detection: Record<string, DetectionPathConfig>, initialStatus: InstrumentStatus) {
+  constructor(client: Client, detection: Record<string, DetectionAssemblyConfig>, initialStatus: InstrumentStatus) {
     this.#client = client;
     this.#detection = detection;
 
@@ -620,7 +620,7 @@ export class Preview {
 
   constructor(
     client: Client,
-    detection: Record<string, DetectionPathConfig>,
+    detection: Record<string, DetectionAssemblyConfig>,
     initialStatus: InstrumentStatus,
     stage: Stage
   ) {

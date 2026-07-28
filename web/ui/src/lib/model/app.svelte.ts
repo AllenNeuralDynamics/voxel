@@ -266,6 +266,7 @@ export class Instrument {
 
   readonly mode = $derived(this.status.mode);
   readonly fov = $derived(this.status.fov);
+  readonly routingTargets = $derived(this.status.routing_targets);
   readonly state = $derived(this.status.state);
   readonly taskTiles = $derived(this.status.task_tiles);
   readonly imaging = $derived(this.state.imaging);
@@ -506,6 +507,14 @@ export class Instrument {
 
   saveSettings(): Promise<void> {
     return this.#client.post('/instrument/settings/save');
+  }
+
+  applyOpticalRouting(): Promise<void> {
+    return this.#client.post('/instrument/optical-routing/apply');
+  }
+
+  overrideOpticalRoute(dimension: string, route: string): Promise<void> {
+    return this.#client.post(`/instrument/optical-routing/${encodeURIComponent(dimension)}/override`, { route });
   }
 
   saveAsDefault(): Promise<void> {
@@ -768,9 +777,8 @@ export class VoxelApp {
     await this.#run(() => this.#client.post(`/templates/${encodeURIComponent(template)}/launch${query}`));
   }
 
-  async resetBench(name: string, label: string): Promise<void> {
-    const path = `/instruments/${encodeURIComponent(name)}/reset-bench?label=${encodeURIComponent(label)}`;
-    await this.#run(() => this.#client.post(path));
+  async archiveBench(name: string): Promise<void> {
+    await this.#run(() => this.#client.post(`/instruments/${encodeURIComponent(name)}/archive-bench`));
     await this.refresh();
   }
 

@@ -15,18 +15,28 @@ export interface StageConfig {
   z: string;
 }
 
-export interface OpticalPathConfig {
+export interface OpticalAssemblyConfig {
   aux_devices?: string[];
+  routing: Record<string, string[]>;
 }
 
-/** A detection path: filter wheels + optics on top of a camera device. */
-export interface DetectionPathConfig extends OpticalPathConfig {
+/** A detection assembly: filter wheels + optics on top of a camera device. */
+export interface DetectionAssemblyConfig extends OpticalAssemblyConfig {
   filter_wheels: string[];
   magnification: number;
   rotation_deg: number;
 }
 
-export type IlluminationPathConfig = OpticalPathConfig;
+export type IlluminationAssemblyConfig = OpticalAssemblyConfig;
+
+/** Discrete-axis device UID → selected position label. */
+export type DiscreteAxisPositions = Record<string, string>;
+
+/** The selector positions that define one named optical route. */
+export type OpticalRouteConfig = DiscreteAxisPositions;
+
+/** Routing dimension → route name → selector positions. */
+export type OpticalRoutingConfig = Record<string, Record<string, OpticalRouteConfig>>;
 
 /** Whether a node runs as a local subprocess or a remote (networked) process. */
 export type NodeKind = 'subprocess' | 'remote';
@@ -38,13 +48,14 @@ export interface NodeConfig {
   devices: Record<string, DeviceConfig>;
 }
 
-/** The hardware blueprint: in-process devices, nodes, stage, and optical paths. */
+/** The hardware blueprint: in-process devices, nodes, stage, optical assemblies, and routing. */
 export interface HALConfig {
   devices: Record<string, DeviceConfig>;
   nodes: Record<string, NodeConfig>;
   stage: StageConfig;
-  detection: Record<string, DetectionPathConfig>;
-  illumination: Record<string, IlluminationPathConfig>;
+  detection: Record<string, DetectionAssemblyConfig>;
+  illumination: Record<string, IlluminationAssemblyConfig>;
+  optical_routing: OpticalRoutingConfig;
 }
 
 // ---- the editable bench (the InstrumentState tree; mirrors src/vxl/instrument.py) ----
@@ -141,7 +152,7 @@ export interface SensorROI {
 export interface ChannelConfig {
   detection: string;
   illumination: string;
-  filters: Record<string, string>;
+  filters: DiscreteAxisPositions;
   desc: string;
   label?: string | null;
   emission?: number | null;
@@ -164,6 +175,21 @@ export interface ImagingProtocol {
   channels: Record<string, ChannelConfig>;
   profiles: Record<string, ProfileConfig>;
 }
+
+export interface FixedOpticalRoutingPolicy {
+  type: 'fixed';
+  route: string;
+}
+
+export interface SplitOpticalRoutingPolicy {
+  type: 'split';
+  axis: 'x' | 'y';
+  threshold: number;
+  lower: string;
+  upper: string;
+}
+
+export type OpticalRoutingPolicy = FixedOpticalRoutingPolicy | SplitOpticalRoutingPolicy;
 
 /** Mosaic + z-range defaults prefilled into new tasks (µm). */
 export interface Stencil {
@@ -222,6 +248,7 @@ export interface WriterSettings {
 /** Baseline fields that can live in `config.default` (mirrors `InstrumentDefaults` in src/vxl/instrument.py). */
 export interface InstrumentDefaults {
   imaging: ImagingProtocol;
+  routing: Record<string, OpticalRoutingPolicy>;
   metadata_cls: string;
   output: WriterSettings;
   stencil: Stencil;
@@ -387,29 +414,43 @@ export interface InstrumentConfig {
   default: InstrumentDefaults;
 }
 
-/** A failed load: field → error message. */
-export type LoadError = Record<string, string>;
+/** One structured configuration, validation, or startup failure. */
+export interface Violation {
+  msg: string;
+  code?: string | null;
+  loc?: (string | number)[];
+}
 
-/** An existing instrument: its config and saved bench, or load errors. `bench` is `null` when the
- * instrument has never been opened (no `bench.json` yet) — that is not an error. */
-export interface InstrumentInfo {
-  config: InstrumentConfig | LoadError;
-  bench: InstrumentState | LoadError | null;
+export interface Loaded<T> {
+  status: 'loaded';
+  value: T;
+}
+
+export interface Missing {
+  status: 'missing';
+}
+
+export interface Invalid {
+  status: 'invalid';
+}
+
+export type Inspected<T> = Loaded<T> | Missing | Invalid;
+
+/** An existing instrument and every issue found without opening its hardware. */
+export interface InstrumentInspection {
+  config: Inspected<InstrumentConfig>;
+  state: Inspected<InstrumentState>;
+  violations: Violation[];
 }
 
 export interface InstrumentsCatalog {
-  instruments: Record<string, InstrumentInfo>;
+  instruments: Record<string, InstrumentInspection>;
   templates: Record<string, InstrumentConfig>;
 }
 
-/** Whether an instrument loaded cleanly (its config carries a HAL). */
-export function isLoaded(info: InstrumentInfo): info is InstrumentInfo & { config: InstrumentConfig } {
-  return typeof info.config === 'object' && info.config !== null && 'hal' in info.config;
-}
-
-/** The config load errors, or null if it loaded cleanly. */
-export function configError(info: InstrumentInfo): LoadError | null {
-  return isLoaded(info) ? null : (info.config as LoadError);
+/** Whether an instrument's configuration loaded successfully. */
+export function isLoaded<T>(inspected: Inspected<T>): inspected is Loaded<T> {
+  return inspected.status === 'loaded';
 }
 
 // ---- WS event payloads (server → client) ----
@@ -427,6 +468,7 @@ export interface InstrumentStatus {
   active_profile_id: string;
   preview_epoch: number;
   fov: [number, number] | null;
+  routing_targets: Record<string, string>;
   state: InstrumentState;
   task_tiles: TaskTile[];
 }

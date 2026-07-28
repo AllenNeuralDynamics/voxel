@@ -18,6 +18,7 @@
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
+  import RoutingMonitor from '$lib/devices/RoutingMonitor.svelte';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
   import { Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
@@ -45,8 +46,18 @@
   provideStageScene();
   let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
 
+  async function configureServiceWorker(): Promise<void> {
+    if (!('serviceWorker' in navigator)) return;
+    if (import.meta.env.DEV) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      return;
+    }
+    await navigator.serviceWorker.register('/sw.js');
+  }
+
   onMount(() => {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    toastError(configureServiceWorker());
     toastError(app.initialize());
   });
   onDestroy(() => app.dispose());
@@ -307,6 +318,9 @@
               {/if}
               {#if instrument.filterWheels.length > 0}
                 <FilterWheelsMonitor {instrument} />
+              {/if}
+              {#if Object.keys(instrument.hal.optical_routing).length > 0}
+                <RoutingMonitor {instrument} />
               {/if}
             </div>
           </Pane>

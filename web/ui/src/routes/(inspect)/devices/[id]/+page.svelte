@@ -3,7 +3,6 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getVoxelApp } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
 
   import CameraInspector from './CameraInspector.svelte';
   import DeviceBrowser from './DeviceBrowser.svelte';
@@ -13,16 +12,25 @@
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
   const deviceId = $derived(page.params.id!);
+  const stageAxis = $derived.by<'x' | 'y' | 'z' | null>(() => {
+    if (!instrument) return null;
+    if (instrument.hal.stage.x === deviceId) return 'x';
+    if (instrument.hal.stage.y === deviceId) return 'y';
+    if (instrument.hal.stage.z === deviceId) return 'z';
+    return null;
+  });
 
-  // Redirect if this route points at a device that no longer exists
+  // Stage axes have a consolidated inspector; redirect legacy device URLs to it.
   $effect(() => {
-    if (instrument && !instrument.devices.has(deviceId)) {
+    if (stageAxis) {
+      goto(resolve(`/stage?axis=${stageAxis}`), { replaceState: true, keepFocus: true, noScroll: true });
+    } else if (instrument && !instrument.devices.has(deviceId)) {
       goto(resolve('/' as const), { keepFocus: true, noScroll: true });
     }
   });
 </script>
 
-{#if instrument && instrument.devices.has(deviceId)}
+{#if instrument && !stageAxis && instrument.devices.has(deviceId)}
   {@const device = instrument.devices.get(deviceId)}
   <section class="px-4">
     {#if instrument.cameras.has(deviceId)}
@@ -33,16 +41,7 @@
       <SignalGeneratorInspector {instrument} {deviceId} />
     {:else}
       <!-- Generic device config -->
-      <div class="flex h-full flex-col gap-6">
-        <div class="flex items-center justify-between">
-          <h2 class="text-2xl text-fg">{sanitizeString(deviceId)}</h2>
-          <span
-            class={cn('h-2 w-2 rounded-full', device?.connected ? 'bg-success' : 'bg-fg-muted/30')}
-            title={device?.connected ? 'Connected' : 'Disconnected'}
-          >
-          </span>
-        </div>
-
+      <div class="flex h-full flex-col">
         {#if device?.connected}
           <div class="min-h-0 flex-1 space-y-6">
             <DeviceBrowser {device} />

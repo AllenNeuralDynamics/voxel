@@ -75,6 +75,12 @@ class CameraHandle(DeviceHandle[Camera]):
         """Stop camera preview mode."""
         await self.call("stop_preview")
 
+    async def close_preview_updates(self) -> None:
+        """Stop and await the handle-owned preview update workers."""
+        await self.preview_viewport.close()
+        await self.preview_levels.close()
+        await self.preview_colormap.close()
+
     async def clear_preview_cache(self) -> None:
         """Clear cached frame on camera. Called on profile change."""
         await self.call("clear_preview_cache")

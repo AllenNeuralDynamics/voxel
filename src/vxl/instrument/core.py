@@ -1,0 +1,1285 @@
+import asyncio
+import datetime
+import getpass
+import logging
+import math
+import uuid
+from collections.abc import Collection, Mapping, Sequence
+from contextlib import suppress
+from dataclasses import dataclass
+from enum import StrEnum
+from pathlib import Path, PurePosixPath
+from typing import Any, Self
+
+from pydantic import BaseModel, Field, ValidationError
+
+from rigup import DeviceHandle, DeviceInterface
+from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
+from vxl.camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, StorageSpec
+from vxl.daq.clocked import Signals
+from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
+from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.system import System
+from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Teardown, merge_dicts
+
+from .bench import PROMOTABLE_FIELDS, InstrumentBench
+from .hal import HAL
+from .state import (
+    AcquisitionTask,
+    ChannelConfig,
+    ChannelPatch,
+    InstrumentDefaults,
+    InstrumentState,
+    ProfileConfig,
+    ProfilePatch,
+    StencilPatch,
+    TaskPatch,
+    WriterPatch,
+    ZStack,
+)
+from .topology import HALConfig
+from .traversal import Tile, TileOrder
+
+logger = logging.getLogger(__name__)
+
+
+class AcquisitionMode(StrEnum):
+    IDLE = "idle"
+    PREVIEW = "preview"
+    CAPTURE = "capture"
+
+
+class Origin(BaseModel):
+    on: str = Field(..., description="Machine name of the instrument PC")
+    by: str = Field(..., description="Username of the logged-in operator")
+    at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
+
+
+class PlannedVolume(BaseModel, frozen=True):
+    """One (task, profile) capture in a run's plan — the unit :meth:`Instrument._capture_volume` writes."""
+
+    task: str
+    profile: str
+
+
+class AcquisitionRequest(BaseModel):
+    """Parameters of an acquisition run. Shared by the instrument API and the web request body."""
+
+    storage: StorageSpec
+    task_ids: list[str] | None = None  # None → every planned task, in traversal order
+    operator: str | None = None
+
+
+class AcquisitionRecord(BaseModel):
+    record_id: str = Field(..., exclude=True)
+    origin: Origin
+    volumes: list[PlannedVolume]
+    state: InstrumentState
+    hardware: HALConfig
+
+
+class AcquisitionProgress(BaseModel, frozen=True):
+    """One progress update for a (task, profile) volume; emitted per captured batch.
+
+    A profile's channels capture in synchronized batches, so ``frames_done`` is shared across them
+    (no per-channel breakdown). Task completion is implicit (``frames_done == frames_total``); the
+    run's overall start/stop is conveyed by :attr:`Instrument.mode`.
+    """
+
+    task: str
+    profile: str
+    done: int
+    total: int
+
+    def updated(self, *, done: int, total: int | None = None) -> Self:
+        return self.model_copy(update={"done": done, "total": total if total is not None else self.total})
+
+
+class TaskTile(Tile):
+    """A task's footprint tile (a :class:`Tile`) tagged with its ``task_id``. Because :class:`TileOrder`
+    is generic over the tile subtype, an ordered ``list[TaskTile]`` carries both the per-task geometry
+    and the traversal order — replacing a separate tiles-map and order-list with one value."""
+
+    task_id: str
+
+
+@dataclass(frozen=True)
+class Channel:
+    """Runtime handles for one protocol channel.
+
+    The channel config remains canonical in :class:`InstrumentState`; this object only holds the
+    stable hardware handles resolved from that config.
+    """
+
+    uid: str
+    camera: CameraHandle
+    laser: DeviceHandle
+
+    async def start_preview(self) -> None:
+        "Enable this channel's laser and start its camera's preview."
+        await self.laser.call("enable")
+        await self.camera.start_preview()
+
+    async def stop_preview(self) -> None:
+        "Disable this channel's laser and stop its camera's preview."
+        await self.laser.call("disable")
+        await self.camera.stop_preview()
+
+    async def enable_laser(self) -> None:
+        """Enable this channel's laser."""
+        await self.laser.call("enable")
+
+    async def disable_laser(self) -> None:
+        """Disable this channel's laser."""
+        await self.laser.call("disable")
+
+
+class Instrument:
+    """An opened instrument: hardware, persisted acquisition state, and active-profile orchestration."""
+
+    @classmethod
+    def from_path(cls, home: Path | str) -> Self:
+        """Load a validated bench from ``home`` and construct its instrument."""
+        return cls(InstrumentBench.load(home))
+
+    def __init__(self, bench: InstrumentBench) -> None:
+        self._hal = HAL(bench.config.hal, name=bench.home.name)
+        self._bench = bench
+        self._active_profile_id = Cell[str](next(iter(self._bench.value.imaging.profiles)))
+        self._channels: dict[str, Channel] = {}
+        self._preview_channels: list[Channel] = []
+        self._preview_unsubs: list[Teardown] = []
+        self._viewport = PreviewViewport()
+        self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
+        self._preview_epoch = Cell[int](0)
+        self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
+        self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
+        self._routing_targets = Cell[dict[str, str]]({})
+        self._routing_unsubs: list[Teardown] = []
+        self._routing_updates = Coalescer[dict[str, str]](
+            drain=self._apply_automatic_routes,
+            reducer=merge_dicts,
+        )
+        self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
+        self.frames: Emitter[tuple[str, bytes]] = Emitter()
+        self.views: Emitter[tuple[str, bytes]] = Emitter()
+        self.progress: Emitter[AcquisitionProgress] = Emitter()
+        self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
+
+    @property
+    def path(self) -> Path:
+        """The instrument's on-disk home (``<name>.voxel/``)."""
+        return self._bench.home
+
+    @property
+    def config_path(self) -> Path:
+        """The instrument's config file path (``<name>.voxel/config.yaml``)."""
+        return self._bench.home / "config.yaml"
+
+    @property
+    def hal(self) -> HAL:
+        return self._hal
+
+    @property
+    def state(self) -> Readable[InstrumentState]:
+        """Committed acquisition state as a read-only reactive view."""
+        return self._bench
+
+    @property
+    def default(self) -> Readable[InstrumentDefaults]:
+        """The on-disk baseline (``config.yaml`` ``default``) as a reactive view; updated by ``save_as_default``."""
+        return self._bench.default
+
+    @property
+    def active_profile_id(self) -> Readable[str]:
+        """The currently selected profile id. This is always a valid profile key."""
+        return self._active_profile_id
+
+    @property
+    def preview_epoch(self) -> Readable[int]:
+        """Monotonic counter bumped whenever displayed preview frames go stale (e.g. profile switch);
+        clients clear their preview when it changes."""
+        return self._preview_epoch
+
+    @property
+    def routing_targets(self) -> Readable[dict[str, str]]:
+        """Routes currently resolved by the routing policies and live stage position."""
+        return self._routing_targets
+
+    @property
+    def active_profile(self) -> ProfileConfig:
+        """The current active profile config."""
+        return self._bench.value.imaging.profiles[self._active_profile_id.value]
+
+    @property
+    def active_channels(self) -> Mapping[str, Channel]:
+        """Runtime channels used by the active profile."""
+        return {ch_id: self._channels[ch_id] for ch_id in self.active_profile.channels if ch_id in self._channels}
+
+    @property
+    def mode(self) -> Readable[AcquisitionMode]:
+        """Acquisition mode as a read-only reactive view."""
+        return self._mode
+
+    def update_viewport(self, viewport: PreviewViewport | None = None) -> None:
+        """Set the shared viewport (no arg = re-apply current) on the active profile's cameras."""
+        self._viewport = viewport if viewport is not None else self._viewport
+        self._apply_viewport(self.active_channels)
+
+    def _apply_viewport(self, channels: Mapping[str, Channel]) -> None:
+        for ch_id, ch in channels.items():
+            rot = self._hal.config.detection[self._channel_config(ch_id).detection].rotation_deg
+            ch.camera.preview_viewport.update(self._viewport.to_sensor_space(rot) if rot else self._viewport)
+
+    def update_levels(self, levels: dict[str, PreviewLevels]) -> None:
+        for ch_id, lvl in levels.items():
+            if (ch := self.active_channels.get(ch_id)) is not None:
+                ch.camera.preview_levels.update(lvl)
+
+    def update_colormaps(self, colormaps: dict[str, str]) -> None:
+        for ch_id, cmap in colormaps.items():
+            if (ch := self.active_channels.get(ch_id)) is not None:
+                ch.camera.preview_colormap.update(cmap)
+
+    async def open(self) -> None:
+        """Open the hardware, activate the default profile, route preview frames, and watch the bench."""
+        try:
+            async with self._lock:
+                await self._hal.open()
+                await self._validate_startup()
+                self._channels = self._build_channels()
+                for camera in self._hal.cameras.values():
+                    self.fov.add_triggers(camera.frame_area_um)
+                await self._apply_profile(self._active_profile_id.value)
+                await self._start_optical_routing()
+                for cam_id, camera in self._hal.cameras.items():
+                    await self._subscribe_camera(cam_id, camera)
+                await self.task_tiles.refresh()
+        except BaseException:
+            try:
+                await self.close()
+            except Exception:
+                logger.exception("Failed to clean up instrument after startup error")
+            raise
+
+    async def _validate_startup(self) -> None:
+        if violations := await self._startup_violations():
+            raise StartupError(violations)
+
+    async def _startup_violations(self) -> list[Violation]:
+        """Collect runtime constraints that span live devices and persisted bench state."""
+        device_items = list(self._hal.devices.items())
+        interfaces = await asyncio.gather(*(handle.interface() for _, handle in device_items))
+        signal_violations, stage_violations = await asyncio.gather(
+            self._signal_port_violations(),
+            self._stage_limit_violations(),
+        )
+        return [
+            *self._profile_interface_violations(dict(zip((uid for uid, _ in device_items), interfaces, strict=True))),
+            *signal_violations,
+            *stage_violations,
+        ]
+
+    def _profile_interface_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
+        violations = []
+        for profile_id, profile in self._bench.value.imaging.profiles.items():
+            profile_loc = ("bench", "imaging", "profiles", profile_id)
+            for uid in profile.sync:
+                interface = interfaces.get(uid)
+                if interface is not None and interface.type != "signal_generator":
+                    violations.append(
+                        Violation(
+                            code="imaging.profile.sync.not_signal_generator",
+                            msg=f"Device '{uid}' is a '{interface.type}', not a signal generator.",
+                            loc=(*profile_loc, "sync", uid),
+                        )
+                    )
+
+            for device_id, props in profile.props.items():
+                interface = interfaces.get(device_id)
+                if interface is None:
+                    violations.append(
+                        Violation(
+                            code="imaging.profile.props.device_unavailable",
+                            msg=f"Settings target device '{device_id}' is unavailable.",
+                            loc=(*profile_loc, "props", device_id),
+                        )
+                    )
+                    continue
+                for prop in props:
+                    info = interface.properties.get(prop)
+                    if info is None:
+                        violations.append(
+                            Violation(
+                                code="imaging.profile.props.property_missing",
+                                msg=f"Device '{device_id}' has no property '{prop}'.",
+                                loc=(*profile_loc, "props", device_id, prop),
+                            )
+                        )
+                    elif info.access != "rw":
+                        violations.append(
+                            Violation(
+                                code="imaging.profile.props.property_read_only",
+                                msg=f"Property '{device_id}.{prop}' is read-only.",
+                                loc=(*profile_loc, "props", device_id, prop),
+                            )
+                        )
+
+            for device_id, commands in profile.setup.items():
+                interface = interfaces.get(device_id)
+                if interface is None:
+                    violations.append(
+                        Violation(
+                            code="imaging.profile.setup.device_unavailable",
+                            msg=f"Setup target device '{device_id}' is unavailable.",
+                            loc=(*profile_loc, "setup", device_id),
+                        )
+                    )
+                    continue
+                for index, command in enumerate(commands):
+                    if command.attr not in interface.commands:
+                        violations.append(
+                            Violation(
+                                code="imaging.profile.setup.command_missing",
+                                msg=f"Device '{device_id}' has no command '{command.attr}'.",
+                                loc=(*profile_loc, "setup", device_id, index, "attr"),
+                            )
+                        )
+        return violations
+
+    async def _signal_port_violations(self) -> list[Violation]:
+        profiles = self._bench.value.imaging.profiles
+        uids = sorted(
+            {uid for profile in profiles.values() for uid in profile.sync} & self._hal.signal_generators.keys()
+        )
+        results = await asyncio.gather(
+            *(self._hal.signal_generators[uid].get_ports() for uid in uids),
+            return_exceptions=True,
+        )
+        ports_by_uid: dict[str, set[str]] = {}
+        violations = []
+        for uid, result in zip(uids, results, strict=True):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                violations.append(
+                    Violation(
+                        code="hal.signal_generator.ports",
+                        msg=f"Unable to read ports for signal generator '{uid}': {result}",
+                        loc=("hal", "devices", uid, "ports"),
+                    )
+                )
+            else:
+                ports_by_uid[uid] = set(result)
+
+        for profile_id, profile in profiles.items():
+            for uid, signals in profile.sync.items():
+                if (ports := ports_by_uid.get(uid)) is None:
+                    continue
+                for port in sorted(set(signals.waveforms) - ports):
+                    violations.append(
+                        Violation(
+                            code="imaging.profile.sync.port_missing",
+                            msg=f"Signal generator '{uid}' has no port '{port}'.",
+                            loc=(
+                                "bench",
+                                "imaging",
+                                "profiles",
+                                profile_id,
+                                "sync",
+                                uid,
+                                "waveforms",
+                                port,
+                            ),
+                        )
+                    )
+        return violations
+
+    async def _stage_limit_violations(self) -> list[Violation]:
+        stage = self._hal.stage
+        requests = [
+            ("x", "lower", stage.x.get_lower_limit()),
+            ("x", "upper", stage.x.get_upper_limit()),
+            ("y", "lower", stage.y.get_lower_limit()),
+            ("y", "upper", stage.y.get_upper_limit()),
+            ("z", "lower", stage.z.get_lower_limit()),
+            ("z", "upper", stage.z.get_upper_limit()),
+        ]
+        results = await asyncio.gather(*(request for _, _, request in requests), return_exceptions=True)
+        limits: dict[str, dict[str, float]] = {}
+        violations = []
+        for (axis, bound, _), result in zip(requests, results, strict=True):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                violations.append(
+                    Violation(
+                        code="hal.stage.limit_unavailable",
+                        msg=f"Unable to read the {axis}-axis {bound} limit: {result}",
+                        loc=("hal", "stage", axis, bound),
+                    )
+                )
+            else:
+                limits.setdefault(axis, {})[bound] = result
+
+        valid_limits: dict[str, tuple[float, float]] = {}
+        for axis, bounds in limits.items():
+            if "lower" not in bounds or "upper" not in bounds:
+                continue
+            lower, upper = bounds["lower"], bounds["upper"]
+            if lower > upper:
+                violations.append(
+                    Violation(
+                        code="hal.stage.limits_invalid",
+                        msg=f"The {axis}-axis lower limit ({lower}) exceeds its upper limit ({upper}).",
+                        loc=("hal", "stage", axis),
+                    )
+                )
+            else:
+                valid_limits[axis] = (lower, upper)
+
+        def check(value: float, axis: str, loc: tuple[str, ...], label: str) -> None:
+            if axis in valid_limits and not (valid_limits[axis][0] <= value <= valid_limits[axis][1]):
+                lower, upper = valid_limits[axis]
+                violations.append(
+                    Violation(
+                        code="bench.stage_position.out_of_bounds",
+                        msg=f"{label} ({value}) is outside the {axis}-axis range [{lower}, {upper}].",
+                        loc=loc,
+                    )
+                )
+
+        for task_id, task in self._bench.value.tasks.items():
+            task_loc = ("bench", "tasks", task_id)
+            check(task.x, "x", (*task_loc, "x"), f"Task '{task_id}' x")
+            check(task.y, "y", (*task_loc, "y"), f"Task '{task_id}' y")
+            check(task.start, "z", (*task_loc, "start"), f"Task '{task_id}' start")
+            check(task.end, "z", (*task_loc, "end"), f"Task '{task_id}' end")
+        stencil = self._bench.value.stencil
+        check(stencil.z_start, "z", ("bench", "stencil", "z_start"), "Stencil z_start")
+        check(stencil.z_end, "z", ("bench", "stencil", "z_end"), "Stencil z_end")
+        return violations
+
+    async def _start_optical_routing(self) -> None:
+        """Resolve and apply the initial routes, then watch their live inputs."""
+        if not self._bench.value.routing:
+            return
+        stage = self._hal.stage
+        await asyncio.gather(stage.x.position.get(), stage.y.position.get(), self.fov.get())
+        routes = self._resolve_live_routes()
+        if routes is None:
+            raise RuntimeError("Optical routing requires current stage positions and field of view")
+        await self._routing_targets.set(routes)
+        await self._move_optical_routes(routes)
+        self._routing_unsubs = [
+            stage.x.position.subscribe(self._refresh_routing_targets),
+            stage.y.position.subscribe(self._refresh_routing_targets),
+            self.fov.subscribe(self._refresh_routing_targets),
+            self._bench.subscribe(self._refresh_routing_targets),
+        ]
+
+    def _resolve_live_routes(self) -> dict[str, str] | None:
+        x = self._hal.stage.x.position.value
+        y = self._hal.stage.y.position.value
+        fov = self.fov.cache
+        if x is None or y is None or fov is None:
+            return None
+        return self._bench.value.resolve_routes(
+            x=x,
+            y=y,
+            previous=self._routing_targets.value,
+            margins={"x": fov[0] / 2, "y": fov[1] / 2},
+        )
+
+    async def _refresh_routing_targets(self, _value: object = None) -> None:
+        routes = self._resolve_live_routes()
+        if routes is None:
+            return
+        previous = self._routing_targets.value
+        changed = {dimension: route for dimension, route in routes.items() if previous.get(dimension) != route}
+        await self._routing_targets.set(routes)
+        if changed and self._mode.value != AcquisitionMode.CAPTURE:
+            self._routing_updates.update(changed)
+
+    async def _apply_automatic_routes(self, routes: dict[str, str]) -> None:
+        async with self._lock:
+            if self._mode.value != AcquisitionMode.CAPTURE:
+                await self._move_optical_routes(routes)
+
+    async def _move_optical_routes(self, routes: Mapping[str, str]) -> None:
+        positions: dict[str, str] = {}
+        topology = self._hal.config.optical_routing.root
+        for dimension, route_name in routes.items():
+            dimension_routes = topology.get(dimension)
+            if dimension_routes is None or route_name not in dimension_routes:
+                raise OperationRejectedError(f"No optical route '{dimension}.{route_name}'")
+            positions.update(dimension_routes[route_name].root)
+        if not positions:
+            return
+
+        preview_channels = list(self._preview_channels) if self._mode.value == AcquisitionMode.PREVIEW else []
+        if preview_channels:
+            await asyncio.gather(*(channel.disable_laser() for channel in preview_channels))
+        # Re-enable preview illumination only after every selector reaches a known position.
+        await asyncio.gather(
+            *(
+                self._hal.discrete_axes[selector].call("select", position, wait=True)
+                for selector, position in positions.items()
+            )
+        )
+        if preview_channels:
+            await asyncio.gather(*(channel.enable_laser() for channel in preview_channels))
+
+    async def apply_optical_routing(self) -> None:
+        """Restore every optical-routing dimension to its current policy target."""
+        async with self._lock:
+            self._ensure_mode(
+                "apply optical routing",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._move_optical_routes(self._routing_targets.value)
+
+    async def override_optical_route(self, dimension: str, route: str) -> None:
+        """Temporarily move one routing dimension without changing its persisted policy target."""
+        async with self._lock:
+            self._ensure_mode(
+                "override optical routing",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._move_optical_routes({dimension: route})
+
+    async def close(self) -> None:
+        """Stop preview, drop the feed, close hardware, and keep the logical active profile id."""
+        for unsub in self._routing_unsubs:
+            unsub()
+        self._routing_unsubs = []
+        await self._routing_updates.close()
+        await self.stop_preview()
+        for unsub in self._preview_unsubs:
+            unsub()
+        self._preview_unsubs = []
+        self.fov.clear_triggers()
+        await self._hal.close()
+        self._channels = {}
+
+    async def set_active_profile(self, profile_id: str) -> str:
+        """Select ``profile_id`` and drive hardware to it, keeping preview running across the switch."""
+        async with self._lock:
+            self._ensure_mode(
+                "select the active profile",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            if profile_id == self._active_profile_id.value:
+                return profile_id  # already active — avoid preview flicker and hardware churn
+            was_previewing = self._mode.value == AcquisitionMode.PREVIEW
+            if was_previewing:
+                await self._stop_preview()
+            try:
+                await self._apply_profile(profile_id)
+            finally:
+                if was_previewing:
+                    await self._start_preview()  # restored even on failure (on the rolled-back profile)
+            return profile_id
+
+    async def start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
+        """Start preview for the active profile."""
+        async with self._lock:
+            await self._start_preview(channel_ids)
+
+    async def stop_preview(self) -> None:
+        """Stop active preview if it is running."""
+        async with self._lock:
+            await self._stop_preview()
+
+    async def _apply_profile(self, profile_id: str) -> None:
+        """Drive hardware to a saved profile config. Pure: knows nothing about preview.
+
+        The hardware steps read the active profile via the Cell, so the id is set first and rolled back
+        on failure — it always names the last fully-applied profile. Requires exclusive access, guaranteed
+        either by holding ``self._lock`` (the ``set_active_profile`` path) or by ``CAPTURE`` mode (the
+        ``start_acquisition`` loop, where every other transition bails).
+        """
+        if profile_id not in self._bench.value.imaging.profiles:
+            raise OperationRejectedError(f"No such profile '{profile_id}'")
+        previous_id = self._active_profile_id.value
+        await self._active_profile_id.set(profile_id)
+        try:
+            # Invalidate preview before the colormap/viewport updates below: bump the epoch (clients clear
+            # the previous profile's frames on the next status) and drop each camera's cached raw frame (so
+            # the idle reprocess those updates trigger can't re-render the previous profile).
+            await self._preview_epoch.set(self._preview_epoch.value + 1)
+            await asyncio.gather(*(ch.camera.clear_preview_cache() for ch in self.active_channels.values()))
+            await self._apply_filters()
+            await self._apply_settings()
+            for ch_id, ch in self.active_channels.items():
+                ch.camera.preview_colormap.update(self._channel_config(ch_id).colormap)
+            await self._run_setup_commands()
+            await self._apply_signals()
+            self.update_viewport()
+        except Exception:
+            await self._active_profile_id.set(previous_id)
+            raise
+
+    async def _start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
+        """Start preview for the active profile. Caller holds ``self._lock``."""
+        if self._mode.value != AcquisitionMode.IDLE:
+            logger.warning("Preview or Acquisition already running")
+            return
+        channels = self.active_channels
+        all_chans = channels.values()
+        chans = list(all_chans if channel_ids is None else [channels[ch] for ch in channel_ids if ch in channels])
+        if not chans:
+            raise OperationRejectedError("No channels to preview")
+        self._preview_channels = chans
+
+        results = await asyncio.gather(*(ch.start_preview() for ch in chans), return_exceptions=True)
+        started = 0
+        for ch, result in zip(chans, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.error("Channel %s failed to start preview", ch.uid, exc_info=result)
+            else:
+                started += 1
+
+        if started == 0:
+            self._preview_channels = []
+            raise RuntimeError("Preview failed to start on every channel")
+
+        with suppress(NotImplementedError, RuntimeError):
+            await self._hal.stage.scanning_axis.reset_ttl_stepper()
+
+        await self._start_signal_generators()
+        await self._mode.set(AcquisitionMode.PREVIEW)
+        logger.info("Preview started (%d cameras)", started)
+
+    async def _stop_preview(self) -> None:
+        """Stop active preview if it is running. Caller holds ``self._lock``.
+
+        Safe to call in any mode: _preview_channels is non-empty only while previewing (start_preview
+        bails unless IDLE; acquisition stops preview before entering CAPTURE), so this early-returns
+        during a capture and never flips the mode out from under a running acquisition.
+        """
+        if not self._preview_channels:
+            return
+        chans, self._preview_channels = self._preview_channels, []
+
+        results = await asyncio.gather(*(ch.stop_preview() for ch in chans), return_exceptions=True)
+        for ch, result in zip(chans, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.error("Channel %s failed to stop preview", ch.uid, exc_info=result)
+
+        await self._stop_signal_generators()
+        await self._mode.set(AcquisitionMode.IDLE)
+        logger.info("Preview stopped")
+
+    async def apply_settings(self) -> None:
+        """Apply saved rw props and camera ROIs for the active profile to hardware."""
+        async with self._lock:
+            self._ensure_mode(
+                "apply device settings",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._apply_settings()
+
+    async def _apply_settings(self) -> None:
+        """Apply the active profile's saved settings. Caller owns the runtime transition."""
+        profile = self.active_profile
+        if invalid := set(profile.props) - self._settable_devices():
+            msg = f"devices not settable for profile '{self._active_profile_id.value}': {sorted(invalid)}"
+            raise OperationRejectedError(msg)
+        for device_id in sorted(profile.props):
+            props = profile.props[device_id]
+            if props:
+                result = await self._hal.devices[device_id].props.set(**props)
+                if not result.is_ok:
+                    failed = sorted(name for name, prop_result in result.results.items() if not prop_result.is_ok)
+                    raise OperationRejectedError(f"Unable to apply properties {failed} to device '{device_id}'")
+        coros = []
+        for ch_id, ch in self.active_channels.items():
+            roi = profile.rois.get(self._channel_config(ch_id).detection)
+            coros.append(ch.camera.update_roi(roi) if roi is not None else ch.camera.reset_roi())
+        await asyncio.gather(*coros)
+        await self.fov.get()
+
+    async def save_settings(self) -> None:
+        """Persist current rw props and camera ROIs into the active profile."""
+        async with self._lock:
+            self._ensure_mode(
+                "save device settings",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            profile = self.active_profile
+            settable = self._settable_devices()
+            props = {**profile.props}
+            rois = {**profile.rois}
+
+            for device_id in sorted(settable):
+                if device_id not in self._hal.devices:
+                    continue
+                captured = await self._hal.devices[device_id].props.get_values("rw")
+                captured.pop("roi", None)
+                if captured:
+                    props[device_id] = captured
+                if device_id in self._hal.cameras:
+                    camera = self._hal.cameras[device_id]
+                    roi = await camera.roi.get()
+                    sensor = camera.sensor_size_px.value
+                    if sensor is not None and roi.x == 0 and roi.y == 0 and roi.w == sensor.x and roi.h == sensor.y:
+                        rois.pop(device_id, None)  # full sensor → store nothing; activate falls back to reset_roi
+                    else:
+                        rois[device_id] = roi
+
+            await self._update_active_profile_config(profile.model_copy(update={"props": props, "rois": rois}))
+
+    async def save_as_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
+        """Persist the named baseline fields from the live bench into ``config.yaml``'s ``default``.
+
+        ``include`` must be a subset of :data:`PROMOTABLE_FIELDS`; fields outside it keep their current
+        on-disk baseline value. Defaults to every promotable field.
+        """
+        async with self._lock:
+            self._ensure_mode(
+                "save instrument defaults",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._bench.save_as_default(include)
+
+    async def restore_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
+        """Reset the named baseline fields on the live bench to ``config.yaml``'s ``default``.
+
+        ``include`` must be a subset of :data:`PROMOTABLE_FIELDS`. Run state (tasks, metadata) and any
+        field outside ``include`` are left untouched. Defaults to every promotable field.
+        """
+        async with self._lock:
+            self._ensure_mode(
+                "restore instrument defaults",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._bench.restore_default(include)
+
+    async def update_signals(self, generator_uid: str, signals: Signals) -> None:
+        """Apply one clocked signal config, then persist it into the active profile."""
+        async with self._lock:
+            self._ensure_mode("update synchronized outputs", AcquisitionMode.IDLE)
+            handle = self._hal.signal_generators.get(generator_uid)
+            if handle is None:
+                raise OperationRejectedError(f"Signal generator '{generator_uid}' not provisioned")
+            await handle.load(signals)
+            await self._update_active_profile_config(
+                self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_uid: signals}})
+            )
+
+    async def update_profile(self, patch: ProfilePatch) -> None:
+        """Persist mutable fields on the active profile."""
+        async with self._lock:
+            self._ensure_mode(
+                "update the active profile",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._update_active_profile_config(self.active_profile.model_copy(update=patch.changes()))
+
+    async def update_channel(self, channel_id: str, patch: ChannelPatch) -> None:
+        async with self._lock:
+            self._ensure_mode(
+                "update a channel",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            imaging = self._bench.value.imaging
+            if channel_id not in imaging.channels:
+                raise OperationRejectedError(f"No such channel '{channel_id}'")
+            changes = patch.changes()
+            updated = imaging.channels[channel_id].model_copy(update=changes)
+            imaging = imaging.model_copy(update={"channels": {**imaging.channels, channel_id: updated}})
+            await self._bench.update(imaging=imaging)
+            if "emission" in changes and channel_id in self.active_channels:
+                self.active_channels[channel_id].camera.preview_colormap.update(updated.colormap)
+
+    async def update_output(self, patch: WriterPatch) -> None:
+        async with self._lock:
+            self._ensure_mode(
+                "update output settings",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            output = self._bench.value.output.model_copy(update=patch.changes())
+            await self._bench.update(output=output)
+
+    async def update_stencil(self, patch: StencilPatch) -> None:
+        async with self._lock:
+            self._ensure_mode(
+                "update the stencil",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            stencil = self._bench.value.stencil.model_copy(update=patch.changes())
+            await self._bench.update(stencil=stencil)
+
+    async def update_metadata(self, **fields: Any) -> None:
+        """Merge ``fields`` into the experiment metadata, validated against the active metadata schema.
+
+        ``metadata_cls`` is the (dynamic, per-instrument) schema, so the merged dict is validated against
+        it rather than a static ``Patch`` model: unknown keys and bad values are rejected as a
+        :class:`OperationRejectedError`.
+        """
+        async with self._lock:
+            self._ensure_mode(
+                "update metadata",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            state = self._bench.value
+            merged = {**state.metadata, **fields}
+            try:
+                validated = state.metadata_cls.model_validate(merged).model_dump()
+            except ValidationError as e:
+                raise OperationRejectedError("; ".join(err["msg"] for err in e.errors())) from e
+            await self._bench.update(metadata=validated)
+
+    async def set_metadata_schema(self, schema: type[ExperimentMetadata] | str) -> None:
+        """Switch the metadata schema (``metadata_cls``), re-seeding ``metadata`` to the new schema.
+
+        Best-effort carryover: values for fields the new schema still defines (e.g. ``notes`` across
+        base↔subclass) are kept; if they don't validate, ``metadata`` falls back to the new schema's
+        defaults so the switch always succeeds.
+        """
+        async with self._lock:
+            self._ensure_mode(
+                "change the metadata schema",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            cls = resolve_metadata_class(schema) if isinstance(schema, str) else schema
+            carried = {k: v for k, v in self._bench.value.metadata.items() if k in cls.model_fields}
+            try:
+                metadata = cls.model_validate(carried).model_dump()
+            except ValidationError:
+                metadata = cls().model_dump()
+            await self._bench.update(metadata_cls=cls, metadata=metadata)
+
+    async def set_traversal(self, order: TileOrder) -> None:
+        async with self._lock:
+            self._ensure_mode(
+                "change the traversal order",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            await self._bench.update(traversal=order)
+
+    async def add_tasks(self, xy: Sequence[tuple[float, float]], *, profile_ids: Sequence[str] | None = None) -> None:
+        """Add a task at each (x, y), defaulting to the active profile."""
+        async with self._lock:
+            self._ensure_mode(
+                "add tasks",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            state = self._bench.value
+            profiles = list(profile_ids) if profile_ids is not None else [self._active_profile_id.value]
+            if not profiles:
+                raise OperationRejectedError("Adding tasks requires at least one profile")
+            tasks = {
+                uuid.uuid4().hex: AcquisitionTask(
+                    x=x, y=y, start=state.stencil.z_start, end=state.stencil.z_end, profile_ids=profiles
+                )
+                for x, y in xy
+            }
+            await self._bench.update(tasks={**state.tasks, **tasks})
+
+    async def remove_tasks(self, task_ids: Sequence[str]) -> None:
+        """Delete one or more tasks in a single bench update."""
+        async with self._lock:
+            self._ensure_mode(
+                "remove tasks",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            tasks = self._bench.value.tasks
+            if unknown := [tid for tid in task_ids if tid not in tasks]:
+                raise OperationRejectedError("; ".join(f"No such task '{tid}'" for tid in unknown))
+            remove = set(task_ids)
+            await self._bench.update(tasks={tid: t for tid, t in tasks.items() if tid not in remove})
+
+    async def update_tasks(self, patches: Mapping[str, TaskPatch]) -> None:
+        """Apply a per-task patch to one or more tasks in a single bench update."""
+        async with self._lock:
+            self._ensure_mode(
+                "update tasks",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            tasks = self._bench.value.tasks
+            if unknown := [tid for tid in patches if tid not in tasks]:
+                raise OperationRejectedError("; ".join(f"No such task '{tid}'" for tid in unknown))
+            updated = {
+                tid: (t.model_copy(update=patches[tid].changes()) if tid in patches else t) for tid, t in tasks.items()
+            }
+            await self._bench.update(tasks=updated)
+
+    async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionRecord:
+        """Begin acquiring the requested volumes into ``request.storage``; return the record once started.
+
+        ``storage`` is the run's logical destination (root + relative base; the node resolves it).
+        ``task_ids`` selects a subset of planned tasks (``None`` → all), always captured in traversal
+        order. Runs the preflight (each participating camera must be able to write ``storage``) and writes
+        ``<run>/record.json`` (a snapshot of the plan + hardware) **synchronously** — so a bad target or
+        an empty/unknown selection fails here — then launches the capture loop in the background and
+        returns the record. The run streams :attr:`progress` and ends by returning :attr:`mode` to
+        ``IDLE``; stop it early with :meth:`stop_acquisition`, or await it with :meth:`wait_acquisition`.
+        """
+        storage = request.storage
+        # Snapshot the bench and enter CAPTURE in one locked transition, so an edit cannot commit between
+        # planning and freezing the run state. The lock is released before preflight and capture; CAPTURE
+        # then rejects every other state transition.
+        async with self._lock:
+            if self._mode.value == AcquisitionMode.CAPTURE:
+                raise InstrumentBusyError("An acquisition is already in progress")
+            state = self._bench.value
+            plan = self._generate_plan(request.task_ids)
+            if not plan:
+                raise OperationRejectedError("No tasks planned — add tasks before acquiring")
+            if self._mode.value == AcquisitionMode.PREVIEW:
+                await self._stop_preview()
+            await self._mode.set(AcquisitionMode.CAPTURE)
+        try:
+            # Preflight: every camera in the plan must be able to write `storage`, tested on its own node
+            # (round-trip write). Any failure raises here — before record.json, motion, or capture.
+            detections = {
+                state.imaging.channels[ch_id].detection
+                for v in plan
+                for ch_id in state.imaging.profiles[v.profile].channels
+                if ch_id in state.imaging.channels
+            }
+            cameras = [self._hal.cameras[d] for d in detections if d in self._hal.cameras]
+            await asyncio.gather(*(cam.check_writable(storage) for cam in cameras))
+
+            record = AcquisitionRecord(
+                record_id=storage.path.name,
+                origin=Origin(on=System.hostname(), by=request.operator or getpass.getuser()),
+                volumes=plan,
+                state=state,
+                hardware=self._hal.config,
+            )
+            run_root = storage.resolve().target
+            run_root.mkdir(parents=True, exist_ok=True)
+            (run_root / "record.json").write_text(record.model_dump_json(indent=2))
+        except BaseException:
+            await self._mode.set(AcquisitionMode.IDLE)  # preflight/record failed — release CAPTURE
+            raise
+
+        self._acq_task = asyncio.create_task(self._run_acquisition(storage, plan))
+        return record
+
+    async def stop_acquisition(self) -> None:
+        """Cancel the in-flight acquisition, if any; its cleanup runs and ``mode`` returns to IDLE."""
+        if (task := self._acq_task) is not None and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    async def wait_acquisition(self) -> None:
+        """Await the in-flight acquisition's completion (no-op if none is running)."""
+        if (task := self._acq_task) is not None:
+            with suppress(asyncio.CancelledError):
+                await task
+
+    async def _run_acquisition(self, storage: StorageSpec, plan: list[PlannedVolume]) -> None:
+        """Capture each planned (task, profile) volume in order. Runs as the background ``_acq_task``.
+
+        Reads the bench live — it's frozen for the whole run (CAPTURE blocks edits) — and delegates each
+        volume to :meth:`_capture_volume`. A volume failure **aborts the run** (remaining volumes are
+        skipped) and is logged here, so the failure is observed even though the run is fire-and-launched;
+        cancellation (via :meth:`stop_acquisition`) propagates normally. ``mode`` returns to IDLE when the
+        run ends, completes, fails, or is cancelled.
+        """
+        tasks = self._bench.value.tasks
+        try:
+            for v in plan:
+                await self._apply_profile(v.profile)
+                subpath = PurePosixPath(tasks[v.task].signature, v.profile)
+                await self._capture_volume(tasks[v.task].stack, storage, subpath, task=v.task, profile=v.profile)
+            logger.info("Acquisition complete: %d volumes → %s", len(plan), storage.resolve().target)
+        except Exception:
+            logger.exception("Acquisition aborted")
+        finally:
+            self._acq_task = None
+            # Free each camera's writer ring (workers + ~hundreds of GB shared memory) now the run is
+            # over — it's kept resident across volumes for reuse, but not indefinitely afterward. The
+            # next acquisition re-allocates it cold. Runs on completion, failure, or cancellation.
+            released = await asyncio.gather(
+                *(cam.release_writer() for cam in self._hal.cameras.values()), return_exceptions=True
+            )
+            for cam_id, result in zip(self._hal.cameras, released, strict=True):
+                if isinstance(result, BaseException):
+                    logger.warning("release_writer failed for %s: %r", cam_id, result)
+            await self._mode.set(AcquisitionMode.IDLE)
+
+    async def _capture_volume(
+        self,
+        stack: ZStack,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
+        *,
+        task: str,
+        profile: str,
+    ) -> None:
+        """Acquire one volume for the already-active profile, emitting :attr:`progress` per batch.
+
+        The ``finally`` disables lasers, resets the stepper, and finalizes the writers — so a cancel
+        leaves hardware safe and the partial stack finalized.
+        """
+        settings = self._bench.value.output
+        channels = self.active_channels
+        scanning_axis = self._hal.stage.scanning_axis
+        z_step = self.active_profile.z_step
+        num_frames = stack.num_frames(z_step)
+        batch_z = settings.batch_z
+        progress = AcquisitionProgress(task=task, profile=profile, done=0, total=num_frames)
+        await self.progress.emit(progress)
+        try:
+            await asyncio.gather(
+                self._hal.stage.x.move_abs(stack.x, wait=True),
+                self._hal.stage.y.move_abs(stack.y, wait=True),
+                self._hal.stage.z.move_abs(stack.start, wait=True),
+            )
+            routes = self._bench.value.resolve_routes(x=stack.x, y=stack.y)
+            await self._routing_targets.set(routes)
+            async with self._lock:
+                await self._move_optical_routes(routes)
+            await scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
+            init_coros = []
+            for ch_id, ch in channels.items():
+                config = self._channel_config(ch_id)
+                init_coros.append(
+                    ch.camera.open_stack(
+                        storage=storage,
+                        subpath=subpath / ch_id,
+                        num_frames=num_frames,
+                        z_step=z_step,
+                        magnification=self._hal.config.detection[config.detection].magnification,
+                        settings=settings,
+                    )
+                )
+            refs = await asyncio.gather(*init_coros)
+
+            profile_root = storage.resolve(subpath).target
+            profile_root.mkdir(parents=True, exist_ok=True)
+            for ch_id, ref in zip(channels, refs, strict=True):
+                (profile_root / f"{ch_id}.ref.json").write_text(ref.model_dump_json(indent=2))
+
+            await asyncio.gather(*(ch.enable_laser() for ch in channels.values()))
+
+            for batch_idx in range(math.ceil(num_frames / batch_z)):
+                frames_in_batch = min(batch_z, num_frames - batch_idx * batch_z)
+                for _ in range(frames_in_batch):
+                    await scanning_axis.queue_relative_move(z_step)
+                # begin_batch waits for a free writer slot and arms the camera before returning,
+                # so the signal generator is safe to fire once these resolve.
+                await asyncio.gather(*(ch.camera.begin_batch(frames_in_batch) for ch in channels.values()))
+                await self._start_signal_generators()
+                while True:
+                    states = await asyncio.gather(*(ch.camera.capture_state() for ch in channels.values()))
+                    if all(state is CaptureState.DONE for state in states):
+                        break
+                    await asyncio.sleep(0.05)
+                await self._stop_signal_generators()
+                done = min((batch_idx + 1) * batch_z, num_frames)
+                await self.progress.emit(progress.updated(done=done))
+        finally:
+            await self._teardown_capture(list(channels.values()), scanning_axis)
+        logger.info("Captured %d frames: task %s / profile %s", num_frames, task, profile)
+
+    async def _teardown_capture(self, chans: list[Channel], scanning_axis: ContinuousAxisHandle) -> None:
+        """Cleanup after a volume, regardless of how capture exited: disable lasers, reset the stepper,
+        then drain and close every writer. Per-camera failures are logged, never raised, so one bad
+        camera can't block the others' cleanup.
+
+        Close runs in the background on each node; this polls ``capture_state`` until every camera
+        reports ``CLOSED``. Each poll is a short RPC, so a hung/dead node surfaces via its timeout
+        rather than blocking cleanup indefinitely.
+        """
+
+        def _report(label: str, results: list[Any]) -> None:
+            for ch, result in zip(chans, results, strict=True):
+                if isinstance(result, BaseException):
+                    logger.error("cleanup: %s failed for %s", label, ch.uid, exc_info=result)
+
+        _report("disable_laser", await asyncio.gather(*(ch.disable_laser() for ch in chans), return_exceptions=True))
+        with suppress(NotImplementedError, RuntimeError):
+            await scanning_axis.reset_ttl_stepper()
+        _report("close_stack", await asyncio.gather(*(ch.camera.close_stack() for ch in chans), return_exceptions=True))
+        pending = list(chans)
+        while pending:
+            states = await asyncio.gather(*(ch.camera.capture_state() for ch in pending), return_exceptions=True)
+            still_closing = []
+            for ch, state in zip(pending, states, strict=True):
+                if isinstance(state, BaseException):
+                    logger.error("cleanup: close_stack failed for %s", ch.uid, exc_info=state)
+                elif state is not CaptureState.CLOSED:
+                    still_closing.append(ch)
+            pending = still_closing
+            if pending:
+                await asyncio.sleep(0.05)
+
+    async def _update_active_profile_config(self, profile: ProfileConfig) -> None:
+        imaging = self._bench.value.imaging
+        profile_id = self._active_profile_id.value
+        imaging = imaging.model_copy(update={"profiles": {**imaging.profiles, profile_id: profile}})
+        await self._bench.update(imaging=imaging)
+
+    async def _subscribe_camera(self, cam_id: str, camera: CameraHandle) -> None:
+        async def forward_frames(data: bytes) -> None:
+            if (channel_id := self._channel_for_camera(cam_id)) is not None:
+                await self.frames.emit((channel_id, data))
+
+        async def forward_views(data: bytes) -> None:
+            if (channel_id := self._channel_for_camera(cam_id)) is not None:
+                await self.views.emit((channel_id, data))
+
+        self._preview_unsubs.append(camera.subscribe("preview", forward_frames))
+        self._preview_unsubs.append(camera.subscribe("preview_view", forward_views))
+
+    async def _apply_filters(self) -> None:
+        desired: dict[str, str] = {}
+        for ch_id in self.active_channels:
+            desired.update(self._channel_config(ch_id).filters)
+        await asyncio.gather(*(self._hal.fws[fw_id].call("select", slot, wait=True) for fw_id, slot in desired.items()))
+
+    async def _apply_signals(self) -> None:
+        for uid, signals in self.active_profile.sync.items():
+            await self._hal.signal_generators[uid].load(signals)
+
+    async def _start_signal_generators(self) -> None:
+        handles = [self._hal.signal_generators[uid] for uid in self.active_profile.sync]
+        await asyncio.gather(*(h.start() for h in handles))
+
+    async def _stop_signal_generators(self) -> None:
+        handles = [self._hal.signal_generators[uid] for uid in self.active_profile.sync]
+        await asyncio.gather(*(h.stop() for h in handles))
+
+    async def _run_setup_commands(self) -> None:
+        for device_id, commands in self.active_profile.setup.items():
+            result = await self._hal.devices[device_id].run_commands(commands)
+            if not result.is_ok:
+                failed = sorted(name for name, command_result in result.results.items() if not command_result.is_ok)
+                raise OperationRejectedError(f"Setup commands {failed} failed for device '{device_id}'")
+
+    def _saved_fov_for_profiles(self, profile_ids: Sequence[str]) -> tuple[float, float]:
+        """Return the bounding-box FOV implied by saved ROIs and cached camera geometry."""
+        imaging = self._bench.value.imaging
+        widths: list[float] = []
+        heights: list[float] = []
+        for profile_id in profile_ids:
+            profile = imaging.profiles.get(profile_id)
+            if profile is None:
+                continue
+            for channel_id in profile.channels:
+                channel = imaging.channels.get(channel_id)
+                if channel is None:
+                    continue
+                camera_id = channel.detection
+                camera = self._hal.cameras.get(camera_id)
+                if camera is None or (pixel_size := camera.pixel_size_um.value) is None:
+                    continue
+                if (sensor_size := camera.sensor_size_px.value) is None:
+                    continue
+                roi = profile.rois.get(camera_id)
+                width_px, height_px = (roi.w, roi.h) if roi is not None else (sensor_size.x, sensor_size.y)
+                path = self._hal.config.detection[camera_id]
+                factor = pixel_size / path.magnification
+                if path.rotation_deg % 180 == 0:
+                    widths.append(width_px * factor.x)
+                    heights.append(height_px * factor.y)
+                else:
+                    widths.append(height_px * factor.y)
+                    heights.append(width_px * factor.x)
+        return (max(widths, default=0.0), max(heights, default=0.0))
+
+    async def _compute_current_fov(self) -> tuple[float, float]:
+        if not self._hal.cameras:
+            raise RuntimeError("Instrument is not open")
+        detection = self._hal.config.detection
+        fovs: list[tuple[float, float]] = []
+        for ch_id, channel in self.active_channels.items():
+            frame_area = await channel.camera.frame_area_um.get()
+            path = detection[self._channel_config(ch_id).detection]
+            w, h = frame_area.x / path.magnification, frame_area.y / path.magnification
+            if path.rotation_deg % 180 != 0:
+                w, h = h, w
+            fovs.append((w, h))
+        active_id = self._active_profile_id.value
+        if fovs:
+            if not all(f == fovs[0] for f in fovs):
+                logger.warning("Profile '%s' cameras disagree on FOV; using bounding box", active_id)
+            return (max(w for w, _ in fovs), max(h for _, h in fovs))
+
+        return self._saved_fov_for_profiles([active_id])
+
+    def _generate_plan(self, task_ids: list[str] | None) -> list[PlannedVolume]:
+        """Resolve the ordered (task, profile) volumes to capture; validate an explicit selection.
+
+        ``task_ids`` is a selection, not an ordering: order always comes from the traversal query, so a
+        subset is visited in the same spatial order as the full run. Unknown ids raise
+        :class:`OperationRejectedError`.
+        """
+        tasks = self._bench.value.tasks
+        if task_ids is not None and (unknown := [t for t in task_ids if t not in tasks]):
+            raise OperationRejectedError("; ".join(f"No such task '{task_id}'" for task_id in unknown))
+        selected = None if task_ids is None else set(task_ids)
+        return [
+            PlannedVolume(task=tile.task_id, profile=pid)
+            for tile in self.task_tiles.value
+            if selected is None or tile.task_id in selected
+            for pid in tasks[tile.task_id].profile_ids
+        ]
+
+    def _ensure_mode(self, operation: str, *allowed: AcquisitionMode) -> None:
+        current = self._mode.value
+        if current in allowed:
+            return
+        expected = " or ".join(mode.value for mode in allowed)
+        raise InstrumentBusyError(f"Unable to {operation}: requires mode {expected}; current mode is {current.value}")
+
+    def _settable_devices(self) -> set[str]:
+        return self._bench.value.imaging.get_profile_settable_devices(self._active_profile_id.value, self._hal.config)
+
+    def _channel_config(self, channel_id: str) -> ChannelConfig:
+        return self._bench.value.imaging.channels[channel_id]
+
+    def _channel_for_camera(self, camera_id: str) -> str | None:
+        for ch_id in self.active_profile.channels:
+            config = self._bench.value.imaging.channels.get(ch_id)
+            if config is not None and config.detection == camera_id and ch_id in self._channels:
+                return ch_id
+        return None
+
+    def _build_channels(self) -> dict[str, Channel]:
+        return {
+            uid: Channel(
+                uid=uid,
+                camera=self._hal.cameras[config.detection],
+                laser=self._hal.lasers[config.illumination],
+            )
+            for uid, config in self._bench.value.imaging.channels.items()
+        }
+
+    def _compute_task_tiles(self) -> list[TaskTile]:
+        """Each task's footprint tile (position + its profiles' combined FOV), in traversal order.
+
+        Replaces the old (tiles-dict + order-list) pair. The traversal is generic over the ``Tile``
+        subtype, so it returns the :class:`TaskTile`s — each carrying its ``task_id`` — already ordered.
+        Read the order with ``[tt.task_id for tt in task_tiles.value]``.
+        """
+        state = self._bench.value
+        tiles: list[TaskTile] = []
+        for key, task in state.tasks.items():
+            w, h = self._saved_fov_for_profiles(task.profile_ids)
+            tiles.append(TaskTile(task_id=key, x=task.x, y=task.y, w=w, h=h))
+        return list(state.traversal(tiles))

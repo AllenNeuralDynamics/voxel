@@ -16,6 +16,7 @@ members = [
     "ome-zarr-writer",
     "rigup",
     "vxl",
+    "vxl-cli",
     "vxl-drivers",
     "vxl-qt",
     "vxl-web",
@@ -2702,6 +2703,36 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "ruff", specifier = ">=0.8.0" },
 ]
+
+[[package]]
+name = "vxl-cli"
+version = "0.1.0"
+source = { editable = "cli" }
+dependencies = [
+    { name = "vxl" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "vxl-qt" },
+    { name = "vxl-web" },
+]
+qt = [
+    { name = "vxl-qt" },
+]
+web = [
+    { name = "vxl-web" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "vxl", editable = "." },
+    { name = "vxl-qt", marker = "extra == 'all'", editable = "qt" },
+    { name = "vxl-qt", marker = "extra == 'qt'", editable = "qt" },
+    { name = "vxl-web", marker = "extra == 'all'", editable = "web" },
+    { name = "vxl-web", marker = "extra == 'web'", editable = "web" },
+]
+provides-extras = ["web", "qt", "all"]
 
 [[package]]
 name = "vxl-drivers"

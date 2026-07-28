@@ -16,8 +16,9 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QMouseEvent, QPainter, QPaintEvent, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QMenu, QSizePolicy, QWidget
 
-from vxl.instrument import AcquisitionTask, Instrument, InstrumentState, TaskPatch
-from vxl.traversal import Tile
+from vxl.instrument import Instrument, InstrumentState
+from vxl.instrument.state import AcquisitionTask, TaskPatch
+from vxl.instrument.traversal import Tile
 from vxl_qt.devices.adapter import DevicesStore
 from vxl_qt.devices.bind import bind_slider_spinbox
 from vxl_qt.devices.stage import StageStore

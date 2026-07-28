@@ -1,4 +1,4 @@
-"""FastAPI factory + entrypoint for the Voxel web backend, on the ``vxl.Instrument`` API.
+"""FastAPI factory + launcher for the Voxel web backend, on the ``vxl.Instrument`` API.
 
 Lean by design: two routers (the ``VoxelApp`` surface — discover/launch/close/catalog — and the active
 ``Instrument`` surface), the per-instrument WS feed (:mod:`vxl_web.live`), and the ``MsgBus``
@@ -10,7 +10,6 @@ Runs as a single uvicorn process: it owns the open hardware, the bus, and one ev
 exactly one process per microscope (never multiple workers — they would each open the hardware).
 """
 
-import argparse
 import asyncio
 import logging
 from collections import deque
@@ -18,6 +17,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -29,7 +29,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
 from vxl.app import VoxelApp
-from vxl.instrument import ProtocolError
+from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.system import load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
@@ -62,21 +62,22 @@ class SPAStaticFiles(StaticFiles):
 
 
 def _register_error_handlers(app: FastAPI) -> None:
-    """Map the Instrument's rejection vocabulary to HTTP: ProtocolError → 422, RuntimeError → 409.
+    """Map expected instrument failures to HTTP while leaving unexpected errors as 500s."""
 
-    ``ProtocolError`` is a precondition/validation rejection (state unchanged) → 422 with the violation
-    list. The Instrument raises ``RuntimeError`` only for busy/wrong-mode conflicts (e.g. editing during
-    a capture) → 409. NOTE: this maps *all* RuntimeErrors to 409, so a stray bug surfaces as a conflict
-    rather than a 500 — acceptable until the Instrument uses a dedicated busy exception.
-    """
+    def details(exc: StartupError) -> list[dict[str, Any]]:
+        return [violation.model_dump(mode="json", exclude_none=True) for violation in exc.violations]
 
-    @app.exception_handler(ProtocolError)
-    async def _on_protocol_error(_request: Request, exc: ProtocolError) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": exc.violations})
+    @app.exception_handler(OperationRejectedError)
+    async def _on_operation_rejected(_request: Request, exc: OperationRejectedError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
-    @app.exception_handler(RuntimeError)
-    async def _on_runtime_error(_request: Request, exc: RuntimeError) -> JSONResponse:
+    @app.exception_handler(InstrumentBusyError)
+    async def _on_instrument_busy(_request: Request, exc: InstrumentBusyError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(StartupError)
+    async def _on_startup_error(_request: Request, exc: StartupError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": details(exc)})
 
 
 class _LogHandler(logging.Handler):
@@ -145,21 +146,17 @@ def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) 
     return app
 
 
-def main() -> None:
+def serve(*, host: str, port: int = 8000, debug: bool = False) -> None:
+    """Run the Voxel web application."""
     load_voxel_env()  # ambient env from ~/.voxel/.env before anything reads it (System, S3 clients)
-    parser = argparse.ArgumentParser(prog="vxl", description="Voxel — microscope control system")
-    parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: all interfaces)")  # noqa: S104
-    parser.add_argument("--port", type=int, default=8000, help="Web server port (default: 8000)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    args = parser.parse_args()
-    console_level = logging.DEBUG if args.debug else logging.INFO
+    console_level = logging.DEBUG if debug else logging.INFO
     configure_logging(level=console_level, fmt="%(message)s", datefmt="[%X]")
     # The WS log feed streams DEBUG to the UI while the console keeps the user-facing threshold. Per-handler
     # levels split the two: the bus handler (added in the lifespan) is DEBUG; the console handler is
     # console_level. Without --debug, only the Voxel packages emit DEBUG (root stays INFO) so the feed isn't
     # flooded with third-party library noise; --debug opens everything, including third-party loggers.
     root_logger = logging.getLogger()
-    if args.debug:
+    if debug:
         root_logger.setLevel(logging.DEBUG)
     else:
         root_logger.setLevel(logging.INFO)
@@ -168,18 +165,14 @@ def main() -> None:
     for handler in root_logger.handlers:
         handler.setLevel(console_level)
     log.info("Starting Voxel...")
-    log.info("Web UI: http://localhost:%d", args.port)
+    log.info("Web UI: http://localhost:%d", port)
     if (local_ip := get_local_ip()) != "127.0.0.1":
-        log.info("      or http://%s:%d", local_ip, args.port)
+        log.info("      or http://%s:%d", local_ip, port)
     uvicorn.run(
         create_app(),
-        host=args.host,
-        port=args.port,
+        host=host,
+        port=port,
         log_config=get_uvicorn_log_config(),
         loop="auto",
         ws_ping_interval=None,  # disable keepalive pings — prevents a race with manual send_bytes
     )
-
-
-if __name__ == "__main__":
-    main()

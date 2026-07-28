@@ -7,12 +7,14 @@ from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
 
 class BuildConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     target: str  # Fully qualified class name, e.g., "rigup.objs.camera.Camera"
     init: dict[str, Any] = Field(default_factory=dict)  # Constructor arguments
     # Values set via setattr on the instance after construction. Goes through descriptor

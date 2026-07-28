@@ -42,6 +42,10 @@ hal:
       target: vxl.axes.simulated.SimulatedDiscreteAxis
       init:
         slots: { 0: "BP525", 1: "BP600", 2: "BP700" }
+    illumination_side_selector:
+      target: vxl.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: { 0: "left", 1: "right" }
     x_axis:
       target: &axis_target vxl.axes.simulated.SimulatedContinuousAxis
       init: { lower_limit: 0, upper_limit: 36700 }
@@ -63,10 +67,26 @@ hal:
       magnification: 8.0
 
   illumination:
-    laser_488: {}
-    laser_561: {}
+    laser_488:
+      routing:
+        excitation_side: [left, right]
+    laser_561:
+      routing:
+        excitation_side: [left, right]
+
+  optical_routing:
+    excitation_side:
+      left:
+        illumination_side_selector: left
+      right:
+        illumination_side_selector: right
 
 default:
+  routing:
+    excitation_side:
+      type: fixed
+      route: left
+
   imaging:
     channels:
       gfp:

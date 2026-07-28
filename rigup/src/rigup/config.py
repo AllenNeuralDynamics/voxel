@@ -27,7 +27,7 @@ node to host devices the rig doesn't care about).
 
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .build import BuildConfig
 
@@ -79,6 +79,8 @@ class NodeConfig(BaseModel):
     ``address: tcp://localhost:5555``.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     kind: NodeKind
     address: str | None = None
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
@@ -110,6 +112,8 @@ class RigConfig(BaseModel, frozen=True):
     no IPC, no subprocess. ``nodes`` declares separate processes (subprocess or
     remote) that each host their own ``devices`` dict.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     devices: dict[str, DeviceConfig] = Field(default_factory=dict)
     nodes: dict[str, NodeConfig] = Field(default_factory=dict)

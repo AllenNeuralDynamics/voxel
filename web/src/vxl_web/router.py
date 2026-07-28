@@ -5,7 +5,7 @@
   settings / tasks / plan / metadata / devices / preview / acquisition (wired in later increments).
 
 ``api_router`` aggregates both. Endpoints map near-1:1 to ``VoxelApp`` / ``Instrument`` methods
-(``ProtocolError`` → 422, ``RuntimeError`` → 409).
+(``OperationRejectedError`` → 422, ``InstrumentBusyError`` → 409).
 """
 
 import logging
@@ -17,20 +17,12 @@ from pydantic import BaseModel
 
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
 from vxl.daq.clocked import Signals
-from vxl.instrument import (
-    AcquisitionRecord,
-    AcquisitionRequest,
-    ChannelPatch,
-    HALConfig,
-    InstrumentDefaults,
-    ProfilePatch,
-    StencilPatch,
-    TaskPatch,
-    WriterPatch,
-)
+from vxl.instrument.core import AcquisitionRecord, AcquisitionRequest
+from vxl.instrument.state import ChannelPatch, InstrumentDefaults, ProfilePatch, StencilPatch, TaskPatch, WriterPatch
+from vxl.instrument.topology import HALConfig
+from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
 from vxl.system import Remote
-from vxl.traversal import TileOrder
 from vxlib import ColormapGroup, get_colormap_catalog
 
 from .deps import AppDep, InstrumentDep, LogBufferDep
@@ -78,21 +70,18 @@ async def launch(name: str, app: AppDep) -> dict[str, str]:
     return {"launched": instrument.path.stem}
 
 
-@app_router.post("/instruments/{name}/reset-bench")
-async def reset_bench(name: str, label: str, app: AppDep) -> dict[str, str]:
-    """Archive ``<name>.voxel/bench.json`` to ``bench.<label>.json`` so the next launch repopulates it.
+@app_router.post("/instruments/{name}/archive-bench")
+async def archive_bench(name: str, app: AppDep) -> dict[str, str]:
+    """Archive ``bench.json`` under the next available backup name.
 
-    404 if the instrument or its bench is missing, 409 if it's active or the archive already exists,
-    422 on an empty label.
+    404 if the instrument or its bench is missing; 409 if the instrument is active.
     """
     try:
-        archive = app.reset_bench(name, label)
+        archive = app.archive_bench(name)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except (FileExistsError, RuntimeError) as e:
+    except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
     return {"archived": archive.name}
 
 
@@ -216,6 +205,10 @@ class _ExecuteCommand(BaseModel):
     kwargs: dict[str, Any] = {}
 
 
+class _OpticalRouteOverride(BaseModel):
+    route: str
+
+
 @instrument_router.get("")
 async def get_status(inst: InstrumentDep) -> InstrumentStatus:
     """The current whole-instrument snapshot — same shape as the ``instrument.status`` WS topic."""
@@ -224,6 +217,7 @@ async def get_status(inst: InstrumentDep) -> InstrumentStatus:
         active_profile_id=inst.active_profile_id.value,
         preview_epoch=inst.preview_epoch.value,
         fov=await inst.fov.get(),
+        routing_targets=inst.routing_targets.value,
         state=inst.state.value,
         task_tiles=inst.task_tiles.value,
     )
@@ -269,6 +263,16 @@ async def apply_settings(inst: InstrumentDep) -> None:
 @instrument_router.post("/settings/save", status_code=204)
 async def save_settings(inst: InstrumentDep) -> None:
     await inst.save_settings()
+
+
+@instrument_router.post("/optical-routing/apply", status_code=204)
+async def apply_optical_routing(inst: InstrumentDep) -> None:
+    await inst.apply_optical_routing()
+
+
+@instrument_router.post("/optical-routing/{dimension}/override", status_code=204)
+async def override_optical_route(dimension: str, body: _OpticalRouteOverride, inst: InstrumentDep) -> None:
+    await inst.override_optical_route(dimension, body.route)
 
 
 @instrument_router.post("/default/save", status_code=204)

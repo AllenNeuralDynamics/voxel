@@ -66,6 +66,10 @@ hal:
           target: *fw_target
           init:
             slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
+        illumination_path_selector:
+          target: *fw_target
+          init:
+            slots: { 0: "sample", 1: "calibration" }
         x_axis:
           target: &axis_target vxl.axes.simulated.SimulatedContinuousAxis
           init: { lower_limit: 0, upper_limit: 36700 }
@@ -84,6 +88,10 @@ hal:
           init:
             pixel_size_um: "3.76,3.76"
             sensor_size_px: "10640,14192"
+        detection_path_selector:
+          target: vxl.axes.simulated.SimulatedDiscreteAxis
+          init:
+            slots: { 0: "sample", 1: "calibration" }
       kind: subprocess
     node_2:
       devices:
@@ -99,18 +107,46 @@ hal:
     camera_1:
       filter_wheels: [fw_detection_shared, fw_emission_cam1]
       magnification: 8.0
+      routing:
+        beam_path: [sample, calibration]
     camera_2:
       filter_wheels: [fw_detection_shared, fw_emission_cam2]
       magnification: 8.0
+      routing:
+        beam_path: [sample, calibration]
 
   illumination:
-    laser_405: {}
-    laser_488: {}
-    laser_561: {}
-    laser_640: {}
-    laser_730: {}
+    laser_405:
+      routing:
+        beam_path: [sample, calibration]
+    laser_488:
+      routing:
+        beam_path: [sample, calibration]
+    laser_561:
+      routing:
+        beam_path: [sample, calibration]
+    laser_640:
+      routing:
+        beam_path: [sample, calibration]
+    laser_730:
+      routing:
+        beam_path: [sample, calibration]
+
+  optical_routing:
+    beam_path:
+      sample:
+        illumination_path_selector: sample
+        detection_path_selector: sample
+      calibration:
+        illumination_path_selector: calibration
+        detection_path_selector: calibration
 
 default:
+  routing:
+    beam_path:
+      type: fixed
+      route: sample
+
   imaging:
     channels:
       dapi:

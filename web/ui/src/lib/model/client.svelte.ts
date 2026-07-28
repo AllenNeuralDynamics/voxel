@@ -235,7 +235,16 @@ export class Client {
     } catch {
       /* non-JSON body — keep the status-line detail */
     }
-    const message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+    const message =
+      typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail) &&
+            detail.every(
+              (item): item is { msg: string } =>
+                typeof item === 'object' && item !== null && 'msg' in item && typeof item.msg === 'string'
+            )
+          ? detail.map((item) => item.msg).join('; ')
+          : JSON.stringify(detail);
     return new ApiError(res.status, detail, message);
   }
 

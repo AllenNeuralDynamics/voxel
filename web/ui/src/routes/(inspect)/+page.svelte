@@ -1,10 +1,16 @@
 <script lang="ts">
+  import { resolve } from '$app/paths';
+  import { page } from '$app/state';
   import { wavelengthToColor } from '$lib/colors.svelte';
+  import { defaultDialog } from '$lib/DefaultConfigDialog.svelte';
+  import { Button, DiffJsonView, JsonView } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
-  import { sanitizeString, toastError } from '$lib/utils';
+  import { cn, sanitizeString, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
+  const configActive = $derived(page.url.searchParams.get('tab') === 'config');
+  const overviewActive = $derived(!configActive);
 
   const headingClass = 'mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase';
   const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3';
@@ -34,83 +40,117 @@
   }
 </script>
 
+{#snippet instrumentTab(label: string, path: '/' | '/?tab=config', active: boolean)}
+  <a
+    href={resolve(path)}
+    class={cn(
+      'border-b-2 px-3 py-1.5 transition-colors',
+      active ? 'border-fg text-fg' : 'border-transparent text-fg-muted hover:text-fg'
+    )}
+  >
+    {label}
+  </a>
+{/snippet}
+
 {#if instrument}
-  {@const state = instrument.state}
-  {@const imaging = instrument.imaging}
-  {@const activeProfile = instrument.activeProfile}
+  <nav class="flex border-b border-border px-3" aria-label="Instrument views">
+    {@render instrumentTab('Overview', '/', overviewActive)}
+    {@render instrumentTab('Configuration', '/?tab=config', configActive)}
+  </nav>
 
-  <!-- Identity / status -->
-  <section class="border-b border-border px-4 pt-2 pb-6">
-    <h2 class="text-2xl text-fg">{app.activeName ? sanitizeString(app.activeName) : 'Instrument'}</h2>
-
-    <dl class="mt-4 grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
-      <dt class={rowLabelClass}>Active profile</dt>
-      <dd class={rowValueClass}>{(activeProfile?.label ?? sanitizeString(instrument.activeProfileId)) || '—'}</dd>
-
-      <dt class={rowLabelClass}>FOV</dt>
-      <dd class={rowValueClass}>
-        {instrument.fov ? `${instrument.fov[0].toFixed(0)} × ${instrument.fov[1].toFixed(0)} µm` : '—'}
-      </dd>
-
-      <dt class={rowLabelClass}>Traversal</dt>
-      <dd class={rowValueClass}>{sanitizeString(state.traversal)}</dd>
-
-      <dt class={rowLabelClass}>Metadata</dt>
-      <dd class={rowValueClass}>{state.metadata_cls.split('.').pop()}</dd>
-
-      <dt class={rowLabelClass}>Tasks</dt>
-      <dd class={rowValueClass}>{Object.keys(state.tasks).length}</dd>
-
-      <dt class={rowLabelClass}>Last modified</dt>
-      <dd class={rowValueClass}>{formatRelative(state.last_modified)}</dd>
-    </dl>
-  </section>
-
-  <!-- Profile cards -->
-  <section class="p-4">
-    <h3 class={headingClass}>Profiles</h3>
-    <div class={cardGroupClass}>
-      {#each Object.keys(imaging.profiles) as profileId (profileId)}
-        {@render profileCard(profileId)}
-      {/each}
-    </div>
-  </section>
-
-  <!-- Channel cards -->
-  <section class="p-4">
-    <h3 class={headingClass}>Channels</h3>
-    <div class={cardGroupClass}>
-      {#each Object.entries(imaging.channels) as [channelId, channel] (channelId)}
-        <div class="rounded-lg border bg-card p-3 text-fg shadow-sm">
-          <div class="mb-2 flex items-center gap-2 text-lg">
-            {#if channel.emission}
-              <span
-                class="h-2.5 w-2.5 shrink-0 rounded-full"
-                style="background-color: {wavelengthToColor(channel.emission)}"
-              ></span>
-            {/if}
-            <span class="font-medium text-fg">{channel.label ?? sanitizeString(channelId)}</span>
-          </div>
-          <div class="space-y-1 text-fg-muted">
-            <div class="flex justify-between">
-              <span>Detection</span>
-              <span class="text-fg">{channel.detection}</span>
-            </div>
-            <div class="flex justify-between">
-              <span>Illumination</span>
-              <span class="text-fg">{channel.illumination}</span>
-            </div>
-            {#each Object.entries(channel.filters) as [fwId, position] (fwId)}
-              <div class="flex justify-between">
-                <span>{fwId}</span>
-                <span class="text-fg">{position}</span>
-              </div>
-            {/each}
+  {#if configActive}
+    <div class="space-y-6 px-4 py-2">
+      <section>
+        <div class="mb-2 flex items-center gap-3">
+          <h2 class="text-base font-medium tracking-wide text-fg-muted/70 uppercase">Bench</h2>
+          <div class="ml-auto flex items-center gap-1.5">
+            <Button variant="ghost" size="xs" onclick={() => defaultDialog.open('restore')}>Restore default</Button>
+            <Button variant="outline" size="xs" onclick={() => defaultDialog.open('save')}>Save as default</Button>
           </div>
         </div>
-      {/each}
+        <DiffJsonView data={instrument.state} base={instrument.default} expandDepth={1} />
+      </section>
+      <section>
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Hardware</h2>
+        <JsonView data={instrument.hal} expandDepth={1} />
+      </section>
     </div>
-  </section>
+  {:else}
+    {@const state = instrument.state}
+    {@const imaging = instrument.imaging}
+    {@const activeProfile = instrument.activeProfile}
+
+    <!-- Status -->
+    <section class="border-b border-border px-4 pt-2 pb-6">
+      <dl class="grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
+        <dt class={rowLabelClass}>Active profile</dt>
+        <dd class={rowValueClass}>{(activeProfile?.label ?? sanitizeString(instrument.activeProfileId)) || '—'}</dd>
+
+        <dt class={rowLabelClass}>FOV</dt>
+        <dd class={rowValueClass}>
+          {instrument.fov ? `${instrument.fov[0].toFixed(0)} × ${instrument.fov[1].toFixed(0)} µm` : '—'}
+        </dd>
+
+        <dt class={rowLabelClass}>Traversal</dt>
+        <dd class={rowValueClass}>{sanitizeString(state.traversal)}</dd>
+
+        <dt class={rowLabelClass}>Metadata</dt>
+        <dd class={rowValueClass}>{state.metadata_cls.split('.').pop()}</dd>
+
+        <dt class={rowLabelClass}>Tasks</dt>
+        <dd class={rowValueClass}>{Object.keys(state.tasks).length}</dd>
+
+        <dt class={rowLabelClass}>Last modified</dt>
+        <dd class={rowValueClass}>{formatRelative(state.last_modified)}</dd>
+      </dl>
+    </section>
+
+    <!-- Profile cards -->
+    <section class="p-4">
+      <h3 class={headingClass}>Profiles</h3>
+      <div class={cardGroupClass}>
+        {#each Object.keys(imaging.profiles) as profileId (profileId)}
+          {@render profileCard(profileId)}
+        {/each}
+      </div>
+    </section>
+
+    <!-- Channel cards -->
+    <section class="p-4">
+      <h3 class={headingClass}>Channels</h3>
+      <div class={cardGroupClass}>
+        {#each Object.entries(imaging.channels) as [channelId, channel] (channelId)}
+          <div class="rounded-lg border bg-card p-3 text-fg shadow-sm">
+            <div class="mb-2 flex items-center gap-2 text-lg">
+              {#if channel.emission}
+                <span
+                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style="background-color: {wavelengthToColor(channel.emission)}"
+                ></span>
+              {/if}
+              <span class="font-medium text-fg">{channel.label ?? sanitizeString(channelId)}</span>
+            </div>
+            <div class="space-y-1 text-fg-muted">
+              <div class="flex justify-between">
+                <span>Detection</span>
+                <span class="text-fg">{channel.detection}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Illumination</span>
+                <span class="text-fg">{channel.illumination}</span>
+              </div>
+              {#each Object.entries(channel.filters) as [fwId, position] (fwId)}
+                <div class="flex justify-between">
+                  <span>{fwId}</span>
+                  <span class="text-fg">{position}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 {/if}
 
 {#snippet profileCard(profileId: string)}

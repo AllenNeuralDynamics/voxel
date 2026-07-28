@@ -2,7 +2,9 @@
 
 import pytest
 from pydantic import ValidationError
+from rigup.build import BuildConfig
 from rigup.config import NodeConfig, RigConfig
+from rigup.device import CommandRequest
 
 
 class TestNodeConfigKindAutofill:
@@ -52,17 +54,20 @@ class TestNodeConfigValidation:
         cfg = NodeConfig.model_validate({"kind": "subprocess", "address": "tcp://localhost:5555"})
         assert cfg.address == "tcp://localhost:5555"
 
+    def test_unknown_field_is_rejected(self):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            NodeConfig.model_validate({"kind": "subprocess", "adress": "tcp://localhost:5555"})
+
 
 class TestRigConfig:
     def test_minimal_config(self):
-        cfg = RigConfig.model_validate({"name": "test"})
+        cfg = RigConfig.model_validate({})
         assert cfg.devices == {}
         assert cfg.nodes == {}
 
     def test_devices_and_nodes(self):
         cfg = RigConfig.model_validate(
             {
-                "name": "test",
                 "devices": {"stage": {"target": "some.Module", "init": {}}},
                 "nodes": {"cam_host": {"address": "tcp://10.0.0.2:5555", "devices": {}}},
             }
@@ -70,6 +75,18 @@ class TestRigConfig:
         assert "stage" in cfg.devices
         assert cfg.nodes["cam_host"].kind == "remote"
         assert cfg.nodes["cam_host"].address == "tcp://10.0.0.2:5555"
+
+    def test_unknown_field_is_rejected(self):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            RigConfig.model_validate({"name": "test"})
+
+    def test_unknown_device_build_field_is_rejected(self):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            BuildConfig.model_validate({"target": "some.Module", "initial": {}})
+
+    def test_unknown_command_request_field_is_rejected(self):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            CommandRequest.model_validate({"attr": "enable", "arguments": []})
 
     def test_device_uids_must_be_unique_across_nodes(self):
         with pytest.raises(ValidationError, match="Device UID 'camera' is duplicated"):

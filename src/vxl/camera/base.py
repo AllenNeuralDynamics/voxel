@@ -22,7 +22,7 @@ from ome_zarr_writer import (
     WriterSettings,
 )
 from ome_zarr_writer.writer import BatchMetrics
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
@@ -129,6 +129,8 @@ class SensorROI(BaseModel):
     All coordinates are in the unbinned sensor pixel space. FOV depends only on
     (x, y, w, h) and the camera's pixel_size_um — binning is independent.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     x: int = 0
     y: int = 0

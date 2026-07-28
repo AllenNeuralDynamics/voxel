@@ -10,6 +10,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 
 log = logging.getLogger(__name__)
 
@@ -30,11 +31,12 @@ class Coalescer[T]:
     preserving partial-update information across keys::
 
         coalescer = Coalescer[dict[str, Levels]](drain=send_levels, reducer=merge_dicts)
-        coalescer.put({"ch1": l1})  # stored
-        coalescer.put({"ch2": l2})  # folded → {"ch1": l1, "ch2": l2}
+        coalescer.update({"ch1": l1})  # stored
+        coalescer.update({"ch2": l2})  # folded → {"ch1": l1, "ch2": l2}
 
-    Lazy-starts the delivery task on first ``put``. Re-startable after
-    :meth:`close` — next ``put`` spins up a new task.
+    Lazy-starts the delivery task on first :meth:`update`. :meth:`cancel` stops
+    the current task while leaving the coalescer reusable; :meth:`close` is the
+    awaited, permanent teardown operation.
 
     Intentionally 1:1 (one producer side, one drain). For multi-observer
     broadcast, use :class:`Signal` or :class:`Cell`; ``Coalescer`` is a bridge,
@@ -52,6 +54,7 @@ class Coalescer[T]:
         self._value: T | None = None
         self._event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
+        self._closed = False
 
     def update(self, value: T) -> None:
         """Submit a value. Sync, never blocks.
@@ -59,6 +62,8 @@ class Coalescer[T]:
         Older unused values are overwritten (or folded via ``reducer``). Lazy-starts
         the delivery task if not already running.
         """
+        if self._closed:
+            raise RuntimeError("Coalescer is closed")
         if self._reducer is not None and self._value is not None:
             self._value = self._reducer(self._value, value)
         else:
@@ -70,14 +75,28 @@ class Coalescer[T]:
     def cancel(self) -> None:
         """Cancel the delivery task. Sync. Idempotent. Safe to call from any context.
 
-        The next :meth:`put` will lazy-start a fresh task — close is a stop, not a
-        permanent shutdown. Pending value (if any) is discarded.
+        The next :meth:`update` will lazy-start a fresh task. Pending value (if
+        any) is discarded. Use and await :meth:`close` for final teardown so the
+        cancelled task finishes before its event loop is closed.
         """
-        if self._task is not None and not self._task.done():
-            self._task.cancel()
-            self._task = None
+        task, self._task = self._task, None
+        if task is not None and not task.done():
+            task.cancel()
         self._value = None
         self._event.clear()
+
+    async def close(self) -> None:
+        """Cancel and await the delivery task permanently. Idempotent."""
+        self._closed = True
+        task, self._task = self._task, None
+        self._value = None
+        self._event.clear()
+        if task is None:
+            return
+        if not task.done():
+            task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
     async def _run(self) -> None:
         try:

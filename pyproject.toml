@@ -35,10 +35,6 @@ dependencies = [
 Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
-[project.scripts]
-vxl-node = "vxl.node:main"
-voxel-node = "vxl.node:main"
-
 [project.entry-points."vxl.metadata"]
 exaspim = "vxl.metadata.ExaspimMetadata"
 
@@ -48,6 +44,7 @@ build-backend = "uv_build"
 
 [tool.uv.workspace]
 members = [
+    "cli",
     "rigup",
     "drivers",
     "web",

@@ -2,7 +2,7 @@ import math
 import re
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, GetCoreSchemaHandler, GetJsonSchemaHandler, model_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, GetJsonSchemaHandler, model_validator
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, core_schema
 
@@ -114,6 +114,8 @@ class _QuantityRange[Q: Quantity](BaseModel):
 
 
 class QuantityRange[Q: Quantity](BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     min: Q | float = Field(default=float("nan"), description="Minimum value of the range")
     max: Q | float = Field(default=float("nan"), description="Maximum value of the range")
     span: Q | float = Field(default=float("nan"), description="Span of the range")
@@ -139,6 +141,8 @@ class QuantityRange[Q: Quantity](BaseModel):
 
 
 class NormalizedRange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     min: float = Field(default=float("nan"), ge=0.0)
     max: float = Field(default=float("nan"), le=1.0)
     span: float = Field(default=float("nan"), ge=0.0)

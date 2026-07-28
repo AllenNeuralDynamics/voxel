@@ -6,7 +6,7 @@ from enum import Enum
 from functools import wraps
 from typing import Annotated, Any, Literal, Self, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field, RootModel, ValidationError, create_model
+from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, create_model
 
 from .props import PropertyModel
 
@@ -277,6 +277,8 @@ class Command[R]:
 
 
 class CommandRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     attr: str
     args: list[Any] = Field(default_factory=list)
     kwargs: dict[str, Any] = Field(default_factory=dict)

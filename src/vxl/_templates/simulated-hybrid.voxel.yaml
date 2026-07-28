@@ -39,6 +39,10 @@ hal:
       target: *fw_target
       init:
         slots: { 0: "BP525", 1: "BP600" }
+    detection_mode_selector:
+      target: *fw_target
+      init:
+        slots: { 0: "widefield", 1: "confocal" }
     x_axis:
       target: &axis_target vxl.axes.simulated.SimulatedContinuousAxis
       init: { lower_limit: 0, upper_limit: 36700 }
@@ -76,15 +80,31 @@ hal:
     camera_1:
       filter_wheels: [fw_detection, fw_emission_cam1]
       magnification: 8.0
+      routing:
+        detection_mode: [widefield, confocal]
     camera_2:
       filter_wheels: [fw_detection, fw_emission_cam2]
       magnification: 8.0
+      routing:
+        detection_mode: [widefield, confocal]
 
   illumination:
     laser_488: {}
     laser_561: {}
 
+  optical_routing:
+    detection_mode:
+      widefield:
+        detection_mode_selector: widefield
+      confocal:
+        detection_mode_selector: confocal
+
 default:
+  routing:
+    detection_mode:
+      type: fixed
+      route: widefield
+
   imaging:
     channels:
       gfp_cam1:

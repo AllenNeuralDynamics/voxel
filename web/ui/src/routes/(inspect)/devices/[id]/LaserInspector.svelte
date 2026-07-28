@@ -2,7 +2,6 @@
   import { Switch } from '$lib/kit';
   import type { Instrument } from '$lib/model';
   import { PropInput } from '$lib/prop';
-  import { cn, sanitizeString } from '$lib/utils';
 
   import DeviceBrowser from './DeviceBrowser.svelte';
 
@@ -20,7 +19,6 @@
 
   const laser = $derived(instrument.lasers.get(deviceId));
 
-  const wavelength = $derived(laser?.wavelength?.value);
   const laserColor = $derived(laser?.color);
   const enabled = $derived(laser?.isEnabled?.value === true);
   const measured = $derived(laser?.power?.value);
@@ -32,27 +30,16 @@
   }
 </script>
 
-<!-- Header with enable switch -->
-<div class="mb-6 flex items-center justify-between">
-  <div class="flex items-center gap-2">
-    <span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
-    <h2 class="text-2xl text-fg">
-      {typeof wavelength === 'number' ? `${wavelength} nm Laser` : sanitizeString(deviceId)}
-    </h2>
-  </div>
-  <div class="flex items-center gap-3">
-    <span
-      class={cn('h-2 w-2 rounded-full', laser?.connected ? 'bg-success' : 'bg-fg-muted/30')}
-      title={laser?.connected ? 'Connected' : 'Disconnected'}
-    ></span>
-    {#if laser?.connected}
-      <Switch checked={enabled} onCheckedChange={handleToggle} size="sm" style="--switch-accent: {laserColor}" />
-    {/if}
-  </div>
-</div>
-
 {#if laser?.connected}
   <div class="max-w-xl space-y-6">
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="h-2.5 w-2.5 rounded-full" style="background-color: {laserColor}"></span>
+        <span class="font-medium text-fg-muted">Enabled</span>
+      </div>
+      <Switch checked={enabled} onCheckedChange={handleToggle} size="sm" style="--switch-accent: {laserColor}" />
+    </div>
+
     <!-- Power Setpoint -->
     {#if laser.powerSetpoint && typeof setpoint === 'number'}
       {@const ps = laser.powerSetpoint}

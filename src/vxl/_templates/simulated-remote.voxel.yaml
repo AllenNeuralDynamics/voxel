@@ -67,6 +67,10 @@ hal:
           target: *fw_target
           init:
             slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
+        illumination_end_selector:
+          target: *fw_target
+          init:
+            slots: { 0: "front", 1: "rear" }
         x_axis:
           target: &axis_target vxl.axes.simulated.SimulatedContinuousAxis
           init: { lower_limit: 0, upper_limit: 36700 }
@@ -103,13 +107,38 @@ hal:
       magnification: 8.0
 
   illumination:
-    laser_405: {}
-    laser_488: {}
-    laser_561: {}
-    laser_640: {}
-    laser_730: {}
+    laser_405:
+      routing:
+        illumination_end: [front, rear]
+    laser_488:
+      routing:
+        illumination_end: [front, rear]
+    laser_561:
+      routing:
+        illumination_end: [front, rear]
+    laser_640:
+      routing:
+        illumination_end: [front, rear]
+    laser_730:
+      routing:
+        illumination_end: [front, rear]
+
+  optical_routing:
+    illumination_end:
+      front:
+        illumination_end_selector: front
+      rear:
+        illumination_end_selector: rear
 
 default:
+  routing:
+    illumination_end:
+      type: split
+      axis: y
+      threshold: 11500
+      lower: front
+      upper: rear
+
   imaging:
     channels:
       dapi:
