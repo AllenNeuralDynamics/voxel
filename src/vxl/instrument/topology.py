@@ -57,6 +57,8 @@ class IlluminationAssemblyConfig(OpticalAssemblyConfig): ...
 
 
 type DiscreteAxisPositions = dict[str, str]
+type RouteByDimension = dict[str, str]
+type RoutingSelectorOwners = dict[str, RouteByDimension]
 
 
 class OpticalRouteConfig(RootModel[DiscreteAxisPositions]):
@@ -72,7 +74,19 @@ class OpticalRouteConfig(RootModel[DiscreteAxisPositions]):
 
 
 class OpticalRoutingConfig(RootModel[dict[str, dict[str, OpticalRouteConfig]]]):
-    """Routing dimensions keyed directly to their named routes."""
+    """Routing dimensions keyed directly to their named routes.
+
+    Example:
+        ```yaml
+         excitation_side:
+             left:
+                 excitation_side_selector_1: left
+                 excitation_side_selector_2: left
+             right:
+                 excitation_side_selector_1: right
+                 excitation_side_selector_2: right
+        ```
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -280,9 +294,9 @@ class HALConfig(RigConfig, frozen=True):
         self,
         loc: ViolationLoc,
         referenced_dimensions: set[str],
-    ) -> tuple[list[Violation], dict[str, dict[str, str]]]:
+    ) -> tuple[list[Violation], RoutingSelectorOwners]:
         violations = []
-        selector_owners: dict[str, dict[str, str]] = {}
+        selector_owners: RoutingSelectorOwners = {}
         for dimension, routes in self.optical_routing.root.items():
             if dimension not in referenced_dimensions:
                 violations.append(
@@ -319,7 +333,7 @@ class HALConfig(RigConfig, frozen=True):
     def _selector_ownership_violations(
         self,
         loc: ViolationLoc,
-        selector_owners: dict[str, dict[str, str]],
+        selector_owners: RoutingSelectorOwners,
     ) -> list[Violation]:
         violations = []
         for selector_uid, owners in selector_owners.items():
