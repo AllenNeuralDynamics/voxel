@@ -2,8 +2,8 @@
   import { watch } from 'runed';
 
   import { Button, Select } from '$lib/kit';
-  import { type Instrument } from '$lib/model';
-  import { cn, sanitizeString, toastError } from '$lib/utils';
+  import { type Instrument, type OpticalRoutingPolicy } from '$lib/model';
+  import { cn, sanitizeString, toastError, trimFloat } from '$lib/utils';
 
   interface Props {
     instrument: Instrument;
@@ -16,6 +16,7 @@
     current?: string;
     target?: string;
     moving: boolean;
+    policy?: OpticalRoutingPolicy;
   }
 
   let { instrument, class: className }: Props = $props();
@@ -37,13 +38,21 @@
         routes: Object.keys(routes),
         current,
         target: instrument.routingTargets[id],
-        moving
+        moving,
+        policy: instrument.state.routing[id]
       };
     })
   );
 
   const displayedRoute = (dimension: RoutingDimension): string | undefined =>
     optimistic[dimension.id] ?? (dimension.moving ? dimension.target : dimension.current);
+
+  function policySummary(policy: OpticalRoutingPolicy): string {
+    if (policy.type === 'fixed') return `Fixed to ${sanitizeString(policy.route)}`;
+    return `${policy.axis.toUpperCase()} split at ${trimFloat(policy.threshold / 1000, 4)} mm · ${sanitizeString(
+      policy.lower
+    )} → ${sanitizeString(policy.upper)}`;
+  }
 
   const canRevert = $derived(
     dimensions.some((dimension) => dimension.target != null && displayedRoute(dimension) !== dimension.target)
@@ -104,28 +113,38 @@
   <div class="flex flex-col gap-2 px-3 py-2">
     {#each dimensions as dimension (dimension.id)}
       {@const options = dimension.routes.map((route) => ({ value: route, label: sanitizeString(route) }))}
-      <div class="flex items-center gap-2 rounded-xs border border-border bg-card px-2.5 py-1.5">
-        <span class="min-w-0 flex-1 truncate text-base font-medium text-fg">
-          {sanitizeString(dimension.id)}
-        </span>
-        <Select
-          variant="ghost"
-          size="xs"
-          side="top"
-          class="ml-auto w-42 tabular-nums"
-          value={displayedRoute(dimension) ?? ''}
-          {options}
-          placeholder="Mixed"
-          loading={dimension.moving}
-          onchange={(route) => override(dimension.id, route)}
-        >
-          {#snippet trailing(option)}
-            {#if option.value === dimension.target}
-              <span class="inline-block size-1.5 shrink-0 rounded-full bg-fg-muted align-middle" title="Routing target"
-              ></span>
-            {/if}
-          {/snippet}
-        </Select>
+      <div class="flex flex-col gap-1 rounded-xs border border-border bg-card px-2.5 py-1.5">
+        <div class="flex items-center gap-2">
+          <span class="min-w-0 flex-1 truncate text-base font-medium text-fg">
+            {sanitizeString(dimension.id)}
+          </span>
+          <Select
+            variant="ghost"
+            size="xs"
+            side="top"
+            class="ml-auto w-42 tabular-nums"
+            value={displayedRoute(dimension) ?? ''}
+            {options}
+            placeholder="Mixed"
+            loading={dimension.moving}
+            onchange={(route) => override(dimension.id, route)}
+          >
+            {#snippet trailing(option)}
+              {#if option.value === dimension.target}
+                <span
+                  class="inline-block size-1.5 shrink-0 rounded-full bg-fg-muted align-middle"
+                  title="Routing target"
+                ></span>
+              {/if}
+            {/snippet}
+          </Select>
+        </div>
+        {#if dimension.policy}
+          <div class="truncate text-sm text-fg-muted" title={policySummary(dimension.policy)}>
+            <span class="mr-1.5 text-fg-faint">Policy</span>
+            {policySummary(dimension.policy)}
+          </div>
+        {/if}
       </div>
     {/each}
   </div>

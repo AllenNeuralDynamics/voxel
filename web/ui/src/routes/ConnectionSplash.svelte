@@ -39,7 +39,7 @@
         {:else}
           <p class="text-lg text-fg-muted">Connecting&hellip;</p>
         {/if}
-        <p class="truncate font-mono text-base text-fg-muted/70" title={app.client.wsUrl}>
+        <p class="truncate font-mono text-base text-fg-muted" title={app.client.wsUrl}>
           {app.client.wsUrl}
         </p>
       </div>
@@ -61,7 +61,7 @@
     <div class="flex h-ui-md items-center justify-end gap-2 px-4">
       {#if connectionState === 'failed'}
         <button
-          class="flex-1 cursor-pointer px-2 py-1 text-center text-base hover:text-danger/80"
+          class="flex-1 cursor-pointer px-2 py-1 text-center text-base hover:text-danger"
           onclick={() => app.retryConnection()}
         >
           Retry

@@ -53,7 +53,7 @@
     <!-- Status readback -->
     {#if typeof measured === 'number' || typeof temperature === 'number'}
       <div class="rounded border border-border bg-card p-3">
-        <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Status</h4>
+        <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Status</h4>
         <div class="grid gap-1.5 text-lg">
           {#if typeof measured === 'number'}
             <div class="flex justify-between">

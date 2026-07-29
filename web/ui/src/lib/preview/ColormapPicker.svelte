@@ -188,7 +188,7 @@
         {:else}
           {#each catalog as group (group.uid)}
             {#if !hiddenGroups.has(group.uid)}
-              <div class="pt-1 pb-0.5 text-base font-medium tracking-wide text-fg-muted uppercase opacity-60">
+              <div class="pt-1 pb-0.5 text-base font-medium tracking-wide text-fg-muted uppercase">
                 {group.label}
               </div>
               <div class="swatch-grid pb-2">

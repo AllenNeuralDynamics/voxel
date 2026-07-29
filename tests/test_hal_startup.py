@@ -18,7 +18,7 @@ from vxl.errors import StartupError, Violation
 from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState
 from vxl.instrument.core import Channel
 from vxl.instrument.hal import HAL
-from vxl.instrument.state import AcquisitionTask, SplitOpticalRoutingPolicy
+from vxl.instrument.state import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.topology import (
     DetectionAssemblyConfig,
     HALConfig,
@@ -515,6 +515,27 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
 
         await instrument.apply_optical_routing()
         assert await selector.props.get_value("label") == "left"
+
+        await instrument.update_optical_routing_policy(
+            "excitation_side",
+            SplitOpticalRoutingPolicy(
+                type="split",
+                axis="x",
+                threshold=1,
+                lower="left",
+                upper="right",
+            ),
+        )
+        await instrument.add_tasks([(1, 0)])
+        assert instrument.task_tiles.value[0].routes == {"excitation_side": "right"}
+
+        await instrument.update_optical_routing_policy(
+            "excitation_side",
+            FixedOpticalRoutingPolicy(type="fixed", route="right"),
+        )
+        assert instrument.routing_targets.value == {"excitation_side": "right"}
+        await instrument.apply_optical_routing()
+        assert await selector.props.get_value("label") == "right"
     finally:
         await instrument.close()
 

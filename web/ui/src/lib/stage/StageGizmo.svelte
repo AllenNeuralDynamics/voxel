@@ -19,9 +19,9 @@
 
   // Toggle + line color per axis — classic RGB (X red · Y green · Z blue).
   const AXIS_ON: Record<Axis3, string> = {
-    x: 'bg-danger/25 text-danger',
-    y: 'bg-success/25 text-success',
-    z: 'bg-primary/25 text-primary'
+    x: 'bg-danger/15 text-danger',
+    y: 'bg-success/15 text-success',
+    z: 'bg-primary/15 text-primary'
   };
   const AXIS_SPINS: [Axis3, number][] = [
     ['x', 0.01],
@@ -349,31 +349,20 @@
 
 <div class={cn('flex h-full flex-col gap-0', className)}>
   <div class="flex items-center justify-between gap-2">
-    <span class=" font-medium tracking-wide text-fg-muted/70 uppercase">Stage</span>
-    <div class="flex items-center gap-2">
-      <div class="flex overflow-hidden rounded border border-border">
-        {#each AXES as a (a)}
-          <button
-            onclick={() => toggle(a)}
-            class={cn(
-              'w-7 cursor-pointer border-l border-border py-0.5  uppercase transition-colors first:border-l-0',
-              shown[a] ? AXIS_ON[a] : 'text-fg-faint hover:text-fg-muted'
-            )}
-            title={`View down ${a.toUpperCase()}`}
-          >
-            {a}
-          </button>
-        {/each}
-      </div>
-      <Button
-        variant={stage.anyMoving ? 'danger' : 'outline'}
-        size="xs"
-        class="disabled:opacity-70"
-        onclick={() => toastError(stage.halt())}
-        disabled={!stage.anyMoving}
-      >
-        Halt
-      </Button>
+    <span class=" font-medium tracking-wide text-fg-muted uppercase">Stage</span>
+    <div class="flex overflow-hidden rounded border border-border">
+      {#each AXES as a (a)}
+        <button
+          onclick={() => toggle(a)}
+          class={cn(
+            'w-7 cursor-pointer border-l border-border py-0.5  uppercase transition-colors first:border-l-0',
+            shown[a] ? AXIS_ON[a] : 'text-fg-faint hover:text-fg-muted'
+          )}
+          title={`View down ${a.toUpperCase()}`}
+        >
+          {a}
+        </button>
+      {/each}
     </div>
   </div>
 
@@ -391,7 +380,7 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-3 gap-2">
+  <div class="flex flex-wrap gap-2">
     {#each AXIS_SPINS as [a, step] (a)}
       <SpinBox
         model={axisModel(a, step)}
@@ -400,8 +389,17 @@
         align="right"
         prefix={a.toUpperCase()}
         suffix="mm"
-        class={stage.moving(a) ? 'w-full text-danger' : 'w-full'}
+        class={stage.moving(a) ? 'min-w-32 flex-1 text-danger' : 'min-w-32 flex-1'}
       />
     {/each}
+    <Button
+      variant={stage.anyMoving ? 'danger' : 'secondary'}
+      size="xs"
+      class="min-w-32 flex-1 disabled:opacity-100"
+      onclick={() => toastError(stage.halt())}
+      disabled={!stage.anyMoving}
+    >
+      Halt
+    </Button>
   </div>
 </div>

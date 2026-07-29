@@ -18,7 +18,15 @@ from pydantic import BaseModel
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
 from vxl.daq.clocked import Signals
 from vxl.instrument.core import AcquisitionRecord, AcquisitionRequest
-from vxl.instrument.state import ChannelPatch, InstrumentDefaults, ProfilePatch, StencilPatch, TaskPatch, WriterPatch
+from vxl.instrument.state import (
+    ChannelPatch,
+    InstrumentDefaults,
+    OpticalRoutingPolicy,
+    ProfilePatch,
+    StencilPatch,
+    TaskPatch,
+    WriterPatch,
+)
 from vxl.instrument.topology import HALConfig
 from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
@@ -268,6 +276,15 @@ async def save_settings(inst: InstrumentDep) -> None:
 @instrument_router.post("/optical-routing/apply", status_code=204)
 async def apply_optical_routing(inst: InstrumentDep) -> None:
     await inst.apply_optical_routing()
+
+
+@instrument_router.put("/optical-routing/{dimension}/policy", status_code=204)
+async def update_optical_routing_policy(
+    dimension: str,
+    policy: OpticalRoutingPolicy,
+    inst: InstrumentDep,
+) -> None:
+    await inst.update_optical_routing_policy(dimension, policy)
 
 
 @instrument_router.post("/optical-routing/{dimension}/override", status_code=204)

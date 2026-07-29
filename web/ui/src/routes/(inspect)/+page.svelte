@@ -12,7 +12,7 @@
   const configActive = $derived(page.url.searchParams.get('tab') === 'config');
   const overviewActive = $derived(!configActive);
 
-  const headingClass = 'mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase';
+  const headingClass = 'mb-2 text-base font-medium tracking-wide text-fg-muted uppercase';
   const cardGroupClass = 'grid auto-rows-auto grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3';
   const rowLabelClass = 'whitespace-nowrap text-fg-muted';
   const rowValueClass = 'truncate font-mono text-fg';
@@ -62,7 +62,7 @@
     <div class="space-y-6 px-4 py-2">
       <section>
         <div class="mb-2 flex items-center gap-3">
-          <h2 class="text-base font-medium tracking-wide text-fg-muted/70 uppercase">Bench</h2>
+          <h2 class="text-base font-medium tracking-wide text-fg-muted uppercase">Bench</h2>
           <div class="ml-auto flex items-center gap-1.5">
             <Button variant="ghost" size="xs" onclick={() => defaultDialog.open('restore')}>Restore default</Button>
             <Button variant="outline" size="xs" onclick={() => defaultDialog.open('save')}>Save as default</Button>
@@ -71,7 +71,7 @@
         <DiffJsonView data={instrument.state} base={instrument.default} expandDepth={1} />
       </section>
       <section>
-        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Hardware</h2>
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Hardware</h2>
         <JsonView data={instrument.hal} expandDepth={1} />
       </section>
     </div>

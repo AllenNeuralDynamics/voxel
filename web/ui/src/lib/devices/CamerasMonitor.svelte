@@ -36,7 +36,7 @@
         {@render cameraRow(cam)}
       {/each}
     {:else}
-      <p class=" text-fg-muted/60">No cameras.</p>
+      <p class=" text-fg-muted">No cameras.</p>
     {/if}
   </div>
 </div>
@@ -94,6 +94,6 @@
 {#snippet stat(label: string, value: string, danger?: boolean)}
   <span class="flex items-baseline gap-1">
     <span class={danger ? 'text-danger' : 'text-fg'}>{value}</span>
-    <span class="text-fg-muted/60">{label}</span>
+    <span class="text-fg-muted">{label}</span>
   </span>
 {/snippet}

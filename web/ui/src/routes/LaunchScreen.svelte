@@ -476,7 +476,7 @@
               {/if}
             {:else}
               <div class="flex h-full items-center justify-center p-8">
-                <p class="text-lg text-fg-muted/60">Select an instrument or template</p>
+                <p class="text-lg text-fg-muted">Select an instrument or template</p>
               </div>
             {/if}
           </div>
@@ -498,7 +498,7 @@
     {@const bench = value.bench ?? value.config.default}
     <div class="space-y-6 p-4">
       <section>
-        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Summary</h2>
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Summary</h2>
         <dl class="grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
           <dt class="text-fg-muted">Devices</dt>
           <dd class="font-mono text-fg">{deviceCount(hal)}</dd>
@@ -516,7 +516,7 @@
       </section>
 
       <section>
-        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Profiles</h2>
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Profiles</h2>
         <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
           {#each Object.entries(bench.imaging.profiles) as [profileId, profile] (profileId)}
             <article class="rounded-lg border bg-card p-3 shadow-sm">
@@ -544,7 +544,7 @@
       </section>
 
       <section>
-        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Channels</h2>
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Channels</h2>
         <div class="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
           {#each Object.entries(bench.imaging.channels) as [channelId, channel] (channelId)}
             <article class="rounded-lg border bg-card p-3 shadow-sm">
@@ -577,7 +577,7 @@
   <div class="space-y-6 p-4">
     {#if value.bench}
       <section>
-        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">
           {value.stateSource === 'default' ? 'Configured Default' : 'Bench'}
         </h2>
         <JsonView data={value.bench} expandDepth={1} />
@@ -585,7 +585,7 @@
     {/if}
     {#if value.config}
       <section>
-        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Hardware</h2>
+        <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Hardware</h2>
         <JsonView data={value.config.hal} expandDepth={1} />
       </section>
     {:else}

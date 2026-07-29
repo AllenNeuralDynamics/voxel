@@ -108,7 +108,7 @@
         {@render wheelRow(wheel)}
       {/each}
     {:else}
-      <p class=" text-fg-muted/60">No filter wheels.</p>
+      <p class=" text-fg-muted">No filter wheels.</p>
     {/if}
   </div>
 </div>
@@ -184,7 +184,7 @@
         </div>
       </div>
     {:else}
-      <p class="border-t border-border px-2.5 py-2 text-[11px] text-fg-muted/60 italic">No positions.</p>
+      <p class="border-t border-border px-2.5 py-2 text-[11px] text-fg-muted italic">No positions.</p>
     {/if}
   </div>
 {/snippet}

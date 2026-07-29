@@ -44,7 +44,12 @@
   const collapsed = pref('stage:sidebar-collapsed', false);
   let boundsColor = '#3f3f46';
   let markerColor = '#e254d4';
-  let hoverWorld: [number, number] | null = null;
+  // The transient pointer footprint is available while Alt/Option is held. A point context menu pins its
+  // own footprint independently, while an active marquee drag suppresses the transient one.
+  let pointerWorld: [number, number] | null = null;
+  let altHeld = false;
+  let marqueeDragging = false;
+  let menuGhostWorld: [number, number] | null = null;
   let marqueeColor = '#e5e7eb';
   // Camera scale + view width, mirrored from the (plain) camera each render to drive the reactive scale bar.
   let camScale = $state(0);
@@ -120,6 +125,13 @@
     return [Math.min(Math.max(wx, b.minX), b.maxX), Math.min(Math.max(wy, b.minY), b.maxY)];
   }
 
+  // A point menu takes precedence over modifier hover. Marquee menus show no point footprint.
+  function ghostWorld(): [number, number] | null {
+    if (menuGhostWorld) return menuGhostWorld;
+    if (menuOpen || !altHeld || marqueeDragging) return null;
+    return pointerWorld;
+  }
+
   // Move the stage to the right-clicked position (z unchanged), clamped to the reachable soft limits.
   function goToWorld() {
     if (!stage) return;
@@ -162,11 +174,12 @@
     p.strokeRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
   };
 
-  // Under-chrome: a dotted FOV footprint for the cursor. Shown anywhere inside the imageable frame, but
-  // drawn at the clamped position so it lands where the stage actually would. Alt means marquee, so hidden.
+  // Under-chrome: a dotted FOV footprint for Alt/Option-hover or a point context menu. Shown anywhere
+  // inside the imageable frame, but drawn at the clamped position so it lands where the stage actually would.
   const ghostLayer: Layer = (p) => {
-    if (!hoverWorld || !fov) return;
-    const [hx, hy] = hoverWorld;
+    const ghost = ghostWorld();
+    if (!ghost || !fov) return;
+    const [hx, hy] = ghost;
     const b = stageBounds;
     if (b && (hx < b.minX || hx > b.maxX || hy < b.minY || hy > b.maxY)) return;
     const [x, y] = clampToStage(hx, hy);
@@ -286,12 +299,11 @@
     () => surface?.invalidate()
   );
 
-  // Closing the menu releases the pinned ghost; the next pointer move re-places it if still over the canvas.
+  // Closing a point menu releases its pinned ghost; Alt-hover resumes immediately when applicable.
   watch(
     () => menuOpen,
     (open) => {
-      if (open) return;
-      hoverWorld = null;
+      if (!open) menuGhostWorld = null;
       surface?.invalidate();
     }
   );
@@ -331,10 +343,8 @@
         },
         scaleLimits,
         onHover: (world, e) => {
-          if (menuOpen) return; // freeze the ghost on the point the open menu will act on
-          const next = world && !e.altKey ? world : null;
-          if (next?.[0] === hoverWorld?.[0] && next?.[1] === hoverWorld?.[1]) return;
-          hoverWorld = next;
+          pointerWorld = world;
+          altHeld = e.altKey;
           surface?.invalidate();
         },
         onClick: (world, e) => {
@@ -352,28 +362,43 @@
           if (m && inMarquee(world)) {
             menuMode = 'marquee';
             menuHits = scene.marqueeHits(m);
-            hoverWorld = null; // marquee mode acts on the region, not the point
+            menuGhostWorld = null; // marquee mode acts on the region, not the point
           } else {
             clearMarquee(); // right-clicking outside the selection drops it, then acts on the point
             menuMode = 'point';
             menuHits = scene.hits(world);
-            hoverWorld = world; // pin the ghost to the point the menu will act on
+            menuGhostWorld = world; // pin the ghost to the point the menu will act on
           }
           surface?.invalidate();
         },
         marqueeOn: (e) => e.altKey, // Alt/Option-drag rubber-bands a selection region instead of panning
-        onMarquee: (rect) => {
+        onMarquee: (rect, done) => {
+          marqueeDragging = !done;
           scene.setMarquee(rect);
           surface?.invalidate();
         }
       }
     });
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') clearMarquee();
+    const setAltHeld = (held: boolean) => {
+      if (altHeld === held) return;
+      altHeld = held;
+      surface?.invalidate();
     };
-    window.addEventListener('keydown', onKey);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearMarquee();
+      if (e.key === 'Alt') setAltHeld(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') setAltHeld(false);
+    };
+    const onBlur = () => setAltHeld(false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
       if (viewport.mode === 'manual') saveViewport();
       surface?.destroy();
     };

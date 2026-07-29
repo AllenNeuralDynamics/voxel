@@ -266,7 +266,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-sm tracking-wide text-fg-muted/70 uppercase">Inpaint</span>
+    <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Inpaint</span>
     <Button variant="ghost" size="icon-xs" title="New mosaic" onclick={createMosaic}>
       <Plus width="16" height="16" />
     </Button>

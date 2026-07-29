@@ -474,7 +474,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-sm tracking-wide text-fg-muted/70 uppercase">Snapshots</span>
+    <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Snapshots</span>
     <Button variant="ghost" size="icon-xs" title="New group" onclick={() => snaps.createSnapshotGroup()}>
       <Plus width="16" height="16" />
     </Button>

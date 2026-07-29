@@ -5,27 +5,54 @@
 
   import { wavelengthToColor } from '$lib/colors.svelte';
   import { ChevronDown, ChevronRight, Link, LinkOff } from '$lib/icons';
-  import { Button } from '$lib/kit';
+  import { Button, Collapsible } from '$lib/kit';
   import { type CameraHandle, type DeviceHandle, type FilterSetting, getVoxelApp, type LaserHandle } from '$lib/model';
   import { type AnyPropModel, BoolModel, EnumeratedModel, LinkGroup, NumericModel, Prop, RoiModel } from '$lib/model';
   import { formatPropValue, PropInput } from '$lib/prop';
   import { SpinBox } from '$lib/prop/numeric';
-  import { cn, sanitizeString, toastError } from '$lib/utils';
+  import { cn, pref, sanitizeString, toastError } from '$lib/utils';
+
+  import RoutingPolicySection from './RoutingPolicySection.svelte';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
+  const tuneExpanded = pref('configure:tune-expanded', false);
 
-  // Devices referenced only in profile.sync waveforms (role 'waveform'), not part of any channel.
-  const syncDevices = $derived.by(() => {
+  const tuneContent = $derived.by(() => {
     const inst = instrument;
-    if (!inst) return [];
-    return [...inst.roles]
-      .filter(([, role]) => role.kind === 'waveform')
-      .flatMap(([id]) => {
-        const d = inst.devices.get(id);
-        return d ? [d] : [];
-      });
+    const profile = inst?.activeProfile;
+    if (!inst || !profile) return { devices: [], outputGroups: [] };
+
+    const channelDeviceIds = new SvelteSet<string>();
+    for (const channel of inst.activeChannels) {
+      channelDeviceIds.add(channel.camera.id);
+      channelDeviceIds.add(channel.laser.id);
+      for (const filter of channel.filters) channelDeviceIds.add(filter.wheel.id);
+      for (const device of channel.auxilliary) channelDeviceIds.add(device.id);
+    }
+
+    const stageDeviceIds = new SvelteSet([inst.hal.stage.x, inst.hal.stage.y, inst.hal.stage.z].filter(Boolean));
+    const devices = new SvelteMap<string, DeviceHandle>();
+    const outputGroups: { generatorId: string; outputs: string[] }[] = [];
+
+    for (const [generatorId, signals] of Object.entries(profile.sync)) {
+      const outputs: string[] = [];
+      for (const output of Object.keys(signals.waveforms)) {
+        if (channelDeviceIds.has(output) || stageDeviceIds.has(output)) continue;
+        const device = inst.devices.get(output);
+        if (device) devices.set(device.id, device);
+        else outputs.push(output);
+      }
+      if (outputs.length > 0) outputGroups.push({ generatorId, outputs });
+    }
+
+    return { devices: [...devices.values()], outputGroups };
   });
+
+  const tuneDevices = $derived(tuneContent.devices);
+  const waveformOutputGroups = $derived(tuneContent.outputGroups);
+  const hasOtherDevices = $derived(tuneDevices.length > 0);
+  const hasTuneSection = $derived(Object.keys(instrument?.activeProfile?.sync ?? {}).length > 0);
 
   interface Linkable {
     name: string;
@@ -200,7 +227,7 @@
       ondblclick={() => toastError(device.setProps({ [name]: saved }))}
     >
       {formatPropValue(saved, stepHint)}
-      <span class="min-w-[2ch] text-sm text-nowrap opacity-50">{prop.units !== '' ? prop.units : '  '}</span>
+      <span class="min-w-[2ch] text-sm text-nowrap">{prop.units !== '' ? prop.units : '  '}</span>
     </button>
   </div>
 {/snippet}
@@ -417,71 +444,126 @@
   </div>
 {/snippet}
 
-<section class="flex flex-1 flex-col p-4">
+<section class="flex min-h-0 flex-1 flex-col">
   {#if instrument}
-    <header class="mb-4 flex flex-wrap items-center gap-4">
-      <h2 class="text-xl font-medium text-fg">
-        {instrument.activeProfile?.label || sanitizeString(instrument.activeProfileId ?? '') || '—'}
-      </h2>
-      <span class="text-fg-muted">
-        {instrument.activeChannels.length} channel{instrument.activeChannels.length === 1 ? '' : 's'}
-      </span>
+    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+      <header class="mb-4 flex flex-wrap items-center gap-4">
+        <h2 class="text-xl font-medium text-fg">
+          {instrument.activeProfile?.label || sanitizeString(instrument.activeProfileId ?? '') || '—'}
+        </h2>
+        <span class="text-fg-muted">
+          {instrument.activeChannels.length} channel{instrument.activeChannels.length === 1 ? '' : 's'}
+        </span>
 
-      <div class="ml-auto flex items-center gap-1.5">
-        <Button variant="outline" size="xs" onclick={() => toastError(instrument.applySettings())}>Apply Saved</Button>
-        <Button variant="outline" size="xs" onclick={() => toastError(instrument.saveSettings())}>Save Current</Button>
-      </div>
-    </header>
-    <div class="flex flex-wrap gap-4">
-      {#each instrument.activeChannels as ch (ch.id)}
-        {@const accent = ch.emission ? wavelengthToColor(ch.emission) : undefined}
-        <div class="max-w-3xl min-w-96 flex-1 rounded-sm border border-border bg-card/50">
-          <!-- Header: channel identity + emission accent -->
-          <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
-            <span class="text-lg font-medium text-fg">{ch.label}</span>
-            <span class="flex shrink-0 items-center gap-1.5 text-sm text-fg-muted">
-              <span
-                class="inline-block size-1.5 shrink-0 rounded-full"
-                style="background-color: {accent ?? 'var(--color-fg-muted)'};"
-              ></span>
-              <span class="truncate">{ch.emission ? `${ch.emission} nm` : ch.id}</span>
-            </span>
-          </div>
-
-          <!-- Body: illumination → detection → aux → filter wheels -->
-          <div class="space-y-5 px-3 py-3">
-            <div>{@render sectionHeader(ch.laser.id, ch.laser.interface?.type)}{@render laser(ch.laser)}</div>
-            <div>{@render sectionHeader(ch.camera.id, ch.camera.interface?.type)}{@render camera(ch.camera)}</div>
-            {#each ch.auxilliary as aux (aux.id)}
-              {@render auxDevice(aux, defaultPinned(aux.interface?.type))}
-            {/each}
-            {#if ch.filters.length}
-              <div>
-                {@render sectionHeader('Filters')}
-                <div class="space-y-1.5">
-                  {#each ch.filters as f (f.wheel.id)}
-                    {@render filterWheel(f)}
-                  {/each}
-                </div>
-              </div>
-            {/if}
-          </div>
+        <div class="ml-auto flex items-center gap-1.5">
+          <Button variant="outline" size="xs" onclick={() => toastError(instrument.applySettings())}>Apply Saved</Button
+          >
+          <Button variant="outline" size="xs" onclick={() => toastError(instrument.saveSettings())}>Save Current</Button
+          >
         </div>
-      {/each}
-    </div>
-    {#if syncDevices.length > 0}
-      <div class="mt-6">
-        <h3 class="mb-2 font-medium tracking-wide text-fg-muted/70 uppercase">Sync</h3>
-        <div class="flex flex-wrap gap-4">
-          {#each syncDevices as dev (dev.id)}
-            <div class="max-w-md min-w-72 flex-1 rounded-sm border border-border bg-card px-3 py-3">
-              {@render auxDevice(dev, defaultPinned(dev.interface?.type))}
+      </header>
+      <div class="flex flex-wrap gap-4">
+        {#each instrument.activeChannels as ch (ch.id)}
+          {@const accent = ch.emission ? wavelengthToColor(ch.emission) : undefined}
+          <div class="max-w-3xl min-w-96 flex-1 rounded-sm border border-border bg-card/50">
+            <!-- Header: channel identity + emission accent -->
+            <div class="flex h-ui-lg items-center justify-between border-b border-border px-3 py-2">
+              <span class="text-lg font-medium text-fg">{ch.label}</span>
+              <span class="flex shrink-0 items-center gap-1.5 text-sm text-fg-muted">
+                <span
+                  class="inline-block size-1.5 shrink-0 rounded-full"
+                  style="background-color: {accent ?? 'var(--color-fg-muted)'};"
+                ></span>
+                <span class="truncate">{ch.emission ? `${ch.emission} nm` : ch.id}</span>
+              </span>
             </div>
-          {/each}
-        </div>
+
+            <!-- Body: illumination → detection → aux → filter wheels -->
+            <div class="space-y-5 px-3 py-3">
+              <div>{@render sectionHeader(ch.laser.id, ch.laser.interface?.type)}{@render laser(ch.laser)}</div>
+              <div>{@render sectionHeader(ch.camera.id, ch.camera.interface?.type)}{@render camera(ch.camera)}</div>
+              {#each ch.auxilliary as aux (aux.id)}
+                {@render auxDevice(aux, defaultPinned(aux.interface?.type))}
+              {/each}
+              {#if ch.filters.length}
+                <div>
+                  {@render sectionHeader('Filters')}
+                  <div class="space-y-1.5">
+                    {#each ch.filters as f (f.wheel.id)}
+                      {@render filterWheel(f)}
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/each}
+
+        {#if hasOtherDevices}
+          <div class="max-w-3xl min-w-96 flex-1 rounded-sm border border-border bg-card/50">
+            <div class="flex h-ui-lg items-center border-b border-border px-3 py-2">
+              <span class="text-lg font-medium text-fg">Other Devices</span>
+            </div>
+
+            <div class="space-y-5 px-3 py-3">
+              {#each tuneDevices as device (device.id)}
+                {@render auxDevice(device, defaultPinned(device.interface?.type))}
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
+    </div>
+    {#if hasTuneSection || instrument.routingDimensions.length > 0}
+      <footer class="shrink-0 border-t border-border bg-surface py-4">
+        {#if hasTuneSection}
+          <Collapsible.Root bind:open={tuneExpanded.get, tuneExpanded.set}>
+            <section class={cn('px-4', instrument.routingDimensions.length > 0 && 'border-b border-border pb-4')}>
+              <Collapsible.Trigger
+                class="group flex w-full items-start gap-2 text-left text-fg transition-colors hover:text-fg"
+              >
+                <h3 class="font-medium tracking-wide text-fg-muted uppercase">Tune</h3>
+                <span class="mt-0.5 ml-auto shrink-0 text-fg-muted">
+                  {#if tuneExpanded.get()}
+                    <ChevronDown width="14" height="14" />
+                  {:else}
+                    <ChevronRight width="14" height="14" />
+                  {/if}
+                </span>
+              </Collapsible.Trigger>
+
+              <Collapsible.Content class="pt-3">
+                {#if waveformOutputGroups.length > 0}
+                  <div class="max-w-3xl">
+                    <div class="space-y-1.5">
+                      {#each waveformOutputGroups as group (group.generatorId)}
+                        <div class="grid grid-cols-[10rem_minmax(0,1fr)] gap-2 text-base">
+                          <span class="truncate text-fg-muted" title={group.generatorId}>
+                            {sanitizeString(group.generatorId)}
+                          </span>
+                          <span class="text-fg">
+                            {group.outputs.map(sanitizeString).join(', ')}
+                          </span>
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {:else}
+                  <div></div>
+                {/if}
+              </Collapsible.Content>
+            </section>
+          </Collapsible.Root>
+        {/if}
+
+        {#if instrument.routingDimensions.length > 0}
+          <div class={cn('px-4', hasTuneSection && 'pt-4')}>
+            <RoutingPolicySection {instrument} />
+          </div>
+        {/if}
+      </footer>
     {/if}
   {:else}
-    <p></p>
+    <div class="min-h-0 flex-1 overflow-y-auto p-4"><p></p></div>
   {/if}
 </section>

@@ -315,6 +315,8 @@ def test_optical_routing_policy_supports_fixed_and_split_modes() -> None:
         adapter.validate_python({**split, "threshold": float("inf")})
     with pytest.raises(ValidationError, match="Input should be 'x' or 'y'"):
         adapter.validate_python({**split, "axis": "z"})
+    with pytest.raises(ValidationError, match="different lower and upper routes"):
+        adapter.validate_python({**split, "upper": "left"})
 
 
 def test_split_routing_policy_resolves_with_symmetric_hysteresis() -> None:

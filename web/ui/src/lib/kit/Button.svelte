@@ -21,7 +21,7 @@
         ghost: 'border-transparent hover:bg-element-hover hover:text-fg active:bg-element-active focus:border-focused',
         danger: 'border-danger bg-danger text-danger-fg hover:bg-danger/90 active:bg-danger/80',
         success: 'border-success bg-success text-success-fg hover:bg-success/90 active:bg-success/80',
-        link: 'border-transparent text-primary underline-offset-4 hover:underline active:text-primary/70'
+        link: 'border-transparent text-primary underline-offset-4 hover:underline'
       },
       size: {
         xs: 'h-ui-xs gap-1 px-1.5 text-base',
@@ -46,14 +46,39 @@
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
+  import { cn } from '$lib/utils';
+
+  import { Spinner } from './cn/spinner';
+
   interface Props extends HTMLButtonAttributes, ButtonVariants {
     class?: string;
     children?: Snippet;
+    loading?: boolean;
   }
 
-  let { variant = 'default', size = 'md', class: className = '', children, ...restProps }: Props = $props();
+  let {
+    variant = 'default',
+    size = 'md',
+    class: className = '',
+    children,
+    loading = false,
+    disabled = false,
+    ...restProps
+  }: Props = $props();
 </script>
 
-<button class={buttonVariants({ variant, size, class: className })} {...restProps}>
-  {#if children}{@render children()}{/if}
+<button
+  class={buttonVariants({ variant, size, class: cn('relative', className) })}
+  disabled={disabled || loading}
+  aria-busy={loading}
+  {...restProps}
+>
+  {#if children}
+    <span class={cn('inline-flex items-center justify-center gap-[inherit]', loading && 'invisible')}>
+      {@render children()}
+    </span>
+  {/if}
+  {#if loading}
+    <Spinner class="absolute" />
+  {/if}
 </button>

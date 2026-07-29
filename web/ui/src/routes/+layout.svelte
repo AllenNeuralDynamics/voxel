@@ -133,7 +133,7 @@
     max: 64,
     fallback: { min: 30, default: 30, max: 50 }
   });
-  const rightPane = createPaneSize(() => shellRef, { min: 32, default: 32, max: 36, fallback: { min: 15, max: 18 } });
+  const rightPane = createPaneSize(() => shellRef, { min: 28, default: 32, max: 36, fallback: { min: 15, max: 18 } });
 
   // Vertical split inside the right pane: monitors (top) over the stage gizmo (bottom).
   let rightSplitEl = $state<HTMLElement | null>(null);

@@ -87,7 +87,7 @@
         {@render laserTile(laser)}
       {/each}
     {:else}
-      <p class=" text-fg-muted/60">No lasers.</p>
+      <p class=" text-fg-muted">No lasers.</p>
     {/if}
   </div>
 </div>

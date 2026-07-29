@@ -96,6 +96,12 @@ class SplitOpticalRoutingPolicy(SchemaModel):
     lower: str
     upper: str
 
+    @model_validator(mode="after")
+    def validate_distinct_routes(self) -> Self:
+        if self.lower == self.upper:
+            raise ValueError("Split optical-routing policies must use different lower and upper routes")
+        return self
+
     def resolve(self, coordinate: float, *, previous: str | None = None, margin: float = 0) -> str:
         """Resolve one side, retaining ``previous`` within the symmetric hysteresis margin."""
         if margin < 0:

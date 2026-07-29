@@ -225,6 +225,7 @@ export interface Tile {
 /** A task's footprint tile tagged with its task id; an ordered `TaskTile[]` carries geometry + traversal order. */
 export interface TaskTile extends Tile {
   task_id: string;
+  routes: Record<string, string>;
 }
 
 /** Tile acquisition ordering strategy. */

@@ -2,6 +2,7 @@ import { unpack } from 'msgpackr';
 import { SvelteMap } from 'svelte/reactivity';
 
 import type {
+  AcquisitionMode,
   ChannelConfig,
   DetectionAssemblyConfig,
   InstrumentStatus,
@@ -595,7 +596,6 @@ export interface LiveStageFrame {
 export class Preview {
   readonly feed: LiveFeed;
 
-  isPreviewing = $state(false);
   isPanZoomActive = $state(false);
   viewport = $state<PreviewViewport>({ ...DEFAULT_VIEWPORT });
   /** Width/height of the display surface, kept current by the renderer; anchors aspect-aware zoom. */
@@ -609,6 +609,7 @@ export class Preview {
 
   #client: Client;
   #stage: Stage;
+  #getMode: () => AcquisitionMode;
   #paintDispose: () => void = () => {};
   #unsubscribers: Array<() => void> = [];
   #viewportUpdateTimer: number | null = null;
@@ -622,21 +623,19 @@ export class Preview {
     client: Client,
     detection: Record<string, DetectionAssemblyConfig>,
     initialStatus: InstrumentStatus,
-    stage: Stage
+    stage: Stage,
+    getMode: () => AcquisitionMode
   ) {
     this.#client = client;
     this.#stage = stage;
+    this.#getMode = getMode;
     this.feed = new LiveFeed(client, detection, initialStatus);
-    this.isPreviewing = initialStatus.mode === 'preview';
 
     const unsubFrame = this.feed.onFrame((name) => this.#autoLevel(name));
-    const unsubStatus = this.#client.on('instrument.status', (status) => {
-      this.isPreviewing = status.mode === 'preview';
-    });
     const unsubUpdates = this.#client.on('preview.updates', (update) => {
       this.#applyPreviewUpdate(update);
     });
-    this.#unsubscribers.push(unsubFrame, unsubStatus, unsubUpdates);
+    this.#unsubscribers.push(unsubFrame, unsubUpdates);
 
     fetchColormapCatalog(client)
       .then((catalog) => {
@@ -651,7 +650,7 @@ export class Preview {
     this.#paintDispose = $effect.root(() => this.#runPaintLoop(inpaint));
   }
 
-  /** Continuously max-blend fresh frames into the active mosaic while previewing at a stationary stage pose. */
+  /** Continuously max-blend fresh frames into the active mosaic while the instrument is active and stationary. */
   #runPaintLoop(inpaint: Inpainter): void {
     interface AcceptedFrame {
       token: string;
@@ -670,8 +669,8 @@ export class Preview {
     let baseline: Array<string | null> = [];
     let accepted: Array<AcceptedFrame | undefined> = [];
     let lastPaintAt: number[] = [];
-    let wasPreviewing = false;
-    let boutStarted = false; // whether this preview session has resolved its destination mosaic
+    let previousMode: AcquisitionMode | null = null;
+    let boutStarted = false; // whether this active-mode session has resolved its destination mosaic
 
     const tokenFor = (frameIdx: number): string => `${this.feed.previewEpoch}:${frameIdx}`;
     const currentToken = (ch: PreviewChannel): string | null =>
@@ -706,25 +705,27 @@ export class Preview {
     $effect(() => {
       void this.feed.redrawGeneration;
       const fov = this.#stage.fov;
+      const mode = this.#getMode();
 
-      const previewing = this.isPreviewing;
-      if (previewing && !wasPreviewing) boutStarted = false; // preview off→on: this session may start fresh
-      wasPreviewing = previewing;
-
-      if (!previewing || !this.settled || !fov) {
+      if (mode !== previousMode) {
+        previousMode = mode;
+        boutStarted = false;
         sessionKey = null;
         baseline = [];
         accepted = [];
         lastPaintAt = [];
+      }
+
+      if (mode === 'idle' || !this.settled || !fov) {
         return;
       }
 
-      // Resolve the destination once per preview session: continue the active mosaic, or start a new one
-      // when it's stale (>30 min since last touch) or none exists. After that, follow whatever is active.
+      // Capture always paints onto a clean mosaic. Manual preview continues the active mosaic unless it is
+      // stale (>30 min since last touch) or absent. After resolving the session, follow whatever is active.
       let mosaic = inpaint.activeMosaic;
       if (!boutStarted) {
-        const stale = !mosaic || Date.now() - mosaic.touchedAt > INPAINT_NEW_BOUT_GAP_MS;
-        if (stale) {
+        const createNew = mode === 'capture' || !mosaic || Date.now() - mosaic.touchedAt > INPAINT_NEW_BOUT_GAP_MS;
+        if (createNew) {
           const b = this.#stage.bounds(true);
           if (!b) return; // stage limits not known yet; retry next frame
           mosaic = inpaint.createFor({ x: b.minX, y: b.minY, w: b.maxX - b.minX, h: b.maxY - b.minY }, fov[0]);
@@ -794,6 +795,10 @@ export class Preview {
   get boundingBoxAspect(): number {
     return this.feed.boundingBoxAspect;
   }
+  /** Whether preview or acquisition is producing live frames. */
+  get isActive(): boolean {
+    return this.#getMode() !== 'idle';
+  }
   clearFrames(): void {
     this.feed.clearFrames();
   }
@@ -815,11 +820,11 @@ export class Preview {
   /**
    * Visible channels' current frames mapped into stage µm at the live pose: an oriented overview plus its
    * optional high-res detail ROI, each as a drawable source + stage-space rect. For painting the live camera
-   * footprint on the stage map. Empty when not previewing or no frames have arrived.
+   * footprint on the stage map. The consuming layer controls mode-based visibility.
    */
   liveFrames(): LiveStageFrame[] {
     const fov = this.#stage.fov;
-    if (!this.isPreviewing || !fov) return [];
+    if (!fov) return [];
     const pose = { x: this.#stage.position('x'), y: this.#stage.position('y') };
     const out: LiveStageFrame[] = [];
     for (const ch of this.feed.channels) {
@@ -923,7 +928,7 @@ export class Preview {
   }
 
   dispose(): void {
-    if (this.isPreviewing) {
+    if (this.#getMode() === 'preview') {
       this.stopPreview();
     }
 

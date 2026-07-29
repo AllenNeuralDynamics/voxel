@@ -16,9 +16,9 @@
   const scene = getStageScene();
   const instrument = $derived(app.instrument);
   const preview = $derived(instrument?.preview ?? null);
-  const previewing = $derived(preview?.isPreviewing ?? false);
+  const active = $derived(preview?.isActive ?? false);
 
-  // Manual show/hide, remembered across sessions; gates the layer on top of `isPreviewing`.
+  // Manual show/hide, remembered across sessions; gates the layer while preview or capture is active.
   const show = pref('stage:live-visible', true);
 
   // The live FOV footprint (stage µm) centered on the current pose; null until pose + FOV are known.
@@ -59,7 +59,7 @@
     id: 'live',
     z: 1, // "now" sits above snapshots (0) and inpaint (-1); the green pose marker is chrome above all
     get visible() {
-      return previewing && show.get();
+      return active && show.get();
     },
     draw,
     hitTest,
@@ -71,7 +71,7 @@
 
   // Repaint on every new frame / detail view / channel change, and whenever visibility flips.
   watch(
-    () => [preview?.redrawGeneration, previewing, show.get()] as const,
+    () => [preview?.redrawGeneration, active, show.get()] as const,
     () => scene.invalidate()
   );
 </script>
@@ -85,7 +85,7 @@
 
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-sm tracking-wide text-fg-muted/70 uppercase">Live</span>
+    <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Live</span>
     <Button
       variant="ghost"
       size="icon-xs"

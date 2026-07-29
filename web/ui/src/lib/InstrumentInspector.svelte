@@ -32,7 +32,7 @@
 </script>
 
 {#snippet sectionLabel(label: string)}
-  <div class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">{label}</div>
+  <div class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">{label}</div>
 {/snippet}
 
 <div class="flex h-full flex-col gap-8 overflow-y-auto px-4 py-2">
@@ -40,7 +40,7 @@
   <section>
     {@render sectionLabel('Devices')}
     {#if allDevices.length === 0}
-      <p class="text-lg text-fg-muted/60">No devices.</p>
+      <p class="text-lg text-fg-muted">No devices.</p>
     {:else}
       <div class="space-y-1">
         {#each allDevices as { id, config, node, nodeKind } (id)}
@@ -73,7 +73,7 @@
                     </span>
                   {/if}
                 </Collapsible.Trigger>
-                <span class="shrink-0 truncate font-mono text-base text-fg-muted/60">{config.target}</span>
+                <span class="shrink-0 truncate font-mono text-base text-fg-muted">{config.target}</span>
               </div>
 
               {#if config.init && Object.keys(config.init).length > 0}
@@ -96,7 +96,7 @@
   <section>
     {@render sectionLabel('Detection Paths')}
     {#if detectionEntries.length === 0}
-      <p class="text-lg text-fg-muted/60">No detection paths.</p>
+      <p class="text-lg text-fg-muted">No detection paths.</p>
     {:else}
       <div class="space-y-4">
         {#each detectionEntries as [id, path] (id)}
@@ -122,7 +122,7 @@
   <section>
     {@render sectionLabel('Illumination Paths')}
     {#if illuminationEntries.length === 0}
-      <p class="text-lg text-fg-muted/60">No illumination paths.</p>
+      <p class="text-lg text-fg-muted">No illumination paths.</p>
     {:else}
       <div class="space-y-4">
         {#each illuminationEntries as [id, path] (id)}

@@ -107,10 +107,10 @@
         {#each filtered as log, i (i)}
           {@const LevelIcon = levelIcons[log.level] ?? CircleSmall}
           <div class="flex gap-2 {wrap.get() ? 'items-start' : 'items-center'}">
-            <span class="w-[8ch] shrink-0 text-fg-muted/65">{formatTime(log.timestamp)}</span>
+            <span class="w-[8ch] shrink-0 text-fg-muted">{formatTime(log.timestamp)}</span>
             <span class="min-w-0 flex-1 {wrap.get() ? 'wrap-break-word' : 'truncate'}">
               <span class="mr-2 {getLevelColor(log.level)}" title={log.logger}>{truncateMiddle(log.logger, 42)}</span>
-              <span class="text-fg/80">{log.message}</span>
+              <span class="text-fg">{log.message}</span>
             </span>
             <span class="shrink-0 {getLevelColor(log.level)}" title={log.level}>
               <LevelIcon width="14" height="14" />

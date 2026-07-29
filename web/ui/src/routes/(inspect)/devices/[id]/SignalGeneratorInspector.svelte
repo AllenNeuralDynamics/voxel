@@ -24,7 +24,7 @@
   <!-- Engine state -->
   {#if engineState}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Engine State</h4>
+      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Engine State</h4>
       <p class="font-mono text-fg">{engineState}</p>
     </div>
   {/if}
@@ -32,7 +32,7 @@
   <!-- Output ports -->
   {#if ports.length > 0}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Output Ports</h4>
+      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Output Ports</h4>
       <div class="grid gap-1.5">
         {#each ports as [name, pin] (name)}
           <div class="flex items-center justify-between">
@@ -47,7 +47,7 @@
   <!-- Loaded signals summary -->
   {#if loaded}
     <div class="rounded border border-border bg-card p-3">
-      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted/70 uppercase">Loaded Signals</h4>
+      <h4 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Loaded Signals</h4>
       <div class="grid gap-1.5">
         <div class="flex items-center justify-between">
           <span class="text-fg-muted">Sample rate</span>

@@ -33,6 +33,7 @@ import type {
   InstrumentStatus,
   JsonSchema,
   LogMessage,
+  OpticalRoutingPolicy,
   ProfilePatch,
   Remote,
   SensorROI,
@@ -71,6 +72,15 @@ export interface DeviceDivergence {
   dirty: Set<string>;
   /** Camera ROI needs saving (cameras only). */
   roiDirty: boolean;
+}
+
+/** One optical-routing dimension joined across immutable topology, editable policy, and live target. */
+export interface RoutingDimension {
+  id: string;
+  routes: string[];
+  policyRoutes: string[];
+  policy: OpticalRoutingPolicy;
+  target?: string;
 }
 
 /** Compare two property values; treats floating-point near-equality as equal. */
@@ -280,6 +290,28 @@ export class Instrument {
   readonly discreteAxes = $derived.by(() => this.#devicesOfType(DiscreteAxisHandle));
   readonly signalGenerators = $derived.by(() => this.#devicesOfType(SignalGeneratorHandle));
 
+  /** Optical-routing dimensions with route choices valid for both the topology and every participant. */
+  readonly routingDimensions = $derived.by<RoutingDimension[]>(() => {
+    const assemblies = [...Object.values(this.hal.detection), ...Object.values(this.hal.illumination)];
+    return Object.entries(this.hal.optical_routing).flatMap(([id, routes]) => {
+      const policy = this.state.routing[id];
+      if (!policy) return [];
+      const participants = assemblies.filter((assembly) => id in assembly.routing);
+      const routeNames = Object.keys(routes);
+      return [
+        {
+          id,
+          routes: routeNames,
+          policyRoutes: routeNames.filter((route) =>
+            participants.every((assembly) => assembly.routing[id]?.includes(route) === true)
+          ),
+          policy,
+          target: this.routingTargets[id]
+        }
+      ];
+    });
+  });
+
   // Discrete axes any detection path declares as a filter wheel — config-authoritative, across all profiles.
   readonly filterWheels = $derived.by<DiscreteAxisHandle[]>(() => {
     const ids = Object.values(this.hal.detection).flatMap((det) => det.filter_wheels);
@@ -430,7 +462,7 @@ export class Instrument {
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
-    this.preview = new Preview(client, hal.detection, status, this.stage);
+    this.preview = new Preview(client, hal.detection, status, this.stage, () => this.mode);
     this.#unsubs.push(
       client.on('instrument.status', (s) => {
         this.status = s;
@@ -511,6 +543,10 @@ export class Instrument {
 
   applyOpticalRouting(): Promise<void> {
     return this.#client.post('/instrument/optical-routing/apply');
+  }
+
+  updateOpticalRoutingPolicy(dimension: string, policy: OpticalRoutingPolicy): Promise<void> {
+    return this.#client.put(`/instrument/optical-routing/${encodeURIComponent(dimension)}/policy`, policy);
   }
 
   overrideOpticalRoute(dimension: string, route: string): Promise<void> {

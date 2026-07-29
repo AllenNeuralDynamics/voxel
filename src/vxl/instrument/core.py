@@ -30,6 +30,7 @@ from .state import (
     ChannelPatch,
     InstrumentDefaults,
     InstrumentState,
+    OpticalRoutingPolicy,
     ProfileConfig,
     ProfilePatch,
     StencilPatch,
@@ -101,6 +102,7 @@ class TaskTile(Tile):
     and the traversal order — replacing a separate tiles-map and order-list with one value."""
 
     task_id: str
+    routes: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -539,6 +541,18 @@ class Instrument:
                 AcquisitionMode.PREVIEW,
             )
             await self._move_optical_routes(self._routing_targets.value)
+
+    async def update_optical_routing_policy(self, dimension: str, policy: OpticalRoutingPolicy) -> None:
+        """Persist one complete routing policy; live routing reacts through the bench subscription."""
+        async with self._lock:
+            self._ensure_mode(
+                "update optical routing policy",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            if dimension not in self._hal.config.optical_routing.root:
+                raise OperationRejectedError(f"No optical-routing dimension '{dimension}'")
+            await self._bench.update(routing={**self._bench.value.routing, dimension: policy})
 
     async def override_optical_route(self, dimension: str, route: str) -> None:
         """Temporarily move one routing dimension without changing its persisted policy target."""
@@ -1281,5 +1295,14 @@ class Instrument:
         tiles: list[TaskTile] = []
         for key, task in state.tasks.items():
             w, h = self._saved_fov_for_profiles(task.profile_ids)
-            tiles.append(TaskTile(task_id=key, x=task.x, y=task.y, w=w, h=h))
+            tiles.append(
+                TaskTile(
+                    task_id=key,
+                    x=task.x,
+                    y=task.y,
+                    w=w,
+                    h=h,
+                    routes=state.resolve_routes(x=task.x, y=task.y),
+                )
+            )
         return list(state.traversal(tiles))
