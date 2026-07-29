@@ -9,8 +9,9 @@ from vxl_drivers.serial import SerialTransport
 from rigup import Device
 
 DEFAULT_BAUD = 38400
-DEFAULT_TIMEOUT_S = 0.5
-TERMINATOR = b"\r"
+DEFAULT_TIMEOUT_S = 1.0
+COMMAND_TERMINATOR = b"\n\r"
+RESPONSE_TERMINATOR = b"\r"
 
 
 class MMCCommunicationError(ConnectionError):
@@ -33,6 +34,9 @@ class MMCHub(Device):
         timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> None:
         super().__init__(uid=uid)
+        if timeout_s <= 0:
+            raise ValueError(f"MMC timeout_s must be positive, got {timeout_s}")
+
         self._transport = SerialTransport(port=port, baud=baud, timeout=timeout_s)
         self._timeout_s = timeout_s
         self._reserved: set[int] = set()
@@ -73,15 +77,17 @@ class MMCHub(Device):
         payload = self._frame(axis_id, command, ("?",))
         try:
             with self._transport.transaction() as serial_port:
-                serial_port.reset_input_buffer()
                 serial_port.write(payload)
                 serial_port.flush()
                 previous_timeout = serial_port.timeout
+                timeout_changed = previous_timeout != timeout_s
                 try:
-                    serial_port.timeout = timeout_s
-                    raw = serial_port.read_until(TERMINATOR)
+                    if timeout_changed:
+                        serial_port.timeout = timeout_s
+                    raw = serial_port.read_until(RESPONSE_TERMINATOR)
                 finally:
-                    serial_port.timeout = previous_timeout
+                    if timeout_changed:
+                        serial_port.timeout = previous_timeout
         except Exception as exc:
             raise MMCCommunicationError(
                 f"MMC query failed for axis {axis_id}: {payload.decode('ascii').strip()!r}"
@@ -89,8 +95,9 @@ class MMCHub(Device):
 
         lines = tuple(self._clean_lines(raw))
         if not lines:
+            waited = "without a timeout" if timeout_s is None else f"after waiting {timeout_s:g}s"
             raise MMCCommunicationError(
-                f"MMC query returned no response for axis {axis_id}: {payload.decode('ascii').strip()!r}"
+                f"MMC query returned no response {waited} for axis {axis_id}: {payload.decode('ascii').strip()!r}"
             )
         return lines
 
@@ -112,7 +119,7 @@ class MMCHub(Device):
     def _frame(axis_id: int, command: Cmd, parameters: tuple[str | int | float, ...]) -> bytes:
         MMCHub._validate_axis_id(axis_id)
         suffix = ",".join(format_number(value) if isinstance(value, int | float) else value for value in parameters)
-        return f"{axis_id}{command.value}{suffix}".encode("ascii") + TERMINATOR
+        return f"{axis_id}{command.value}{suffix}".encode("ascii") + COMMAND_TERMINATOR
 
     @staticmethod
     def _clean_lines(raw: bytes) -> Iterator[str]:

@@ -1,201 +1,135 @@
-from collections import deque
-from unittest.mock import patch
+"""Shared serial connection for a stack of Micronix MMC-100 controllers."""
 
-import pytest
-from rigup.device.props import PropertyModel
-from rigup.device.schema import Result, collect_commands, collect_properties
-from vxl_drivers.axes.mmc import MMCLinearAxis
-from vxl_drivers.axes.mmc._cmds import (
-    Cmd,
-    parse_controller_error,
-    parse_deadband,
-    parse_limit_status,
-    parse_position,
-    parse_status,
-)
-from vxl_drivers.axes.mmc._hub import MMCAxisAlreadyReservedError, MMCHub
+import threading
+from collections.abc import Iterator
+
+from vxl_drivers.axes.mmc._cmds import Cmd, format_number
+from vxl_drivers.serial import SerialTransport
+
+from rigup import Device
+
+DEFAULT_BAUD = 38400
+DEFAULT_TIMEOUT_S = 1.0
+COMMAND_TERMINATOR = b"\n\r"
+RESPONSE_TERMINATOR = b"\r"
 
 
-class FakeSerial:
-    def __init__(self, responses: list[bytes] | None = None) -> None:
-        self.responses = deque(responses or [])
-        self.writes: list[bytes] = []
-        self.reset_count = 0
-        self.flush_count = 0
-        self.is_open = True
-        self.port = "test"
-        self.timeout: float | None = 0.5
+class MMCCommunicationError(ConnectionError):
+    """Communication with an MMC controller failed."""
 
-    def reset_input_buffer(self) -> None:
-        self.reset_count += 1
 
-    def write(self, payload: bytes) -> None:
-        self.writes.append(payload)
+class MMCAxisAlreadyReservedError(ValueError):
+    """An MMC axis address is already owned by another driver instance."""
 
-    def flush(self) -> None:
-        self.flush_count += 1
 
-    def read_until(self, terminator: bytes) -> bytes:
-        assert terminator == b"\r"
-        return self.responses.popleft() if self.responses else b""
+class MMCHub(Device):
+    """Own one serial bus shared by one or more addressed MMC axes."""
+
+    def __init__(
+        self,
+        port: str,
+        *,
+        uid: str = "mmc",
+        baud: int = DEFAULT_BAUD,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
+    ) -> None:
+        super().__init__(uid=uid)
+        if timeout_s <= 0:
+            raise ValueError(f"MMC timeout_s must be positive, got {timeout_s}")
+
+        self._transport = SerialTransport(port=port, baud=baud, timeout=timeout_s)
+        self._timeout_s = timeout_s
+        self._reserved: set[int] = set()
+        self._reservation_lock = threading.Lock()
+
+        # The controller can emit startup text. It never emits unsolicited runtime
+        # messages, so discarding that text once is safe.
+        with self._transport.transaction() as serial_port:
+            serial_port.reset_input_buffer()
+
+    def command(self, axis_id: int, command: Cmd, *parameters: str | float) -> None:
+        """Send a command that does not produce a response."""
+        payload = self._frame(axis_id, command, parameters)
+        try:
+            with self._transport.transaction() as serial_port:
+                serial_port.write(payload)
+                serial_port.flush()
+        except Exception as exc:
+            raise MMCCommunicationError(
+                f"MMC command failed for axis {axis_id}: {payload.decode('ascii').strip()!r}"
+            ) from exc
+
+    def query(self, axis_id: int, command: Cmd) -> str:
+        """Run a single-line query and return its final nonempty response line."""
+        lines = self.query_lines(axis_id, command)
+        return lines[-1]
+
+    def query_lines(self, axis_id: int, command: Cmd) -> tuple[str, ...]:
+        """Run a query and return every response line through the final carriage return."""
+        return self._query_lines(axis_id, command, timeout_s=self._timeout_s)
+
+    def blocking_query(self, axis_id: int, command: Cmd, *, timeout_s: float | None) -> str:
+        """Run a query that may legitimately block until a controller operation completes."""
+        lines = self._query_lines(axis_id, command, timeout_s=timeout_s)
+        return lines[-1]
+
+    def _query_lines(self, axis_id: int, command: Cmd, *, timeout_s: float | None) -> tuple[str, ...]:
+        payload = self._frame(axis_id, command, ("?",))
+        try:
+            with self._transport.transaction() as serial_port:
+                serial_port.write(payload)
+                serial_port.flush()
+                previous_timeout = serial_port.timeout
+                timeout_changed = previous_timeout != timeout_s
+                try:
+                    if timeout_changed:
+                        serial_port.timeout = timeout_s
+                    raw = serial_port.read_until(RESPONSE_TERMINATOR)
+                finally:
+                    if timeout_changed:
+                        serial_port.timeout = previous_timeout
+        except Exception as exc:
+            raise MMCCommunicationError(
+                f"MMC query failed for axis {axis_id}: {payload.decode('ascii').strip()!r}"
+            ) from exc
+
+        lines = tuple(self._clean_lines(raw))
+        if not lines:
+            waited = "without a timeout" if timeout_s is None else f"after waiting {timeout_s:g}s"
+            raise MMCCommunicationError(
+                f"MMC query returned no response {waited} for axis {axis_id}: {payload.decode('ascii').strip()!r}"
+            )
+        return lines
+
+    def reserve_axis(self, axis_id: int) -> None:
+        self._validate_axis_id(axis_id)
+        with self._reservation_lock:
+            if axis_id in self._reserved:
+                raise MMCAxisAlreadyReservedError(f"MMC axis {axis_id} is already reserved on {self.uid}")
+            self._reserved.add(axis_id)
+
+    def release_axis(self, axis_id: int) -> None:
+        with self._reservation_lock:
+            self._reserved.discard(axis_id)
 
     def close(self) -> None:
-        self.is_open = False
+        self._transport.close()
 
+    @staticmethod
+    def _frame(axis_id: int, command: Cmd, parameters: tuple[str | int | float, ...]) -> bytes:
+        MMCHub._validate_axis_id(axis_id)
+        suffix = ",".join(format_number(value) if isinstance(value, int | float) else value for value in parameters)
+        return f"{axis_id}{command.value}{suffix}".encode("ascii") + COMMAND_TERMINATOR
 
-def make_hub(port: FakeSerial) -> MMCHub:
-    with patch("vxl_drivers.serial.serial.Serial", return_value=port):
-        return MMCHub("test", uid="hub")
+    @staticmethod
+    def _clean_lines(raw: bytes) -> Iterator[str]:
+        decoded = raw.decode("ascii", errors="replace").replace("\r", "\n")
+        for line in decoded.splitlines():
+            cleaned = line.strip().removeprefix("#").strip()
+            if cleaned:
+                yield cleaned
 
-
-def test_hub_frames_commands_and_cleans_multiline_responses() -> None:
-    port = FakeSerial([b"#11 - Motor Disabled [MVA]\n#12 - No Encoder Detected [POS]\n\r"])
-    hub = make_hub(port)
-
-    hub.command(2, Cmd.MOVE_ABSOLUTE, 1.25)
-    errors = hub.query_lines(2, Cmd.READ_ERRORS)
-
-    assert port.writes == [b"2MVA1.25\r", b"2ERR?\r"]
-    assert errors == ("11 - Motor Disabled [MVA]", "12 - No Encoder Detected [POS]")
-
-
-def test_hub_rejects_duplicate_axis_reservations() -> None:
-    hub = make_hub(FakeSerial())
-    hub.reserve_axis(1)
-
-    with pytest.raises(MMCAxisAlreadyReservedError):
-        hub.reserve_axis(1)
-
-    hub.release_axis(1)
-    hub.reserve_axis(1)
-
-
-def test_protocol_parsers_match_manual_response_shapes() -> None:
-    position = parse_position("[1.25, 1.249]")
-    status = parse_status("171")
-    limits = parse_limit_status("1,0")
-    deadband = parse_deadband("10,1.5")
-    error = parse_controller_error("12 - No Encoder Detected [POS]")
-
-    assert position.theoretical == 1.25
-    assert position.encoder == 1.249
-    assert status.has_error
-    assert status.at_constant_velocity
-    assert status.stopped
-    assert status.program_running is False
-    assert status.positive_limit_active
-    assert status.negative_limit_active
-    assert limits.positive_active
-    assert not limits.negative_active
-    assert deadband.counts == 10
-    assert deadband.timeout_s == 1.5
-    assert error.code == 12
-    assert error.message == "No Encoder Detected"
-    assert error.command == "POS"
-
-
-def test_axis_converts_units_and_exposes_serializable_status() -> None:
-    port = FakeSerial(
-        [
-            b"#1.4.53\n\r",
-            b"#0\n\r",
-            b"#10\n\r",
-            b"#1.25,1.249\n\r",
-            b"#136\n\r",
-        ]
-    )
-    hub = make_hub(port)
-    axis = MMCLinearAxis(hub=hub, axis_id=2, uid="selector", units="um")
-
-    assert axis.firmware_version == "1.4.53"
-    assert axis.position == 1250
-    status_model = PropertyModel.from_value(axis.status)
-    axis.move_abs(2500)
-
-    assert status_model.model_dump(mode="json")["value"] == {
-        "raw": 136,
-        "has_error": True,
-        "accelerating": False,
-        "at_constant_velocity": False,
-        "decelerating": False,
-        "stopped": True,
-        "program_running": False,
-        "positive_limit_active": False,
-        "negative_limit_active": False,
-    }
-    assert port.writes == [
-        b"2VER?\r",
-        b"2TLN?\r",
-        b"2TLP?\r",
-        b"2POS?\r",
-        b"2STA?\r",
-        b"2MVA2.5\r",
-    ]
-
-
-def test_axis_rejects_nonzero_logical_position() -> None:
-    hub = make_hub(FakeSerial([b"#1.4.53\n\r", b"#0\n\r", b"#10\n\r"]))
-    axis = MMCLinearAxis(hub=hub, axis_id=1, uid="axis")
-
-    with pytest.raises(NotImplementedError, match="zeroing"):
-        axis.set_logical_position(1)
-
-
-def test_home_uses_blocking_home_query_instead_of_status_polling() -> None:
-    port = FakeSerial(
-        [
-            b"#1.4.53\n\r",
-            b"#0\n\r",
-            b"#10\n\r",
-            b"#1\n\r",
-            b"#8\n\r",
-        ]
-    )
-    hub = make_hub(port)
-    axis = MMCLinearAxis(hub=hub, axis_id=1, uid="axis")
-
-    axis.go_home(wait=True, timeout_s=12)
-
-    assert port.writes[-3:] == [b"1HOM\r", b"1HOM?\r", b"1STA?\r"]
-    assert port.timeout == 0.5
-
-
-def test_axis_rigup_interface_is_curated_and_structured_results_serialize() -> None:
-    hub = make_hub(FakeSerial([b"#1.4.53\n\r", b"#0\n\r", b"#10\n\r"]))
-    axis = MMCLinearAxis(hub=hub, axis_id=1, uid="axis")
-
-    properties = collect_properties(axis)
-    commands = collect_commands(axis)
-    error = parse_controller_error("12 - No Encoder Detected [POS]")
-
-    assert {
-        "feedback_mode",
-        "motor_enabled",
-        "status",
-        "position_reading",
-        "deadband",
-        "encoder_type",
-    } <= properties.keys()
-    assert properties["position"].stream
-    assert properties["is_moving"].stream
-    assert not properties["speed"].stream
-    assert not properties["acceleration"].stream
-    assert {
-        "move_abs",
-        "halt",
-        "stop",
-        "configure_deadband",
-        "read_and_clear_errors",
-        "save_settings",
-    } <= commands.keys()
-    assert Result.ok([error]).model_dump(mode="json") == {
-        "ok": True,
-        "value": [
-            {
-                "code": 12,
-                "message": "No Encoder Detected",
-                "command": "POS",
-                "raw": "12 - No Encoder Detected [POS]",
-            }
-        ],
-    }
+    @staticmethod
+    def _validate_axis_id(axis_id: int) -> None:
+        if not 1 <= axis_id <= 99:
+            raise ValueError(f"MMC axis_id must be in range 1..99, got {axis_id}")

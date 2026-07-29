@@ -1,5 +1,6 @@
 """Continuous linear axis backed by a Micronix MMC-100 controller."""
 
+import math
 import time
 
 from vxl_drivers.axes.mmc._cmds import (
@@ -35,6 +36,7 @@ _MM_PER_USER_UNIT = {
     "mm": 1.0,
 }
 _AWAIT_POLL_INTERVAL_S = 0.05
+_MMC_KINEMATIC_RESOLUTION = 0.001
 
 
 class MMCAxisError(RuntimeError):
@@ -49,19 +51,44 @@ class MMCLinearAxis(ContinuousAxis):
     both theoretical and encoder values for diagnostics.
     """
 
-    def __init__(self, *, hub: MMCHub, axis_id: int, uid: str, units: str = "um") -> None:
+    def __init__(
+        self,
+        *,
+        hub: MMCHub,
+        axis_id: int,
+        uid: str,
+        units: str = "um",
+        deadband_counts: int = 2,
+        deadband_timeout_s: float = 1.0,
+        speed_mm_s: float | None = None,
+        acceleration_mm_s2: float | None = None,
+        deceleration_mm_s2: float | None = None,
+    ) -> None:
         super().__init__(uid=uid, units=units)
         self.hub = hub
         self.axis_id = axis_id
         self._mm_per_user_unit = _MM_PER_USER_UNIT[units]
         self._closed = False
         self._homing = False
+        desired_deadband = DeadbandSettings(counts=deadband_counts, timeout_s=deadband_timeout_s)
+        initial_kinematics = (
+            (Cmd.VELOCITY, speed_mm_s, "speed_mm_s"),
+            (Cmd.ACCELERATION, acceleration_mm_s2, "acceleration_mm_s2"),
+            (Cmd.DECELERATION, deceleration_mm_s2, "deceleration_mm_s2"),
+        )
+        for _command, value, name in initial_kinematics:
+            if value is not None:
+                self._validate_initial_kinematic(name, value)
 
         self.hub.reserve_axis(axis_id)
         try:
             self._firmware_version = self.hub.query(self.axis_id, Cmd.FIRMWARE_VERSION)
             self._lower_limit = self._from_mm(self._query_float(Cmd.LOWER_LIMIT))
             self._upper_limit = self._from_mm(self._query_float(Cmd.UPPER_LIMIT))
+            self._apply_initial_deadband(desired_deadband)
+            for command, value, name in initial_kinematics:
+                if value is not None:
+                    self._apply_initial_kinematic(command, value, name)
         except Exception:
             self.hub.release_axis(axis_id)
             raise
@@ -411,6 +438,29 @@ class MMCLinearAxis(ContinuousAxis):
             return int(response)
         except ValueError as exc:
             raise ValueError(f"Unexpected {command.value}? response: {response!r}") from exc
+
+    def _apply_initial_deadband(self, desired: DeadbandSettings) -> None:
+        if self.deadband == desired:
+            return
+        self.configure_deadband(desired.counts, desired.timeout_s)
+        actual = self.deadband
+        if actual != desired:
+            raise MMCAxisError(f"MMC axis {self.axis_id} failed to apply deadband {desired}; read back {actual}")
+
+    def _apply_initial_kinematic(self, command: Cmd, desired: float, name: str) -> None:
+        if math.isclose(self._query_float(command), desired, rel_tol=0, abs_tol=_MMC_KINEMATIC_RESOLUTION / 2):
+            return
+        self.hub.command(self.axis_id, command, desired)
+        actual = self._query_float(command)
+        if not math.isclose(actual, desired, rel_tol=0, abs_tol=_MMC_KINEMATIC_RESOLUTION / 2):
+            raise MMCAxisError(f"MMC axis {self.axis_id} failed to apply {name}={desired}; read back {actual}")
+
+    @staticmethod
+    def _validate_initial_kinematic(name: str, value: float) -> None:
+        if not math.isfinite(value) or value < _MMC_KINEMATIC_RESOLUTION:
+            raise ValueError(f"{name} must be finite and at least {_MMC_KINEMATIC_RESOLUTION}, got {value}")
+        if not math.isclose(value, round(value, 3), rel_tol=0, abs_tol=1e-12):
+            raise ValueError(f"{name} must use no more than 0.001 precision in MMC controller units, got {value}")
 
     def _to_mm(self, value: float) -> float:
         return value * self._mm_per_user_unit
