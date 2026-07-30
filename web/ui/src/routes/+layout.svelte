@@ -145,16 +145,16 @@
 
   // Pane sizes
 
-  const contentPane = createPaneSize(() => shellRef, {
+  let workspaceSplitEl = $state<HTMLElement | null>(null);
+  const contentPane = createPaneSize(() => workspaceSplitEl, {
     min: 42,
     default: 42,
     max: 64,
     fallback: { min: 30, default: 30, max: 50 }
   });
-  let liveSplitEl = $state<HTMLElement | null>(null);
-  const monitorsPane = createPaneSize(() => liveSplitEl, {
+  const monitorsPane = createPaneSize(() => shellRef, {
     min: 24,
-    default: 26,
+    default: 30,
     max: 30,
     fallback: { min: 15, max: 18 }
   });
@@ -209,41 +209,41 @@
     </div>
   {/snippet}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
-    <PaneGroup direction="horizontal" autoSaveId="shell">
-      <!-- Mode controls: nav + routed content + logs -->
-      <Pane {...contentPane} class="grid h-full grid-rows-[auto_1fr] bg-surface">
-        <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
-          <a
-            href={resolve('/')}
-            class={cn(
-              'flex shrink-0 items-center transition-colors',
-              viewId === '/' ? 'text-fg' : 'text-fg-muted hover:text-fg'
-            )}
-            title="Home"
-            aria-label="Home"
-          >
-            <VoxelLogo class="size-ui-md" />
-          </a>
-          {#if app.instrument}
-            <nav class="flex items-center">
-              {@render segmented(navSegments)}
-            </nav>
-          {/if}
-        </header>
-        <div class="flex h-full min-h-0 min-w-0 flex-col">
-          {@render children()}
-        </div>
-      </Pane>
-      <PaneDivider direction="vertical" />
+    <PaneGroup direction="horizontal" autoSaveId="shell:frame">
+      <!-- Main workspace: routed content beside the viewer/log surface. -->
+      <Pane>
+        <PaneGroup direction="horizontal" bind:ref={workspaceSplitEl} autoSaveId="shell:workspace">
+          <Pane {...contentPane} class="grid h-full grid-rows-[auto_1fr] bg-surface">
+            <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
+              <a
+                href={resolve('/')}
+                class={cn(
+                  'flex shrink-0 items-center transition-colors',
+                  viewId === '/' ? 'text-fg' : 'text-fg-muted hover:text-fg'
+                )}
+                title="Home"
+                aria-label="Home"
+              >
+                <VoxelLogo class="size-ui-md" />
+              </a>
+              {#if app.instrument}
+                <nav class="flex items-center">
+                  {@render segmented(navSegments)}
+                </nav>
+              {/if}
+            </header>
+            <div class="flex h-full min-h-0 min-w-0 flex-col">
+              {@render children()}
+            </div>
+          </Pane>
+          <PaneDivider direction="vertical" />
 
-      {#if app.instrument}
-        {@const instrument = app.instrument}
-        <Pane>
-          <PaneGroup direction="horizontal" bind:ref={liveSplitEl} autoSaveId="shell:live">
+          {#if app.instrument}
+            {@const instrument = app.instrument}
             <!-- Viewer: Preview + Logs (centerpiece) -->
-            <Pane defaultSize={45} class="flex h-full flex-col bg-canvas">
+            <Pane class="flex h-full flex-col bg-canvas">
               <main class="min-h-0 flex-1 overflow-hidden">
-                <PaneGroup direction="vertical" autoSaveId="shell:live:viewer">
+                <PaneGroup direction="vertical" autoSaveId="shell:workspace:viewer">
                   <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
                     <div class="flex h-full flex-col bg-canvas">
                       <div class="relative flex min-h-0 flex-1">
@@ -335,47 +335,46 @@
                 </button>
               </footer>
             </Pane>
-            <PaneDivider direction="vertical" />
+          {:else}
+            <Pane class="min-h-0 min-w-0 bg-canvas">
+              <LogViewer logs={app.logs} />
+            </Pane>
+          {/if}
+        </PaneGroup>
+      </Pane>
 
-            <!-- Monitors: run controls + device telemetry -->
-            <Pane defaultSize={16} {...monitorsPane} class="flex flex-col bg-surface">
-              <header class="flex shrink-0 flex-col gap-3 border-b border-border bg-elevated px-4 py-3">
-                <RunButton {app} class="w-full justify-center" />
-                <ProfileSelector {instrument} size="md" class="w-full" />
-              </header>
-              <PaneGroup
-                direction="vertical"
-                bind:ref={monitorsSplitEl}
-                autoSaveId="shell:live:monitors"
-                class="min-h-0 flex-1"
-              >
-                <Pane class="min-h-0">
-                  <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
-                    {#if instrument.cameras.size > 0}
-                      <CamerasMonitor {instrument} />
-                    {/if}
-                    {#if instrument.lasers.size > 0}
-                      <LasersMonitor {instrument} />
-                    {/if}
-                    {#if instrument.filterWheels.length > 0}
-                      <FilterWheelsMonitor {instrument} />
-                    {/if}
-                    {#if Object.keys(instrument.hal.optical_routing).length > 0}
-                      <RoutingMonitor {instrument} />
-                    {/if}
-                  </div>
-                </Pane>
-                <PaneDivider direction="horizontal" />
-                <Pane defaultSize={32} {...gizmoPane} class="min-h-0">
-                  <StageGizmo stage={instrument.stage} class="border-t border-border p-3" />
-                </Pane>
-              </PaneGroup>
+      {#if app.instrument}
+        {@const instrument = app.instrument}
+        <PaneDivider direction="vertical" />
+
+        <!-- Monitors: run controls + device telemetry -->
+        <Pane {...monitorsPane} class="flex flex-col bg-surface">
+          <header class="flex shrink-0 flex-col gap-3 border-b border-border bg-elevated px-4 py-3">
+            <RunButton {app} class="w-full justify-center" />
+            <ProfileSelector {instrument} size="md" class="w-full" />
+          </header>
+          <PaneGroup direction="vertical" bind:ref={monitorsSplitEl} autoSaveId="shell:monitors" class="min-h-0 flex-1">
+            <Pane class="min-h-0">
+              <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
+                {#if instrument.cameras.size > 0}
+                  <CamerasMonitor {instrument} />
+                {/if}
+                {#if instrument.lasers.size > 0}
+                  <LasersMonitor {instrument} />
+                {/if}
+                {#if instrument.filterWheels.length > 0}
+                  <FilterWheelsMonitor {instrument} />
+                {/if}
+                {#if Object.keys(instrument.hal.optical_routing).length > 0}
+                  <RoutingMonitor {instrument} />
+                {/if}
+              </div>
+            </Pane>
+            <PaneDivider direction="horizontal" />
+            <Pane defaultSize={32} {...gizmoPane} class="min-h-0">
+              <StageGizmo stage={instrument.stage} class="border-t border-border p-3" />
             </Pane>
           </PaneGroup>
-        </Pane>
-      {:else}
-        <Pane class="min-h-0 min-w-0 bg-canvas">
-          <LogViewer logs={app.logs} />
         </Pane>
       {/if}
     </PaneGroup>
