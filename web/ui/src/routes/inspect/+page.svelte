@@ -4,7 +4,7 @@
   import { getVoxelApp } from '$lib/model';
   import { cn } from '$lib/utils';
 
-  import DeviceBrowser from '../devices/[id]/DeviceBrowser.svelte';
+  import DeviceBrowser from './devices/[deviceId]/DeviceBrowser.svelte';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
@@ -35,7 +35,7 @@
           {@const active = selected?.key === key}
           {@const issue = axis.error ? 'error' : !axis.connected ? 'disconnected' : null}
           <a
-            href={resolve(`/stage?axis=${key}`)}
+            href={resolve(`/inspect?axis=${key}` as '/')}
             class={cn(
               'flex items-center gap-2 border-b-2 px-3 py-1.5 transition-colors',
               active ? 'border-fg text-fg' : 'border-transparent text-fg-muted hover:text-fg'
@@ -68,4 +68,8 @@
       <p class="px-4 text-lg text-fg-muted">No stage axes mapped.</p>
     {/if}
   </section>
+{:else}
+  <div class="flex h-full items-center justify-center p-8">
+    <p class="text-lg text-fg-muted">No active instrument.</p>
+  </div>
 {/if}

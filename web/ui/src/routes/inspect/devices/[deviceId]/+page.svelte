@@ -11,7 +11,7 @@
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
-  const deviceId = $derived(page.params.id!);
+  const deviceId = $derived(page.params.deviceId!);
   const stageAxis = $derived.by<'x' | 'y' | 'z' | null>(() => {
     if (!instrument) return null;
     if (instrument.hal.stage.x === deviceId) return 'x';
@@ -23,9 +23,9 @@
   // Stage axes have a consolidated inspector; redirect legacy device URLs to it.
   $effect(() => {
     if (stageAxis) {
-      goto(resolve(`/stage?axis=${stageAxis}`), { replaceState: true, keepFocus: true, noScroll: true });
+      goto(resolve(`/inspect?axis=${stageAxis}` as '/'), { replaceState: true, keepFocus: true, noScroll: true });
     } else if (instrument && !instrument.devices.has(deviceId)) {
-      goto(resolve('/' as const), { keepFocus: true, noScroll: true });
+      goto(resolve('/inspect'), { keepFocus: true, noScroll: true });
     }
   });
 </script>

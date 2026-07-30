@@ -711,6 +711,8 @@ export class VoxelApp {
     colormaps: [],
     metadata_schemas: {}
   });
+  /** Persisted acquisition manifests from the catalog, newest first. */
+  acquisitions = $state.raw<AcquisitionManifest[]>([]);
   instrument = $state<Instrument | null>(null);
   logs = $state<LogMessage[]>([]);
   error = $state<string | null>(null);
@@ -809,7 +811,12 @@ export class VoxelApp {
   async refresh(): Promise<void> {
     this.error = null;
     try {
-      this.discovery = await this.#client.get<AppDiscovery>('/discovery');
+      const [discovery, acquisitions] = await Promise.all([
+        this.#client.get<AppDiscovery>('/discovery'),
+        this.#client.get<AcquisitionManifest[]>('/acquisitions').catch(() => this.acquisitions)
+      ]);
+      this.discovery = discovery;
+      this.acquisitions = acquisitions;
     } catch (e) {
       this.error = errorMessage(e);
     }
@@ -933,12 +940,14 @@ export class VoxelApp {
     const existing = this.instrument;
     void this.#hydrateLogs(); // independent of the instrument flow; backlog fills in alongside reconcile
     try {
-      const [status, discovery] = await Promise.all([
+      const [status, discovery, acquisitions] = await Promise.all([
         this.#client.get<AppStatus>('/app'),
-        this.#client.get<AppDiscovery>('/discovery')
+        this.#client.get<AppDiscovery>('/discovery'),
+        this.#client.get<AcquisitionManifest[]>('/acquisitions').catch(() => this.acquisitions)
       ]);
       this.#desired = status.active;
       this.discovery = discovery;
+      this.acquisitions = acquisitions;
     } catch (e) {
       this.error = errorMessage(e);
       return;

@@ -2,9 +2,8 @@
   import './layout.css';
 
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
-  import { DropdownMenu } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
-  import { useEventListener } from 'runed';
+  import { useEventListener, watch } from 'runed';
   import type { Component } from 'svelte';
   import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
@@ -14,7 +13,7 @@
   import { page } from '$app/state';
   import type { Pathname } from '$app/types';
   import favicon from '$lib/assets/favicon.svg';
-  import DefaultConfigDialog, { defaultDialog } from '$lib/DefaultConfigDialog.svelte';
+  import DefaultConfigDialog from '$lib/DefaultConfigDialog.svelte';
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
@@ -36,7 +35,6 @@
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
-  import LaunchScreen from './LaunchScreen.svelte';
 
   const { children } = $props();
 
@@ -85,7 +83,7 @@
   type Segment = { key: string; label: string; icon?: Component; active: boolean; select: () => void };
 
   const navTabs: { id: Pathname; label: string; icon: Component }[] = [
-    { id: '/', label: 'Inspect', icon: Microscope },
+    { id: '/inspect', label: 'Inspect', icon: Microscope },
     { id: '/sync', label: 'Sync', icon: WaveformsIcon },
     { id: '/configure', label: 'Configure', icon: TuneVertical },
     { id: '/plan', label: 'Plan', icon: Layers }
@@ -99,6 +97,13 @@
   const viewId = $derived<Pathname>(
     navTabs.find((t) => t.id !== '/' && page.url.pathname.startsWith(t.id))?.id ??
       (page.url.pathname === '/debug' ? '/debug' : '/')
+  );
+
+  watch(
+    () => app.instrument,
+    () => {
+      if (!app.instrument && viewId !== '/') goto(resolve('/'), { replaceState: true });
+    }
   );
 
   function selectView(id: Pathname) {
@@ -127,29 +132,35 @@
 
   // Pane sizes
 
-  const leftPane = createPaneSize(() => shellRef, {
+  const contentPane = createPaneSize(() => shellRef, {
     min: 42,
     default: 42,
     max: 64,
     fallback: { min: 30, default: 30, max: 50 }
   });
-  const rightPane = createPaneSize(() => shellRef, { min: 28, default: 32, max: 36, fallback: { min: 15, max: 18 } });
+  let liveSplitEl = $state<HTMLElement | null>(null);
+  const monitorsPane = createPaneSize(() => liveSplitEl, {
+    min: 24,
+    default: 26,
+    max: 30,
+    fallback: { min: 15, max: 18 }
+  });
 
-  // Vertical split inside the right pane: monitors (top) over the stage gizmo (bottom).
-  let rightSplitEl = $state<HTMLElement | null>(null);
-  const stagePane = createPaneSize(() => rightSplitEl, {
+  // Vertical split inside the monitors pane: telemetry (top) over the stage gizmo (bottom).
+  let monitorsSplitEl = $state<HTMLElement | null>(null);
+  const gizmoPane = createPaneSize(() => monitorsSplitEl, {
     default: 22,
     min: 18,
     max: 28,
     fallback: { min: 28, max: 40, default: 32 }
   });
 
-  let bottomPane = $state<Pane | undefined>(undefined);
-  const logsOpen = $derived(bottomPane ? !bottomPane.isCollapsed() : false);
+  let logsPaneRef = $state<Pane | undefined>(undefined);
+  const logsOpen = $derived(logsPaneRef ? !logsPaneRef.isCollapsed() : false);
 
   function toggleLogs() {
-    if (bottomPane?.isCollapsed()) bottomPane.expand();
-    else bottomPane?.collapse();
+    if (logsPaneRef?.isCollapsed()) logsPaneRef.expand();
+    else logsPaneRef?.collapse();
   }
 
   // --- Dialog state ---
@@ -163,59 +174,7 @@
 
 {#if !app.client.isConnected}
   <ConnectionSplash {app} />
-{:else if !app.instrument}
-  <LaunchScreen {app} />
 {:else}
-  {@const instrument = app.instrument}
-  {#snippet appMenu()}
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        class="flex shrink-0 cursor-pointer items-center text-fg-muted transition-colors hover:text-fg"
-        title="App menu"
-      >
-        <VoxelLogo class="size-ui-md" />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="start"
-          sideOffset={8}
-          class="z-50 min-w-56 rounded-md border border-border bg-floating p-1 text-lg shadow-lg outline-none"
-        >
-          <DropdownMenu.Item
-            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-highlighted:bg-element-hover"
-            onclick={() => (themes.pickerOpen = true)}
-          >
-            Change Appearance
-            <span class="ml-8 text-base text-fg-faint">⌘K T</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator class="my-1 h-px bg-border" />
-          <DropdownMenu.Item
-            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
-            disabled={!app.instrument}
-            onclick={() => defaultDialog.open('save')}
-          >
-            Save as Default…
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
-            disabled={!app.instrument}
-            onclick={() => defaultDialog.open('restore')}
-          >
-            Restore Default…
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator class="my-1 h-px bg-border" />
-          <DropdownMenu.Item
-            class="flex cursor-pointer items-center rounded px-2 py-1.5 outline-none hover:bg-element-hover focus:bg-element-hover data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-element-hover"
-            disabled={!app.instrument}
-            onclick={() => (closeDialogOpen = true)}
-          >
-            Close Session…
-            <span class="ml-8 text-base text-fg-faint">⌘K Q</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  {/snippet}
   {#snippet segmented(segments: Segment[])}
     <div class="flex h-ui-md items-center rounded-md border border-input bg-canvas/50 p-0.5">
       {#each segments as { key, label, icon: Icon, active, select } (key)}
@@ -224,7 +183,7 @@
           title={label}
           onclick={select}
           class={cn(
-            'inline-flex h-full min-w-24 cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 text-lg whitespace-nowrap transition-colors',
+            'inline-flex h-full min-w-20 cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 text-lg whitespace-nowrap transition-colors',
             active ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
           )}
         >
@@ -239,12 +198,24 @@
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell">
       <!-- Mode controls: nav + routed content + logs -->
-      <Pane {...leftPane} class="grid h-full grid-rows-[auto_1fr] bg-surface">
+      <Pane {...contentPane} class="grid h-full grid-rows-[auto_1fr] bg-surface">
         <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
-          {@render appMenu()}
-          <nav class="flex items-center">
-            {@render segmented(navSegments)}
-          </nav>
+          <a
+            href={resolve('/')}
+            class={cn(
+              'flex shrink-0 items-center transition-colors',
+              viewId === '/' ? 'text-fg' : 'text-fg-muted hover:text-fg'
+            )}
+            title="Home"
+            aria-label="Home"
+          >
+            <VoxelLogo class="size-ui-md" />
+          </a>
+          {#if app.instrument}
+            <nav class="flex items-center">
+              {@render segmented(navSegments)}
+            </nav>
+          {/if}
         </header>
         <div class="flex h-full min-h-0 min-w-0 flex-col">
           {@render children()}
@@ -252,84 +223,100 @@
       </Pane>
       <PaneDivider direction="vertical" />
 
-      <!-- Viewer: Preview + Logs (centerpiece) -->
-      <Pane defaultSize={45} class="flex h-full flex-col bg-canvas">
-        <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-elevated px-4">
-          <div class="flex items-center gap-2">
-            {@render segmented(modeSegments)}
-            <button
-              onclick={toggleLogs}
-              class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-lg whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-            >
-              {logsOpen ? 'Hide logs' : 'Show logs'}
-            </button>
-          </div>
-          <RunButton {app} />
-        </header>
-        <main class="min-h-0 flex-1 overflow-hidden">
-          <PaneGroup direction="vertical" autoSaveId="shell:viewer">
-            <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
-              <div class="flex h-full flex-col bg-canvas">
-                <div class="relative flex-1 overflow-hidden" data-fly-origin>
-                  {#if app.viewMode.get() === 'stage'}
-                    <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                      <StageView bind:viewport={stageViewport} />
-                    </div>
-                  {:else}
-                    <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                      <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
-                    </div>
-                  {/if}
+      {#if app.instrument}
+        {@const instrument = app.instrument}
+        <Pane>
+          <PaneGroup direction="horizontal" bind:ref={liveSplitEl} autoSaveId="shell:live">
+            <!-- Viewer: Preview + Logs (centerpiece) -->
+            <Pane defaultSize={45} class="flex h-full flex-col bg-canvas">
+              <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-elevated px-4">
+                <div class="flex items-center gap-2">
+                  {@render segmented(modeSegments)}
+                  <button
+                    onclick={toggleLogs}
+                    class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-lg whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+                  >
+                    {logsOpen ? 'Hide logs' : 'Show logs'}
+                  </button>
                 </div>
+                <RunButton {app} />
+              </header>
+              <main class="min-h-0 flex-1 overflow-hidden">
+                <PaneGroup direction="vertical" autoSaveId="shell:live:viewer">
+                  <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
+                    <div class="flex h-full flex-col bg-canvas">
+                      <div class="relative flex-1 overflow-hidden" data-fly-origin>
+                        {#if app.viewMode.get() === 'stage'}
+                          <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                            <StageView bind:viewport={stageViewport} />
+                          </div>
+                        {:else}
+                          <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                            <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                          </div>
+                        {/if}
+                      </div>
 
-                <SnapshotFlyOverlay />
-              </div>
+                      <SnapshotFlyOverlay />
+                    </div>
+                  </Pane>
+                  <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
+                  <Pane
+                    bind:this={logsPaneRef}
+                    collapsible
+                    collapsedSize={0}
+                    defaultSize={35}
+                    minSize={20}
+                    maxSize={55}
+                    class="bg-surface"
+                  >
+                    <LogViewer {logs} class="bg-canvas/35" />
+                  </Pane>
+                </PaneGroup>
+              </main>
             </Pane>
-            <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
-            <Pane
-              bind:this={bottomPane}
-              collapsible
-              collapsedSize={0}
-              defaultSize={35}
-              minSize={20}
-              maxSize={55}
-              class="bg-surface"
-            >
-              <LogViewer {logs} class="bg-canvas/35" />
+            <PaneDivider direction="vertical" />
+
+            <!-- Monitors: run controls + device telemetry -->
+            <Pane defaultSize={16} {...monitorsPane} class="flex flex-col bg-surface">
+              <header class="flex h-15 shrink-0 items-center border-b border-border bg-elevated px-4">
+                <ProfileSelector {instrument} size="md" class="w-full" />
+              </header>
+              <PaneGroup
+                direction="vertical"
+                bind:ref={monitorsSplitEl}
+                autoSaveId="shell:live:monitors"
+                class="min-h-0 flex-1"
+              >
+                <Pane class="min-h-0">
+                  <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
+                    {#if instrument.cameras.size > 0}
+                      <CamerasMonitor {instrument} />
+                    {/if}
+                    {#if instrument.lasers.size > 0}
+                      <LasersMonitor {instrument} />
+                    {/if}
+                    {#if instrument.filterWheels.length > 0}
+                      <FilterWheelsMonitor {instrument} />
+                    {/if}
+                    {#if Object.keys(instrument.hal.optical_routing).length > 0}
+                      <RoutingMonitor {instrument} />
+                    {/if}
+                  </div>
+                </Pane>
+                <PaneDivider direction="horizontal" />
+                <Pane defaultSize={32} {...gizmoPane} class="min-h-0">
+                  <StageGizmo stage={instrument.stage} class="border-t border-border p-3" />
+                </Pane>
+              </PaneGroup>
             </Pane>
           </PaneGroup>
-        </main>
-      </Pane>
-      <PaneDivider direction="vertical" />
-
-      <!-- Monitors: run controls + device telemetry -->
-      <Pane defaultSize={16} {...rightPane} class="flex flex-col bg-surface">
-        <header class="flex h-15 shrink-0 items-center border-b border-border bg-elevated px-4">
-          <ProfileSelector {instrument} size="md" class="w-full" />
-        </header>
-        <PaneGroup direction="vertical" bind:ref={rightSplitEl} autoSaveId="monitors" class="min-h-0 flex-1">
-          <Pane class="min-h-0">
-            <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
-              {#if instrument.cameras.size > 0}
-                <CamerasMonitor {instrument} />
-              {/if}
-              {#if instrument.lasers.size > 0}
-                <LasersMonitor {instrument} />
-              {/if}
-              {#if instrument.filterWheels.length > 0}
-                <FilterWheelsMonitor {instrument} />
-              {/if}
-              {#if Object.keys(instrument.hal.optical_routing).length > 0}
-                <RoutingMonitor {instrument} />
-              {/if}
-            </div>
-          </Pane>
-          <PaneDivider direction="horizontal" />
-          <Pane defaultSize={32} {...stagePane} class="min-h-0">
-            <StageGizmo stage={instrument.stage} class="border-t border-border p-3" />
-          </Pane>
-        </PaneGroup>
-      </Pane>
+        </Pane>
+      {:else}
+        <Pane class="min-h-0 min-w-0 bg-canvas">
+          <LogViewer logs={app.logs} />
+        </Pane>
+      {/if}
     </PaneGroup>
   </div>
 
