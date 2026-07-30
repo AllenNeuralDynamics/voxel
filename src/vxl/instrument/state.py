@@ -337,10 +337,6 @@ class ZStack(SchemaModel):
             raise ValueError(f"z-range end ({self.end}) must be >= start ({self.start})")
         return self
 
-    @property
-    def signature(self) -> str:
-        return f"x{self.x:.2f}_y{self.y:.2f}_z{self.start:.2f}-{self.end:.2f}"
-
     def num_frames(self, z_step: float) -> int:
         return int((self.end - self.start) / z_step) + 1
 

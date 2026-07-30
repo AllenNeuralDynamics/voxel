@@ -16,6 +16,7 @@ members = [
     "ome-zarr-writer",
     "rigup",
     "vxl",
+    "vxl-catalog",
     "vxl-cli",
     "vxl-drivers",
     "vxl-qt",
@@ -2670,6 +2671,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "rigup" },
+    { name = "vxl-catalog" },
     { name = "vxlib" },
 ]
 
@@ -2693,6 +2695,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "rich", specifier = ">=14.2.0" },
     { name = "rigup", editable = "rigup" },
+    { name = "vxl-catalog", editable = "catalog" },
     { name = "vxlib", editable = "vxlib" },
 ]
 
@@ -2702,6 +2705,21 @@ dev = [
     { name = "pytest", specifier = ">=9.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "ruff", specifier = ">=0.8.0" },
+]
+
+[[package]]
+name = "vxl-catalog"
+version = "0.1.0"
+source = { editable = "catalog" }
+dependencies = [
+    { name = "cloudpathlib", extra = ["s3"] },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cloudpathlib", extras = ["s3"], specifier = ">=0.24.0" },
+    { name = "pydantic", specifier = ">=2.11" },
 ]
 
 [[package]]

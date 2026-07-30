@@ -4,16 +4,16 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, cast
 
 from ome_zarr_writer import WriterSettings
+from pydantic import TypeAdapter
 from rigup.device.handle import Adapter, DeviceProperty
+from vxl_catalog import DatasetLocation, StorageSpec
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import DeviceHandle
 from vxl.camera.base import (
     Camera,
     CaptureState,
-    DatasetRef,
     SensorROI,
-    StorageSpec,
     StorageStatus,
     TriggerMode,
     TriggerPolarity,
@@ -23,6 +23,8 @@ from vxlib import Coalescer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+
+_DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
 
 
 class CameraHandle(DeviceHandle[Camera]):
@@ -134,14 +136,13 @@ class CameraHandle(DeviceHandle[Camera]):
         z_step: float,
         magnification: float,
         settings: WriterSettings,
-    ) -> DatasetRef:
-        """Prepare camera and writer for a stack acquisition; return a pointer to its dataset.
+    ) -> DatasetLocation:
+        """Prepare camera and writer for a stack acquisition; return its catalog location.
 
         ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
-        under it (the node resolves ``storage.resolve(subpath)``); ``settings`` are the broadcast
+        under it (the node resolves it against machine-local storage); ``settings`` are the broadcast
         output-format knobs. ``magnification`` converts the sensor-space pixel size into the
-        sample-space lateral voxel size. The returned :class:`DatasetRef` is persisted by control as
-        ``<channel>.ref.json``.
+        sample-space lateral voxel size. OME-Zarr metadata remains authoritative for dataset geometry.
         """
         result = await self.call(
             "open_stack",
@@ -152,7 +153,7 @@ class CameraHandle(DeviceHandle[Camera]):
             magnification=magnification,
             settings=settings,
         )
-        return DatasetRef.model_validate(result)
+        return _DATASET_LOCATION_ADAPTER.validate_python(result)
 
     async def close_stack(self) -> None:
         """Start draining and closing the writer in the background. Poll capture_state until CLOSED."""

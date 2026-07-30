@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from vxl_catalog import Catalog, FileCatalogBackend
 
 from rigup import (
     BuildConfig,
@@ -28,6 +29,13 @@ from vxl.instrument.topology import (
     StageConfig,
 )
 from vxlib import Cell
+
+
+def _catalog(tmp_path: Path) -> Catalog:
+    return Catalog(
+        FileCatalogBackend(tmp_path / "catalog"),
+        resolve_root=lambda _spec: tmp_path / "acquisitions",
+    )
 
 
 class _FakeRig:
@@ -485,7 +493,10 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations() -
 
 async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: Path) -> None:
     config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
-    instrument = Instrument.from_path(config.instantiate("runtime-validation", tmp_path))
+    instrument = Instrument.from_path(
+        config.instantiate("runtime-validation", tmp_path),
+        catalog=_catalog(tmp_path),
+    )
 
     try:
         await instrument.open()
@@ -542,7 +553,10 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
 
 async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None:
     config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
-    instrument = Instrument.from_path(config.instantiate("coalescer-cleanup", tmp_path))
+    instrument = Instrument.from_path(
+        config.instantiate("coalescer-cleanup", tmp_path),
+        catalog=_catalog(tmp_path),
+    )
 
     await instrument.open()
     try:
@@ -590,7 +604,8 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
         }
     )
     instrument = Instrument.from_path(
-        config.model_copy(update={"hal": hal, "default": default}).instantiate("split-routing", tmp_path)
+        config.model_copy(update={"hal": hal, "default": default}).instantiate("split-routing", tmp_path),
+        catalog=_catalog(tmp_path),
     )
 
     async def wait_for_target(route: str) -> None:

@@ -11,11 +11,20 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
+from vxl_catalog import (
+    AcquisitionManifest,
+    AcquisitionOrigin,
+    AcquisitionVolume,
+    Catalog,
+    DatasetLocation,
+    DatasetStatus,
+    LocationStatus,
+)
 
 from rigup import DeviceHandle, DeviceInterface
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from vxl.camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, StorageSpec
+from vxl.camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, StorageSpec, resolve_storage
 from vxl.daq.clocked import Signals
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
@@ -38,7 +47,6 @@ from .state import (
     WriterPatch,
     ZStack,
 )
-from .topology import HALConfig
 from .traversal import Tile, TileOrder
 
 logger = logging.getLogger(__name__)
@@ -50,33 +58,12 @@ class AcquisitionMode(StrEnum):
     CAPTURE = "capture"
 
 
-class Origin(BaseModel):
-    on: str = Field(..., description="Machine name of the instrument PC")
-    by: str = Field(..., description="Username of the logged-in operator")
-    at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
-
-
-class PlannedVolume(BaseModel, frozen=True):
-    """One (task, profile) capture in a run's plan — the unit :meth:`Instrument._capture_volume` writes."""
-
-    task: str
-    profile: str
-
-
 class AcquisitionRequest(BaseModel):
     """Parameters of an acquisition run. Shared by the instrument API and the web request body."""
 
     storage: StorageSpec
     task_ids: list[str] | None = None  # None → every planned task, in traversal order
     operator: str | None = None
-
-
-class AcquisitionRecord(BaseModel):
-    record_id: str = Field(..., exclude=True)
-    origin: Origin
-    volumes: list[PlannedVolume]
-    state: InstrumentState
-    hardware: HALConfig
 
 
 class AcquisitionProgress(BaseModel, frozen=True):
@@ -140,13 +127,14 @@ class Instrument:
     """An opened instrument: hardware, persisted acquisition state, and active-profile orchestration."""
 
     @classmethod
-    def from_path(cls, home: Path | str) -> Self:
+    def from_path(cls, home: Path | str, *, catalog: Catalog) -> Self:
         """Load a validated bench from ``home`` and construct its instrument."""
-        return cls(InstrumentBench.load(home))
+        return cls(InstrumentBench.load(home), catalog=catalog)
 
-    def __init__(self, bench: InstrumentBench) -> None:
+    def __init__(self, bench: InstrumentBench, *, catalog: Catalog) -> None:
         self._hal = HAL(bench.config.hal, name=bench.home.name)
         self._bench = bench
+        self._catalog = catalog
         self._active_profile_id = Cell[str](next(iter(self._bench.value.imaging.profiles)))
         self._channels: dict[str, Channel] = {}
         self._preview_channels: list[Channel] = []
@@ -937,16 +925,15 @@ class Instrument:
             }
             await self._bench.update(tasks=updated)
 
-    async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionRecord:
-        """Begin acquiring the requested volumes into ``request.storage``; return the record once started.
+    async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionManifest:
+        """Begin acquiring the requested volumes and return their running manifest.
 
         ``storage`` is the run's logical destination (root + relative base; the node resolves it).
         ``task_ids`` selects a subset of planned tasks (``None`` → all), always captured in traversal
-        order. Runs the preflight (each participating camera must be able to write ``storage``) and writes
-        ``<run>/record.json`` (a snapshot of the plan + hardware) **synchronously** — so a bad target or
-        an empty/unknown selection fails here — then launches the capture loop in the background and
-        returns the record. The run streams :attr:`progress` and ends by returning :attr:`mode` to
-        ``IDLE``; stop it early with :meth:`stop_acquisition`, or await it with :meth:`wait_acquisition`.
+        order. The preflight proves every participating camera can write ``storage`` before the catalog
+        creates ``manifest.json`` and transitions it to ``running``. Capture then continues in the
+        background, streaming :attr:`progress`; stop it early with :meth:`stop_acquisition`, or await it
+        with :meth:`wait_acquisition`.
         """
         storage = request.storage
         # Snapshot the bench and enter CAPTURE in one locked transition, so an edit cannot commit between
@@ -964,7 +951,7 @@ class Instrument:
             await self._mode.set(AcquisitionMode.CAPTURE)
         try:
             # Preflight: every camera in the plan must be able to write `storage`, tested on its own node
-            # (round-trip write). Any failure raises here — before record.json, motion, or capture.
+            # (round-trip write). Any failure raises here — before a manifest, motion, or capture.
             detections = {
                 state.imaging.channels[ch_id].detection
                 for v in plan
@@ -974,22 +961,27 @@ class Instrument:
             cameras = [self._hal.cameras[d] for d in detections if d in self._hal.cameras]
             await asyncio.gather(*(cam.check_writable(storage) for cam in cameras))
 
-            record = AcquisitionRecord(
-                record_id=storage.path.name,
-                origin=Origin(on=System.hostname(), by=request.operator or getpass.getuser()),
+            manifest = AcquisitionManifest(
+                id=uuid.uuid4(),
+                instrument=self.path.stem,
+                origin=AcquisitionOrigin(
+                    host=System.hostname(),
+                    operator=request.operator or getpass.getuser(),
+                ),
+                created_at=datetime.datetime.now(tz=datetime.UTC),
+                storage=storage,
+                bench_snapshot=state.model_dump(mode="json"),
+                hardware_snapshot=self._hal.config.model_dump(mode="json"),
                 volumes=plan,
-                state=state,
-                hardware=self._hal.config,
             )
-            run_root = storage.resolve().target
-            run_root.mkdir(parents=True, exist_ok=True)
-            (run_root / "record.json").write_text(record.model_dump_json(indent=2))
+            await self._catalog.create(manifest)
+            manifest = await self._catalog.start_acquisition(manifest.id)
         except BaseException:
-            await self._mode.set(AcquisitionMode.IDLE)  # preflight/record failed — release CAPTURE
+            await self._mode.set(AcquisitionMode.IDLE)
             raise
 
-        self._acq_task = asyncio.create_task(self._run_acquisition(storage, plan))
-        return record
+        self._acq_task = asyncio.create_task(self._run_acquisition(manifest.id, storage, plan))
+        return manifest
 
     async def stop_acquisition(self) -> None:
         """Cancel the in-flight acquisition, if any; its cleanup runs and ``mode`` returns to IDLE."""
@@ -1004,23 +996,45 @@ class Instrument:
             with suppress(asyncio.CancelledError):
                 await task
 
-    async def _run_acquisition(self, storage: StorageSpec, plan: list[PlannedVolume]) -> None:
+    async def _run_acquisition(self, acq_id: uuid.UUID, storage: StorageSpec, plan: list[AcquisitionVolume]) -> None:
         """Capture each planned (task, profile) volume in order. Runs as the background ``_acq_task``.
 
         Reads the bench live — it's frozen for the whole run (CAPTURE blocks edits) — and delegates each
-        volume to :meth:`_capture_volume`. A volume failure **aborts the run** (remaining volumes are
-        skipped) and is logged here, so the failure is observed even though the run is fire-and-launched;
-        cancellation (via :meth:`stop_acquisition`) propagates normally. ``mode`` returns to IDLE when the
-        run ends, completes, fails, or is cancelled.
+        volume to :meth:`_capture_volume`, updating the catalog around every lifecycle boundary. A volume
+        failure aborts the run and skips remaining volumes; cancellation marks unfinished volumes
+        cancelled. ``mode`` returns to IDLE when the run completes, fails, or is cancelled.
         """
         tasks = self._bench.value.tasks
+        task_ordinals = {
+            task_id: ordinal for ordinal, task_id in enumerate(dict.fromkeys(volume.task for volume in plan), start=1)
+        }
         try:
             for v in plan:
+                await self._catalog.start_volume(acq_id, task=v.task, profile=v.profile)
                 await self._apply_profile(v.profile)
-                subpath = PurePosixPath(tasks[v.task].signature, v.profile)
-                await self._capture_volume(tasks[v.task].stack, storage, subpath, task=v.task, profile=v.profile)
-            logger.info("Acquisition complete: %d volumes → %s", len(plan), storage.resolve().target)
-        except Exception:
+                subpath = PurePosixPath("tasks", f"{task_ordinals[v.task]:04d}", v.profile)
+                await self._capture_volume(
+                    tasks[v.task].stack,
+                    storage,
+                    subpath,
+                    acq_id=acq_id,
+                    task=v.task,
+                    profile=v.profile,
+                )
+                await self._catalog.complete_volume(acq_id, task=v.task, profile=v.profile)
+            await self._catalog.complete_acquisition(acq_id)
+            logger.info("Acquisition complete: %d volumes → %s", len(plan), resolve_storage(storage).target)
+        except asyncio.CancelledError:
+            try:
+                await self._catalog.cancel_acquisition(acq_id)
+            except Exception:
+                logger.exception("Failed to persist cancellation for acquisition %s", acq_id)
+            raise
+        except Exception as error:
+            try:
+                await self._catalog.fail_acquisition(acq_id, error)
+            except Exception:
+                logger.exception("Failed to persist failure for acquisition %s", acq_id)
             logger.exception("Acquisition aborted")
         finally:
             self._acq_task = None
@@ -1041,12 +1055,13 @@ class Instrument:
         storage: StorageSpec,
         subpath: PurePosixPath,
         *,
+        acq_id: uuid.UUID,
         task: str,
         profile: str,
     ) -> None:
         """Acquire one volume for the already-active profile, emitting :attr:`progress` per batch.
 
-        The ``finally`` disables lasers, resets the stepper, and finalizes the writers — so a cancel
+        Cleanup always disables lasers, resets the stepper, and finalizes the writers, so cancellation
         leaves hardware safe and the partial stack finalized.
         """
         settings = self._bench.value.output
@@ -1057,6 +1072,9 @@ class Instrument:
         batch_z = settings.batch_z
         progress = AcquisitionProgress(task=task, profile=profile, done=0, total=num_frames)
         await self.progress.emit(progress)
+        locations: dict[str, DatasetLocation] = {}
+        frames_done = 0
+        capture_error: BaseException | None = None
         try:
             await asyncio.gather(
                 self._hal.stage.x.move_abs(stack.x, wait=True),
@@ -1081,12 +1099,14 @@ class Instrument:
                         settings=settings,
                     )
                 )
-            refs = await asyncio.gather(*init_coros)
-
-            profile_root = storage.resolve(subpath).target
-            profile_root.mkdir(parents=True, exist_ok=True)
-            for ch_id, ref in zip(channels, refs, strict=True):
-                (profile_root / f"{ch_id}.ref.json").write_text(ref.model_dump_json(indent=2))
+            opened = await asyncio.gather(*init_coros)
+            locations = dict(zip(channels, opened, strict=True))
+            await self._catalog.register_datasets(
+                acq_id,
+                task=task,
+                profile=profile,
+                locations=locations,
+            )
 
             await asyncio.gather(*(ch.enable_laser() for ch in channels.values()))
 
@@ -1105,42 +1125,78 @@ class Instrument:
                     await asyncio.sleep(0.05)
                 await self._stop_signal_generators()
                 done = min((batch_idx + 1) * batch_z, num_frames)
+                frames_done = done
                 await self.progress.emit(progress.updated(done=done))
-        finally:
-            await self._teardown_capture(list(channels.values()), scanning_axis)
-        logger.info("Captured %d frames: task %s / profile %s", num_frames, task, profile)
+        except BaseException as error:
+            capture_error = error
 
-    async def _teardown_capture(self, chans: list[Channel], scanning_axis: ContinuousAxisHandle) -> None:
+        cleanup_errors = await self._teardown_capture(list(channels.values()), scanning_axis)
+        if capture_error is None and not cleanup_errors:
+            logger.info("Captured %d frames: task %s / profile %s", num_frames, task, profile)
+            return
+
+        location_status = LocationStatus.FAILED if cleanup_errors else LocationStatus.AVAILABLE
+        dataset_status = DatasetStatus.PARTIAL if frames_done else DatasetStatus.FAILED
+        try:
+            terminalize = (
+                self._catalog.cancel_volume
+                if isinstance(capture_error, asyncio.CancelledError)
+                else self._catalog.fail_volume
+            )
+            await terminalize(
+                acq_id,
+                task=task,
+                profile=profile,
+                dataset_status=dataset_status,
+                location_status=location_status,
+            )
+        except Exception:
+            logger.exception("Failed to persist volume failure for task %s / profile %s", task, profile)
+
+        if capture_error is not None:
+            for error in cleanup_errors:
+                logger.error("Cleanup also failed for task %s / profile %s", task, profile, exc_info=error)
+            raise capture_error.with_traceback(capture_error.__traceback__)
+        raise ExceptionGroup(f"writer cleanup failed for task {task} / profile {profile}", cleanup_errors)
+
+    async def _teardown_capture(self, chans: list[Channel], scanning_axis: ContinuousAxisHandle) -> list[Exception]:
         """Cleanup after a volume, regardless of how capture exited: disable lasers, reset the stepper,
-        then drain and close every writer. Per-camera failures are logged, never raised, so one bad
-        camera can't block the others' cleanup.
+        then drain and close every writer. Every camera is attempted; writer-close failures are returned
+        so the caller cannot mark the dataset complete.
 
         Close runs in the background on each node; this polls ``capture_state`` until every camera
         reports ``CLOSED``. Each poll is a short RPC, so a hung/dead node surfaces via its timeout
         rather than blocking cleanup indefinitely.
         """
 
-        def _report(label: str, results: list[Any]) -> None:
+        def _report(label: str, results: list[Any], *, collect: bool = False) -> list[Exception]:
+            errors: list[Exception] = []
             for ch, result in zip(chans, results, strict=True):
                 if isinstance(result, BaseException):
                     logger.error("cleanup: %s failed for %s", label, ch.uid, exc_info=result)
+                    if collect:
+                        errors.append(result if isinstance(result, Exception) else RuntimeError(str(result)))
+            return errors
 
         _report("disable_laser", await asyncio.gather(*(ch.disable_laser() for ch in chans), return_exceptions=True))
         with suppress(NotImplementedError, RuntimeError):
             await scanning_axis.reset_ttl_stepper()
-        _report("close_stack", await asyncio.gather(*(ch.camera.close_stack() for ch in chans), return_exceptions=True))
-        pending = list(chans)
+        close_results = await asyncio.gather(*(ch.camera.close_stack() for ch in chans), return_exceptions=True)
+        errors = _report("close_stack", close_results, collect=True)
+        pending = [ch for ch, result in zip(chans, close_results, strict=True) if not isinstance(result, BaseException)]
         while pending:
             states = await asyncio.gather(*(ch.camera.capture_state() for ch in pending), return_exceptions=True)
             still_closing = []
             for ch, state in zip(pending, states, strict=True):
                 if isinstance(state, BaseException):
                     logger.error("cleanup: close_stack failed for %s", ch.uid, exc_info=state)
+                    errors.append(state if isinstance(state, Exception) else RuntimeError(str(state)))
                 elif state is not CaptureState.CLOSED:
                     still_closing.append(ch)
             pending = still_closing
             if pending:
                 await asyncio.sleep(0.05)
+        return errors
 
     async def _update_active_profile_config(self, profile: ProfileConfig) -> None:
         imaging = self._bench.value.imaging
@@ -1236,7 +1292,7 @@ class Instrument:
 
         return self._saved_fov_for_profiles([active_id])
 
-    def _generate_plan(self, task_ids: list[str] | None) -> list[PlannedVolume]:
+    def _generate_plan(self, task_ids: list[str] | None) -> list[AcquisitionVolume]:
         """Resolve the ordered (task, profile) volumes to capture; validate an explicit selection.
 
         ``task_ids`` is a selection, not an ordering: order always comes from the traversal query, so a
@@ -1248,7 +1304,7 @@ class Instrument:
             raise OperationRejectedError("; ".join(f"No such task '{task_id}'" for task_id in unknown))
         selected = None if task_ids is None else set(task_ids)
         return [
-            PlannedVolume(task=tile.task_id, profile=pid)
+            AcquisitionVolume(task=tile.task_id, profile=pid)
             for tile in self.task_tiles.value
             if selected is None or tile.task_id in selected
             for pid in tasks[tile.task_id].profile_ids

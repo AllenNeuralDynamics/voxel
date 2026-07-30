@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from vxl_catalog import Catalog, FileCatalogBackend
 
 from vxl.app import VoxelApp
 from vxl.camera import SensorROI
@@ -238,7 +239,13 @@ def test_instrument_constructs_from_the_validated_snapshot_without_rereading(tmp
     bench = InstrumentBench.load(directory)
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")
 
-    instrument = Instrument(bench)
+    instrument = Instrument(
+        bench,
+        catalog=Catalog(
+            FileCatalogBackend(tmp_path / "catalog"),
+            resolve_root=lambda _spec: tmp_path / "acquisitions",
+        ),
+    )
 
     assert instrument.path == directory
     assert instrument.default.value == config.default
@@ -375,6 +382,10 @@ async def test_launch_rejects_static_violations_before_constructing_instrument(
     monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
     app = object.__new__(VoxelApp)
     app._active = Cell(None)
+    app._catalog = Catalog(
+        FileCatalogBackend(tmp_path / "catalog"),
+        resolve_root=lambda _spec: tmp_path / "acquisition",
+    )
     directory = tmp_path / "broken.voxel"
     directory.mkdir()
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")

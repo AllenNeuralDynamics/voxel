@@ -76,15 +76,15 @@
   let archiveBenchDialogOpen = $state(false);
   let archiveBenchInstrument = $state('');
 
-  const instrumentEntries = $derived(Object.entries(app.catalog.instruments));
-  const templateEntries = $derived(Object.entries(app.catalog.templates));
+  const instrumentEntries = $derived(Object.entries(app.discovery.instruments));
+  const templateEntries = $derived(Object.entries(app.discovery.templates));
   const selectedId = $derived(selection ? selectionId(selection) : null);
 
   const selected = $derived.by((): Selected | null => {
     if (!selection) return null;
 
     if (selection.kind === 'template') {
-      const config = app.catalog.templates[selection.name];
+      const config = app.discovery.templates[selection.name];
       if (!config) return null;
       return {
         name: selection.name,
@@ -97,7 +97,7 @@
       };
     }
 
-    const info = app.catalog.instruments[selection.name];
+    const info = app.discovery.instruments[selection.name];
     if (!info) return null;
     const config = isLoaded(info.config) ? info.config.value : null;
     const configErrors = violationsFor(info, 'config');
@@ -165,7 +165,7 @@
   $effect(() => {
     if (selection !== null) return;
     const last = app.lastInstrument;
-    if (last && last in app.catalog.instruments) {
+    if (last && last in app.discovery.instruments) {
       selection = { kind: 'instrument', name: last };
     } else if (instrumentEntries.length > 0) {
       selection = { kind: 'instrument', name: instrumentEntries[0][0] };
@@ -306,8 +306,8 @@
                   <span class="min-w-0 flex-1 text-sm tracking-wide text-fg-faint uppercase">Instruments</span>
                   <button
                     class="flex size-7 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-                    title="Collapse catalog"
-                    aria-label="Collapse catalog"
+                    title="Collapse instrument list"
+                    aria-label="Collapse instrument list"
                     onclick={() => (sidebarOpen = false)}
                   >
                     <PanelLeft width="16" height="16" />
@@ -368,8 +368,8 @@
               {#if !sidebarOpen}
                 <button
                   class="flex size-7 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-                  title="Expand catalog"
-                  aria-label="Expand catalog"
+                  title="Expand instrument list"
+                  aria-label="Expand instrument list"
                   onclick={() => (sidebarOpen = true)}
                 >
                   <PanelLeft width="16" height="16" />

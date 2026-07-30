@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
     "rigup",
     "vxlib",
+    "vxl-catalog",
     "msgpack-numpy>=0.4.8",
     "numpy>=2.3.4",
     "ome-zarr-writer",
@@ -52,12 +53,14 @@ members = [
     "vxlib",
     "omezarr",
     "bench",
+    "catalog",
 ]
 
 [tool.uv.sources]
 ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
 vxlib = { workspace = true }
+vxl-catalog = { workspace = true }
 
 [dependency-groups]
 dev = [

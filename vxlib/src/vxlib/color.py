@@ -18,8 +18,6 @@ Usage:
     lut = resolve_colormap("inferno")   # gradient colormap
 """
 
-from __future__ import annotations
-
 import colorsys
 from enum import StrEnum
 from typing import Self
@@ -96,43 +94,43 @@ class Color(str):
 
     # -- Modifiers (return new Color) -----------------------------------------
 
-    def lighten(self, factor: float = 0.2) -> Color:
+    def lighten(self, factor: float = 0.2) -> Self:
         """Return a lighter shade."""
         r, g, b = self.rgb
-        return Color.from_rgb(
+        return type(self).from_rgb(
             int(r + (255 - r) * factor),
             int(g + (255 - g) * factor),
             int(b + (255 - b) * factor),
         )
 
-    def darken(self, factor: float = 0.2) -> Color:
+    def darken(self, factor: float = 0.2) -> Self:
         """Return a darker shade."""
         r, g, b = self.rgb
-        return Color.from_rgb(
+        return type(self).from_rgb(
             int(r * (1 - factor)),
             int(g * (1 - factor)),
             int(b * (1 - factor)),
         )
 
-    def contrasting(self, light: str = "#ffffff", dark: str = "#000000") -> Color:
+    def contrasting(self, light: str = "#ffffff", dark: str = "#000000") -> Self:
         """Return light or dark color based on contrast with this color."""
-        return Color(dark if self.luminance > 0.179 else light)
+        return type(self)(dark if self.luminance > 0.179 else light)
 
     # -- Factory methods ------------------------------------------------------
 
     @classmethod
-    def from_rgb(cls, r: int, g: int, b: int) -> Color:
+    def from_rgb(cls, r: int, g: int, b: int) -> Self:
         """Create from RGB values (0-255)."""
         return cls(f"#{r:02x}{g:02x}{b:02x}")
 
     @classmethod
-    def from_hsl(cls, hue: float, saturation: float, lightness: float) -> Color:
+    def from_hsl(cls, hue: float, saturation: float, lightness: float) -> Self:
         """Create from HSL values (0.0-1.0)."""
         r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
         return cls.from_rgb(int(r * 255), int(g * 255), int(b * 255))
 
     @classmethod
-    def from_wavelength(cls, wavelength_nm: float) -> Color:
+    def from_wavelength(cls, wavelength_nm: float) -> Self:
         """Create from light wavelength in nanometers (380-780nm visible range).
 
         Uses gamma correction for better violet rendering on sRGB displays.

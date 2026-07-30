@@ -8,6 +8,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from vxl_catalog import Catalog, FileCatalogBackend
+
+from vxl.camera import resolve_storage
 from vxl.errors import Loaded
 from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection, InstrumentState
 from vxl.system import Remote, System
@@ -93,10 +96,20 @@ class VoxelApp:
     ``close()``s then launches to switch.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, catalog: Catalog | None = None) -> None:
         self._active: Cell[Instrument | None] = Cell(None)
-        System().dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
+        system = System()
+        system.dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
         self.instruments_dir.mkdir(exist_ok=True)
+        self._catalog = catalog or Catalog(
+            FileCatalogBackend(system.dir / "catalog"),
+            resolve_root=lambda spec: resolve_storage(spec).target,
+        )
+
+    @property
+    def catalog(self) -> Catalog:
+        """The acquisition catalog shared with the active instrument."""
+        return self._catalog
 
     @property
     def remotes(self) -> dict[str, Remote]:
@@ -141,7 +154,7 @@ class VoxelApp:
         directory = self.instruments_dir / f"{name}.voxel"
         if not directory.is_dir():
             raise FileNotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
-        instrument = Instrument.from_path(directory)
+        instrument = Instrument.from_path(directory, catalog=self._catalog)
         await instrument.open()
         await self._active.set(instrument)
         return instrument

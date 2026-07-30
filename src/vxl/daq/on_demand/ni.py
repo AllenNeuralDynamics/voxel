@@ -1,22 +1,16 @@
 """NI-DAQmx on-demand digital output."""
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
 
 from nidaqmx.constants import LineGrouping
 from nidaqmx.task import Task as NiTask
+from vxlib.quantity import VoltageRange
+
+from vxl.daq.hub_ni import NiDaqmx
+from vxl.daq.hub_ni.resources import NiTaskLease  # noqa: TC001 - annotations are evaluated at runtime
 
 from .base import OnDemandAO, OnDemandDO
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from vxlib.quantity import VoltageRange
-
-    from vxl.daq.hub_ni import NiDaqmx
-    from vxl.daq.hub_ni.resources import NiTaskLease
 
 
 class NiOnDemandAO(OnDemandAO):

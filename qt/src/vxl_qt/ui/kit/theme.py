@@ -14,8 +14,6 @@ Usage:
     c.lighten(0.2)  # Lighter shade
 """
 
-from __future__ import annotations
-
 import base64
 from enum import Enum, StrEnum
 from functools import lru_cache

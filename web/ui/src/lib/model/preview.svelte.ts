@@ -4,6 +4,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import type {
   AcquisitionMode,
   ChannelConfig,
+  ColormapCatalog,
   DetectionAssemblyConfig,
   InstrumentStatus,
   PreviewLevels,
@@ -16,25 +17,6 @@ import type { Stage } from './app.svelte';
 import type { Client } from './client.svelte';
 import type { Inpainter } from './inpaint.svelte';
 import { NumericModel } from './prop.svelte';
-
-/** A colormap: list of hex color stops (black->color for single-stop). */
-export type ColormapDef = string[];
-
-/** A named group of colormaps. */
-export interface ColormapGroup {
-  uid: string;
-  label: string;
-  desc: string;
-  colormaps: Record<string, ColormapDef>;
-}
-
-/** The full catalog is a list of groups. */
-export type ColormapCatalog = ColormapGroup[];
-
-/** Fetch the colormap catalog from the backend. */
-export function fetchColormapCatalog(client: Client): Promise<ColormapCatalog> {
-  return client.get<ColormapCatalog>('/catalog/colormaps');
-}
 
 // ── Frame wire shapes + decoders ────────────────────────────────────
 // Frames are a binary domain stream (per-channel `preview.frame.{ch}` / `preview.view.{ch}` topics),
@@ -624,24 +606,20 @@ export class Preview {
     detection: Record<string, DetectionAssemblyConfig>,
     initialStatus: InstrumentStatus,
     stage: Stage,
-    getMode: () => AcquisitionMode
+    getMode: () => AcquisitionMode,
+    catalog: ColormapCatalog
   ) {
     this.#client = client;
     this.#stage = stage;
     this.#getMode = getMode;
     this.feed = new LiveFeed(client, detection, initialStatus);
+    this.catalog = catalog;
 
     const unsubFrame = this.feed.onFrame((name) => this.#autoLevel(name));
     const unsubUpdates = this.#client.on('preview.updates', (update) => {
       this.#applyPreviewUpdate(update);
     });
     this.#unsubscribers.push(unsubFrame, unsubUpdates);
-
-    fetchColormapCatalog(client)
-      .then((catalog) => {
-        this.catalog = catalog;
-      })
-      .catch((e) => console.warn('[Preview] failed to fetch colormap catalog:', e));
   }
 
   /** Wire the mosaic store as the paint sink (owned by the app, injected once the instrument opens). */

@@ -8,28 +8,21 @@ Both take a ``NiDaqmx`` hub (``vxl.daq.hub_ni``) at construction; the card and p
 live there.
 """
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Annotated, Literal
+from collections.abc import Mapping
+from typing import Annotated, Literal
 
 import numpy as np
 from nidaqmx.constants import AcquisitionType as NiAcqType
 from nidaqmx.constants import Edge, RegenerationMode
 from nidaqmx.task import Task as NiTask
 from pydantic import BaseModel, ConfigDict, Discriminator, TypeAdapter
+from vxlib.quantity import VoltageRange
 
-from .base import SignalGenerator
+from vxl.daq.hub_ni import NiDaqmx
+from vxl.daq.hub_ni.resources import NiTaskLease  # noqa: TC001 - annotations are evaluated at runtime
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from vxlib.quantity import VoltageRange
-
-    from vxl.daq.hub_ni import NiDaqmx
-    from vxl.daq.hub_ni.resources import NiTaskLease
-
-    from .base import Signals
+from .base import SignalGenerator, Signals
 
 
 class CounterTrigger(BaseModel):

@@ -1,6 +1,6 @@
 """FastAPI factory + launcher for the Voxel web backend, on the ``vxl.Instrument`` API.
 
-Lean by design: two routers (the ``VoxelApp`` surface — discover/launch/close/catalog — and the active
+Lean by design: two routers (the ``VoxelApp`` surface — discovery/launch/close/history — and the active
 ``Instrument`` surface), the per-instrument WS feed (:mod:`vxl_web.live`), and the ``MsgBus``
 (:mod:`vxl_web.wire`). No manager/service layer — routers call the ``Instrument``'s flat method surface
 directly, so the only lifetime-scoped object is the ``InstrumentFeed``. The previous stack lives under

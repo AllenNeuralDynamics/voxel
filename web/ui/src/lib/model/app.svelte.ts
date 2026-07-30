@@ -21,15 +21,16 @@ import { Preview } from './preview.svelte';
 import type { SnapshotChannel } from './snapshots.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
+  AcquisitionManifest,
   AcquisitionProgress,
-  AcquisitionRecord,
   AcquisitionRequest,
+  AppDiscovery,
   AppStatus,
   ChannelPatch,
+  ColormapCatalog,
   DeviceSnapshot,
   HALConfig,
   InstrumentDefaults,
-  InstrumentsCatalog,
   InstrumentStatus,
   JsonSchema,
   LogMessage,
@@ -270,9 +271,8 @@ export class Instrument {
   /** Live acquisition progress, keyed by `${task}:${profile}` volume. Cleared when a run starts. */
   readonly progress = new SvelteMap<string, AcquisitionProgress>();
 
-  /** The record of the active (or most recent) run — its planned volumes + config snapshot. Set when a
-   * run starts; carries the full volume list the progress view fills in. */
-  acquisitionRecord = $state.raw<AcquisitionRecord | null>(null);
+  /** The manifest returned for the active or most recent acquisition. */
+  acquisitionManifest = $state.raw<AcquisitionManifest | null>(null);
 
   readonly mode = $derived(this.status.mode);
   readonly fov = $derived(this.status.fov);
@@ -438,7 +438,7 @@ export class Instrument {
     return false;
   });
 
-  /** Resolved JSON schema for the active `metadata_cls`; re-fetched from the catalog when it changes. */
+  /** Resolved JSON schema for the active `metadata_cls`; re-fetched from the backend when it changes. */
   metadataSchema = $state.raw<JsonSchema | null>(null);
 
   readonly #client: Client;
@@ -450,7 +450,9 @@ export class Instrument {
     status: InstrumentStatus,
     hal: HALConfig,
     defaults: InstrumentDefaults,
-    devices: Record<string, DeviceSnapshot>
+    devices: Record<string, DeviceSnapshot>,
+    colormaps: ColormapCatalog,
+    readonly metadataSchemas: Record<string, string>
   ) {
     this.#client = client;
     this.status = status;
@@ -462,7 +464,7 @@ export class Instrument {
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
-    this.preview = new Preview(client, hal.detection, status, this.stage, () => this.mode);
+    this.preview = new Preview(client, hal.detection, status, this.stage, () => this.mode, colormaps);
     this.#unsubs.push(
       client.on('instrument.status', (s) => {
         this.status = s;
@@ -476,7 +478,7 @@ export class Instrument {
   }
 
   /** Hydrate the active instrument over REST, then keep it fresh from the WS streams. */
-  static async open(client: Client): Promise<Instrument> {
+  static async open(client: Client, discovery: AppDiscovery): Promise<Instrument> {
     let latest: InstrumentStatus | undefined;
     const buffer = client.on('instrument.status', (s) => (latest = s));
     try {
@@ -486,7 +488,15 @@ export class Instrument {
         client.get<InstrumentDefaults>('/instrument/default'),
         client.get<Record<string, DeviceSnapshot>>('/instrument/devices')
       ]);
-      const instrument = new Instrument(client, latest ?? fetched, hal, defaults, devices); // a push during the fetch wins
+      const instrument = new Instrument(
+        client,
+        latest ?? fetched,
+        hal,
+        defaults,
+        devices,
+        discovery.colormaps,
+        discovery.metadata_schemas
+      ); // a push during the fetch wins
       void instrument.#refreshDevices(); // initial prop values fill in reactively (the feed only pushes changes)
       return instrument;
     } finally {
@@ -581,10 +591,9 @@ export class Instrument {
     return this.#client.put('/instrument/metadata/schema', { target });
   }
 
-  /** The catalog of selectable metadata schemas (display name → target identifier). */
-  async fetchMetadataSchemas(): Promise<Record<string, string>> {
-    const { schemas } = await this.#client.get<{ schemas: Record<string, string> }>('/catalog/metadata/schemas');
-    return schemas;
+  /** The discovered metadata schema registry (display name → target identifier). */
+  fetchMetadataSchemas(): Promise<Record<string, string>> {
+    return Promise.resolve(this.metadataSchemas);
   }
 
   setTraversal(order: TileOrder): Promise<void> {
@@ -607,11 +616,11 @@ export class Instrument {
   }
 
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
-  async startAcquisition(request: AcquisitionRequest): Promise<AcquisitionRecord> {
+  async startAcquisition(request: AcquisitionRequest): Promise<AcquisitionManifest> {
     this.progress.clear();
-    const record = await this.#client.post<AcquisitionRecord>('/instrument/acquisition', request);
-    this.acquisitionRecord = record;
-    return record;
+    const manifest = await this.#client.post<AcquisitionManifest>('/instrument/acquisition', request);
+    this.acquisitionManifest = manifest;
+    return manifest;
   }
 
   stopAcquisition(): Promise<void> {
@@ -634,9 +643,7 @@ export class Instrument {
     if (cls === this.#schemaCls) return;
     this.#schemaCls = cls;
     try {
-      this.metadataSchema = await this.#client.get<JsonSchema>(
-        `/catalog/metadata/schema?target=${encodeURIComponent(cls)}`
-      );
+      this.metadataSchema = await this.#client.get<JsonSchema>(`/metadata/schema?target=${encodeURIComponent(cls)}`);
     } catch {
       this.metadataSchema = null;
     }
@@ -697,7 +704,13 @@ export type PreviewMode = 'live' | 'stage';
 export class VoxelApp {
   readonly #client: Client;
 
-  catalog = $state<InstrumentsCatalog>({ instruments: {}, templates: {} });
+  discovery = $state<AppDiscovery>({
+    instruments: {},
+    templates: {},
+    remotes: {},
+    colormaps: [],
+    metadata_schemas: {}
+  });
   instrument = $state<Instrument | null>(null);
   logs = $state<LogMessage[]>([]);
   error = $state<string | null>(null);
@@ -789,14 +802,14 @@ export class VoxelApp {
 
   /** Configured object stores (name → connection + selectable roots); empty when only local storage. */
   fetchRemotes(): Promise<Record<string, Remote>> {
-    return this.#client.get<Record<string, Remote>>('/catalog/remotes');
+    return Promise.resolve(this.discovery.remotes);
   }
 
-  /** Load the available instruments and templates. */
+  /** Load the bounded resources used to initialize the application. */
   async refresh(): Promise<void> {
     this.error = null;
     try {
-      this.catalog = await this.#client.get<InstrumentsCatalog>('/instruments');
+      this.discovery = await this.#client.get<AppDiscovery>('/discovery');
     } catch (e) {
       this.error = errorMessage(e);
     }
@@ -920,7 +933,12 @@ export class VoxelApp {
     const existing = this.instrument;
     void this.#hydrateLogs(); // independent of the instrument flow; backlog fills in alongside reconcile
     try {
-      this.#desired = (await this.#client.get<AppStatus>('/app')).active;
+      const [status, discovery] = await Promise.all([
+        this.#client.get<AppStatus>('/app'),
+        this.#client.get<AppDiscovery>('/discovery')
+      ]);
+      this.#desired = status.active;
+      this.discovery = discovery;
     } catch (e) {
       this.error = errorMessage(e);
       return;
@@ -938,11 +956,11 @@ export class VoxelApp {
   /** Sweep persisted snapshots whose instrument no longer exists (frontend-only GC, on connect). */
   async #pruneSnapshots(): Promise<void> {
     try {
-      const { instruments } = await this.#client.get<InstrumentsCatalog>('/instruments');
+      const { instruments } = await this.#client.get<AppDiscovery>('/discovery');
       const names = Object.keys(instruments);
       await Promise.all([this.snaps.reconcile(names), this.inpaint.reconcile(names)]);
     } catch {
-      // best-effort — a failed catalog fetch just skips this round of GC
+      // Best-effort: failed discovery just skips this round of GC.
     }
   }
 
@@ -969,7 +987,7 @@ export class VoxelApp {
         if (target === null) continue;
         let opened: Instrument | null = null;
         try {
-          opened = await Instrument.open(this.#client);
+          opened = await Instrument.open(this.#client, this.discovery);
         } catch (e) {
           this.error = errorMessage(e);
         }

@@ -1,6 +1,6 @@
 """API routers for the rebuilt backend, in one module.
 
-- ``app_router``: the ``VoxelApp`` surface — discover / launch / close, static catalog, and the WS.
+- ``app_router``: the ``VoxelApp`` surface — discovery / launch / close, acquisition history, and the WS.
 - ``instrument_router`` (``/instrument`` prefix): the active ``Instrument`` surface — profile /
   settings / tasks / plan / metadata / devices / preview / acquisition (wired in later increments).
 
@@ -14,10 +14,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from vxl_catalog import AcquisitionManifest, ManifestNotFoundError
 
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
 from vxl.daq.clocked import Signals
-from vxl.instrument.core import AcquisitionRecord, AcquisitionRequest
+from vxl.instrument import InstrumentConfig, InstrumentInspection
+from vxl.instrument.core import AcquisitionRequest
 from vxl.instrument.state import (
     ChannelPatch,
     InstrumentDefaults,
@@ -46,6 +48,16 @@ instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
 # ---- discovery / launch / close (the VoxelApp surface) ----
 
 
+class AppDiscovery(BaseModel):
+    """Bounded resources a client needs to discover and configure this Voxel application."""
+
+    instruments: dict[str, InstrumentInspection]
+    templates: dict[str, InstrumentConfig]
+    remotes: dict[str, Remote]
+    colormaps: list[ColormapGroup]
+    metadata_schemas: dict[str, str]
+
+
 @app_router.get("/app")
 async def get_app_status(app: AppDep) -> AppStatus:
     """App-level presence (active instrument name, or null) — the REST counterpart of the ``app.status`` stream."""
@@ -53,14 +65,17 @@ async def get_app_status(app: AppDep) -> AppStatus:
     return AppStatus(active=active.path.stem if active is not None else None)
 
 
-@app_router.get("/instruments")
-async def list_instruments(app: AppDep) -> dict[str, Any]:
-    """Existing instruments (fault-tolerant) + shipped templates on this box. No hardware opened."""
+@app_router.get("/discovery")
+async def get_discovery(app: AppDep) -> AppDiscovery:
+    """Return the bounded application resources needed to initialize a client."""
     found = app.discover()
-    return {
-        "instruments": {name: info.model_dump(mode="json") for name, info in found.instruments.items()},
-        "templates": {name: cfg.model_dump(mode="json") for name, cfg in found.templates.items()},
-    }
+    return AppDiscovery(
+        instruments=found.instruments,
+        templates=found.templates,
+        remotes=app.remotes,
+        colormaps=get_colormap_catalog(),
+        metadata_schemas=discover_metadata_schema(),
+    )
 
 
 @app_router.post("/instruments/{name}/launch")
@@ -112,32 +127,30 @@ async def close(app: AppDep) -> dict[str, bool]:
     return {"closed": True}
 
 
-# ---- static catalog (no instrument required) ----
+# ---- resource details and acquisition history (no active instrument required) ----
 
 
-@app_router.get("/catalog/colormaps")
-async def list_colormaps() -> list[ColormapGroup]:
-    return get_colormap_catalog()
-
-
-@app_router.get("/catalog/remotes")
-async def list_remotes(app: AppDep) -> dict[str, Remote]:
-    """Configured object stores: name → connection + selectable roots (from ``System.remotes``).
-    A local run targets no remote."""
-    return app.remotes
-
-
-@app_router.get("/catalog/metadata/schemas")
-async def list_metadata_schemas() -> dict[str, Any]:
-    return {"schemas": discover_metadata_schema()}
-
-
-@app_router.get("/catalog/metadata/schema")
+@app_router.get("/metadata/schema")
 async def get_metadata_schema(target: str) -> dict[str, Any]:
     try:
         return resolve_metadata_class(target).model_json_schema()
     except (ImportError, AttributeError, TypeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app_router.get("/acquisitions")
+async def list_acquisitions(app: AppDep) -> list[AcquisitionManifest]:
+    """Return acquisition manifests from newest to oldest."""
+    return await app.catalog.list_manifests()
+
+
+@app_router.get("/acquisitions/{acquisition_id}")
+async def get_acquisition(acquisition_id: uuid.UUID, app: AppDep) -> AcquisitionManifest:
+    """Return one durable acquisition manifest."""
+    try:
+        return await app.catalog.get(acquisition_id)
+    except ManifestNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 # ---- WebSocket (msgpack [topic, body] over MsgBus) ----
@@ -415,8 +428,8 @@ async def execute_device_command(device_id: str, cmd_name: str, body: _ExecuteCo
 
 
 @instrument_router.post("/acquisition")
-async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> AcquisitionRecord:
-    """Launch the requested acquisition and return its record once the run has started.
+async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> AcquisitionManifest:
+    """Launch the requested acquisition and return its manifest once the run has started.
 
     The synchronous preflight writes a marker to the destination; an unwritable target raises ``OSError``
     here (mapped to 422) before any capture. Progress streams on the ``acquisition.progress`` WS topic.

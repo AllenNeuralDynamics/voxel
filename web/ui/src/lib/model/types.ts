@@ -343,7 +343,7 @@ export interface S3Store {
 
 /** A configured object store: connection plus selectable roots (label → a write root: a bucket,
  * optionally narrowed to `bucket/prefix`).
- * Mirrors `vxl.system.Remote`; the payload of `GET /catalog/remotes` (keyed by store name). */
+ * Mirrors `vxl.system.Remote`; provided by `GET /discovery` keyed by store name. */
 export interface Remote extends S3Store {
   roots: Record<string, string>;
 }
@@ -362,17 +362,50 @@ export interface StorageSpec {
   remote?: RemoteTarget | null;
 }
 
-/** Who/where/when an acquisition was launched. */
-export interface Origin {
-  on: string;
-  by: string;
-  at: string;
+/** Controller and operator that launched an acquisition. */
+export interface AcquisitionOrigin {
+  host: string;
+  operator: string;
 }
 
-/** One (task, profile) capture in a run's plan. */
-export interface PlannedVolume {
+export type AcquisitionStatus = 'preparing' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+export type VolumeStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped';
+export type DatasetStatus = 'pending' | 'writing' | 'completed' | 'partial' | 'failed';
+export type LocationRole = 'staging' | 'destination' | 'replica';
+export type LocationStatus = 'pending' | 'writing' | 'available' | 'failed' | 'evicted';
+
+export interface LocalLocation {
+  kind: 'local';
+  role: LocationRole;
+  status: LocationStatus;
+  host: string;
+  path: string;
+}
+
+export interface ObjectLocation {
+  kind: 'object';
+  role: LocationRole;
+  status: LocationStatus;
+  host: string;
+  store: string;
+  bucket: string;
+  key: string;
+}
+
+export type DatasetLocation = LocalLocation | ObjectLocation;
+
+export interface AcquisitionDataset {
+  status: DatasetStatus;
+  format: 'ome-zarr';
+  locations: DatasetLocation[];
+}
+
+/** One task/profile capture and its channel datasets. */
+export interface AcquisitionVolume {
   task: string;
   profile: string;
+  status: VolumeStatus;
+  datasets: Record<string, AcquisitionDataset>;
 }
 
 /** Parameters of an acquisition run; `task_ids=null` → every planned task in traversal order. */
@@ -382,15 +415,30 @@ export interface AcquisitionRequest {
   operator?: string | null;
 }
 
-/** The record returned when a run starts: its origin, planned volumes, and the captured config snapshot. */
-export interface AcquisitionRecord {
-  origin: Origin;
-  volumes: PlannedVolume[];
-  state: InstrumentState;
-  hardware: HALConfig;
+export interface AcquisitionFailure {
+  kind: string;
+  message: string;
 }
 
-/** A property in a metadata JSON schema (served by `/catalog/metadata/*`). */
+/** Durable acquisition description returned when a run starts and updated by the catalog. */
+export interface AcquisitionManifest {
+  schema_version: '1.0';
+  id: string;
+  revision: number;
+  instrument: string;
+  origin: AcquisitionOrigin;
+  status: AcquisitionStatus;
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  failure: AcquisitionFailure | null;
+  storage: StorageSpec;
+  bench_snapshot: InstrumentState;
+  hardware_snapshot: HALConfig;
+  volumes: AcquisitionVolume[];
+}
+
+/** A property in a metadata JSON schema (served by `/metadata/schema`). */
 export interface JsonSchemaProperty {
   type?: string;
   default?: unknown;
@@ -444,9 +492,23 @@ export interface InstrumentInspection {
   violations: Violation[];
 }
 
-export interface InstrumentsCatalog {
+/** One named group of display colormaps. */
+export interface ColormapGroup {
+  uid: string;
+  label: string;
+  desc: string;
+  colormaps: Record<string, string[]>;
+}
+
+export type ColormapCatalog = ColormapGroup[];
+
+/** Bounded resources used to initialize the application UI. */
+export interface AppDiscovery {
   instruments: Record<string, InstrumentInspection>;
   templates: Record<string, InstrumentConfig>;
+  remotes: Record<string, Remote>;
+  colormaps: ColormapCatalog;
+  metadata_schemas: Record<string, string>;
 }
 
 /** Whether an instrument's configuration loaded successfully. */

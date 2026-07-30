@@ -10,8 +10,6 @@ Usage:
     uv run vxlib/generate_gradients.py --names inferno viridis magma
 """
 
-from __future__ import annotations
-
 import argparse
 
 import numpy as np
