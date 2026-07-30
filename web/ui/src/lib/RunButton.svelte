@@ -2,7 +2,6 @@
   import { watch } from 'runed';
 
   import AcquisitionDialog from '$lib/AcquisitionDialog.svelte';
-  import { DotsSpinner, ImageLight } from '$lib/icons';
   import { Button } from '$lib/kit';
   import type { VoxelApp } from '$lib/model';
   import { cn, toastError } from '$lib/utils';
@@ -73,22 +72,7 @@
 </script>
 
 <div class={cn('flex items-center gap-2', className)}>
-  <Button
-    variant="secondary"
-    size="md"
-    disabled={!instrument || app.snapping}
-    title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
-    class="border-border text-lg"
-    onclick={() => toastError(app.captureSnapshot())}
-  >
-    {#if app.snapping}
-      <DotsSpinner width="16" height="16" />
-    {:else}
-      <ImageLight width="16" height="16" />
-    {/if}
-    Snap
-  </Button>
-  <div class="w-56">
+  <div class="w-full">
     <div class="grid transition-[grid-template-columns] duration-300 ease-out" style="grid-template-columns: {cols}">
       <div class={cn('overflow-hidden', active === 'acquire' && 'pointer-events-none')}>
         <Button

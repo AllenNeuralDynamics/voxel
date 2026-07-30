@@ -6,15 +6,12 @@
   import { watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
-  import { Button, ContextMenu } from '$lib/kit';
+  import { CenterFocus, Close, Crosshair, FitToScreen, Stop } from '$lib/icons';
+  import { ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
-  import { pref, sanitizeString, toastError } from '$lib/utils';
+  import { sanitizeString, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
-  import Inpaint from './features/Inpaint.svelte';
-  import Live from './features/Live.svelte';
-  import Snapshots from './features/Snapshots.svelte';
   import { getStageScene, type StageHit } from './scene.svelte';
 
   let { viewport = $bindable<StageViewport>({ mode: 'auto' }) }: { viewport?: StageViewport } = $props();
@@ -41,7 +38,6 @@
 
   let hostEl: HTMLDivElement;
   let surface: Surface | null = null;
-  const collapsed = pref('stage:sidebar-collapsed', false);
   let boundsColor = '#3f3f46';
   let markerColor = '#e254d4';
   // The transient pointer footprint is available while Alt/Option is held. A point context menu pins its
@@ -405,144 +401,121 @@
   });
 </script>
 
-<div class="flex h-full w-full">
-  <ContextMenu.Root bind:open={menuOpen}>
-    <ContextMenu.Trigger>
-      {#snippet child({ props })}
-        <div
-          bind:this={hostEl}
-          {...props}
-          class="relative h-full min-w-0 flex-1 overflow-hidden bg-canvas"
-          onpointermove={trackCursor}
-          onpointerleave={() => (cursor = null)}
-        >
-          <div class="absolute top-3 right-3 z-10">
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              title={collapsed.get() ? 'Show panel' : 'Hide panel'}
-              onclick={() => collapsed.set(!collapsed.get())}
-            >
-              <PanelRight width="16" height="16" />
-            </Button>
+<ContextMenu.Root bind:open={menuOpen}>
+  <ContextMenu.Trigger>
+    {#snippet child({ props })}
+      <div
+        bind:this={hostEl}
+        {...props}
+        class="relative h-full w-full min-w-0 overflow-hidden bg-canvas"
+        onpointermove={trackCursor}
+        onpointerleave={() => (cursor = null)}
+      >
+        {#if cursor}
+          <div
+            class="canvas-overlay-halo pointer-events-none absolute bottom-4 left-4 z-10 flex gap-2 font-mono tabular-nums {cursorInBounds
+              ? 'text-fg-muted'
+              : 'text-fg-faint'}"
+          >
+            <span>X {Math.round(cursor[0])}</span>
+            <span>Y {Math.round(cursor[1])} µm</span>
+            {#if !cursorInBounds}
+              <span>· out of range</span>
+            {/if}
           </div>
-          {#if cursor}
-            <div
-              class="canvas-overlay-halo pointer-events-none absolute bottom-4 left-4 z-10 flex gap-2 font-mono tabular-nums {cursorInBounds
-                ? 'text-fg-muted'
-                : 'text-fg-faint'}"
-            >
-              <span>X {Math.round(cursor[0])}</span>
-              <span>Y {Math.round(cursor[1])} µm</span>
-              {#if !cursorInBounds}
-                <span>· out of range</span>
-              {/if}
-            </div>
-          {/if}
-          {#if scaleBar}
-            <div
-              class="canvas-overlay-halo pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-0.5"
-            >
-              <span class="font-mono text-fg-muted">{scaleBar.label}</span>
-              <div class="h-1 rounded-full bg-fg-muted" style:width="{scaleBar.barPx}px"></div>
-            </div>
-          {/if}
-        </div>
-      {/snippet}
-    </ContextMenu.Trigger>
-    <ContextMenu.Content class="min-w-44">
-      {#if menuMode === 'marquee'}
-        {#if marqueeSections.length > 2}
-          {#each marqueeSections as mh (mh.layer.id)}
-            {#if mh.layer.marqueeMenu}
-              <ContextMenu.Sub>
-                <ContextMenu.SubTrigger>{sectionLabel(mh)}</ContextMenu.SubTrigger>
-                <ContextMenu.SubContent class="min-w-44">
-                  {@render mh.layer.marqueeMenu(mh.hit)}
-                </ContextMenu.SubContent>
-              </ContextMenu.Sub>
-            {/if}
-          {/each}
-        {:else}
-          {#each marqueeSections as mh (mh.layer.id)}
-            {#if mh.layer.marqueeMenu}
-              <ContextMenu.Group>
-                <ContextMenu.GroupHeading>{sectionLabel(mh)}</ContextMenu.GroupHeading>
+        {/if}
+        {#if scaleBar}
+          <div
+            class="canvas-overlay-halo pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-0.5"
+          >
+            <span class="font-mono text-fg-muted">{scaleBar.label}</span>
+            <div class="h-1 rounded-full bg-fg-muted" style:width="{scaleBar.barPx}px"></div>
+          </div>
+        {/if}
+      </div>
+    {/snippet}
+  </ContextMenu.Trigger>
+  <ContextMenu.Content class="min-w-44">
+    {#if menuMode === 'marquee'}
+      {#if marqueeSections.length > 2}
+        {#each marqueeSections as mh (mh.layer.id)}
+          {#if mh.layer.marqueeMenu}
+            <ContextMenu.Sub>
+              <ContextMenu.SubTrigger>{sectionLabel(mh)}</ContextMenu.SubTrigger>
+              <ContextMenu.SubContent class="min-w-44">
                 {@render mh.layer.marqueeMenu(mh.hit)}
-              </ContextMenu.Group>
-            {/if}
-          {/each}
-        {/if}
-        {#if marqueeSections.length > 0}
-          <ContextMenu.Separator />
-        {/if}
-        <ContextMenu.Item onSelect={clearMarquee}>
-          <Close width="14" height="14" />
-          Clear selection
-        </ContextMenu.Item>
+              </ContextMenu.SubContent>
+            </ContextMenu.Sub>
+          {/if}
+        {/each}
       {:else}
-        <ContextMenu.Item onSelect={goToWorld}>
-          <Crosshair width="14" height="14" />
-          Go to position
-        </ContextMenu.Item>
-        <ContextMenu.Item onSelect={fitToStage}>
-          <FitToScreen width="14" height="14" />
-          Fit to stage
-        </ContextMenu.Item>
-        {#if hereX != null && hereY != null && fov}
-          <ContextMenu.Item onSelect={recenterOnLive}>
-            <CenterFocus width="14" height="14" />
-            Recenter on live
-          </ContextMenu.Item>
-        {/if}
-        {#if stage?.anyMoving}
-          <ContextMenu.Item variant="destructive" onSelect={halt}>
-            <Stop width="14" height="14" />
-            Halt
-          </ContextMenu.Item>
-        {/if}
-        {#if menuSections.length > 0}
-          <ContextMenu.Separator />
-        {/if}
-        {#if menuSections.length > 2}
-          {#each menuSections as mh (mh.layer.id)}
-            {#if mh.layer.menu}
-              <ContextMenu.Sub>
-                <ContextMenu.SubTrigger>{sectionLabel(mh)}</ContextMenu.SubTrigger>
-                <ContextMenu.SubContent class="min-w-44">
-                  {@render mh.layer.menu(mh.hit)}
-                </ContextMenu.SubContent>
-              </ContextMenu.Sub>
-            {/if}
-          {/each}
-        {:else}
-          {#each menuSections as mh, i (mh.layer.id)}
-            {#if mh.layer.menu}
-              {#if i > 0}
-                <ContextMenu.Separator />
-              {/if}
-              <ContextMenu.Group>
-                <ContextMenu.GroupHeading>{sectionLabel(mh)}</ContextMenu.GroupHeading>
-                {@render mh.layer.menu(mh.hit)}
-              </ContextMenu.Group>
-            {/if}
-          {/each}
-        {/if}
+        {#each marqueeSections as mh (mh.layer.id)}
+          {#if mh.layer.marqueeMenu}
+            <ContextMenu.Group>
+              <ContextMenu.GroupHeading>{sectionLabel(mh)}</ContextMenu.GroupHeading>
+              {@render mh.layer.marqueeMenu(mh.hit)}
+            </ContextMenu.Group>
+          {/if}
+        {/each}
       {/if}
-    </ContextMenu.Content>
-  </ContextMenu.Root>
-  <div
-    class="shrink-0 overflow-hidden bg-surface transition-[width] duration-200 {collapsed.get()
-      ? 'w-0'
-      : 'w-56 border-l border-border'}"
-  >
-    <div class="flex h-full w-full flex-col gap-4 overflow-y-auto py-1.5">
-      <Live />
-      <Inpaint />
-      <Snapshots />
-    </div>
-  </div>
-</div>
+      {#if marqueeSections.length > 0}
+        <ContextMenu.Separator />
+      {/if}
+      <ContextMenu.Item onSelect={clearMarquee}>
+        <Close width="14" height="14" />
+        Clear selection
+      </ContextMenu.Item>
+    {:else}
+      <ContextMenu.Item onSelect={goToWorld}>
+        <Crosshair width="14" height="14" />
+        Go to position
+      </ContextMenu.Item>
+      <ContextMenu.Item onSelect={fitToStage}>
+        <FitToScreen width="14" height="14" />
+        Fit to stage
+      </ContextMenu.Item>
+      {#if hereX != null && hereY != null && fov}
+        <ContextMenu.Item onSelect={recenterOnLive}>
+          <CenterFocus width="14" height="14" />
+          Recenter on live
+        </ContextMenu.Item>
+      {/if}
+      {#if stage?.anyMoving}
+        <ContextMenu.Item variant="destructive" onSelect={halt}>
+          <Stop width="14" height="14" />
+          Halt
+        </ContextMenu.Item>
+      {/if}
+      {#if menuSections.length > 0}
+        <ContextMenu.Separator />
+      {/if}
+      {#if menuSections.length > 2}
+        {#each menuSections as mh (mh.layer.id)}
+          {#if mh.layer.menu}
+            <ContextMenu.Sub>
+              <ContextMenu.SubTrigger>{sectionLabel(mh)}</ContextMenu.SubTrigger>
+              <ContextMenu.SubContent class="min-w-44">
+                {@render mh.layer.menu(mh.hit)}
+              </ContextMenu.SubContent>
+            </ContextMenu.Sub>
+          {/if}
+        {/each}
+      {:else}
+        {#each menuSections as mh, i (mh.layer.id)}
+          {#if mh.layer.menu}
+            {#if i > 0}
+              <ContextMenu.Separator />
+            {/if}
+            <ContextMenu.Group>
+              <ContextMenu.GroupHeading>{sectionLabel(mh)}</ContextMenu.GroupHeading>
+              {@render mh.layer.menu(mh.hit)}
+            </ContextMenu.Group>
+          {/if}
+        {/each}
+      {/if}
+    {/if}
+  </ContextMenu.Content>
+</ContextMenu.Root>
 
 <style>
   .canvas-overlay-halo {

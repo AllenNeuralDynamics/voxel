@@ -19,7 +19,17 @@
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import RoutingMonitor from '$lib/devices/RoutingMonitor.svelte';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import { Layers, Microscope, TuneVertical, WaveformsIcon } from '$lib/icons';
+  import {
+    ChevronDown,
+    ChevronUp,
+    DotsSpinner,
+    ImageLight,
+    Layers,
+    Microscope,
+    PanelRight,
+    TuneVertical,
+    WaveformsIcon
+  } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
@@ -28,10 +38,10 @@
   import SnapshotFlyOverlay from '$lib/preview/SnapshotFlyOverlay.svelte';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
-  import { provideStageScene, StageView, type StageViewport } from '$lib/stage';
+  import { provideStageScene, StageLayersSidebar, StageView, type StageViewport } from '$lib/stage';
   import StageGizmo from '$lib/stage/StageGizmo.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
-  import { cn, createPaneSize, toastError } from '$lib/utils';
+  import { cn, createPaneSize, pref, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
@@ -43,6 +53,7 @@
   provideTaskSelection();
   provideStageScene();
   let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
+  const stageLayersCollapsed = pref('stage:sidebar-collapsed', false);
 
   async function configureServiceWorker(): Promise<void> {
     if (!('serviceWorker' in navigator)) return;
@@ -62,6 +73,8 @@
   useEventListener(window, 'beforeunload', () => app.dispose());
 
   const logs = $derived(app.logs);
+  const logWarnings = $derived(logs.filter((log) => log.level === 'warning').length);
+  const logErrors = $derived(logs.filter((log) => log.level === 'error').length);
 
   // --- Keyboard shortcuts ---
 
@@ -229,32 +242,57 @@
           <PaneGroup direction="horizontal" bind:ref={liveSplitEl} autoSaveId="shell:live">
             <!-- Viewer: Preview + Logs (centerpiece) -->
             <Pane defaultSize={45} class="flex h-full flex-col bg-canvas">
-              <header class="flex h-15 shrink-0 items-center justify-between border-b border-border bg-elevated px-4">
-                <div class="flex items-center gap-2">
-                  {@render segmented(modeSegments)}
-                  <button
-                    onclick={toggleLogs}
-                    class="inline-flex h-ui-md cursor-pointer items-center rounded-md border border-transparent px-3 text-lg whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-                  >
-                    {logsOpen ? 'Hide logs' : 'Show logs'}
-                  </button>
-                </div>
-                <RunButton {app} />
-              </header>
               <main class="min-h-0 flex-1 overflow-hidden">
                 <PaneGroup direction="vertical" autoSaveId="shell:live:viewer">
                   <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
                     <div class="flex h-full flex-col bg-canvas">
-                      <div class="relative flex-1 overflow-hidden" data-fly-origin>
-                        {#if app.viewMode.get() === 'stage'}
-                          <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                            <StageView bind:viewport={stageViewport} />
+                      <div class="relative flex min-h-0 flex-1">
+                        <div
+                          class="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-center justify-between"
+                        >
+                          <div class="pointer-events-auto">
+                            {@render segmented(modeSegments)}
                           </div>
-                        {:else}
-                          <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                            <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                          <div class="pointer-events-auto flex items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              size="md"
+                              disabled={app.snapping}
+                              title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
+                              class="border-border bg-elevated text-lg shadow-sm"
+                              onclick={() => toastError(app.captureSnapshot())}
+                            >
+                              {#if app.snapping}
+                                <DotsSpinner width="16" height="16" />
+                              {:else}
+                                <ImageLight width="16" height="16" />
+                              {/if}
+                              Snap
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="icon-lg"
+                              aria-expanded={!stageLayersCollapsed.get()}
+                              title={stageLayersCollapsed.get() ? 'Show layers' : 'Hide layers'}
+                              class="border-border bg-elevated shadow-sm"
+                              onclick={() => stageLayersCollapsed.set(!stageLayersCollapsed.get())}
+                            >
+                              <PanelRight width="22" height="22" />
+                            </Button>
                           </div>
-                        {/if}
+                        </div>
+                        <div class="relative min-w-0 flex-1 overflow-hidden" data-fly-origin>
+                          {#if app.viewMode.get() === 'stage'}
+                            <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                              <StageView bind:viewport={stageViewport} />
+                            </div>
+                          {:else}
+                            <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
+                              <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                            </div>
+                          {/if}
+                        </div>
+                        <StageLayersSidebar collapsed={stageLayersCollapsed.get()} />
                       </div>
 
                       <SnapshotFlyOverlay />
@@ -274,12 +312,35 @@
                   </Pane>
                 </PaneGroup>
               </main>
+              <footer class="flex h-8 shrink-0 border-t border-border bg-elevated">
+                <button
+                  type="button"
+                  aria-expanded={logsOpen}
+                  onclick={toggleLogs}
+                  class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 text-base text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+                >
+                  <span class="font-medium text-fg">Logs</span>
+                  {#if logErrors > 0}
+                    <span class="text-danger">{logErrors} {logErrors === 1 ? 'error' : 'errors'}</span>
+                  {/if}
+                  {#if logWarnings > 0}
+                    <span class="text-warning">{logWarnings} {logWarnings === 1 ? 'warning' : 'warnings'}</span>
+                  {/if}
+                  <span class="ml-auto">{logsOpen ? 'Collapse' : 'Expand'}</span>
+                  {#if logsOpen}
+                    <ChevronDown width="14" height="14" />
+                  {:else}
+                    <ChevronUp width="14" height="14" />
+                  {/if}
+                </button>
+              </footer>
             </Pane>
             <PaneDivider direction="vertical" />
 
             <!-- Monitors: run controls + device telemetry -->
             <Pane defaultSize={16} {...monitorsPane} class="flex flex-col bg-surface">
-              <header class="flex h-15 shrink-0 items-center border-b border-border bg-elevated px-4">
+              <header class="flex shrink-0 flex-col gap-3 border-b border-border bg-elevated px-4 py-3">
+                <RunButton {app} class="w-full justify-center" />
                 <ProfileSelector {instrument} size="md" class="w-full" />
               </header>
               <PaneGroup
