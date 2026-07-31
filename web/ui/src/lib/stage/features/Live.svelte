@@ -2,7 +2,7 @@
   import { watch } from 'runed';
 
   import { Eye, EyeOff, VideoCamera } from '$lib/icons';
-  import { Button, ContextMenu } from '$lib/kit';
+  import { ContextMenu } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
   import { pref } from '$lib/utils';
 
@@ -86,13 +86,14 @@
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
     <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Live</span>
-    <Button
-      variant="ghost"
-      size="icon-xs"
+    <button
+      type="button"
       title={show.get() ? 'Hide live' : 'Show live'}
+      aria-label={show.get() ? 'Hide live' : 'Show live'}
+      class="focus-visible:ring-focused inline-flex size-ui-xs shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2"
       onclick={() => show.set(!show.get())}
     >
       {#if show.get()}<Eye width="16" height="16" />{:else}<EyeOff width="16" height="16" />{/if}
-    </Button>
+    </button>
   </div>
 </div>

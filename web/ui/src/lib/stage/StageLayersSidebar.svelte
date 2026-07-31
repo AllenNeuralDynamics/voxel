@@ -9,10 +9,10 @@
 <aside
   class="shrink-0 overflow-hidden bg-surface transition-[width] duration-200 {collapsed
     ? 'w-0'
-    : 'w-56 border-l border-border'}"
+    : 'w-64 border-l border-border'}"
 >
   <div
-    class="flex h-full w-56 flex-col gap-4 overflow-y-auto px-0 pt-12 pb-1.5 transition-opacity {collapsed
+    class="flex h-full w-full flex-col gap-4 overflow-y-auto px-0 py-1.5 transition-opacity {collapsed
       ? 'invisible opacity-0'
       : 'opacity-100'}"
   >

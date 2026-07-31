@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
 
   import { Eraser, Plus, Record, TrashCanOutline, VectorCombine } from '$lib/icons';
-  import { Button, ContextMenu, Rename } from '$lib/kit';
+  import { ContextMenu, Rename } from '$lib/kit';
   import { getVoxelApp, type InpaintMosaic } from '$lib/model';
   import { cn, toastError } from '$lib/utils';
 
@@ -267,9 +267,15 @@
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
     <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Inpaint</span>
-    <Button variant="ghost" size="icon-xs" title="New mosaic" onclick={createMosaic}>
+    <button
+      type="button"
+      title="New mosaic"
+      aria-label="New mosaic"
+      class="focus-visible:ring-focused inline-flex size-ui-xs shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2"
+      onclick={createMosaic}
+    >
       <Plus width="16" height="16" />
-    </Button>
+    </button>
   </div>
 
   {#each list as m (m.id)}

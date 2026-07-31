@@ -1,9 +1,15 @@
-// Material Design Icons
+// Lucide Icons
+export { default as CircleDashed } from '~icons/lucide/circle-dashed';
 export { default as Crosshair } from '~icons/lucide/crosshair';
 export { default as EllipsisVertical } from '~icons/lucide/ellipsis-vertical';
+export { default as Eye } from '~icons/lucide/eye';
+export { default as EyeOff } from '~icons/lucide/eye-off';
 export { default as GripVertical } from '~icons/lucide/grip-vertical';
 export { default as Microscope } from '~icons/lucide/microscope';
 export { default as Play } from '~icons/lucide/play';
+export { default as WrapText } from '~icons/lucide/wrap-text';
+
+// Material Design Icons
 export { default as Alert } from '~icons/mdi/alert';
 export { default as AlertCircleOutline } from '~icons/mdi/alert-circle-outline';
 export { default as AlertOutline } from '~icons/mdi/alert-outline';
@@ -24,8 +30,6 @@ export { default as DeleteOutline } from '~icons/mdi/delete-outline';
 export { default as DotsHorizontal } from '~icons/mdi/dots-horizontal';
 export { default as DotsVertical } from '~icons/mdi/dots-vertical';
 export { default as Eraser } from '~icons/mdi/eraser';
-export { default as Eye } from '~icons/mdi/eye';
-export { default as EyeOff } from '~icons/mdi/eye-off';
 export { default as FilterVariant } from '~icons/mdi/filter-variant';
 export { default as FitToScreen } from '~icons/mdi/fit-to-screen-outline';
 export { default as Folder } from '~icons/mdi/folder';
@@ -72,7 +76,12 @@ export { default as DotsSpinner } from '~icons/svg-spinners/3-dots-fade';
 export { default as LucideCheck } from '~icons/lucide/check';
 export { default as LucideChevronRight } from '~icons/lucide/chevron-right';
 export { default as LucideCircle } from '~icons/lucide/circle';
+export { default as CircleCheck } from '~icons/lucide/circle-check';
+export { default as Info } from '~icons/lucide/info';
 export { default as Layers } from '~icons/lucide/layers';
+export { default as Loader2 } from '~icons/lucide/loader-2';
+export { default as OctagonX } from '~icons/lucide/octagon-x';
+export { default as TriangleAlert } from '~icons/lucide/triangle-alert';
 export { default as LucideX } from '~icons/lucide/x';
 
 // Session management

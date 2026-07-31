@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { resolve } from '$app/paths';
   import { wavelengthToColor } from '$lib/colors.svelte';
   import { defaultDialog } from '$lib/DefaultConfigDialog.svelte';
+  import { AlertCircleOutline, AlertOutline, Check, DotsSpinner, Minus, Record } from '$lib/icons';
   import { Button, DiffJsonView, JsonView } from '$lib/kit';
-  import type { HALConfig, InstrumentDefaults } from '$lib/model';
+  import type { AcquisitionManifest, HALConfig, InstrumentDefaults } from '$lib/model';
   import { cn, sanitizeString } from '$lib/utils';
 
-  import { deviceCount } from './instrument/[id]/view';
+  import { deviceCount } from './view';
 
   type InstrumentTabState =
     | {
@@ -21,23 +23,64 @@
   interface Props {
     hal: HALConfig | null;
     instrumentState: InstrumentTabState | null;
+    configurationInvalid?: boolean;
+    acquisitions?: AcquisitionManifest[];
   }
 
-  type InstrumentTab = 'overview' | 'state' | 'hardware';
+  type InstrumentTab = 'overview' | 'state' | 'hardware' | 'acquisitions';
 
-  const { hal, instrumentState }: Props = $props();
+  const { hal, instrumentState, configurationInvalid = false, acquisitions }: Props = $props();
 
   let activeTab = $state<InstrumentTab>('overview');
 
   const tabs = $derived<{ id: InstrumentTab; label: string }[]>([
-    { id: 'overview', label: 'Overview' },
-    { id: 'state', label: instrumentState?.kind === 'default' ? 'Default' : 'Bench' },
-    { id: 'hardware', label: 'Hardware' }
+    ...(hal || instrumentState
+      ? [
+          { id: 'overview' as const, label: 'Overview' },
+          { id: 'state' as const, label: instrumentState?.kind === 'default' ? 'Default' : 'Bench' },
+          { id: 'hardware' as const, label: 'Hardware' }
+        ]
+      : []),
+    ...(acquisitions !== undefined
+      ? [{ id: 'acquisitions' as const, label: `Acquisitions${acquisitions.length ? ` ${acquisitions.length}` : ''}` }]
+      : [])
   ]);
+  const sortedAcquisitions = $derived(
+    acquisitions
+      ? [...acquisitions].sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+      : []
+  );
+  const acquisitionDateFormat = new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
+
+  $effect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab) && tabs[0]) activeTab = tabs[0].id;
+  });
 </script>
 
+{#snippet acquisitionStatus(status: AcquisitionManifest['status'])}
+  <span class="flex items-center gap-2 text-fg-muted capitalize">
+    {#if status === 'completed'}
+      <Check width="14" height="14" class="text-fg-faint" />
+    {:else if status === 'running'}
+      <Record width="14" height="14" class="text-info" />
+    {:else if status === 'preparing'}
+      <DotsSpinner width="14" height="14" class="text-info" />
+    {:else if status === 'failed'}
+      <AlertCircleOutline width="14" height="14" class="text-danger" />
+    {:else if status === 'interrupted'}
+      <AlertOutline width="14" height="14" class="text-warning" />
+    {:else}
+      <Minus width="14" height="14" class="text-fg-faint" />
+    {/if}
+    {status}
+  </span>
+{/snippet}
+
 <div class="flex h-full min-h-0 flex-col">
-  <nav class="flex shrink-0 gap-1 border-b border-border px-3" aria-label="Instrument views">
+  <nav class="flex shrink-0 gap-1 border-b border-border" aria-label="Instrument views">
     {#each tabs as tab (tab.id)}
       <button
         class={cn(
@@ -56,7 +99,7 @@
   <div class="min-h-0 flex-1 overflow-y-auto">
     {#if activeTab === 'overview'}
       {#if hal && instrumentState}
-        <div class="space-y-6 p-4">
+        <div class="space-y-6 py-4">
           <section>
             <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Summary</h2>
             <dl class="grid max-w-3xl grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
@@ -132,6 +175,8 @@
             </div>
           </section>
         </div>
+      {:else if configurationInvalid}
+        <div class="p-4 text-fg-muted">Resolve the configuration issues above to inspect this instrument.</div>
       {:else if !hal}
         <div class="p-4 text-fg-muted">The configuration could not be parsed.</div>
       {:else}
@@ -162,11 +207,13 @@
               <JsonView data={instrumentState.value} expandDepth={1} />
             {/if}
           </section>
+        {:else if configurationInvalid}
+          <p class="text-fg-muted">The instrument state is unavailable until its configuration issues are resolved.</p>
         {:else}
           <p class="text-fg-muted">The state could not be parsed.</p>
         {/if}
       </div>
-    {:else}
+    {:else if activeTab === 'hardware'}
       <div class="p-4">
         {#if hal}
           <section>
@@ -175,6 +222,29 @@
           </section>
         {:else}
           <p class="text-fg-muted">The configuration could not be parsed.</p>
+        {/if}
+      </div>
+    {:else}
+      <div class="py-4">
+        {#if sortedAcquisitions.length > 0}
+          <div class="overflow-hidden rounded-lg border border-border bg-card">
+            {#each sortedAcquisitions as manifest, index (manifest.id)}
+              <a
+                href={resolve(`/acquisitions/${manifest.id}` as '/')}
+                class={cn(
+                  'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 transition-colors hover:bg-element-hover',
+                  index > 0 && 'border-t border-border'
+                )}
+              >
+                <span class="truncate text-fg">{acquisitionDateFormat.format(new Date(manifest.created_at))}</span>
+                {@render acquisitionStatus(manifest.status)}
+              </a>
+            {/each}
+          </div>
+        {:else}
+          <div class="rounded-lg border border-dashed border-border px-6 py-12 text-center text-fg-muted">
+            No acquisitions have been recorded for this instrument.
+          </div>
         {/if}
       </div>
     {/if}

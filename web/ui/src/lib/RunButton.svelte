@@ -15,7 +15,6 @@
 
   const instrument = $derived(app.instrument);
   const canPreview = $derived(instrument?.preview.channels.some((c) => c.visible) ?? false);
-  const canAcquire = $derived((instrument?.taskTiles.length ?? 0) > 0);
 
   // Which action fills the control: null = idle split, 'preview'/'acquire' = full-width Stop.
   const modeActive = $derived<'preview' | 'acquire' | null>(
@@ -90,7 +89,7 @@
           variant={active === 'acquire' ? 'danger' : 'secondary'}
           size="md"
           class={cn('w-full whitespace-nowrap', active === null && 'rounded-l-none border-l-0 border-border')}
-          disabled={!instrument || (active === null && !canAcquire)}
+          disabled={!instrument}
           onclick={toggleAcquire}
         >
           {active === 'acquire' ? 'Stop Acquisition' : 'Acquire'}

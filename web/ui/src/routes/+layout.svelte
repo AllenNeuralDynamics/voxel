@@ -4,9 +4,7 @@
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
   import { Pane, PaneGroup } from 'paneforge';
   import { useEventListener, watch } from 'runed';
-  import type { Component } from 'svelte';
   import { onDestroy, onMount } from 'svelte';
-  import { fade } from 'svelte/transition';
 
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -19,29 +17,15 @@
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import RoutingMonitor from '$lib/devices/RoutingMonitor.svelte';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import {
-    ChevronDown,
-    ChevronUp,
-    DotsSpinner,
-    ImageLight,
-    Layers,
-    Microscope,
-    PanelRight,
-    TuneVertical,
-    WaveformsIcon
-  } from '$lib/icons';
+  import { Logout, Microscope } from '$lib/icons';
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import LogViewer from '$lib/LogViewer.svelte';
-  import { type PreviewMode, setVoxelApp, VoxelApp } from '$lib/model';
-  import PreviewCanvas from '$lib/preview/PreviewCanvas.svelte';
-  import SnapshotFlyOverlay from '$lib/preview/SnapshotFlyOverlay.svelte';
+  import { setVoxelApp, VoxelApp } from '$lib/model';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
-  import { provideStageScene, StageLayersSidebar, StageView, type StageViewport } from '$lib/stage';
   import StageGizmo from '$lib/stage/StageGizmo.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
-  import { cn, createPaneSize, pref, toastError } from '$lib/utils';
+  import { cn, createPaneSize, sanitizeString, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
@@ -51,9 +35,6 @@
   const app = new VoxelApp();
   setVoxelApp(app);
   provideTaskSelection();
-  provideStageScene();
-  let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
-  const stageLayersCollapsed = pref('stage:sidebar-collapsed', false);
 
   async function configureServiceWorker(): Promise<void> {
     if (!('serviceWorker' in navigator)) return;
@@ -72,10 +53,6 @@
   onDestroy(() => app.dispose());
   useEventListener(window, 'beforeunload', () => app.dispose());
 
-  const logs = $derived(app.logs);
-  const logWarnings = $derived(logs.filter((log) => log.level === 'warning').length);
-  const logErrors = $derived(logs.filter((log) => log.level === 'error').length);
-
   // --- Keyboard shortcuts ---
 
   createHotkey('Alt+P', () => {
@@ -93,29 +70,33 @@
 
   let shellRef = $state<HTMLElement | null>(null);
 
-  type Segment = { key: string; label: string; icon?: Component; active: boolean; select: () => void };
+  type Route = { id: Pathname; label: string };
+  type Segment = {
+    key: string;
+    label: string;
+    highlighted: boolean;
+    select: () => void;
+  };
 
-  const navTabs: { id: Pathname; label: string; icon: Component }[] = [
-    { id: '/inspect', label: 'Inspect', icon: Microscope },
-    { id: '/sync', label: 'Sync', icon: WaveformsIcon },
-    { id: '/configure', label: 'Configure', icon: TuneVertical },
-    { id: '/plan', label: 'Plan', icon: Layers }
+  const libraryRoute: Route = { id: '/', label: 'Library' };
+  const controlRoutes: Route[] = [
+    { id: '/inspect', label: 'Inspect' },
+    { id: '/sync', label: 'Sync' },
+    { id: '/configure', label: 'Configure' },
+    { id: '/plan', label: 'Plan' }
   ];
-
-  const previewModes: { mode: PreviewMode; label: string }[] = [
-    { mode: 'live', label: 'Live' },
-    { mode: 'stage', label: 'Stage' }
-  ];
+  const navRoutes = [libraryRoute, ...controlRoutes];
 
   const viewId = $derived<Pathname>(
-    navTabs.find((t) => t.id !== '/' && page.url.pathname.startsWith(t.id))?.id ??
-      (page.url.pathname === '/debug' ? '/debug' : '/')
+    navRoutes.find((route) => route.id !== libraryRoute.id && page.url.pathname.startsWith(route.id))?.id ??
+      (page.url.pathname === '/debug' ? '/debug' : libraryRoute.id)
   );
+  const controlActive = $derived(controlRoutes.some((route) => route.id === viewId));
 
   watch(
-    () => app.instrument,
-    () => {
-      if (!app.instrument && viewId !== '/') goto(resolve('/'), { replaceState: true });
+    () => [app.activeTarget, controlActive] as const,
+    ([activeTarget, isControlRoute]) => {
+      if (activeTarget === null && isControlRoute) goto(resolve('/'), { replaceState: true });
     }
   );
 
@@ -124,36 +105,19 @@
     goto(resolve(id), { keepFocus: true, noScroll: true });
   }
 
-  const navSegments = $derived<Segment[]>(
-    navTabs.map((t) => ({
-      key: t.id,
-      label: t.label,
-      icon: t.icon,
-      active: viewId === t.id,
-      select: () => selectView(t.id)
-    }))
-  );
-
-  const modeSegments = $derived<Segment[]>(
-    previewModes.map((m) => ({
-      key: m.mode,
-      label: m.label,
-      active: app.viewMode.get() === m.mode,
-      select: () => app.viewMode.set(m.mode)
+  const controlSegments = $derived<Segment[]>(
+    controlRoutes.map((route) => ({
+      key: route.id,
+      label: route.label,
+      highlighted: viewId === route.id,
+      select: () => selectView(route.id)
     }))
   );
 
   // Pane sizes
 
-  let workspaceSplitEl = $state<HTMLElement | null>(null);
-  const contentPane = createPaneSize(() => workspaceSplitEl, {
-    min: 42,
-    default: 42,
-    max: 64,
-    fallback: { min: 30, default: 30, max: 50 }
-  });
   const monitorsPane = createPaneSize(() => shellRef, {
-    min: 24,
+    min: 30,
     default: 30,
     max: 30,
     fallback: { min: 15, max: 18 }
@@ -168,14 +132,6 @@
     fallback: { min: 28, max: 40, default: 32 }
   });
 
-  let logsPaneRef = $state<Pane | undefined>(undefined);
-  const logsOpen = $derived(logsPaneRef ? !logsPaneRef.isCollapsed() : false);
-
-  function toggleLogs() {
-    if (logsPaneRef?.isCollapsed()) logsPaneRef.expand();
-    else logsPaneRef?.collapse();
-  }
-
   // --- Dialog state ---
 
   let closeDialogOpen = $state(false);
@@ -185,173 +141,93 @@
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if !app.client.isConnected}
+{#if !app.client.isConnected || !app.ready}
   <ConnectionSplash {app} />
 {:else}
-  {#snippet segmented(segments: Segment[])}
-    <div class="flex h-ui-md items-center rounded-md border border-input bg-canvas/50 p-0.5">
-      {#each segments as { key, label, icon: Icon, active, select } (key)}
-        <button
-          type="button"
-          title={label}
-          onclick={select}
-          class={cn(
-            'inline-flex h-full min-w-20 cursor-pointer items-center justify-center gap-1.5 rounded-sm px-4 text-lg whitespace-nowrap transition-colors',
-            active ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
-          )}
-        >
-          {#if Icon}
-            <Icon width="12" height="12" class="shrink-0" />
-          {/if}
-          {label}
-        </button>
-      {/each}
-    </div>
+  {#snippet routeLink(segment: Segment)}
+    <button
+      type="button"
+      title={segment.label}
+      onclick={segment.select}
+      class={cn(
+        'inline-flex h-full cursor-pointer items-center justify-center px-3 text-lg font-normal whitespace-nowrap transition-colors',
+        segment.highlighted ? 'bg-element-selected text-fg' : 'text-fg hover:bg-element-hover/80 hover:text-fg'
+      )}
+    >
+      {segment.label}
+    </button>
   {/snippet}
   <div bind:this={shellRef} class="h-screen w-full text-fg">
     <PaneGroup direction="horizontal" autoSaveId="shell:frame">
-      <!-- Main workspace: routed content beside the viewer/log surface. -->
-      <Pane>
-        <PaneGroup direction="horizontal" bind:ref={workspaceSplitEl} autoSaveId="shell:workspace">
-          <Pane {...contentPane} class="grid h-full grid-rows-[auto_1fr] bg-surface">
-            <header class="flex h-15 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
-              <a
-                href={resolve('/')}
-                class={cn(
-                  'flex shrink-0 items-center transition-colors',
-                  viewId === '/' ? 'text-fg' : 'text-fg-muted hover:text-fg'
-                )}
-                title="Home"
-                aria-label="Home"
-              >
-                <VoxelLogo class="size-ui-md" />
-              </a>
-              {#if app.instrument}
-                <nav class="flex items-center">
-                  {@render segmented(navSegments)}
-                </nav>
-              {/if}
-            </header>
-            <div class="flex h-full min-h-0 min-w-0 flex-col">
-              {@render children()}
-            </div>
-          </Pane>
-          <PaneDivider direction="vertical" />
-
+      <!-- Application workspace below the global navigation. -->
+      <Pane class="grid h-full min-w-0 grid-rows-[auto_1fr] overflow-hidden">
+        <header class="flex h-12 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
+          <a
+            href={resolve('/')}
+            class={cn(
+              '-ml-2 flex h-ui-md shrink-0 items-center gap-2 rounded-md border border-border px-2 text-fg transition-colors',
+              viewId === '/' ? 'border-border bg-element-selected' : 'hover:bg-element-hover'
+            )}
+            title="Library"
+            aria-label="Library"
+          >
+            <VoxelLogo class="size-6 shrink-0" />
+            <span class="text-2xl font-normal tracking-wide uppercase">Voxel</span>
+          </a>
           {#if app.instrument}
-            {@const instrument = app.instrument}
-            <!-- Viewer: Preview + Logs (centerpiece) -->
-            <Pane class="flex h-full flex-col bg-canvas">
-              <main class="min-h-0 flex-1 overflow-hidden">
-                <PaneGroup direction="vertical" autoSaveId="shell:workspace:viewer">
-                  <Pane defaultSize={65} minSize={30} class="flex flex-1 flex-col justify-center">
-                    <div class="flex h-full flex-col bg-canvas">
-                      <div class="relative flex min-h-0 flex-1">
-                        <div
-                          class="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-center justify-between"
-                        >
-                          <div class="pointer-events-auto">
-                            {@render segmented(modeSegments)}
-                          </div>
-                          <div class="pointer-events-auto flex items-center gap-2">
-                            <Button
-                              variant="secondary"
-                              size="md"
-                              disabled={app.snapping}
-                              title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
-                              class="border-border bg-elevated text-lg shadow-sm"
-                              onclick={() => toastError(app.captureSnapshot())}
-                            >
-                              {#if app.snapping}
-                                <DotsSpinner width="16" height="16" />
-                              {:else}
-                                <ImageLight width="16" height="16" />
-                              {/if}
-                              Snap
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="icon-lg"
-                              aria-expanded={!stageLayersCollapsed.get()}
-                              title={stageLayersCollapsed.get() ? 'Show layers' : 'Hide layers'}
-                              class="border-border bg-elevated shadow-sm"
-                              onclick={() => stageLayersCollapsed.set(!stageLayersCollapsed.get())}
-                            >
-                              <PanelRight width="22" height="22" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div class="relative min-w-0 flex-1 overflow-hidden" data-fly-origin>
-                          {#if app.viewMode.get() === 'stage'}
-                            <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                              <StageView bind:viewport={stageViewport} />
-                            </div>
-                          {:else}
-                            <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                              <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
-                            </div>
-                          {/if}
-                        </div>
-                        <StageLayersSidebar collapsed={stageLayersCollapsed.get()} />
-                      </div>
-
-                      <SnapshotFlyOverlay />
-                    </div>
-                  </Pane>
-                  <PaneDivider direction="horizontal" ondblclick={toggleLogs} />
-                  <Pane
-                    bind:this={logsPaneRef}
-                    collapsible
-                    collapsedSize={0}
-                    defaultSize={35}
-                    minSize={20}
-                    maxSize={55}
-                    class="bg-surface"
-                  >
-                    <LogViewer {logs} class="bg-canvas/35" />
-                  </Pane>
-                </PaneGroup>
-              </main>
-              <footer class="flex h-8 shrink-0 border-t border-border bg-elevated">
-                <button
-                  type="button"
-                  aria-expanded={logsOpen}
-                  onclick={toggleLogs}
-                  class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 text-base text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-                >
-                  <span class="font-medium text-fg">Logs</span>
-                  {#if logErrors > 0}
-                    <span class="text-danger">{logErrors} {logErrors === 1 ? 'error' : 'errors'}</span>
-                  {/if}
-                  {#if logWarnings > 0}
-                    <span class="text-warning">{logWarnings} {logWarnings === 1 ? 'warning' : 'warnings'}</span>
-                  {/if}
-                  <span class="ml-auto">{logsOpen ? 'Collapse' : 'Expand'}</span>
-                  {#if logsOpen}
-                    <ChevronDown width="14" height="14" />
-                  {:else}
-                    <ChevronUp width="14" height="14" />
-                  {/if}
-                </button>
-              </footer>
-            </Pane>
+            <div
+              class={cn(
+                'flex h-ui-md min-w-110 items-stretch overflow-hidden rounded-md border',
+                controlActive ? 'border-border' : 'border-border-faint'
+              )}
+            >
+              <nav
+                aria-label="Instrument controls"
+                class="grid h-full flex-1 auto-cols-fr grid-flow-col divide-x divide-border"
+              >
+                {#each controlSegments as segment (segment.key)}
+                  {@render routeLink(segment)}
+                {/each}
+              </nav>
+            </div>
+            <div class="ml-auto flex max-w-2xl min-w-0 flex-1 gap-4">
+              <ProfileSelector instrument={app.instrument} size="md" class="min-w-0 flex-3" />
+              <RunButton {app} class="w-56 justify-center" />
+            </div>
           {:else}
-            <Pane class="min-h-0 min-w-0 bg-canvas">
-              <LogViewer logs={app.logs} />
-            </Pane>
+            <span
+              class="ml-auto flex h-ui-md w-sm items-center gap-1.5 rounded-md border border-border-faint px-3 text-lg font-normal text-fg-muted"
+            >
+              <Microscope width="12" height="12" class="shrink-0" />
+              No active instrument
+            </span>
           {/if}
-        </PaneGroup>
+        </header>
+        <div class="h-full min-h-0 min-w-0 overflow-hidden">
+          {@render children()}
+        </div>
       </Pane>
 
       {#if app.instrument}
         {@const instrument = app.instrument}
         <PaneDivider direction="vertical" />
 
-        <!-- Monitors: run controls + device telemetry -->
+        <!-- Active instrument identity + device telemetry -->
         <Pane {...monitorsPane} class="flex flex-col bg-surface">
-          <header class="flex shrink-0 flex-col gap-3 border-b border-border bg-elevated px-4 py-3">
-            <RunButton {app} class="w-full justify-center" />
-            <ProfileSelector {instrument} size="md" class="w-full" />
+          <header class="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-elevated px-4">
+            <Microscope width="14" height="14" class="shrink-0 text-fg-muted" />
+            <span class="min-w-0 flex-1 truncate text-lg" title={sanitizeString(app.activeName ?? '')}>
+              {sanitizeString(app.activeName ?? 'Active instrument')}
+            </span>
+            <button
+              type="button"
+              title="Close instrument"
+              aria-label="Close instrument"
+              onclick={() => (closeDialogOpen = true)}
+              class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-danger"
+            >
+              <Logout width="14" height="14" />
+            </button>
           </header>
           <PaneGroup direction="vertical" bind:ref={monitorsSplitEl} autoSaveId="shell:monitors" class="min-h-0 flex-1">
             <Pane class="min-h-0">
@@ -383,10 +259,12 @@
   <Dialog.Root bind:open={closeDialogOpen}>
     <Dialog.Content size="sm" showCloseButton={false}>
       <Dialog.Header>
-        <Dialog.Title>Close Session</Dialog.Title>
+        <Dialog.Title>Close instrument</Dialog.Title>
       </Dialog.Header>
       <p class="text-lg text-fg-muted">
-        Are you sure you want to close the current session? Any unsaved progress will be lost.
+        Are you sure you want to close
+        <span class="font-medium text-fg">{sanitizeString(app.activeName ?? 'the active instrument')}</span>? Its
+        hardware will be disconnected.
       </p>
       <Dialog.Footer>
         <Button variant="ghost" onclick={() => (closeDialogOpen = false)}>Cancel</Button>
@@ -397,7 +275,7 @@
             app.close();
           }}
         >
-          Close Session
+          Close instrument
         </Button>
       </Dialog.Footer>
     </Dialog.Content>

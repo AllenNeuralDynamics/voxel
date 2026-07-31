@@ -4,7 +4,7 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   import { Crosshair, FitToScreen, FolderMoveOutline, ImageMultiple, Layers, Plus, TrashCanOutline } from '$lib/icons';
-  import { Button, ContextMenu, HoverCard, Rename } from '$lib/kit';
+  import { ContextMenu, HoverCard, Rename } from '$lib/kit';
   import { getVoxelApp, type Instrument, type Snapshot, type SnapshotGroup } from '$lib/model';
   import { cn, toastError, trimFloat } from '$lib/utils';
 
@@ -475,9 +475,15 @@
 <div class="flex flex-col gap-0.5">
   <div class="flex items-center gap-1 px-3 py-1">
     <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Snapshots</span>
-    <Button variant="ghost" size="icon-xs" title="New group" onclick={() => snaps.createSnapshotGroup()}>
+    <button
+      type="button"
+      title="New group"
+      aria-label="New group"
+      class="focus-visible:ring-focused inline-flex size-ui-xs shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2"
+      onclick={() => snaps.createSnapshotGroup()}
+    >
       <Plus width="16" height="16" />
-    </Button>
+    </button>
   </div>
 
   {#each groups as g (g.id)}

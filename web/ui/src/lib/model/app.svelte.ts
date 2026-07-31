@@ -730,7 +730,7 @@ export class VoxelApp {
   readonly viewMode = pref<PreviewMode>('preview:mode', 'live');
 
   #unsubs: Unsub[] = [];
-  #desired: string | null = null; // latest presence (app.status / GET /app)
+  #desired = $state<string | null | undefined>(undefined); // undefined until app presence is first hydrated
   #openName = $state<string | null>(null); // name of the instrument actually open
   #reconciling = false;
   readonly #lastInstrument = pref<string | null>('last-instrument', null);
@@ -746,6 +746,16 @@ export class VoxelApp {
   /** The active instrument's name, or null when none is open. */
   get activeName(): string | null {
     return this.#openName;
+  }
+
+  /** The instrument reported by app presence; undefined until the initial presence sync completes. */
+  get activeTarget(): string | null | undefined {
+    return this.#desired;
+  }
+
+  /** Whether initial presence has been hydrated and the local instrument matches it. */
+  get ready(): boolean {
+    return this.#desired !== undefined && this.#desired === this.#openName;
   }
 
   /** The last instrument opened in this browser — used to default the launch picker after closing. */
@@ -980,11 +990,12 @@ export class VoxelApp {
 
   /** Converge the open instrument to `#desired`. Single-flight; re-checks `#desired` across awaits. */
   async #reconcile(): Promise<void> {
-    if (this.#reconciling) return;
+    if (this.#desired === undefined || this.#reconciling) return;
     this.#reconciling = true;
     try {
       while (this.#desired !== this.#openName) {
-        const target = this.#desired;
+        const target: string | null | undefined = this.#desired;
+        if (target === undefined) return;
         if (this.instrument) {
           this.instrument.dispose();
           this.instrument = null;

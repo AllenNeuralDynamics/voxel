@@ -8,8 +8,8 @@
   import { ApiError, getVoxelApp, type Violation } from '$lib/model';
   import { sanitizeString } from '$lib/utils';
 
-  import InstrumentTabs from '../../InstrumentTabs.svelte';
-  import { resolveInstrumentView, violationLocation } from './view';
+  import InstrumentTabs from '../InstrumentTabs.svelte';
+  import { resolveInstrumentView, violationLocation } from '../view';
 
   type Failure = {
     title: string;
@@ -20,7 +20,6 @@
 
   type HeaderAction = {
     label: string;
-    variant: 'danger' | 'success';
     onclick: () => void | Promise<void>;
   };
 
@@ -30,10 +29,10 @@
   const selected = $derived(id ? resolveInstrumentView(app.discovery, { kind: 'instrument', name: id }) : null);
   const isActive = $derived(!!id && app.activeName === id);
   const activeInstrument = $derived(isActive ? app.instrument : null);
+  const acquisitions = $derived(id ? app.acquisitions.filter((manifest) => manifest.instrument === id) : []);
 
   let launchFailure = $state<Violation[] | null>(null);
   let archiveBenchDialogOpen = $state(false);
-  let closeDialogOpen = $state(false);
 
   watch(
     () => id,
@@ -43,16 +42,8 @@
   );
 
   const action = $derived.by((): HeaderAction | null => {
-    if (!selected?.config || selected.errorSource) return null;
-    return isActive
-      ? {
-          label: 'Close',
-          variant: 'danger',
-          onclick: () => {
-            closeDialogOpen = true;
-          }
-        }
-      : { label: 'Open', variant: 'success', onclick: openInstrument };
+    if (!selected?.config || selected.errorSource || isActive) return null;
+    return { label: 'Open', onclick: openInstrument };
   });
 
   const failure = $derived.by((): Failure | null => {
@@ -117,76 +108,97 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col">
-  <header class="shrink-0">
-    <div class="flex min-h-12 items-center justify-between gap-3 px-4 py-2">
-      <h1 class="truncate text-2xl font-medium text-fg">
-        {selected ? sanitizeString(selected.name) : 'Instrument not found'}
-      </h1>
-      {#if action}
-        <Button variant={action.variant} size="sm" disabled={app.busy} onclick={action.onclick}>
-          {app.busy ? `${action.label}…` : action.label}
-        </Button>
-      {/if}
-    </div>
+<div class="flex h-full min-h-0 flex-col gap-1">
+  <header class="flex shrink-0 items-center justify-between gap-3">
+    <h1 class="truncate text-2xl font-medium text-fg">
+      {selected
+        ? sanitizeString(selected.name)
+        : id && acquisitions.length
+          ? sanitizeString(id)
+          : 'Instrument not found'}
+    </h1>
+    {#if isActive}
+      <span
+        class="inline-flex items-center gap-2 rounded border border-success/30 bg-success/10 px-2 py-1 text-success"
+      >
+        <span class="size-1.5 rounded-full bg-success"></span>
+        Active
+      </span>
+    {:else if !selected && acquisitions.length > 0}
+      <span class="rounded bg-element-bg px-2 py-1 text-fg-muted">Historical</span>
+    {:else if action}
+      <Button variant="success" size="sm" disabled={app.busy} onclick={action.onclick}>
+        {app.busy ? `${action.label}…` : action.label}
+      </Button>
+    {/if}
   </header>
 
   <div class="min-h-0 flex-1">
-    {#if selected}
+    {#if selected || acquisitions.length > 0}
       <div class="flex h-full min-h-0 flex-col">
         {#if failure}
-          <div class="shrink-0 px-4 pt-4">
-            <section class="overflow-hidden rounded-lg border border-danger/40 bg-danger/5">
-              <div class="flex items-start gap-3 border-b border-danger/25 px-3 py-2.5">
-                <AlertCircleOutline width="18" height="18" class="mt-0.5 shrink-0 text-danger" />
-                <div class="min-w-0 flex-1">
-                  <h2 class="text-lg font-medium text-danger">{failure.title}</h2>
-                  <p class="mt-0.5 text-fg-muted">{failure.description}</p>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                  {#if failure.source === 'bench'}
-                    <Button variant="outline" size="xs" onclick={() => (archiveBenchDialogOpen = true)}>
-                      Archive bench…
-                    </Button>
-                  {:else if failure.source === 'startup'}
-                    <Button variant="outline" size="xs" disabled={app.busy} onclick={openInstrument}>
-                      {app.busy ? 'Retrying…' : 'Retry'}
-                    </Button>
-                  {/if}
-                </div>
+          <section
+            class="mb-2 flex max-h-[min(18rem,45vh)] shrink-0 flex-col overflow-hidden rounded-lg border border-danger/40 bg-danger/5"
+          >
+            <div class="flex shrink-0 items-start gap-3 border-b border-danger/25 p-3">
+              <AlertCircleOutline width="18" height="18" class="mt-0.5 shrink-0 text-danger" />
+              <div class="min-w-0 flex-1">
+                <h2 class="text-base font-medium text-danger">{failure.title}</h2>
+                <p class="mt-0.5 text-sm text-fg-muted">{failure.description}</p>
               </div>
-              <ul class="divide-y divide-border/40">
-                {#each failure.violations as violation, index (`${violation.code ?? ''}:${violationLocation(violation)}:${index}`)}
-                  <li class="px-3 py-2">
-                    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      {#if violationLocation(violation)}
-                        <span class="font-mono text-sm break-all text-fg-muted">{violationLocation(violation)}</span>
-                      {/if}
-                      {#if violation.code}
-                        <span class="font-mono text-sm text-fg-muted">[{violation.code}]</span>
-                      {/if}
-                    </div>
-                    <p class="text-base text-danger">{violation.msg}</p>
-                  </li>
-                {/each}
-              </ul>
-            </section>
-          </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-sm text-fg-muted">
+                  {failure.violations.length}
+                  {failure.violations.length === 1 ? 'issue' : 'issues'}
+                </span>
+                {#if failure.source === 'bench'}
+                  <Button variant="outline" size="xs" onclick={() => (archiveBenchDialogOpen = true)}>
+                    Archive bench…
+                  </Button>
+                {:else if failure.source === 'startup'}
+                  <Button variant="outline" size="xs" disabled={app.busy} onclick={openInstrument}>
+                    {app.busy ? 'Retrying…' : 'Retry'}
+                  </Button>
+                {/if}
+              </div>
+            </div>
+            <ul class="min-h-0 divide-y divide-border/40 overflow-y-auto">
+              {#each failure.violations as violation, index (`${violation.code ?? ''}:${violationLocation(violation)}:${index}`)}
+                <li class="px-3 py-2">
+                  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    {#if violationLocation(violation)}
+                      <span class="font-mono text-xs wrap-anywhere text-fg-muted">
+                        {violationLocation(violation)}
+                      </span>
+                    {/if}
+                    {#if violation.code}
+                      <span class="rounded bg-danger/10 px-1.5 py-0.5 font-mono text-xs text-danger">
+                        {violation.code}
+                      </span>
+                    {/if}
+                  </div>
+                  <p class="mt-1 text-sm text-fg">{violation.msg}</p>
+                </li>
+              {/each}
+            </ul>
+          </section>
         {/if}
 
         <div class="min-h-0 flex-1">
           {#key id}
             <InstrumentTabs
-              hal={activeInstrument?.hal ?? selected.config?.hal ?? null}
+              hal={activeInstrument?.hal ?? selected?.config?.hal ?? null}
               instrumentState={activeInstrument
                 ? {
                     kind: 'bench',
                     value: activeInstrument.state,
                     activeDefaults: activeInstrument.default
                   }
-                : selected.bench && selected.stateSource
+                : selected?.bench && selected.stateSource
                   ? { kind: selected.stateSource, value: selected.bench }
                   : null}
+              configurationInvalid={selected?.errorSource === 'config'}
+              {acquisitions}
             />
           {/key}
         </div>
@@ -220,29 +232,6 @@
       <Button variant="outline" onclick={() => (archiveBenchDialogOpen = false)}>Cancel</Button>
       <Button variant="danger" disabled={app.busy} onclick={submitArchiveBench}>
         {app.busy ? 'Archiving…' : 'Archive Bench'}
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root bind:open={closeDialogOpen}>
-  <Dialog.Content size="sm" showCloseButton={false}>
-    <Dialog.Header>
-      <Dialog.Title>Close Session</Dialog.Title>
-    </Dialog.Header>
-    <p class="text-lg text-fg-muted">
-      Are you sure you want to close the current session? Any unsaved progress will be lost.
-    </p>
-    <Dialog.Footer>
-      <Button variant="ghost" onclick={() => (closeDialogOpen = false)}>Cancel</Button>
-      <Button
-        variant="danger"
-        onclick={() => {
-          closeDialogOpen = false;
-          app.close();
-        }}
-      >
-        Close Session
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

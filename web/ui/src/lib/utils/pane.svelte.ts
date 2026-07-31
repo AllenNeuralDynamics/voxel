@@ -11,6 +11,8 @@ if (typeof document !== 'undefined') {
 }
 
 export interface PaneSizeBounds {
+  /** Collapsed extent in rem, along the group's direction. */
+  collapsed?: number;
   /** Minimum extent in rem, along the group's direction (width if horizontal, height if vertical). */
   min?: number;
   /** Maximum extent in rem, along the group's direction. */
@@ -18,7 +20,7 @@ export interface PaneSizeBounds {
   /** Default (initial) extent in rem, along the group's direction. */
   default?: number;
   /** Percentages to use before the container is measured. */
-  fallback?: { min?: number; max?: number; default?: number };
+  fallback?: { collapsed?: number; min?: number; max?: number; default?: number };
 }
 
 /**
@@ -50,7 +52,10 @@ export function createPaneSize(containerEl: () => HTMLElement | null, bounds: Pa
     return ext > 0 ? ((rem * rootPx) / ext) * 100 : fallback;
   };
 
-  const result: { minSize?: number; maxSize?: number; defaultSize?: number } = {
+  const result: { collapsedSize?: number; minSize?: number; maxSize?: number; defaultSize?: number } = {
+    get collapsedSize() {
+      return bounds.collapsed !== undefined ? pct(bounds.collapsed, bounds.fallback?.collapsed ?? 0) : undefined;
+    },
     get minSize() {
       return bounds.min !== undefined ? pct(bounds.min, bounds.fallback?.min ?? 25) : undefined;
     },

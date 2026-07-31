@@ -9,12 +9,12 @@
   import { ApiError, getVoxelApp, type Violation } from '$lib/model';
   import { sanitizeString } from '$lib/utils';
 
-  import { resolveInstrumentView, violationLocation } from '../../instrument/[id]/view';
   import InstrumentTabs from '../../InstrumentTabs.svelte';
+  import { resolveInstrumentView, violationLocation } from '../../view';
 
   const app = getVoxelApp();
 
-  const name = $derived(page.params.name);
+  const name = $derived(page.params.template);
   const selected = $derived(name ? resolveInstrumentView(app.discovery, { kind: 'template', name }) : null);
 
   let createFailure = $state<Violation[] | null>(null);
@@ -55,7 +55,7 @@
     try {
       await app.launchTemplate(name, instance);
       createDialogOpen = false;
-      await goto(resolve(`/instrument/${instance}` as '/'));
+      await goto(resolve(`/instruments/${instance}` as '/'));
     } catch (error) {
       createDialogOpen = false;
       createFailure = parseViolations(error);
@@ -63,9 +63,9 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col">
+<div class="flex h-full min-h-0 flex-col gap-1">
   <header class="shrink-0">
-    <div class="flex min-h-12 items-center gap-3 px-4 py-2">
+    <div class="flex items-center gap-3">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <h1 class="truncate text-2xl font-medium text-fg">
@@ -88,7 +88,7 @@
     {#if selected}
       <div class="flex h-full min-h-0 flex-col">
         {#if createFailure}
-          <div class="shrink-0 px-4 pt-4">
+          <div class="shrink-0">
             <section class="overflow-hidden rounded-lg border border-danger/40 bg-danger/5">
               <div class="flex items-start gap-3 border-b border-danger/25 px-3 py-2.5">
                 <AlertCircleOutline width="18" height="18" class="mt-0.5 shrink-0 text-danger" />
