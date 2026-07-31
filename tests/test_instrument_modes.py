@@ -79,6 +79,30 @@ async def test_edit_checks_mode_after_acquiring_instrument_lock() -> None:
         await edit
 
 
+async def test_generic_device_mutations_reject_capture_mode() -> None:
+    instrument = cast("Any", instrument_in_mode(AcquisitionMode.CAPTURE))
+    instrument._lock = asyncio.Lock()
+    instrument._hal = SimpleNamespace(devices={"camera": SimpleNamespace()})
+
+    with pytest.raises(
+        InstrumentBusyError,
+        match="Unable to set device properties: requires mode idle or preview; current mode is capture",
+    ):
+        await instrument.set_device_properties("camera", {"exposure_time_ms": 10})
+
+    with pytest.raises(
+        InstrumentBusyError,
+        match="Unable to execute a device command: requires mode idle or preview; current mode is capture",
+    ):
+        await instrument.execute_device_command("camera", "reset")
+
+    with pytest.raises(
+        InstrumentBusyError,
+        match="Unable to move the stage: requires mode idle or preview; current mode is capture",
+    ):
+        await instrument.move_stage(x=1)
+
+
 async def test_apply_settings_uses_locked_public_transition() -> None:
     instrument = cast("Any", instrument_in_mode(AcquisitionMode.IDLE))
     instrument._lock = asyncio.Lock()

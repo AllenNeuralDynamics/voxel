@@ -25,7 +25,7 @@
   import RunButton from '$lib/RunButton.svelte';
   import StageGizmo from '$lib/stage/StageGizmo.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
-  import { cn, createPaneSize, sanitizeString, toastError } from '$lib/utils';
+  import { cn, createPaneSize, pref, sanitizeString, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
@@ -83,9 +83,58 @@
     { id: '/inspect', label: 'Inspect' },
     { id: '/sync', label: 'Sync' },
     { id: '/configure', label: 'Configure' },
-    { id: '/plan', label: 'Plan' }
+    { id: '/plan', label: 'Plan' },
+    { id: '/run', label: 'Run' }
   ];
   const navRoutes = [libraryRoute, ...controlRoutes];
+  const lastLibraryRoute = pref<string>('nav:last-library-route', '/');
+  const lastInspectRoutes = pref<Record<string, string>>('nav:last-inspect-routes', {});
+
+  function isRememberedLibraryRoute(pathname: string): boolean {
+    return (
+      pathname === '/' ||
+      pathname === '/settings' ||
+      pathname.startsWith('/acquisitions/') ||
+      (pathname.startsWith('/instruments/') && !pathname.startsWith('/instruments/new/'))
+    );
+  }
+
+  const libraryTarget = $derived<Pathname>(
+    (isRememberedLibraryRoute(lastLibraryRoute.get()) ? lastLibraryRoute.get() : '/') as Pathname
+  );
+
+  function isValidInspectRoute(target: string): boolean {
+    const instrument = app.instrument;
+    if (!instrument) return false;
+
+    const url = new URL(target, page.url.origin);
+    if (url.origin !== page.url.origin || url.hash) return false;
+
+    if (url.pathname === '/inspect') {
+      const params = [...url.searchParams.entries()];
+      return (
+        params.length === 0 ||
+        (params.length === 1 && params[0][0] === 'axis' && ['x', 'y', 'z'].includes(params[0][1]))
+      );
+    }
+
+    if (url.search || !url.pathname.startsWith('/inspect/devices/')) return false;
+    const encodedId = url.pathname.slice('/inspect/devices/'.length);
+    if (!encodedId || encodedId.includes('/')) return false;
+
+    try {
+      return instrument.devices.has(decodeURIComponent(encodedId));
+    } catch {
+      return false;
+    }
+  }
+
+  const inspectTarget = $derived.by<string>(() => {
+    const name = app.activeName;
+    if (!name) return '/inspect';
+    const target = lastInspectRoutes.get()[name];
+    return target && isValidInspectRoute(target) ? target : '/inspect';
+  });
 
   const viewId = $derived<Pathname>(
     navRoutes.find((route) => route.id !== libraryRoute.id && page.url.pathname.startsWith(route.id))?.id ??
@@ -96,13 +145,48 @@
   watch(
     () => [app.activeTarget, controlActive] as const,
     ([activeTarget, isControlRoute]) => {
-      if (activeTarget === null && isControlRoute) goto(resolve('/'), { replaceState: true });
+      if (activeTarget === null && isControlRoute) goto(resolve(libraryTarget), { replaceState: true });
+    }
+  );
+
+  watch(
+    () => page.url.pathname,
+    (pathname) => {
+      if (isRememberedLibraryRoute(pathname)) lastLibraryRoute.set(pathname);
+    }
+  );
+
+  watch(
+    () => [app.activeName, page.url.pathname, page.url.search] as const,
+    ([name, pathname, search]) => {
+      if (!name || !pathname.startsWith('/inspect')) return;
+      const target = `${pathname}${search}`;
+      if (!isValidInspectRoute(target)) return;
+
+      const routes = lastInspectRoutes.get();
+      if (routes[name] !== target) lastInspectRoutes.set({ ...routes, [name]: target });
     }
   );
 
   function selectView(id: Pathname) {
     if (viewId === id) return;
-    goto(resolve(id), { keepFocus: true, noScroll: true });
+    const target = id === '/inspect' ? inspectTarget : id;
+    goto(resolve(target as Pathname), { keepFocus: true, noScroll: true });
+  }
+
+  async function closeInstrument(): Promise<void> {
+    const name = app.activeName;
+    if (!name) return;
+    const previous = lastLibraryRoute.get();
+    const target = `/instruments/${encodeURIComponent(name)}` as Pathname;
+    lastLibraryRoute.set(target);
+    try {
+      await app.close();
+      await goto(resolve(target), { keepFocus: true, noScroll: true });
+    } catch (error) {
+      lastLibraryRoute.set(previous);
+      throw error;
+    }
   }
 
   const controlSegments = $derived<Segment[]>(
@@ -163,7 +247,7 @@
       <Pane class="grid h-full min-w-0 grid-rows-[auto_1fr] overflow-hidden">
         <header class="flex h-12 shrink-0 items-center gap-x-5 border-b border-border bg-elevated px-4">
           <a
-            href={resolve('/')}
+            href={resolve(libraryTarget)}
             class={cn(
               '-ml-2 flex h-ui-md shrink-0 items-center gap-2 rounded-md border border-border px-2 text-fg transition-colors',
               viewId === '/' ? 'border-border bg-element-selected' : 'hover:bg-element-hover'
@@ -272,7 +356,7 @@
           variant="danger"
           onclick={() => {
             closeDialogOpen = false;
-            app.close();
+            toastError(closeInstrument());
           }}
         >
           Close instrument

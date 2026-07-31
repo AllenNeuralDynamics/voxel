@@ -33,6 +33,7 @@
 
   const displayValue = $derived(isEditing ? editingText : (model.value ?? ''));
   const styles = $derived(textInputVariants({ variant, size }));
+  const effectiveDisabled = $derived(disabled || model.disabled);
 
   function handleInput(e: Event) {
     isEditing = true;
@@ -56,7 +57,7 @@
   }
 </script>
 
-<div class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none border-input/50')}>
+<div class={cn(styles.wrapper({ class: className }), effectiveDisabled && 'pointer-events-none border-input/50')}>
   {#if prefix}
     <span class={styles.prefix()}>{prefix}</span>
   {/if}
@@ -64,7 +65,7 @@
     {id}
     type="text"
     bind:this={inputElement}
-    {disabled}
+    disabled={effectiveDisabled}
     {placeholder}
     value={displayValue}
     oninput={handleInput}

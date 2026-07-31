@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, Self
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from vxl_catalog import (
     AcquisitionManifest,
     AcquisitionOrigin,
@@ -22,14 +22,14 @@ from vxl_catalog import (
     LocationStatus,
 )
 
-from rigup import DeviceHandle, DeviceInterface
+from rigup import DeviceHandle, DeviceInterface, PropResults, Result
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, StorageSpec, resolve_storage
 from vxl.daq.clocked import Signals
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.system import System
-from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Teardown, merge_dicts
+from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
 from .bench import PROMOTABLE_FIELDS, InstrumentBench
 from .hal import HAL
@@ -47,6 +47,7 @@ from .state import (
     WriterPatch,
     ZStack,
 )
+from .topology import HALConfig
 from .traversal import Tile, TileOrder
 
 logger = logging.getLogger(__name__)
@@ -66,21 +67,49 @@ class AcquisitionRequest(BaseModel):
     operator: str | None = None
 
 
-class AcquisitionProgress(BaseModel, frozen=True):
-    """One progress update for a (task, profile) volume; emitted per captured batch.
+class VolumeProgress(BaseModel, frozen=True):
+    """Transient frame progress for one task/profile volume.
 
-    A profile's channels capture in synchronized batches, so ``frames_done`` is shared across them
-    (no per-channel breakdown). Task completion is implicit (``frames_done == frames_total``); the
-    run's overall start/stop is conveyed by :attr:`Instrument.mode`.
+    A profile's channels capture in synchronized batches, so the captured-frame count is shared across
+    them. This state is retained by the instrument for live clients but is not written to the catalog.
     """
 
-    task: str
-    profile: str
-    done: int
-    total: int
+    task: str = Field(min_length=1)
+    profile: str = Field(min_length=1)
+    frames_captured: int = Field(ge=0)
+    frames_total: int = Field(gt=0)
 
-    def updated(self, *, done: int, total: int | None = None) -> Self:
-        return self.model_copy(update={"done": done, "total": total if total is not None else self.total})
+    @model_validator(mode="after")
+    def _check_frames(self) -> Self:
+        if self.frames_captured > self.frames_total:
+            raise ValueError("frames_captured cannot exceed frames_total")
+        return self
+
+    def updated(self, *, frames_captured: int) -> Self:
+        return type(self).model_validate({**self.model_dump(), "frames_captured": frames_captured})
+
+
+class ActiveAcquisitionState(BaseModel, frozen=True):
+    """The latest durable manifest plus transient progress for the instrument's current run."""
+
+    manifest: AcquisitionManifest
+    progress: VolumeProgress
+
+    @model_validator(mode="after")
+    def _check_progress_volume(self) -> Self:
+        key = (self.progress.task, self.progress.profile)
+        if key not in {(volume.task, volume.profile) for volume in self.manifest.volumes}:
+            raise ValueError("progress must identify a volume in the manifest")
+        return self
+
+
+class DeviceSnapshot(BaseModel, frozen=True):
+    """One device's identity and introspected interface, or the error that prevented introspection."""
+
+    id: str
+    connected: bool
+    interface: DeviceInterface | None = None
+    error: str | None = None
 
 
 class TaskTile(Tile):
@@ -139,8 +168,11 @@ class Instrument:
         self._channels: dict[str, Channel] = {}
         self._preview_channels: list[Channel] = []
         self._preview_unsubs: list[Teardown] = []
+        self._device_unsubs: list[Teardown] = []
+        self._device_property_updates = Emitter[tuple[str, PropResults]]()
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
+        self._acquisition = Cell[ActiveAcquisitionState | None](None)
         self._preview_epoch = Cell[int](0)
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
@@ -153,7 +185,6 @@ class Instrument:
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
         self.frames: Emitter[tuple[str, bytes]] = Emitter()
         self.views: Emitter[tuple[str, bytes]] = Emitter()
-        self.progress: Emitter[AcquisitionProgress] = Emitter()
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
 
     @property
@@ -167,8 +198,14 @@ class Instrument:
         return self._bench.home / "config.yaml"
 
     @property
-    def hal(self) -> HAL:
-        return self._hal
+    def hardware_config(self) -> HALConfig:
+        """The immutable hardware topology without access to runtime device handles."""
+        return self._hal.config
+
+    @property
+    def device_property_updates(self) -> Subscribable[tuple[str, PropResults]]:
+        """Property updates from every runtime device, tagged with its device id."""
+        return self._device_property_updates
 
     @property
     def state(self) -> Readable[InstrumentState]:
@@ -211,6 +248,11 @@ class Instrument:
         """Acquisition mode as a read-only reactive view."""
         return self._mode
 
+    @property
+    def acquisition(self) -> Readable[ActiveAcquisitionState | None]:
+        """The current acquisition snapshot, or ``None`` when no run is active."""
+        return self._acquisition
+
     def update_viewport(self, viewport: PreviewViewport | None = None) -> None:
         """Set the shared viewport (no arg = re-apply current) on the active profile's cameras."""
         self._viewport = viewport if viewport is not None else self._viewport
@@ -236,6 +278,12 @@ class Instrument:
         try:
             async with self._lock:
                 await self._hal.open()
+                self._device_unsubs = [
+                    handle.props.subscribe(
+                        lambda props, device_id=device_id: self._device_property_updates.emit((device_id, props))
+                    )
+                    for device_id, handle in self._hal.devices.items()
+                ]
                 await self._validate_startup()
                 self._channels = self._build_channels()
                 for camera in self._hal.cameras.values():
@@ -554,6 +602,9 @@ class Instrument:
 
     async def close(self) -> None:
         """Stop preview, drop the feed, close hardware, and keep the logical active profile id."""
+        for unsub in self._device_unsubs:
+            unsub()
+        self._device_unsubs = []
         for unsub in self._routing_unsubs:
             unsub()
         self._routing_unsubs = []
@@ -565,6 +616,75 @@ class Instrument:
         self.fov.clear_triggers()
         await self._hal.close()
         self._channels = {}
+
+    async def inspect_devices(self) -> dict[str, DeviceSnapshot]:
+        """Introspect every device independently so one unavailable device does not hide the others."""
+        devices = list(self._hal.devices.items())
+        interfaces = await asyncio.gather(*(handle.interface() for _, handle in devices), return_exceptions=True)
+        snapshots: dict[str, DeviceSnapshot] = {}
+        for (device_id, _handle), interface in zip(devices, interfaces, strict=True):
+            if isinstance(interface, BaseException):
+                if not isinstance(interface, Exception):
+                    raise interface
+                snapshots[device_id] = DeviceSnapshot(id=device_id, connected=False, error=str(interface))
+            else:
+                snapshots[device_id] = DeviceSnapshot(id=device_id, connected=True, interface=interface)
+        return snapshots
+
+    async def get_device_properties(self, device_id: str, names: Collection[str] | None = None) -> PropResults:
+        """Read named device properties, or every introspected property when ``names`` is omitted."""
+        handle = self._device(device_id)
+        selected = list(names) if names is not None else list((await handle.interface()).properties)
+        return await handle.props.get(*selected)
+
+    async def set_device_properties(self, device_id: str, properties: Mapping[str, Any]) -> PropResults:
+        """Set device properties through the instrument's serialized manual-control boundary."""
+        async with self._lock:
+            self._ensure_mode(
+                "set device properties",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            return await self._device(device_id).props.set(**properties)
+
+    async def execute_device_command(
+        self,
+        device_id: str,
+        command: str,
+        args: Sequence[Any] = (),
+        kwargs: Mapping[str, Any] | None = None,
+    ) -> Result[Any]:
+        """Execute a device command through the instrument's serialized manual-control boundary."""
+        async with self._lock:
+            self._ensure_mode(
+                "execute a device command",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            return await self._device(device_id).run_command(command, *args, **dict(kwargs or {}))
+
+    async def move_stage(
+        self,
+        *,
+        x: float | None = None,
+        y: float | None = None,
+        z: float | None = None,
+        wait: bool = False,
+    ) -> None:
+        """Move any supplied stage axes through the serialized manual-control boundary."""
+        async with self._lock:
+            self._ensure_mode(
+                "move the stage",
+                AcquisitionMode.IDLE,
+                AcquisitionMode.PREVIEW,
+            )
+            stage = self._hal.stage
+            moves = [
+                axis.move_abs(position, wait=wait)
+                for axis, position in ((stage.x, x), (stage.y, y), (stage.z, z))
+                if position is not None
+            ]
+            await asyncio.gather(*moves)
 
     async def set_active_profile(self, profile_id: str) -> str:
         """Select ``profile_id`` and drive hardware to it, keeping preview running across the switch."""
@@ -925,15 +1045,42 @@ class Instrument:
             }
             await self._bench.update(tasks=updated)
 
-    async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionManifest:
-        """Begin acquiring the requested volumes and return their running manifest.
+    @staticmethod
+    def _volume_progress(state: InstrumentState, volume: AcquisitionVolume) -> VolumeProgress:
+        stack = state.tasks[volume.task].stack
+        z_step = state.imaging.profiles[volume.profile].z_step
+        return VolumeProgress(
+            task=volume.task,
+            profile=volume.profile,
+            frames_captured=0,
+            frames_total=stack.num_frames(z_step),
+        )
+
+    async def _update_acquisition(
+        self,
+        *,
+        manifest: AcquisitionManifest | None = None,
+        progress: VolumeProgress | None = None,
+    ) -> ActiveAcquisitionState:
+        current = self._acquisition.value
+        if current is None:
+            raise RuntimeError("cannot update acquisition state when no run is active")
+        updated = ActiveAcquisitionState(
+            manifest=manifest if manifest is not None else current.manifest,
+            progress=progress if progress is not None else current.progress,
+        )
+        await self._acquisition.set(updated)
+        return updated
+
+    async def start_acquisition(self, request: AcquisitionRequest) -> ActiveAcquisitionState:
+        """Begin acquiring the requested volumes and return their retained running state.
 
         ``storage`` is the run's logical destination (root + relative base; the node resolves it).
         ``task_ids`` selects a subset of planned tasks (``None`` → all), always captured in traversal
         order. The preflight proves every participating camera can write ``storage`` before the catalog
         creates ``manifest.json`` and transitions it to ``running``. Capture then continues in the
-        background, streaming :attr:`progress`; stop it early with :meth:`stop_acquisition`, or await it
-        with :meth:`wait_acquisition`.
+        background, updating :attr:`acquisition`; stop it early with :meth:`stop_acquisition`, or await
+        it with :meth:`wait_acquisition`.
         """
         storage = request.storage
         # Snapshot the bench and enter CAPTURE in one locked transition, so an edit cannot commit between
@@ -980,8 +1127,10 @@ class Instrument:
             await self._mode.set(AcquisitionMode.IDLE)
             raise
 
+        acquisition = ActiveAcquisitionState(manifest=manifest, progress=self._volume_progress(state, plan[0]))
+        await self._acquisition.set(acquisition)
         self._acq_task = asyncio.create_task(self._run_acquisition(manifest.id, storage, plan))
-        return manifest
+        return acquisition
 
     async def stop_acquisition(self) -> None:
         """Cancel the in-flight acquisition, if any; its cleanup runs and ``mode`` returns to IDLE."""
@@ -1010,7 +1159,9 @@ class Instrument:
         }
         try:
             for v in plan:
-                await self._catalog.start_volume(acq_id, task=v.task, profile=v.profile)
+                progress = self._volume_progress(self._bench.value, v)
+                manifest = await self._catalog.start_volume(acq_id, task=v.task, profile=v.profile)
+                await self._update_acquisition(manifest=manifest, progress=progress)
                 await self._apply_profile(v.profile)
                 subpath = PurePosixPath("tasks", f"{task_ordinals[v.task]:04d}", v.profile)
                 await self._capture_volume(
@@ -1020,19 +1171,24 @@ class Instrument:
                     acq_id=acq_id,
                     task=v.task,
                     profile=v.profile,
+                    progress=progress,
                 )
-                await self._catalog.complete_volume(acq_id, task=v.task, profile=v.profile)
-            await self._catalog.complete_acquisition(acq_id)
+                manifest = await self._catalog.complete_volume(acq_id, task=v.task, profile=v.profile)
+                await self._update_acquisition(manifest=manifest)
+            manifest = await self._catalog.complete_acquisition(acq_id)
+            await self._update_acquisition(manifest=manifest)
             logger.info("Acquisition complete: %d volumes → %s", len(plan), resolve_storage(storage).target)
         except asyncio.CancelledError:
             try:
-                await self._catalog.cancel_acquisition(acq_id)
+                manifest = await self._catalog.cancel_acquisition(acq_id)
+                await self._update_acquisition(manifest=manifest)
             except Exception:
                 logger.exception("Failed to persist cancellation for acquisition %s", acq_id)
             raise
         except Exception as error:
             try:
-                await self._catalog.fail_acquisition(acq_id, error)
+                manifest = await self._catalog.fail_acquisition(acq_id, error)
+                await self._update_acquisition(manifest=manifest)
             except Exception:
                 logger.exception("Failed to persist failure for acquisition %s", acq_id)
             logger.exception("Acquisition aborted")
@@ -1048,6 +1204,7 @@ class Instrument:
                 if isinstance(result, BaseException):
                     logger.warning("release_writer failed for %s: %r", cam_id, result)
             await self._mode.set(AcquisitionMode.IDLE)
+            await self._acquisition.set(None)
 
     async def _capture_volume(
         self,
@@ -1058,8 +1215,9 @@ class Instrument:
         acq_id: uuid.UUID,
         task: str,
         profile: str,
+        progress: VolumeProgress,
     ) -> None:
-        """Acquire one volume for the already-active profile, emitting :attr:`progress` per batch.
+        """Acquire one volume for the already-active profile, updating :attr:`acquisition` per batch.
 
         Cleanup always disables lasers, resets the stepper, and finalizes the writers, so cancellation
         leaves hardware safe and the partial stack finalized.
@@ -1070,8 +1228,11 @@ class Instrument:
         z_step = self.active_profile.z_step
         num_frames = stack.num_frames(z_step)
         batch_z = settings.batch_z
-        progress = AcquisitionProgress(task=task, profile=profile, done=0, total=num_frames)
-        await self.progress.emit(progress)
+        if progress.frames_total != num_frames:
+            raise RuntimeError(
+                f"planned frame total changed for task {task} / profile {profile}: "
+                f"{progress.frames_total} != {num_frames}"
+            )
         locations: dict[str, DatasetLocation] = {}
         frames_done = 0
         capture_error: BaseException | None = None
@@ -1101,12 +1262,13 @@ class Instrument:
                 )
             opened = await asyncio.gather(*init_coros)
             locations = dict(zip(channels, opened, strict=True))
-            await self._catalog.register_datasets(
+            manifest = await self._catalog.register_datasets(
                 acq_id,
                 task=task,
                 profile=profile,
                 locations=locations,
             )
+            await self._update_acquisition(manifest=manifest)
 
             await asyncio.gather(*(ch.enable_laser() for ch in channels.values()))
 
@@ -1126,7 +1288,8 @@ class Instrument:
                 await self._stop_signal_generators()
                 done = min((batch_idx + 1) * batch_z, num_frames)
                 frames_done = done
-                await self.progress.emit(progress.updated(done=done))
+                progress = progress.updated(frames_captured=done)
+                await self._update_acquisition(progress=progress)
         except BaseException as error:
             capture_error = error
 
@@ -1143,13 +1306,14 @@ class Instrument:
                 if isinstance(capture_error, asyncio.CancelledError)
                 else self._catalog.fail_volume
             )
-            await terminalize(
+            manifest = await terminalize(
                 acq_id,
                 task=task,
                 profile=profile,
                 dataset_status=dataset_status,
                 location_status=location_status,
             )
+            await self._update_acquisition(manifest=manifest)
         except Exception:
             logger.exception("Failed to persist volume failure for task %s / profile %s", task, profile)
 
@@ -1316,6 +1480,12 @@ class Instrument:
             return
         expected = " or ".join(mode.value for mode in allowed)
         raise InstrumentBusyError(f"Unable to {operation}: requires mode {expected}; current mode is {current.value}")
+
+    def _device(self, device_id: str) -> DeviceHandle:
+        try:
+            return self._hal.devices[device_id]
+        except KeyError:
+            raise KeyError(f"Device '{device_id}' not found") from None
 
     def _settable_devices(self) -> set[str]:
         return self._bench.value.imaging.get_profile_settable_devices(self._active_profile_id.value, self._hal.config)

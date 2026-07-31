@@ -38,6 +38,7 @@
   const sliderMin = $derived(model.min ?? 0);
   const sliderMax = $derived(model.max ?? 100);
   const sliderStep = $derived(model.step ?? 1);
+  const effectiveDisabled = $derived(disabled || model.disabled);
 
   const fillPct = $derived(((model.value - sliderMin) / (sliderMax - sliderMin)) * 100);
 
@@ -55,7 +56,7 @@
   class={cn(
     'flex min-w-0 items-stretch rounded bg-element-bg',
     H[size],
-    disabled && 'pointer-events-none opacity-50',
+    effectiveDisabled && 'pointer-events-none opacity-50',
     className
   )}
 >
@@ -66,7 +67,7 @@
     {align}
     {prefix}
     {suffix}
-    {disabled}
+    disabled={effectiveDisabled}
     {size}
     class="rounded-r-none border-r-0 bg-transparent"
   />
@@ -76,6 +77,7 @@
     min={sliderMin}
     max={sliderMax}
     step={sliderStep}
+    disabled={effectiveDisabled}
     value={model.value}
     oninput={handleInput}
     onchange={handleChange}

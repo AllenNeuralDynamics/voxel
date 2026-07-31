@@ -150,7 +150,7 @@ class PreviewStore(QObject):
         channel_config = self._instrument.state.value.imaging.channels.get(channel)
         if channel_config is None:
             return 0
-        detection = self._instrument.hal.config.detection.get(channel_config.detection)
+        detection = self._instrument.hardware_config.detection.get(channel_config.detection)
         return detection.rotation_deg if detection else 0
 
     def set_viewport(self, viewport: PreviewViewport) -> None:

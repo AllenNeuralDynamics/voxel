@@ -15,9 +15,11 @@ from vxl_catalog import (
     StorageSpec,
 )
 from vxl_web.app import create_app
-from vxl_web.router import get_acquisition, get_discovery, list_acquisitions
+from vxl_web.router import get_acquisition, get_active_acquisition, get_discovery, list_acquisitions
 
 from vxl.app import Discovered
+from vxl.instrument import ActiveAcquisitionState, VolumeProgress
+from vxlib import Cell
 
 
 def _catalog(tmp_path: Path) -> Catalog:
@@ -51,6 +53,7 @@ async def test_discovery_composes_bounded_application_resources(tmp_path: Path) 
     web_app = create_app(cast("Any", voxel_app), serve_static=False)
     paths = set(web_app.openapi()["paths"])
     assert "/api/discovery" in paths
+    assert set(web_app.openapi()["paths"]["/api/instrument/acquisition"]) >= {"get", "post"}
     assert "/api/catalog/colormaps" not in paths
 
 
@@ -77,3 +80,32 @@ async def test_acquisition_history_routes_list_and_get_manifests(tmp_path: Path)
     with pytest.raises(HTTPException) as caught:
         await get_acquisition(uuid4(), cast("Any", app))
     assert caught.value.status_code == 404
+
+
+async def test_active_acquisition_route_returns_retained_instrument_state() -> None:
+    manifest = AcquisitionManifest(
+        id=uuid4(),
+        instrument="scope",
+        origin=AcquisitionOrigin(host="controller", operator="operator"),
+        created_at=datetime.datetime.now(tz=datetime.UTC),
+        storage=StorageSpec(path=PurePosixPath("run")),
+        bench_snapshot={},
+        hardware_snapshot={},
+        volumes=[AcquisitionVolume(task="task-a", profile="488")],
+    )
+    active = ActiveAcquisitionState(
+        manifest=manifest,
+        progress=VolumeProgress(
+            task="task-a",
+            profile="488",
+            frames_captured=12,
+            frames_total=48,
+        ),
+    )
+    acquisition = Cell[ActiveAcquisitionState | None](active)
+    instrument = SimpleNamespace(acquisition=acquisition)
+
+    assert await get_active_acquisition(cast("Any", instrument)) == active
+
+    await acquisition.set(None)
+    assert await get_active_acquisition(cast("Any", instrument)) is None

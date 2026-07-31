@@ -15,6 +15,7 @@
   }
 
   let { model, disabled = false, size = 'xs', class: className = '' }: Props = $props();
+  const effectiveDisabled = $derived(disabled || (model?.disabled ?? false));
 
   function formatFallback(value: unknown): string {
     if (value === undefined || value === null) return '—';
@@ -26,17 +27,17 @@
 {#if !model}
   <span class={cn('text-base text-fg-faint', className)}>—</span>
 {:else if model instanceof EnumeratedModel}
-  <Enumerated.Select model={model as EnumeratedModel<string>} {disabled} {size} class={className} />
+  <Enumerated.Select model={model as EnumeratedModel<string>} disabled={effectiveDisabled} {size} class={className} />
 {:else if model instanceof BoolModel}
-  <Bool.Toggle {model} {disabled} {size} class={className} />
+  <Bool.Toggle {model} disabled={effectiveDisabled} {size} class={className} />
 {:else if model instanceof NumericModel}
   {#if model.min != null && model.max != null}
-    <Numeric.SpinSlider {model} {disabled} {size} class={className} />
+    <Numeric.SpinSlider {model} disabled={effectiveDisabled} {size} class={className} />
   {:else}
-    <Numeric.SpinBox {model} {disabled} {size} class={className} />
+    <Numeric.SpinBox {model} disabled={effectiveDisabled} {size} class={className} />
   {/if}
 {:else if model instanceof StringModel}
-  <Text.Input {model} {disabled} {size} class={className} />
+  <Text.Input {model} disabled={effectiveDisabled} {size} class={className} />
 {:else}
   <span class={cn('font-mono text-base text-fg-muted', className)}>{formatFallback(model.value)}</span>
 {/if}

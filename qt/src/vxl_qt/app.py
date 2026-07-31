@@ -281,8 +281,8 @@ class MainWindow(QMainWindow):
 
     async def start(self) -> None:
         """Bring the hardware stores up against the instrument (adapters start here)."""
-        await self._devices.start(self._instrument.hal)
-        cfg = self._instrument.hal.config.stage
+        await self._devices.start(self._instrument)
+        cfg = self._instrument.hardware_config.stage
         x, y, z = self._devices.get_adapter(cfg.x), self._devices.get_adapter(cfg.y), self._devices.get_adapter(cfg.z)
         if x and y and z:
             self._stage.bind(x, y, z)

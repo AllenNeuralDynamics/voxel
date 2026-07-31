@@ -7,7 +7,6 @@ main's ``GridTable`` on the task-centric domain (tasks/stencil/traversal) rather
 tile grid.
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -171,12 +170,7 @@ class TasksTable(QWidget):
         task = self._instrument.state.value.tasks.get(task_id)
         if task is None:
             return
-        stage = self._instrument.hal.stage
-
-        async def move() -> None:
-            await asyncio.gather(stage.x.move_abs(task.x), stage.y.move_abs(task.y))
-
-        fire_and_forget(move(), log=log)
+        fire_and_forget(self._instrument.move_stage(x=task.x, y=task.y), log=log)
 
     def contextMenuEvent(self, event: QContextMenuEvent | None) -> None:
         """Right-click → bulk actions on the checkbox-selected tasks."""
@@ -440,12 +434,7 @@ class GridCanvas(QWidget):
         fire_and_forget(self._instrument.add_tasks([(x, y)]), log=log)
 
     def _move_stage(self, x: float, y: float) -> None:
-        stage = self._instrument.hal.stage
-
-        async def move() -> None:
-            await asyncio.gather(stage.x.move_abs(x), stage.y.move_abs(y))
-
-        fire_and_forget(move(), log=log)
+        fire_and_forget(self._instrument.move_stage(x=x, y=y), log=log)
 
 
 class StageControls(QWidget):
@@ -462,7 +451,7 @@ class StageControls(QWidget):
     def __init__(self, instrument: Instrument, devices: DevicesStore, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._devices = devices
-        cfg = instrument.hal.config.stage
+        cfg = instrument.hardware_config.stage
         self._axis_uids = {"X": cfg.x, "Y": cfg.y, "Z": cfg.z}
         self._sliders: dict[str, SliderSpinBox] = {}
         self._bound = False

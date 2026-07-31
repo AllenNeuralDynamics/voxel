@@ -38,6 +38,11 @@ def _catalog(tmp_path: Path) -> Catalog:
     )
 
 
+async def _device_property(instrument: Instrument, device_id: str, name: str) -> Any:
+    results = await instrument.get_device_properties(device_id, [name])
+    return results[name].unwrap().value
+
+
 class _FakeRig:
     def __init__(
         self,
@@ -109,6 +114,7 @@ class _CameraWithResultProperties:
 class _FakeHAL:
     def __init__(self) -> None:
         self.cameras: dict[str, Any] = {}
+        self.devices: dict[str, Any] = {}
         self.opened = False
         self.closed = False
 
@@ -503,29 +509,33 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
         positions: list[float] = []
         arrived = asyncio.Event()
 
-        def observe_position(position: float) -> None:
-            positions.append(position)
-            if position == 1:
+        def observe_position(update: tuple[str, PropResults]) -> None:
+            device_id, results = update
+            position = results.results.get("position")
+            if device_id != "x_axis" or position is None or not position.is_ok:
+                return
+            value = float(position.unwrap().value)
+            positions.append(value)
+            if value == 1:
                 arrived.set()
 
-        unsubscribe = instrument.hal.stage.x.position.subscribe(observe_position)
-        await instrument.hal.stage.x.move_abs(1, wait=True)
+        unsubscribe = instrument.device_property_updates.subscribe(observe_position)
+        await instrument.move_stage(x=1, wait=True)
         await asyncio.wait_for(arrived.wait(), timeout=1)
         unsubscribe()
 
-        assert instrument.hal.stage.x.position.value == 1
+        assert await _device_property(instrument, "x_axis", "position") == 1
         assert positions[-1] == 1
 
-        selector = instrument.hal.discrete_axes["illumination_side_selector"]
         assert instrument.routing_targets.value == {"excitation_side": "left"}
-        assert await selector.props.get_value("label") == "left"
+        assert await _device_property(instrument, "illumination_side_selector", "label") == "left"
 
         await instrument.override_optical_route("excitation_side", "right")
-        assert await selector.props.get_value("label") == "right"
+        assert await _device_property(instrument, "illumination_side_selector", "label") == "right"
         assert instrument.routing_targets.value == {"excitation_side": "left"}
 
         await instrument.apply_optical_routing()
-        assert await selector.props.get_value("label") == "left"
+        assert await _device_property(instrument, "illumination_side_selector", "label") == "left"
 
         await instrument.update_optical_routing_policy(
             "excitation_side",
@@ -546,7 +556,7 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
         )
         assert instrument.routing_targets.value == {"excitation_side": "right"}
         await instrument.apply_optical_routing()
-        assert await selector.props.get_value("label") == "right"
+        assert await _device_property(instrument, "illumination_side_selector", "label") == "right"
     finally:
         await instrument.close()
 
@@ -621,17 +631,19 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
             unsubscribe()
 
     async def wait_for_selector(route: str) -> None:
-        selector = instrument.hal.discrete_axes["illumination_side_selector"]
         arrived = asyncio.Event()
 
-        def observe_properties(results: PropResults) -> None:
+        def observe_properties(update: tuple[str, PropResults]) -> None:
+            device_id, results = update
+            if device_id != "illumination_side_selector":
+                return
             label = results.results.get("label")
             if label is not None and label.is_ok and label.unwrap().value == route:
                 arrived.set()
 
-        unsubscribe = selector.props.subscribe(observe_properties)
+        unsubscribe = instrument.device_property_updates.subscribe(observe_properties)
         try:
-            if await selector.props.get_value("label") == route:
+            if await _device_property(instrument, "illumination_side_selector", "label") == route:
                 arrived.set()
             await asyncio.wait_for(arrived.wait(), timeout=1)
         finally:
@@ -645,19 +657,19 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
         margin = fov[0] / 2
 
         assert instrument.routing_targets.value == {"excitation_side": "left"}
-        await instrument.hal.stage.x.move_abs(10_000 + margin - 1, wait=True)
+        await instrument.move_stage(x=10_000 + margin - 1, wait=True)
         await asyncio.sleep(0.1)
         assert instrument.routing_targets.value == {"excitation_side": "left"}
 
-        await instrument.hal.stage.x.move_abs(10_000 + margin + 1, wait=True)
+        await instrument.move_stage(x=10_000 + margin + 1, wait=True)
         await wait_for_target("right")
         await wait_for_selector("right")
 
-        await instrument.hal.stage.x.move_abs(10_000, wait=True)
+        await instrument.move_stage(x=10_000, wait=True)
         await asyncio.sleep(0.1)
         assert instrument.routing_targets.value == {"excitation_side": "right"}
 
-        await instrument.hal.stage.x.move_abs(10_000 - margin - 1, wait=True)
+        await instrument.move_stage(x=10_000 - margin - 1, wait=True)
         await wait_for_target("left")
         await wait_for_selector("left")
     finally:

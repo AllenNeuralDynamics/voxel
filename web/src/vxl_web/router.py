@@ -16,10 +16,15 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from pydantic import BaseModel
 from vxl_catalog import AcquisitionManifest, ManifestNotFoundError
 
-from rigup import DeviceHandle, DeviceInterface, PropResults, Result
+from rigup import PropResults, Result
 from vxl.daq.clocked import Signals
-from vxl.instrument import InstrumentConfig, InstrumentInspection
-from vxl.instrument.core import AcquisitionRequest
+from vxl.instrument import (
+    AcquisitionRequest,
+    ActiveAcquisitionState,
+    DeviceSnapshot,
+    InstrumentConfig,
+    InstrumentInspection,
+)
 from vxl.instrument.state import (
     ChannelPatch,
     InstrumentDefaults,
@@ -208,15 +213,6 @@ class _DefaultScope(BaseModel):
     include: set[str] | None = None  # None → all promotable baseline fields
 
 
-class DeviceSnapshot(BaseModel):
-    """One device's identity + introspected interface, or the error that introspection raised."""
-
-    id: str
-    connected: bool
-    interface: DeviceInterface | None = None
-    error: str | None = None
-
-
 class _SetProps(BaseModel):
     properties: dict[str, Any]
 
@@ -251,7 +247,7 @@ async def get_hardware(inst: InstrumentDep) -> HALConfig:
     Separate from the editable bench in ``GET /instrument`` (``InstrumentState``): the UI needs the HAL
     config for preview frame rotation (``detection[*].rotation_deg``), device→role mapping, and stage axes.
     """
-    return inst.hal.config
+    return inst.hardware_config
 
 
 @instrument_router.get("/default")
@@ -383,56 +379,51 @@ async def stop_preview(inst: InstrumentDep) -> None:
 # multi-client echo (see InstrumentFeed). start/stop stay REST: they flip `mode`, which echoes via status.
 
 
-def _device_or_404(devices: dict[str, DeviceHandle], device_id: str) -> DeviceHandle:
-    handle = devices.get(device_id)
-    if handle is None:
-        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
-    return handle
-
-
 @instrument_router.get("/devices")
 async def list_devices(inst: InstrumentDep) -> dict[str, DeviceSnapshot]:
     """Each device's interface. Per-device fault tolerance: a failed introspection is reported, not raised."""
-    snapshot: dict[str, DeviceSnapshot] = {}
-    for device_id, handle in inst.hal.devices.items():
-        try:
-            iface = await handle.interface()
-        except Exception as e:
-            log.warning("device '%s' interface introspection failed: %s", device_id, e)
-            snapshot[device_id] = DeviceSnapshot(id=device_id, connected=False, error=str(e))
-        else:
-            snapshot[device_id] = DeviceSnapshot(id=device_id, connected=True, interface=iface)
-    return snapshot
+    return await inst.inspect_devices()
 
 
 @instrument_router.get("/devices/{device_id}/properties")
 async def get_device_properties(device_id: str, inst: InstrumentDep, props: list[str] | None = None) -> PropResults:
     """Read ``props`` (all of the device's properties if omitted)."""
-    handle = _device_or_404(inst.hal.devices, device_id)
-    names = props or list((await handle.interface()).properties.keys())
-    return await handle.props.get(*names)
+    try:
+        return await inst.get_device_properties(device_id, props)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error.args[0])) from error
 
 
 @instrument_router.patch("/devices/{device_id}/properties")
 async def set_device_properties(device_id: str, body: _SetProps, inst: InstrumentDep) -> PropResults:
     """Set properties; the returned ``PropResults`` carries per-property accept/reject. Subscribers get
     a ``device.props.update`` push via the feed (``props.set`` notifies)."""
-    handle = _device_or_404(inst.hal.devices, device_id)
-    return await handle.props.set(**body.properties)
+    try:
+        return await inst.set_device_properties(device_id, body.properties)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error.args[0])) from error
 
 
 @instrument_router.post("/devices/{device_id}/commands/{cmd_name}")
 async def execute_device_command(device_id: str, cmd_name: str, body: _ExecuteCommand, inst: InstrumentDep) -> Result:
-    handle = _device_or_404(inst.hal.devices, device_id)
-    return await handle.run_command(cmd_name, *body.args, **body.kwargs)
+    try:
+        return await inst.execute_device_command(device_id, cmd_name, body.args, body.kwargs)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+
+
+@instrument_router.get("/acquisition")
+async def get_active_acquisition(inst: InstrumentDep) -> ActiveAcquisitionState | None:
+    """Return the retained state for the current run, or ``None`` while the instrument is idle."""
+    return inst.acquisition.value
 
 
 @instrument_router.post("/acquisition")
-async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> AcquisitionManifest:
-    """Launch the requested acquisition and return its manifest once the run has started.
+async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> ActiveAcquisitionState:
+    """Launch the requested acquisition and return its retained state once the run has started.
 
     The synchronous preflight writes a marker to the destination; an unwritable target raises ``OSError``
-    here (mapped to 422) before any capture. Progress streams on the ``acquisition.progress`` WS topic.
+    here (mapped to 422) before any capture. State streams on the ``acquisition.state`` WS topic.
     """
     try:
         return await inst.start_acquisition(body)

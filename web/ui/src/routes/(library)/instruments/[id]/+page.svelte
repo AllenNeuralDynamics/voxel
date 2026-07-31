@@ -2,6 +2,8 @@
   import { watch } from 'runed';
   import { toast } from 'svelte-sonner';
 
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { AlertCircleOutline } from '$lib/icons';
   import { Button, Dialog } from '$lib/kit';
@@ -91,6 +93,7 @@
     launchFailure = null;
     try {
       await app.launch(id);
+      await goto(resolve('/configure'));
     } catch (error) {
       launchFailure = parseViolations(error);
     }

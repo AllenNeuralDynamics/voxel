@@ -10,12 +10,13 @@
   }
 
   let { model, disabled, size, style, class: className = '' }: Props = $props();
+  const effectiveDisabled = $derived((disabled ?? false) || model.disabled);
 </script>
 
 <KitSwitch
   checked={model.value === true}
   onCheckedChange={(checked) => model.patch(checked)}
-  {disabled}
+  disabled={effectiveDisabled}
   {size}
   {style}
   class={className}

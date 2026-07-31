@@ -22,6 +22,7 @@
 
   const isNumeric = $derived(typeof model.value === 'number');
   const options = $derived(model.options.map((o) => ({ value: String(o), label: formatLabel(o) })));
+  const effectiveDisabled = $derived((disabled ?? false) || model.disabled);
 
   function handleChange(value: string) {
     const converted = (isNumeric ? Number(value) : value) as T;
@@ -34,7 +35,7 @@
   {options}
   onchange={handleChange}
   {placeholder}
-  {disabled}
+  disabled={effectiveDisabled}
   {variant}
   {size}
   class={className}

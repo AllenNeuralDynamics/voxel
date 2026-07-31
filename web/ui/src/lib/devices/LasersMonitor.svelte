@@ -153,6 +153,7 @@
       max={maxP}
       step={1}
       value={setpoint}
+      disabled={laser.powerSetpoint?.disabled}
       oninput={(e) => laser.powerSetpoint?.patch(parseFloat(e.currentTarget.value), { throttled: true })}
     />
   </div>
@@ -231,5 +232,10 @@
     border: none;
     background: transparent;
     cursor: pointer;
+  }
+  .setpoint-slider:disabled,
+  .setpoint-slider:disabled::-webkit-slider-thumb,
+  .setpoint-slider:disabled::-moz-range-thumb {
+    cursor: not-allowed;
   }
 </style>

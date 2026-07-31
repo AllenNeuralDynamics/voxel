@@ -536,12 +536,22 @@ export interface InstrumentStatus {
   task_tiles: TaskTile[];
 }
 
-/** The `acquisition.progress` payload: progress for one (task, profile) volume. */
-export interface AcquisitionProgress {
+/** Transient captured-frame progress for one task/profile volume. */
+export interface VolumeProgress {
   task: string;
   profile: string;
-  done: number;
-  total: number;
+  frames_captured: number;
+  frames_total: number;
+}
+
+/** The latest durable manifest plus transient progress for the instrument's current run. */
+export interface ActiveAcquisitionState {
+  manifest: AcquisitionManifest;
+  progress: VolumeProgress;
+}
+
+export interface AcquisitionUpdate {
+  acquisition: ActiveAcquisitionState | null;
 }
 
 /** A command parameter's introspected signature. */
@@ -618,7 +628,7 @@ export interface ServerTopics {
   'instrument.status': InstrumentStatus;
   'instrument.default': InstrumentDefaults;
   'device.props.update': DevicePropsUpdate;
-  'acquisition.progress': AcquisitionProgress;
+  'acquisition.state': AcquisitionUpdate;
   'preview.updates': PreviewUpdate;
   logs: LogMessage;
 }

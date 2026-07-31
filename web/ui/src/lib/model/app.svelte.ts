@@ -22,8 +22,9 @@ import type { SnapshotChannel } from './snapshots.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionManifest,
-  AcquisitionProgress,
   AcquisitionRequest,
+  AcquisitionUpdate,
+  ActiveAcquisitionState,
   AppDiscovery,
   AppStatus,
   ChannelPatch,
@@ -268,11 +269,8 @@ export class Instrument {
   /** Live preview: frame/tile compositing + viewport/levels/colormap control. */
   readonly preview: Preview;
 
-  /** Live acquisition progress, keyed by `${task}:${profile}` volume. Cleared when a run starts. */
-  readonly progress = new SvelteMap<string, AcquisitionProgress>();
-
-  /** The manifest returned for the active or most recent acquisition. */
-  acquisitionManifest = $state.raw<AcquisitionManifest | null>(null);
+  /** Retained manifest and current-volume progress for the active run. */
+  acquisition = $state.raw<ActiveAcquisitionState | null>(null);
 
   readonly mode = $derived(this.status.mode);
   readonly fov = $derived(this.status.fov);
@@ -448,6 +446,7 @@ export class Instrument {
   constructor(
     client: Client,
     status: InstrumentStatus,
+    acquisition: ActiveAcquisitionState | null,
     hal: HALConfig,
     defaults: InstrumentDefaults,
     devices: Record<string, DeviceSnapshot>,
@@ -456,9 +455,15 @@ export class Instrument {
   ) {
     this.#client = client;
     this.status = status;
+    this.acquisition = acquisition;
     this.hal = hal;
     this.default = defaults;
-    for (const [id, snapshot] of Object.entries(devices)) this.devices.set(id, createDevice(client, snapshot));
+    for (const [id, snapshot] of Object.entries(devices)) {
+      this.devices.set(
+        id,
+        createDevice(client, snapshot, () => this.mode === 'capture')
+      );
+    }
     const sx = this.#stageAxis('x');
     const sy = this.#stageAxis('y');
     const sz = this.#stageAxis('z');
@@ -472,7 +477,7 @@ export class Instrument {
       })
     );
     this.#unsubs.push(client.on('device.props.update', (u) => this.devices.get(u.device)?.ingest(u.properties)));
-    this.#unsubs.push(client.on('acquisition.progress', (p) => this.progress.set(`${p.task}:${p.profile}`, p)));
+    this.#unsubs.push(client.on('acquisition.state', (update) => (this.acquisition = update.acquisition)));
     this.#unsubs.push(client.on('instrument.default', (d) => (this.default = d)));
     void this.#syncMetadataSchema();
   }
@@ -480,10 +485,16 @@ export class Instrument {
   /** Hydrate the active instrument over REST, then keep it fresh from the WS streams. */
   static async open(client: Client, discovery: AppDiscovery): Promise<Instrument> {
     let latest: InstrumentStatus | undefined;
-    const buffer = client.on('instrument.status', (s) => (latest = s));
+    let latestAcquisition: ActiveAcquisitionState | null | undefined;
+    const statusBuffer = client.on('instrument.status', (s) => (latest = s));
+    const acquisitionBuffer = client.on(
+      'acquisition.state',
+      (update: AcquisitionUpdate) => (latestAcquisition = update.acquisition)
+    );
     try {
-      const [fetched, hal, defaults, devices] = await Promise.all([
+      const [fetched, fetchedAcquisition, hal, defaults, devices] = await Promise.all([
         client.get<InstrumentStatus>('/instrument'),
+        client.get<ActiveAcquisitionState | null>('/instrument/acquisition'),
         client.get<HALConfig>('/instrument/hardware'),
         client.get<InstrumentDefaults>('/instrument/default'),
         client.get<Record<string, DeviceSnapshot>>('/instrument/devices')
@@ -491,6 +502,7 @@ export class Instrument {
       const instrument = new Instrument(
         client,
         latest ?? fetched,
+        latestAcquisition === undefined ? fetchedAcquisition : latestAcquisition,
         hal,
         defaults,
         devices,
@@ -500,21 +512,33 @@ export class Instrument {
       void instrument.#refreshDevices(); // initial prop values fill in reactively (the feed only pushes changes)
       return instrument;
     } finally {
-      buffer();
+      statusBuffer();
+      acquisitionBuffer();
     }
   }
 
   /** Re-fetch state + hal + device props over REST — after a reconnect, where pushes may have been missed. */
   async rehydrate(): Promise<void> {
-    const [status, hal, defaults] = await Promise.all([
-      this.#client.get<InstrumentStatus>('/instrument'),
-      this.#client.get<HALConfig>('/instrument/hardware'),
-      this.#client.get<InstrumentDefaults>('/instrument/default')
-    ]);
-    this.status = status;
-    this.hal = hal;
-    this.default = defaults;
-    void this.#refreshDevices();
+    let latestAcquisition: ActiveAcquisitionState | null | undefined;
+    const acquisitionBuffer = this.#client.on(
+      'acquisition.state',
+      (update) => (latestAcquisition = update.acquisition)
+    );
+    try {
+      const [status, acquisition, hal, defaults] = await Promise.all([
+        this.#client.get<InstrumentStatus>('/instrument'),
+        this.#client.get<ActiveAcquisitionState | null>('/instrument/acquisition'),
+        this.#client.get<HALConfig>('/instrument/hardware'),
+        this.#client.get<InstrumentDefaults>('/instrument/default')
+      ]);
+      this.status = status;
+      this.acquisition = latestAcquisition === undefined ? acquisition : latestAcquisition;
+      this.hal = hal;
+      this.default = defaults;
+      void this.#refreshDevices();
+    } finally {
+      acquisitionBuffer();
+    }
   }
 
   // Bench edits: each applies server-side, which re-broadcasts the full state on instrument.status —
@@ -616,11 +640,16 @@ export class Instrument {
   }
 
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
-  async startAcquisition(request: AcquisitionRequest): Promise<AcquisitionManifest> {
-    this.progress.clear();
-    const manifest = await this.#client.post<AcquisitionManifest>('/instrument/acquisition', request);
-    this.acquisitionManifest = manifest;
-    return manifest;
+  async startAcquisition(request: AcquisitionRequest): Promise<ActiveAcquisitionState> {
+    let latest: ActiveAcquisitionState | null | undefined;
+    const buffer = this.#client.on('acquisition.state', (update) => (latest = update.acquisition));
+    try {
+      const acquisition = await this.#client.post<ActiveAcquisitionState>('/instrument/acquisition', request);
+      this.acquisition = latest === undefined ? acquisition : latest;
+      return acquisition;
+    } finally {
+      buffer();
+    }
   }
 
   stopAcquisition(): Promise<void> {

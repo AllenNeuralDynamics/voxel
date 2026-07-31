@@ -2,7 +2,6 @@
 ``AppFeed`` (app-level presence + the InstrumentFeed lifecycle)."""
 
 import logging
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -10,7 +9,7 @@ from pydantic import BaseModel
 from rigup import PropResults
 from vxl.app import VoxelApp
 from vxl.camera import PreviewLevels, PreviewViewport
-from vxl.instrument import AcquisitionMode, Instrument, InstrumentState
+from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, InstrumentState
 from vxl.instrument.core import TaskTile
 
 from .wire import ClientId, MsgBus
@@ -45,6 +44,12 @@ class InstrumentStatus(BaseModel):
     routing_targets: dict[str, str]
     state: InstrumentState
     task_tiles: list[TaskTile]
+
+
+class AcquisitionUpdate(BaseModel):
+    """Retained current-run state broadcast whenever its manifest or frame progress changes."""
+
+    acquisition: ActiveAcquisitionState | None
 
 
 class DevicePropsUpdate(BaseModel):
@@ -84,16 +89,17 @@ class InstrumentFeed:
             i.task_tiles.subscribe(lambda _t: self.broadcast_status()),
             i.fov.subscribe(lambda _f: self.broadcast_status()),
             i.routing_targets.subscribe(lambda _r: self.broadcast_status()),
-            i.progress.subscribe(lambda p: bus.broadcast("acquisition.progress", p)),
+            i.acquisition.subscribe(
+                lambda state: bus.broadcast("acquisition.state", AcquisitionUpdate(acquisition=state))
+            ),
             i.default.subscribe(lambda _d: self.broadcast_default()),
             i.frames.subscribe(self._on_frame),
             i.views.subscribe(self._on_view),
-        ]
-        self._unsubs += [
-            handle.props.subscribe(self._forward_props(device_id)) for device_id, handle in i.hal.devices.items()
+            i.device_property_updates.subscribe(self._forward_props),
         ]
         self._unsubs.append(bus.on_command("preview.update", PreviewUpdate, self._on_preview_update))
         self.broadcast_status()
+        self.broadcast_acquisition()
         self.broadcast_default()
 
     def detach(self) -> None:
@@ -130,6 +136,12 @@ class InstrumentFeed:
     def broadcast_default(self) -> None:
         self._bus.broadcast("instrument.default", self._inst.default.value)
 
+    def broadcast_acquisition(self) -> None:
+        self._bus.broadcast(
+            "acquisition.state",
+            AcquisitionUpdate(acquisition=self._inst.acquisition.value),
+        )
+
     async def _on_frame(self, item: tuple[str, bytes]) -> None:
         channel, data = item
         self._bus.broadcast(f"preview.frame.{channel}", data)
@@ -138,11 +150,9 @@ class InstrumentFeed:
         channel, data = item
         self._bus.broadcast(f"preview.view.{channel}", data)
 
-    def _forward_props(self, device_id: str) -> Callable[[PropResults], None]:
-        def forward(props: PropResults) -> None:
-            self._bus.broadcast("device.props.update", DevicePropsUpdate(device=device_id, properties=props))
-
-        return forward
+    def _forward_props(self, update: tuple[str, PropResults]) -> None:
+        device_id, properties = update
+        self._bus.broadcast("device.props.update", DevicePropsUpdate(device=device_id, properties=properties))
 
 
 class AppStatus(BaseModel):

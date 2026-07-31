@@ -17,11 +17,11 @@ from vxl_catalog import (
 )
 
 from vxl.camera import CaptureState
-from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState
+from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, InstrumentConfig, InstrumentState
 from vxl.instrument import core as instrument_core
 from vxl.instrument.core import AcquisitionRequest, Channel
 from vxl.instrument.state import AcquisitionTask
-from vxlib import Cell, Emitter
+from vxlib import Cell
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel.yaml"
 
@@ -105,9 +105,9 @@ def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrumen
     instrument._active_profile_id = Cell("single_gfp")
     instrument._routing_targets = Cell({})
     instrument._mode = Cell(AcquisitionMode.IDLE)
+    instrument._acquisition = Cell(None)
     instrument._lock = asyncio.Lock()
     instrument._acq_task = None
-    instrument.progress = Emitter()
     plan = [AcquisitionVolume(task="task-a", profile="single_gfp")]
     instrument._generate_plan = lambda _task_ids: plan
 
@@ -123,6 +123,8 @@ def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrumen
 
 async def test_acquisition_manifest_tracks_completed_dataset(monkeypatch, tmp_path: Path) -> None:
     instrument, catalog, storage = _instrument(tmp_path)
+    states: list[ActiveAcquisitionState | None] = []
+    instrument.acquisition.subscribe(states.append)
     monkeypatch.setattr(
         instrument_core,
         "resolve_storage",
@@ -132,9 +134,21 @@ async def test_acquisition_manifest_tracks_completed_dataset(monkeypatch, tmp_pa
     started = await instrument.start_acquisition(AcquisitionRequest(storage=storage, operator="operator"))
     await instrument.wait_acquisition()
 
-    persisted = await catalog.get(started.id)
+    persisted = await catalog.get(started.manifest.id)
     dataset = persisted.volumes[0].datasets["gfp"]
-    assert started.status is AcquisitionStatus.RUNNING
+    assert started.manifest.status is AcquisitionStatus.RUNNING
+    assert started.progress.task == "task-a"
+    assert started.progress.profile == "single_gfp"
+    assert started.progress.frames_captured == 0
+    assert started.progress.frames_total == 1
+    assert instrument.acquisition.value is None
+    assert states[-1] is None
+    assert any(
+        state is not None
+        and state.manifest.status is AcquisitionStatus.COMPLETED
+        and state.progress.frames_captured == state.progress.frames_total
+        for state in states
+    )
     assert persisted.status is AcquisitionStatus.COMPLETED
     assert persisted.volumes[0].status is VolumeStatus.COMPLETED
     assert dataset.status is DatasetStatus.COMPLETED
@@ -153,7 +167,7 @@ async def test_writer_close_failure_marks_dataset_and_acquisition_failed(tmp_pat
     started = await instrument.start_acquisition(AcquisitionRequest(storage=storage, operator="operator"))
     await instrument.wait_acquisition()
 
-    persisted = await catalog.get(started.id)
+    persisted = await catalog.get(started.manifest.id)
     dataset = persisted.volumes[0].datasets["gfp"]
     assert persisted.status is AcquisitionStatus.FAILED
     assert persisted.failure is not None

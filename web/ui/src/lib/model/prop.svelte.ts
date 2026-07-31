@@ -43,6 +43,8 @@ export type PropertyKind = 'integer' | 'float' | 'string' | 'bool' | 'generic';
 export interface PropOptions<T> {
   /** Callback invoked when patch() publishes upstream (e.g. backend write). */
   onPatch?: (value: T) => void;
+  /** Read live whenever mutation or rendering needs to know whether this model is writable. */
+  disabled?: () => boolean;
 }
 
 /**
@@ -81,10 +83,16 @@ export abstract class BasePropModel<T> {
   group: LinkGroup<this> | undefined = $state(undefined);
 
   #onPatch?: (value: T) => void;
+  #disabled: () => boolean;
 
   constructor(value: T, opts: PropOptions<T> = {}) {
     this.value = value;
     this.#onPatch = opts.onPatch;
+    this.#disabled = opts.disabled ?? (() => false);
+  }
+
+  get disabled(): boolean {
+    return this.#disabled();
   }
 
   /**
@@ -103,8 +111,10 @@ export abstract class BasePropModel<T> {
    * When linked, the value propagates to every peer in the group (each peer sets + publishes).
    */
   patch(value: T): void {
+    if (this.disabled) return;
     if (this.group) {
       for (const peer of this.group.members) {
+        if (peer.disabled) continue;
         peer.value = value;
         peer.publish(value);
       }
@@ -116,6 +126,7 @@ export abstract class BasePropModel<T> {
 
   /** Notify upstream without mutating local state. Subclasses use this when value was set some other way. */
   protected publish(value: T): void {
+    if (this.disabled) return;
     this.#onPatch?.(value);
   }
 }
@@ -326,6 +337,7 @@ export class NumericModel extends BasePropModel<number> {
    * group type is `BasePropModel<number>`) just get an immediate set + publish.
    */
   patch(value: number, opts: { throttled?: boolean } = {}): void {
+    if (this.disabled) return;
     // Resolve once at the entry — uses merged bounds when linked, raw bounds otherwise.
     const resolved = this.resolve(value);
     if (this.group) {
@@ -337,6 +349,7 @@ export class NumericModel extends BasePropModel<number> {
 
   /** Local-only: set this model's value and (throttled-)publish upstream. No group dispatch. */
   #setAndPublish(value: number, opts: { throttled?: boolean }): void {
+    if (this.disabled) return;
     this.value = value;
     if (opts.throttled) {
       if (this.#throttleTimer !== null) return;
@@ -443,14 +456,17 @@ export type AnyPropModel =
  *   - `kind` 'bool' → BoolModel
  *   - `kind` 'generic' (or unknown) → PropModel fallback
  */
-export function createPropModel(snapshot: PropSnapshot<unknown>, onPatch?: (value: unknown) => void): AnyPropModel {
+export function createPropModel(snapshot: PropSnapshot<unknown>, opts: PropOptions<unknown> = {}): AnyPropModel {
+  const { disabled, onPatch } = opts;
   if (snapshot.options != null) {
     if (snapshot.kind === 'integer') {
       return new EnumeratedModel<number>(snapshot.value as number, snapshot.options as number[], {
+        disabled,
         onPatch: onPatch as ((v: number) => void) | undefined
       });
     }
     return new EnumeratedModel<string>(snapshot.value as string, snapshot.options as string[], {
+      disabled,
       onPatch: onPatch as ((v: string) => void) | undefined
     });
   }
@@ -461,22 +477,25 @@ export function createPropModel(snapshot: PropSnapshot<unknown>, onPatch?: (valu
         min: snapshot.minimum,
         max: snapshot.maximum,
         step: snapshot.step,
+        disabled,
         onPatch: onPatch as ((v: number) => void) | undefined
       });
     case 'string':
       return new StringModel(snapshot.value as string, {
+        disabled,
         onPatch: onPatch as ((v: string) => void) | undefined
       });
     case 'bool':
       return new BoolModel(snapshot.value as boolean, {
+        disabled,
         onPatch: onPatch as ((v: boolean) => void) | undefined
       });
     case 'generic':
-      return new PropModel(snapshot.value, { onPatch });
+      return new PropModel(snapshot.value, { disabled, onPatch });
     default:
       // Unknown kind on the wire — degrade gracefully to fallback rather than throw.
       console.warn('[createPropModel] unknown kind, falling back to PropModel:', snapshot.kind);
-      return new PropModel(snapshot.value, { onPatch });
+      return new PropModel(snapshot.value, { disabled, onPatch });
   }
 }
 

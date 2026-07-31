@@ -1,9 +1,15 @@
+<script module lang="ts">
+  type InstrumentTab = 'overview' | 'state' | 'hardware' | 'acquisitions';
+
+  let rememberedTab: InstrumentTab = 'overview';
+</script>
+
 <script lang="ts">
   import { resolve } from '$app/paths';
   import { wavelengthToColor } from '$lib/colors.svelte';
   import { defaultDialog } from '$lib/DefaultConfigDialog.svelte';
   import { AlertCircleOutline, AlertOutline, Check, DotsSpinner, Minus, Record } from '$lib/icons';
-  import { Button, DiffJsonView, JsonView } from '$lib/kit';
+  import { Button, JsonView } from '$lib/kit';
   import type { AcquisitionManifest, HALConfig, InstrumentDefaults } from '$lib/model';
   import { cn, sanitizeString } from '$lib/utils';
 
@@ -27,11 +33,7 @@
     acquisitions?: AcquisitionManifest[];
   }
 
-  type InstrumentTab = 'overview' | 'state' | 'hardware' | 'acquisitions';
-
   const { hal, instrumentState, configurationInvalid = false, acquisitions }: Props = $props();
-
-  let activeTab = $state<InstrumentTab>('overview');
 
   const tabs = $derived<{ id: InstrumentTab; label: string }[]>([
     ...(hal || instrumentState
@@ -45,6 +47,8 @@
       ? [{ id: 'acquisitions' as const, label: `Acquisitions${acquisitions.length ? ` ${acquisitions.length}` : ''}` }]
       : [])
   ]);
+  let requestedTab = $state<InstrumentTab>(rememberedTab);
+  const activeTab = $derived(tabs.some(({ id }) => id === requestedTab) ? requestedTab : (tabs[0]?.id ?? 'overview'));
   const sortedAcquisitions = $derived(
     acquisitions
       ? [...acquisitions].sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
@@ -55,9 +59,10 @@
     timeStyle: 'short'
   });
 
-  $effect(() => {
-    if (!tabs.some((tab) => tab.id === activeTab) && tabs[0]) activeTab = tabs[0].id;
-  });
+  function selectTab(tab: InstrumentTab): void {
+    requestedTab = tab;
+    rememberedTab = tab;
+  }
 </script>
 
 {#snippet acquisitionStatus(status: AcquisitionManifest['status'])}
@@ -80,16 +85,16 @@
 {/snippet}
 
 <div class="flex h-full min-h-0 flex-col">
-  <nav class="flex shrink-0 gap-1 border-b border-border" aria-label="Instrument views">
+  <nav class="-mx-5 mt-1 flex shrink-0 gap-5 border-b border-border bg-surface px-4" aria-label="Instrument views">
     {#each tabs as tab (tab.id)}
       <button
         class={cn(
-          'border-b-2 px-2 py-1.5 transition-colors',
+          'min-w-[5ch] border-b-2 py-1.5 transition-colors',
           activeTab === tab.id ? 'border-fg text-fg' : 'border-transparent text-fg-muted hover:text-fg'
         )}
         type="button"
         aria-current={activeTab === tab.id ? 'page' : undefined}
-        onclick={() => (activeTab = tab.id)}
+        onclick={() => selectTab(tab.id)}
       >
         {tab.label}
       </button>
@@ -183,7 +188,7 @@
         <div class="p-4 text-fg-muted">The state could not be parsed.</div>
       {/if}
     {:else if activeTab === 'state'}
-      <div class="p-4">
+      <div class="py-4 pt-3">
         {#if instrumentState}
           <section>
             <div class="mb-2 flex items-center gap-3">
@@ -202,7 +207,7 @@
               {/if}
             </div>
             {#if instrumentState.kind === 'bench' && instrumentState.activeDefaults}
-              <DiffJsonView data={instrumentState.value} base={instrumentState.activeDefaults} expandDepth={1} />
+              <JsonView data={instrumentState.value} baseline={instrumentState.activeDefaults} expandDepth={1} />
             {:else}
               <JsonView data={instrumentState.value} expandDepth={1} />
             {/if}
@@ -214,7 +219,7 @@
         {/if}
       </div>
     {:else if activeTab === 'hardware'}
-      <div class="p-4">
+      <div class="py-4">
         {#if hal}
           <section>
             <h2 class="mb-2 text-base font-medium tracking-wide text-fg-muted uppercase">Hardware</h2>

@@ -13,7 +13,6 @@ export * as Sheet from './cn/sheet';
 export { Toaster } from './cn/sonner';
 export { Spinner } from './cn/spinner';
 export { default as ColorPicker } from './ColorPicker.svelte';
-export { default as DiffJsonView } from './DiffJsonView.svelte';
 export { default as Field } from './Field.svelte';
 export { default as JsonView } from './JsonView.svelte';
 export { default as Label } from './Label.svelte';

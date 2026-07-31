@@ -2,6 +2,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 
 import { wavelengthToColor } from '$lib/colors.svelte';
+import { toastError } from '$lib/utils';
 import { parseVec2D, type Vec2D } from '$lib/utils/vec';
 
 import { Client } from './client.svelte';
@@ -30,9 +31,11 @@ export class DeviceHandle {
   props = new SvelteMap<string, Prop>();
 
   #client: Client;
+  #disabled: () => boolean;
 
-  constructor(client: Client, snapshot: DeviceSnapshot) {
+  constructor(client: Client, snapshot: DeviceSnapshot, disabled: () => boolean) {
     this.#client = client;
+    this.#disabled = disabled;
     this.id = snapshot.id;
     this.applySnapshot(snapshot);
   }
@@ -81,7 +84,10 @@ export class DeviceHandle {
     }
     const info = this.interface?.properties?.[name];
     if (!info) return;
-    const model = createPropModel(snapshot, (value) => void this.setProps({ [name]: value }));
+    const model = createPropModel(snapshot, {
+      disabled: this.#disabled,
+      onPatch: (value) => toastError(this.setProps({ [name]: value }))
+    });
     this.props.set(name, new Prop(model, info));
   }
 
@@ -412,19 +418,19 @@ export class CameraHandle extends DeviceHandle {
 }
 
 /** Instantiate the typed handle matching a device's introspected `interface.type`. */
-export function createDevice(client: Client, snapshot: DeviceSnapshot): DeviceHandle {
+export function createDevice(client: Client, snapshot: DeviceSnapshot, disabled: () => boolean): DeviceHandle {
   switch (snapshot.interface?.type) {
     case 'camera':
-      return new CameraHandle(client, snapshot);
+      return new CameraHandle(client, snapshot, disabled);
     case 'laser':
-      return new LaserHandle(client, snapshot);
+      return new LaserHandle(client, snapshot, disabled);
     case 'continuous_axis':
-      return new AxisHandle(client, snapshot);
+      return new AxisHandle(client, snapshot, disabled);
     case 'discrete_axis':
-      return new DiscreteAxisHandle(client, snapshot);
+      return new DiscreteAxisHandle(client, snapshot, disabled);
     case 'signal_generator':
-      return new SignalGeneratorHandle(client, snapshot);
+      return new SignalGeneratorHandle(client, snapshot, disabled);
     default:
-      return new DeviceHandle(client, snapshot);
+      return new DeviceHandle(client, snapshot, disabled);
   }
 }

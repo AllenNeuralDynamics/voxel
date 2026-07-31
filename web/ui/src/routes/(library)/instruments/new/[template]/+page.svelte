@@ -55,7 +55,7 @@
     try {
       await app.launchTemplate(name, instance);
       createDialogOpen = false;
-      await goto(resolve(`/instruments/${instance}` as '/'));
+      await goto(resolve('/configure'));
     } catch (error) {
       createDialogOpen = false;
       createFailure = parseViolations(error);

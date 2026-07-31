@@ -222,7 +222,7 @@
         isDiverged ? 'cursor-pointer hover:text-fg' : 'cursor-default',
         !hasSaved && 'invisible'
       )}
-      disabled={!isDiverged}
+      disabled={!isDiverged || prop.model.disabled}
       title={isDiverged ? 'Double-click to revert to saved' : undefined}
       ondblclick={() => toastError(device.setProps({ [name]: saved }))}
     >

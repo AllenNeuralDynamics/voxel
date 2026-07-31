@@ -1,24 +1,19 @@
-"""Device state store for Voxel application.
-
-Bridges the rig's device handles to Qt: builds a :class:`DeviceHandleQt` adapter per device on
-the active instrument's HAL and exposes them for widgets to read state and subscribe to property
-updates. This is hardware-bridge code — it rides rigup's property stream, independent of the bench.
-"""
+"""Qt adapters for the active instrument's controlled device API."""
 
 import logging
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from rigup import DeviceHandle, PropertyModel, PropResults
-from vxl.instrument.hal import HAL
-from vxlib import fire_and_forget
+from rigup import DeviceInterface, PropertyModel, PropResults
+from vxl.instrument import Instrument
+from vxlib import Teardown, fire_and_forget
 
 log = logging.getLogger(__name__)
 
 
 class DeviceHandleQt(QObject):
-    """Bridges a DeviceHandle's async operations to Qt signals.
+    """Bridges one instrument-owned device to Qt signals.
 
     This adapter:
     - Subscribes to device property streaming
@@ -26,7 +21,7 @@ class DeviceHandleQt(QObject):
     - Provides a clean interface for widgets to call device commands
 
     Usage:
-        adapter = DeviceHandleAdapter(handle)
+        adapter = DeviceHandleQt(instrument, interface)
         adapter.properties_changed.connect(self._on_props)
         await adapter.start()
 
@@ -39,22 +34,25 @@ class DeviceHandleQt(QObject):
     connected = Signal(bool)  # Connection status change
     fault = Signal(str)  # Error message
 
-    def __init__(self, handle: DeviceHandle, parent: QObject | None = None) -> None:
+    def __init__(self, instrument: Instrument, interface: DeviceInterface, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._handle = handle
+        self._instrument = instrument
+        self._interface = interface
+        self._uid = interface.uid
+        self._unsubscribe: Teardown | None = None
         self._started = False
         self._models: dict[str, PropertyModel] = {}  # latest full model per property (value + options/bounds)
-        self.log = logging.getLogger(f"{self.__class__.__name__}[{handle.uid}]")
-
-    @property
-    def handle(self) -> DeviceHandle:
-        """Access the underlying DeviceHandle."""
-        return self._handle
+        self.log = logging.getLogger(f"{self.__class__.__name__}[{self._uid}]")
 
     @property
     def uid(self) -> str:
         """Device unique identifier."""
-        return self._handle.uid
+        return self._uid
+
+    @property
+    def kind(self) -> str:
+        """Device interface type."""
+        return self._interface.type
 
     async def start(self) -> None:
         """Start the adapter and subscribe to device property updates."""
@@ -62,8 +60,7 @@ class DeviceHandleQt(QObject):
             return
 
         try:
-            # Subscribe to property updates
-            self._handle.props.subscribe(self._on_properties)
+            self._unsubscribe = self._instrument.device_property_updates.subscribe(self._on_device_properties)
             self._started = True
             self.connected.emit(True)
             self.log.info("Adapter started")
@@ -82,11 +79,10 @@ class DeviceHandleQt(QObject):
     async def _emit_initial_properties(self) -> None:
         """Fetch all properties and emit them to initialize widgets."""
         try:
-            iface = await self._handle.interface()
-            prop_names = list(iface.properties.keys())
+            prop_names = list(self._interface.properties)
             self.log.debug("Fetching initial properties: %s", prop_names)
             if prop_names:
-                props = await self._handle.props.get(*prop_names)
+                props = await self._instrument.get_device_properties(self._uid, prop_names)
                 self.log.debug("Got initial properties: %s", list(props.ok.keys()))
                 await self._on_properties(props)
         except Exception as e:
@@ -98,7 +94,9 @@ class DeviceHandleQt(QObject):
             return
 
         try:
-            # DeviceHandle cleanup is handled by the rig
+            if self._unsubscribe is not None:
+                self._unsubscribe()
+                self._unsubscribe = None
             self._started = False
             self.connected.emit(False)
             self.log.info("Adapter stopped")
@@ -111,6 +109,12 @@ class DeviceHandleQt(QObject):
         """Cache the full property models (value + options/bounds), then emit bare values to widgets."""
         self._models.update(props.ok)
         self.properties_changed.emit({name: model.value for name, model in props.ok.items()})
+
+    async def _on_device_properties(self, update: tuple[str, PropResults]) -> None:
+        """Forward property updates for this adapter's device."""
+        device_id, props = update
+        if device_id == self._uid:
+            await self._on_properties(props)
 
     def model(self, name: str) -> PropertyModel | None:
         """Latest full model for ``name`` — its value plus any enumerated options / numeric bounds."""
@@ -131,7 +135,8 @@ class DeviceHandleQt(QObject):
             Exception: If command fails
         """
         try:
-            return await self._handle.call(command, *args, **kwargs)
+            result = await self._instrument.execute_device_command(self._uid, command, args, kwargs)
+            return result.unwrap()
         except Exception as e:
             self.log.exception(f"Command {command} failed")
             self.fault.emit(f"Command {command} failed: {e}")
@@ -146,7 +151,9 @@ class DeviceHandleQt(QObject):
         Returns:
             Property value
         """
-        return await self._handle.props.get_value(property_name)
+        props = await self._instrument.get_device_properties(self._uid, [property_name])
+        await self._on_properties(props)
+        return props[property_name].unwrap().value
 
     async def set(self, property_name: str, value: Any) -> None:
         """Set a property value.
@@ -155,15 +162,16 @@ class DeviceHandleQt(QObject):
             property_name: Property name
             value: New value
         """
-        await self._handle.props.set(**{property_name: value})
+        results = await self._instrument.set_device_properties(self._uid, {property_name: value})
+        results.unwrap()
 
-    async def interface(self):
+    async def interface(self) -> DeviceInterface:
         """Get the device interface (introspection).
 
         Returns:
             DeviceInterface with properties, commands, etc.
         """
-        return await self._handle.interface()
+        return self._interface
 
     async def device_type(self) -> str:
         """Get the device type.
@@ -171,18 +179,18 @@ class DeviceHandleQt(QObject):
         Returns:
             Device type string
         """
-        return (await self._handle.interface()).type
+        return self._interface.type
 
 
 class DevicesStore(QObject):
     """Manages device handles and their Qt adapters for the UI.
 
-    Creates a :class:`DeviceHandleQt` adapter for every device on the instrument's HAL and provides
+    Creates a :class:`DeviceHandleQt` adapter for every device exposed by the instrument and provides
     access methods for widgets to query device state and subscribe to property updates.
 
     Usage:
         store = DevicesStore()
-        await store.start(instrument.hal)
+        await store.start(instrument)
 
         adapter = store.get_adapter("laser_488")
         adapter.properties_changed.connect(self._on_laser_props)
@@ -196,32 +204,31 @@ class DevicesStore(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._hal: HAL | None = None
+        self._instrument: Instrument | None = None
         self._adapters: dict[str, DeviceHandleQt] = {}
         self._started = False
         self._property_cache: dict[str, dict[str, Any]] = {}
-
-    @property
-    def hal(self) -> HAL | None:
-        """The HAL whose devices this store is bridging, or None before start."""
-        return self._hal
 
     @property
     def adapters(self) -> dict[str, DeviceHandleQt]:
         """All device adapters by device ID."""
         return self._adapters
 
-    async def start(self, hal: HAL) -> None:
-        """Create and start adapters for every device on ``hal``."""
+    async def start(self, instrument: Instrument) -> None:
+        """Inspect the instrument and create adapters for its available devices."""
         if self._started:
             log.warning("DevicesStore already started")
             return
 
-        self._hal = hal
-        log.info("Starting DevicesStore with %d devices", len(hal.devices))
+        self._instrument = instrument
+        snapshots = await instrument.inspect_devices()
+        log.info("Starting DevicesStore with %d devices", len(snapshots))
 
-        for uid, handle in hal.devices.items():
-            adapter = DeviceHandleQt(handle, parent=self)
+        for uid, snapshot in snapshots.items():
+            if snapshot.interface is None:
+                log.warning("Skipping unavailable device %s: %s", uid, snapshot.error)
+                continue
+            adapter = DeviceHandleQt(instrument, snapshot.interface, parent=self)
             adapter.properties_changed.connect(lambda props, uid=uid: self._on_properties(uid, props))
 
             await adapter.start()
@@ -246,7 +253,7 @@ class DevicesStore(QObject):
 
         self._adapters.clear()
         self._property_cache.clear()
-        self._hal = None
+        self._instrument = None
         self._started = False
 
     def _on_properties(self, device_id: str, props: dict[str, Any]) -> None:
@@ -257,11 +264,6 @@ class DevicesStore(QObject):
     def get_adapter(self, device_id: str) -> DeviceHandleQt | None:
         """Get the Qt adapter for a device."""
         return self._adapters.get(device_id)
-
-    def get_handle(self, device_id: str) -> DeviceHandle | None:
-        """Get the underlying DeviceHandle for a device."""
-        adapter = self._adapters.get(device_id)
-        return adapter.handle if adapter else None
 
     def get_property(self, device_id: str, prop_name: str) -> Any | None:
         """Get a cached property value.
@@ -280,25 +282,24 @@ class DevicesStore(QObject):
 
     def get_lasers(self) -> dict[str, DeviceHandleQt]:
         """Get all laser device adapters."""
-        if self._hal is None:
-            return {}
-        return {uid: self._adapters[uid] for uid in self._hal.lasers if uid in self._adapters}
+        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "laser"}
 
     def get_cameras(self) -> dict[str, DeviceHandleQt]:
         """Get all camera device adapters."""
-        if self._hal is None:
-            return {}
-        return {uid: self._adapters[uid] for uid in self._hal.cameras if uid in self._adapters}
+        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "camera"}
 
     def get_filter_wheels(self) -> dict[str, DeviceHandleQt]:
         """Get all filter wheel device adapters."""
-        if self._hal is None:
+        if self._instrument is None:
             return {}
-        return {uid: self._adapters[uid] for uid in self._hal.fws if uid in self._adapters}
+        return {
+            uid: self._adapters[uid] for uid in self._instrument.hardware_config.filter_wheels if uid in self._adapters
+        }
 
     def get_stage_axes(self) -> dict[str, DeviceHandleQt]:
         """Get stage axis adapters (x, y, z)."""
-        if self._hal is None:
+        if self._instrument is None:
             return {}
-        stage_ids = [self._hal.config.stage.x, self._hal.config.stage.y, self._hal.config.stage.z]
+        stage = self._instrument.hardware_config.stage
+        stage_ids = [stage.x, stage.y, stage.z]
         return {uid: self._adapters[uid] for uid in stage_ids if uid in self._adapters}

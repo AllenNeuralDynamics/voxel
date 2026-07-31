@@ -1,6 +1,5 @@
 """Filter wheel device control widget."""
 
-import asyncio
 import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
@@ -39,15 +38,6 @@ class FilterWheelControl(QWidget):
         adapter = devices_manager.get_adapter("filter_wheel_1")
         widget = FilterWheelControl(adapter)
 
-    Example (standalone):
-        from vxl_drivers.axes.simulated import SimulatedDiscreteAxis
-        from vxl_qt.handle import create_local_handle, DeviceHandleQt
-
-        device = SimulatedDiscreteAxis(uid="fw", slots={0: "GFP", 1: "RFP"}, slot_count=6)
-        handle = create_local_handle(device)
-        adapter = DeviceHandleQt(handle)
-        await adapter.start()
-        widget = FilterWheelControl(adapter)
     """
 
     def __init__(
@@ -213,59 +203,3 @@ class FilterWheelControl(QWidget):
         log.error("Filter wheel fault: %s", message)
         if self._status_label is not None:
             self._status_label.setText(f"Error: {message}")
-
-
-# Demo code for standalone testing
-if __name__ == "__main__":
-    import sys
-
-    from PySide6.QtWidgets import QApplication, QMainWindow
-    from qasync import QEventLoop, asyncSlot
-    from rigup.node import LocalAdapter
-
-    from rigup import DeviceController, DeviceHandle
-    from vxl.axes.simulated import SimulatedDiscreteAxis
-    from vxl_qt.devices.adapter import DeviceHandleQt
-
-    class FilterWheelDemo(QMainWindow):
-        def __init__(self) -> None:
-            super().__init__()
-            self.setWindowTitle("Filter Wheel Control Demo")
-            self.setGeometry(100, 100, 400, 500)
-
-        @asyncSlot()
-        async def setup(self) -> None:
-            device = SimulatedDiscreteAxis(
-                uid="demo-fw",
-                slots={0: "GFP", 1: "RFP", 2: "DAPI", 3: "Cy5"},
-                slot_count=6,
-            )
-
-            controller = DeviceController(device)
-            controller.start_streaming()
-            handle = DeviceHandle(LocalAdapter(controller))
-            self._adapter = DeviceHandleQt(handle)
-            await self._adapter.start()
-
-            # Create the control widget
-            hue_mapping = {
-                "GFP": 120,  # Green
-                "RFP": 0,  # Red
-                "DAPI": 240,  # Blue
-                "Cy5": 300,  # Magenta
-            }
-            widget = FilterWheelControl(self._adapter, hue_mapping=hue_mapping)
-            self.setCentralWidget(widget)
-
-    app = QApplication(sys.argv)
-
-    # Set up async event loop
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
-
-    demo = FilterWheelDemo()
-    demo.show()
-
-    with loop:
-        loop.run_until_complete(demo.setup())
-        loop.run_forever()
