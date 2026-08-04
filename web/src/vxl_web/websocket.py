@@ -34,6 +34,8 @@ type ClientId = str
 type CommandHandler[T] = Callable[[T, ClientId], Awaitable[None]]
 type PreviewKey = tuple[str, PreviewLayer]
 
+PREVIEW_DISCONNECT_GRACE_SECONDS = 2.0
+
 
 class _MsgQueue:
     """Bounded FIFO that silently drops the oldest message when full."""
@@ -273,6 +275,8 @@ class PreviewHub:
     def __init__(self, app: VoxelApp) -> None:
         self._app = app
         self._clients: set[_PreviewClient] = set()
+        self._instrument: Instrument | None = None
+        self._disconnect_stop_task: asyncio.Task[None] | None = None
         self._app_unsub: Teardown | None = None
         self._instrument_unsubs: list[Teardown] = []
 
@@ -296,6 +300,7 @@ class PreviewHub:
     async def serve(self, websocket: WebSocket) -> None:
         """Accept and retain one peer until either side disconnects."""
         await websocket.accept()
+        self._cancel_disconnect_stop()
         client = _PreviewClient(websocket)
         self._clients.add(client)
         try:
@@ -305,6 +310,8 @@ class PreviewHub:
         finally:
             self._clients.discard(client)
             await client.close()
+            if not self._clients:
+                self._schedule_disconnect_stop()
 
     def publish(self, item: tuple[str, PreviewLayer, bytes]) -> None:
         """Offer an opaque packet to every client without waiting for network delivery."""
@@ -314,9 +321,11 @@ class PreviewHub:
             client.publish(key, frame)
 
     def _set_instrument(self, instrument: Instrument | None) -> None:
+        self._cancel_disconnect_stop()
         for unsub in self._instrument_unsubs:
             unsub()
         self._instrument_unsubs = []
+        self._instrument = instrument
         self._clear_pending()
         if instrument is None:
             return
@@ -328,3 +337,35 @@ class PreviewHub:
     def _clear_pending(self) -> None:
         for client in tuple(self._clients):
             client.clear_pending()
+
+    def _schedule_disconnect_stop(self) -> None:
+        instrument = self._instrument
+        if instrument is None or self._clients or self._disconnect_stop_task is not None:
+            return
+        self._disconnect_stop_task = asyncio.create_task(
+            self._stop_unobserved_preview(instrument),
+            name="preview-stop-after-disconnect",
+        )
+
+    def _cancel_disconnect_stop(self) -> None:
+        if self._disconnect_stop_task is None:
+            return
+        task, self._disconnect_stop_task = self._disconnect_stop_task, None
+        task.cancel()
+
+    async def _stop_unobserved_preview(self, instrument: Instrument) -> None:
+        current = asyncio.current_task()
+        try:
+            await asyncio.sleep(PREVIEW_DISCONNECT_GRACE_SECONDS)
+            if self._clients or self._instrument is not instrument:
+                return
+            # Once the grace period expires, let shutdown finish even if a client connects concurrently.
+            # Instrument.stop_preview() is a safe no-op while idle or acquiring.
+            if self._disconnect_stop_task is current:
+                self._disconnect_stop_task = None
+            await instrument.stop_preview()
+        except Exception:
+            log.exception("Failed to stop preview after the last client disconnected")
+        finally:
+            if self._disconnect_stop_task is current:
+                self._disconnect_stop_task = None

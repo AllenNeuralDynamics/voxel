@@ -82,6 +82,18 @@
   }
 </script>
 
+{#snippet swatch(value: string, name: string, gradient: string)}
+  <button
+    type="button"
+    onclick={() => pick(value)}
+    class="swatch-row {colormapPreference === value ? 'selected' : ''}"
+    aria-label="Select colormap {name}"
+  >
+    <span class="swatch-gradient" style="background: {gradient}"></span>
+    <span class="truncate text-xs text-fg-muted">{name}</span>
+  </button>
+{/snippet}
+
 <Popover.Root bind:open>
   <Popover.Trigger
     class={`${triggerClass ?? defaultTriggerClass} flex w-full items-center gap-2`}
@@ -94,7 +106,7 @@
 
   <Popover.Portal>
     <Popover.Content
-      class="z-50 flex flex-col-reverse rounded-t border border-border bg-floating shadow-xl outline-none {width
+      class="z-50 flex flex-col-reverse rounded-t border border-border bg-surface shadow-xl outline-none {width
         ? ''
         : 'w-72'}"
       style={width ? `width: ${width}px;` : undefined}
@@ -107,7 +119,7 @@
           type="text"
           bind:value={search}
           placeholder="Search colormaps..."
-          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-input bg-element-bg px-1.5 text-base text-fg placeholder-fg-muted focus:outline-none"
+          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-input bg-element-bg px-1.5 text-sm text-fg placeholder-fg-muted focus:outline-none"
         />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
@@ -121,7 +133,7 @@
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content
-              class="z-60 min-w-32 rounded border border-border bg-floating p-1 shadow-xl outline-none"
+              class="z-60 min-w-32 rounded border border-border bg-surface p-1 shadow-xl outline-none"
               side="top"
               sideOffset={4}
               align="end"
@@ -136,7 +148,7 @@
                     else next.add(group.uid);
                     hiddenGroups = next;
                   }}
-                  class="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-base text-fg-muted outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg"
+                  class="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-xs text-fg-muted outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg"
                 >
                   {#snippet children({ checked })}
                     <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center">
@@ -155,51 +167,27 @@
 
       <div class="max-h-80 overflow-y-auto border-y border-border px-2">
         <div class="swatch-grid py-2">
-          <button
-            type="button"
-            onclick={() => pick(AUTO_COLORMAP)}
-            class="swatch-row {colormapPreference === AUTO_COLORMAP ? 'selected' : ''}"
-            aria-label="Select automatic colormap"
-          >
-            <span class="swatch-gradient" style="background: {autoGradient}"></span>
-            <span class="truncate text-base text-fg-muted">auto</span>
-          </button>
+          {@render swatch(AUTO_COLORMAP, 'auto', autoGradient)}
         </div>
         {#if searchResults}
           {#if searchResults.length > 0}
             <div class="swatch-grid pb-2">
               {#each searchResults as { name, stops } (name)}
-                <button
-                  type="button"
-                  onclick={() => pick(name)}
-                  class="swatch-row {colormapPreference === name ? 'selected' : ''}"
-                  aria-label="Select colormap {name}"
-                >
-                  <span class="swatch-gradient" style="background: {colormapGradient(stops)}"></span>
-                  <span class="truncate text-base text-fg-muted">{name}</span>
-                </button>
+                {@render swatch(name, name, colormapGradient(stops))}
               {/each}
             </div>
           {:else}
-            <div class="pb-2 text-base text-fg-muted">No matches</div>
+            <div class="pb-2 text-xs text-fg-muted">No matches</div>
           {/if}
         {:else}
           {#each catalog as group (group.uid)}
             {#if !hiddenGroups.has(group.uid)}
-              <div class="pt-1 pb-0.5 text-base font-medium tracking-wide text-fg-muted uppercase">
+              <div class="pt-1 pb-0.5 text-xs font-medium tracking-wide text-fg-muted uppercase">
                 {group.label}
               </div>
               <div class="swatch-grid pb-2">
                 {#each Object.entries(group.colormaps) as [name, stops] (name)}
-                  <button
-                    type="button"
-                    onclick={() => pick(name)}
-                    class="swatch-row {colormapPreference === name ? 'selected' : ''}"
-                    aria-label="Select colormap {name}"
-                  >
-                    <span class="swatch-gradient" style="background: {colormapGradient(stops)}"></span>
-                    <span class="truncate text-base text-fg-muted">{name}</span>
-                  </button>
+                  {@render swatch(name, name, colormapGradient(stops))}
                 {/each}
               </div>
             {/if}
@@ -216,7 +204,7 @@
           }}
           placeholder={triggerColor}
           size="5"
-          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-element-bg px-1.5 font-mono text-base text-fg placeholder:text-fg-muted focus:outline-none"
+          class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-element-bg px-1.5 font-mono text-xs text-fg placeholder:text-fg-muted focus:outline-none"
           style:--hex-color={triggerColor}
         />
         <button
@@ -235,7 +223,7 @@
 <style>
   .swatch-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
     gap: 0.43rem 0.125rem;
   }
 

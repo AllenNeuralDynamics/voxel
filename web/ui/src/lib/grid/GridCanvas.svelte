@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte';
 
-  import { GridLines, ImageLight, PathLight, StackLight } from '$lib/icons';
+  import { GridLines, PathLight, StackLight } from '$lib/icons';
   import { type Instrument } from '$lib/model';
   import StencilControls from '$lib/StencilControls.svelte';
 
@@ -15,13 +15,12 @@
 
   let { instrument }: Props = $props();
 
-  let layers = $state<LayerVisibility>({ grid: true, tasks: true, path: true, fov: true, thumbnail: true });
+  let layers = $state<LayerVisibility>({ grid: true, tasks: true, path: true, fov: true });
 
   const layerItems: { key: keyof LayerVisibility; color: string; Icon: Component; title: string }[] = [
     { key: 'grid', color: 'text-fg-muted', Icon: GridLines, title: 'Toggle grid' },
     { key: 'tasks', color: 'text-info', Icon: StackLight, title: 'Toggle tasks' },
-    { key: 'path', color: 'text-warning', Icon: PathLight, title: 'Toggle traversal path' },
-    { key: 'thumbnail', color: 'text-success', Icon: ImageLight, title: 'Toggle thumbnail' }
+    { key: 'path', color: 'text-warning', Icon: PathLight, title: 'Toggle traversal path' }
   ];
 </script>
 

@@ -43,7 +43,7 @@
 
   // ── Constants ─────────────────────────────────────────────────────
 
-  const svgHeight = 30;
+  const svgHeight = 36;
   const labelWidth = 36;
   const labelGap = 4;
   const gradientId = `ch-grad-${Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
@@ -367,7 +367,7 @@
     </svg>
   {:else}
     <div class="flex items-center justify-center" style:height="{svgHeight}px">
-      <span class="text-[10px] text-fg-faint">No histogram data</span>
+      <span class="text-[10px] text-fg-muted">No histogram data</span>
     </div>
   {/if}
 {/snippet}

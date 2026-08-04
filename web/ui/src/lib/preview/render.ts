@@ -125,6 +125,17 @@ export function resolveColormapStops(colormap: string | null, catalog: ColormapC
   return [BLACK, WHITE];
 }
 
+/** Highest-intensity color for labels and markers; null when the colormap cannot be resolved. */
+export function resolveColormapColor(colormap: string | null, catalog: ColormapCatalog): string | null {
+  if (!colormap) return null;
+  if (colormap.startsWith('#')) return colormap;
+  for (const group of catalog) {
+    const stops = group.colormaps[colormap];
+    if (stops?.length) return stops[stops.length - 1];
+  }
+  return null;
+}
+
 export function colormapGradient(stops: string[]): string {
   return `linear-gradient(to right, ${normalizeColormapStops(stops).join(', ')})`;
 }
@@ -219,7 +230,7 @@ export class PreviewGpuRenderer {
 
   async render(
     canvas: HTMLCanvasElement,
-    channels: PreviewRenderChannel[],
+    channels: readonly PreviewRenderChannel[],
     viewport: PreviewViewport,
     catalog: ColormapCatalog
   ): Promise<void> {
@@ -228,7 +239,7 @@ export class PreviewGpuRenderer {
 
   async renderFull(
     canvas: HTMLCanvasElement,
-    channels: PreviewRenderChannel[],
+    channels: readonly PreviewRenderChannel[],
     catalog: ColormapCatalog
   ): Promise<void> {
     await this.#render(canvas, channels, FULL_VIEWPORT, catalog);
@@ -236,7 +247,7 @@ export class PreviewGpuRenderer {
 
   async #render(
     canvas: HTMLCanvasElement,
-    channels: PreviewRenderChannel[],
+    channels: readonly PreviewRenderChannel[],
     viewport: PreviewViewport,
     catalog: ColormapCatalog
   ): Promise<void> {
@@ -467,10 +478,12 @@ function normalizedRect(header?: PreviewSourceHeader): [number, number, number, 
   ];
 }
 
-function channelBoundingBox(channels: PreviewRenderChannel[]): { maxW: number; maxH: number } {
+/** Bounding-box extents across visible channels in stage orientation. */
+export function channelBoundingBox(channels: readonly PreviewRenderChannel[]): { maxW: number; maxH: number } {
   let maxW = 0;
   let maxH = 0;
   for (const channel of channels) {
+    if (!channel.visible || channel.sensorWidth <= 0 || channel.sensorHeight <= 0) continue;
     const swapped = normalizedQuarterTurns(channel.rotationDeg) % 2 !== 0;
     maxW = Math.max(maxW, swapped ? channel.sensorHeight : channel.sensorWidth);
     maxH = Math.max(maxH, swapped ? channel.sensorWidth : channel.sensorHeight);

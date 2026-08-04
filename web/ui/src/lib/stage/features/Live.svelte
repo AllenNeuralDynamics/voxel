@@ -5,6 +5,8 @@
   import { Eye, EyeOff, VideoCamera } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
+  import PreviewDetails from '$lib/preview/PreviewDetails.svelte';
+  import { getPreviewContext } from '$lib/preview/session.svelte';
   import { pref } from '$lib/utils';
 
   import type { Bounds, Painter } from '../draw';
@@ -14,10 +16,11 @@
   type LiveHit = { readonly overTile: true };
 
   const app = getVoxelApp();
+  const previews = getPreviewContext();
   const scene = getStageScene();
   const instrument = $derived(app.instrument);
-  const preview = $derived(instrument?.preview ?? null);
-  const active = $derived(preview?.isActive ?? false);
+  const preview = $derived(previews.current);
+  const active = $derived(preview !== null && instrument?.mode !== 'idle');
 
   // Manual show/hide, remembered across sessions; gates the layer while preview or capture is active.
   const show = pref('stage:live-visible', true);
@@ -74,6 +77,17 @@
     return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY ? { overTile: true } : null;
   }
 
+  function nativeScale(): number | null {
+    const fov = instrument?.stage.fov;
+    if (!preview || !fov || fov[0] <= 0 || fov[1] <= 0) return null;
+    let best = 0;
+    for (const channel of preview.channels) {
+      if (!channel.visible || channel.sensorWidth <= 0) continue;
+      best = Math.max(best, channel.sensorWidth / fov[0], channel.sensorHeight / fov[1]);
+    }
+    return best > 0 ? best : null;
+  }
+
   const layer: StageLayer<LiveHit> = {
     id: 'live',
     z: 1, // "now" sits above snapshots (0) and inpaint (-1); the green pose marker is chrome above all
@@ -84,7 +98,7 @@
     hitTest,
     onActivate: () => app.viewMode.set('live'), // double-click the live tile → full live view
     menu: liveMenu,
-    maxScale: () => preview?.nativeScale() ?? null // zoom in to the camera's native resolution, no further
+    maxScale: nativeScale // zoom in to the camera's native resolution, no further
   };
   useLayer(layer);
 
@@ -118,4 +132,5 @@
       {#if show.get()}<Eye width="16" height="16" />{:else}<EyeOff width="16" height="16" />{/if}
     </button>
   </div>
+  {#if preview}<PreviewDetails previewer={preview} />{/if}
 </div>

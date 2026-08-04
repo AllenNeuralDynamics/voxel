@@ -5,7 +5,8 @@
 
   import { Crosshair, FitToScreen, FolderMoveOutline, ImageMultiple, Layers, Plus, TrashCanOutline } from '$lib/icons';
   import { ContextMenu, HoverCard, Rename } from '$lib/kit';
-  import { getVoxelApp, type Instrument, type Snapshot, type SnapshotGroup } from '$lib/model';
+  import { getVoxelApp, type Snapshot, type SnapshotGroup } from '$lib/model';
+  import { resolveColormapColor } from '$lib/preview/render';
   import { cn, toastError, trimFloat } from '$lib/utils';
 
   import type { Bounds, Painter } from '../draw';
@@ -227,7 +228,7 @@
     for (const t of gTiles) {
       for (const ch of Object.values(t.channels)) {
         if (!(ch.label in seen))
-          seen[ch.label] = instrument?.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)';
+          seen[ch.label] = resolveColormapColor(ch.colormap, app.discovery.colormaps) ?? 'var(--color-fg-muted)';
       }
     }
     return Object.entries(seen).map(([label, color]) => ({ label, color }));
@@ -282,7 +283,7 @@
   });
 </script>
 
-{#snippet snapshotInfoCard(snap: Snapshot, inst: Instrument)}
+{#snippet snapshotInfoCard(snap: Snapshot)}
   <div class="flex flex-col divide-y divide-border/50 text-base">
     <div class="flex flex-col gap-1 px-2.5 py-2">
       <div class="flex items-center justify-between gap-2">
@@ -308,7 +309,7 @@
     </div>
 
     {#each Object.entries(snap.channels) as [name, ch] (name)}
-      {@const color = inst.preview.resolveColor(ch.colormap) ?? 'var(--color-fg-muted)'}
+      {@const color = resolveColormapColor(ch.colormap, app.discovery.colormaps) ?? 'var(--color-fg-muted)'}
       <div class="flex flex-col gap-1 px-2.5 py-2">
         <div class="flex items-center gap-1.5">
           <span class="h-2 w-2 shrink-0 rounded-full" style:background-color={color}></span>
@@ -460,7 +461,7 @@
           </HoverCard.Trigger>
           {#if instrument}
             <HoverCard.Content class="w-60" side="left" sideOffset={12} align="start">
-              {@render snapshotInfoCard(snap, instrument)}
+              {@render snapshotInfoCard(snap)}
             </HoverCard.Content>
           {/if}
         </HoverCard.Root>

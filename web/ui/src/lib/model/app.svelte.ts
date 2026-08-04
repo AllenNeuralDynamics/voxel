@@ -17,8 +17,6 @@ import {
   SignalGeneratorHandle
 } from './device.svelte';
 import { Inpainter } from './inpaint.svelte';
-import { Preview } from './preview.svelte';
-import type { SnapshotChannel } from './snapshots.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionManifest,
@@ -28,7 +26,6 @@ import type {
   AppDiscovery,
   AppStatus,
   ChannelPatch,
-  ColormapCatalog,
   DeviceSnapshot,
   HALConfig,
   InstrumentDefaults,
@@ -36,7 +33,6 @@ import type {
   JsonSchema,
   LogMessage,
   OpticalRoutingPolicy,
-  PreviewDiscovery,
   ProfilePatch,
   Remote,
   SensorROI,
@@ -267,9 +263,6 @@ export class Instrument {
 
   readonly devices = new SvelteMap<string, DeviceHandle>();
 
-  /** Live preview: frame/tile compositing + viewport/levels/colormap control. */
-  readonly preview: Preview;
-
   /** Retained manifest and current-volume progress for the active run. */
   acquisition = $state.raw<ActiveAcquisitionState | null>(null);
 
@@ -452,8 +445,6 @@ export class Instrument {
     hal: HALConfig,
     defaults: InstrumentDefaults,
     devices: Record<string, DeviceSnapshot>,
-    colormaps: ColormapCatalog,
-    previewDiscovery: PreviewDiscovery,
     readonly metadataSchemas: Record<string, string>
   ) {
     this.#client = client;
@@ -472,16 +463,6 @@ export class Instrument {
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
-    this.preview = new Preview(
-      client,
-      id,
-      previewDiscovery,
-      hal.detection,
-      status,
-      this.stage,
-      () => this.mode,
-      colormaps
-    );
     this.#unsubs.push(
       client.on('instrument.status', (s) => {
         this.status = s;
@@ -519,8 +500,6 @@ export class Instrument {
         hal,
         defaults,
         devices,
-        discovery.colormaps,
-        discovery.preview,
         discovery.metadata_schemas
       ); // a push during the fetch wins
       void instrument.#refreshDevices(); // initial prop values fill in reactively (the feed only pushes changes)
@@ -671,7 +650,6 @@ export class Instrument {
   }
 
   dispose(): void {
-    this.preview.dispose();
     for (const unsub of this.#unsubs) unsub();
     this.#unsubs = [];
   }
@@ -761,8 +739,6 @@ export class VoxelApp {
   logs = $state<LogMessage[]>([]);
   error = $state<string | null>(null);
   busy = $state(false);
-  snapping = $state(false);
-
   /** App-lifetime, IndexedDB-backed collection of captured preview snapshots. */
   readonly snaps = new SnapshotStore();
 
@@ -895,101 +871,6 @@ export class VoxelApp {
   /** Close the active instrument. */
   async close(): Promise<void> {
     await this.#run(() => this.#client.post('/close'));
-  }
-
-  /**
-   * Capture the active instrument's preview into a persisted snapshot (frontend-only): composites the
-   * visible channel frames to a JPEG + thumbnail and records stage/profile/channel metadata. When preview
-   * is stopped, transiently starts it, waits for frames, captures, then stops it again.
-   */
-  static readonly SNAPSHOT_THUMB_SIZE = 160;
-
-  async captureSnapshot(): Promise<void> {
-    if (!this.discovery.preview.features.includes('snapshots')) {
-      throw new Error('The configured preview service does not provide snapshots.');
-    }
-    const inst = this.instrument;
-    if (!inst || this.snapping) return;
-    this.snapping = true;
-    const wasIdle = inst.mode === 'idle';
-    try {
-      if (wasIdle) {
-        inst.preview.clearFrames(); // drop stale frames so we wait for images from the current position
-        inst.preview.startPreview();
-        await this.#awaitPreviewFrames(inst);
-      }
-      await this.#writeSnapshot(inst);
-    } finally {
-      if (wasIdle) inst.preview.stopPreview();
-      this.snapping = false;
-    }
-  }
-
-  /** Poll until every visible channel has a frame, or the timeout elapses. */
-  async #awaitPreviewFrames(inst: Instrument, timeoutMs = 6000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    const ready = () => {
-      const visible = inst.preview.channels.filter((ch) => ch.visible);
-      return visible.length > 0 && visible.every((ch) => ch.overviewFrame);
-    };
-    while (!ready() && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-
-  async #writeSnapshot(inst: Instrument): Promise<void> {
-    const captured = await inst.preview.captureImage(VoxelApp.SNAPSHOT_THUMB_SIZE);
-    if (!captured) throw new Error('No preview frames available');
-
-    const profileId = inst.activeProfileId ?? '';
-
-    // Enrich the preview's per-channel display with the instrument's device metadata (camera/laser).
-    const snapChannels: Record<string, SnapshotChannel> = {};
-    for (const [name, disp] of Object.entries(captured.channels)) {
-      const entry: SnapshotChannel = {
-        label: disp.label,
-        colormap: disp.colormap,
-        levelsMin: disp.levelsMin,
-        levelsMax: disp.levelsMax
-      };
-      const modelCh = inst.activeChannels.find((c) => c.id === name);
-      if (modelCh) {
-        entry.detection = {
-          deviceId: modelCh.camera.id,
-          exposureTime: modelCh.camera.exposure?.value ?? undefined,
-          resolution: modelCh.camera.frameSizePx ?? undefined,
-          binning: modelCh.camera.binning?.value ?? undefined,
-          pixelFormat: modelCh.camera.pixelFormat?.value ?? undefined
-        };
-        entry.illumination = {
-          deviceId: modelCh.laser.id,
-          powerSetpoint: modelCh.laser.powerSetpoint?.value ?? undefined,
-          power: modelCh.laser.power?.value ?? undefined
-        };
-      }
-      snapChannels[name] = entry;
-    }
-
-    const snap = this.snaps.add({
-      instrument: this.activeName ?? '',
-      profileId,
-      profileLabel: inst.activeProfile?.label || sanitizeString(profileId),
-      stageX: captured.pose.x,
-      stageY: captured.pose.y,
-      stageZ: captured.pose.z,
-      fovW: captured.fovW,
-      fovH: captured.fovH,
-      channels: snapChannels,
-      timestamp: Date.now(),
-      blob: captured.blob,
-      thumbnail: captured.thumbnail
-    });
-
-    if (this.snaps.activeSnap?.group.id !== snap.groupId) this.snaps.viewGroup(snap.groupId);
-
-    if (browser) {
-      window.dispatchEvent(new CustomEvent('voxel:snapshot-captured', { detail: { thumbnail: captured.thumbnail } }));
-    }
   }
 
   /** REST re-sync on every (re)connect: refresh presence, then refresh a surviving instrument's state. */

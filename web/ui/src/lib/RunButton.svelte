@@ -4,6 +4,7 @@
   import AcquisitionDialog from '$lib/AcquisitionDialog.svelte';
   import { Button } from '$lib/kit';
   import type { VoxelApp } from '$lib/model';
+  import { getPreviewContext } from '$lib/preview/session.svelte';
   import { cn, toastError } from '$lib/utils';
 
   interface Props {
@@ -13,8 +14,10 @@
 
   let { app, class: className }: Props = $props();
 
+  const previews = getPreviewContext();
   const instrument = $derived(app.instrument);
-  const canPreview = $derived(instrument?.preview.channels.some((c) => c.visible) ?? false);
+  const preview = $derived(previews.current);
+  const canPreview = $derived(preview?.channels.some((channel) => channel.visible) ?? false);
 
   // Which action fills the control: null = idle split, 'preview'/'acquire' = full-width Stop.
   const modeActive = $derived<'preview' | 'acquire' | null>(
@@ -47,13 +50,13 @@
   );
 
   function togglePreview(): void {
-    if (!instrument) return;
+    if (!instrument || !preview) return;
     if (active === 'preview') {
       setOptimistic(null);
-      instrument.preview.stopPreview();
+      preview.stopPreview();
     } else {
       setOptimistic('preview');
-      instrument.preview.startPreview();
+      preview.startPreview();
     }
   }
 

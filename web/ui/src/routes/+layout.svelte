@@ -4,7 +4,7 @@
   import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
   import { Pane, PaneGroup } from 'paneforge';
   import { useEventListener, watch } from 'runed';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
 
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -21,6 +21,7 @@
   import { Button, Dialog, Toaster } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { setVoxelApp, VoxelApp } from '$lib/model';
+  import { PreviewSession, providePreviewContext } from '$lib/preview/session.svelte';
   import ProfileSelector from '$lib/ProfileSelector.svelte';
   import RunButton from '$lib/RunButton.svelte';
   import StageGizmo from '$lib/stage/StageGizmo.svelte';
@@ -34,7 +35,32 @@
 
   const app = new VoxelApp();
   setVoxelApp(app);
+  const previews = providePreviewContext();
   provideTaskSelection();
+
+  $effect(() => {
+    const instrument = app.instrument;
+    if (!instrument) {
+      previews.current = null;
+      return;
+    }
+    const session = untrack(
+      () =>
+        new PreviewSession({
+          client: app.client,
+          instrumentId: instrument.id,
+          discovery: app.discovery.preview,
+          detection: instrument.hal.detection,
+          initialStatus: instrument.status,
+          catalog: app.discovery.colormaps
+        })
+    );
+    previews.current = session;
+    return () => {
+      if (previews.current === session) previews.current = null;
+      session.dispose();
+    };
+  });
 
   async function configureServiceWorker(): Promise<void> {
     if (!('serviceWorker' in navigator)) return;
@@ -50,16 +76,23 @@
     toastError(configureServiceWorker());
     toastError(app.initialize());
   });
-  onDestroy(() => app.dispose());
-  useEventListener(window, 'beforeunload', () => app.dispose());
+  onDestroy(() => {
+    previews.current?.dispose();
+    app.dispose();
+  });
+  useEventListener(window, 'beforeunload', () => {
+    previews.current?.dispose();
+    app.dispose();
+  });
 
   // --- Keyboard shortcuts ---
 
   createHotkey('Alt+P', () => {
     const inst = app.instrument;
-    if (!inst) return;
-    if (inst.mode === 'preview') inst.preview.stopPreview();
-    else inst.preview.startPreview();
+    const preview = previews.current;
+    if (!inst || !preview) return;
+    if (inst.mode === 'preview') preview.stopPreview();
+    else preview.startPreview();
   });
   createHotkeySequence(['Mod+K', 'T'], () => (themes.pickerOpen = true));
   createHotkeySequence(['Mod+K', 'Q'], () => {

@@ -6,7 +6,6 @@
 </script>
 
 <script lang="ts">
-  import { watch } from 'runed';
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
 
@@ -21,7 +20,6 @@
     tasks: boolean;
     path: boolean;
     fov: boolean;
-    thumbnail: boolean;
   }
 
   /** An auto-grid cell computed from the stencil (a potential tile position, not a placed task). */
@@ -39,8 +37,7 @@
     layers?: LayerVisibility;
   }
 
-  let { instrument, layers = $bindable({ grid: true, tasks: true, path: true, fov: true, thumbnail: true }) }: Props =
-    $props();
+  let { instrument, layers = $bindable({ grid: true, tasks: true, path: true, fov: true }) }: Props = $props();
 
   // ── Geometry ─────────────────────────────────────────────────────────
 
@@ -177,74 +174,6 @@
       const { width, height } = containerRef.getBoundingClientRect();
       fitCanvas(width, height);
     }
-  });
-
-  // ── FOV thumbnail (live preview composite) ───────────────────────────
-
-  const FOV_RESOLUTION = 256;
-  let thumbnail = $state('');
-  let needsRedraw = false;
-  let thumbnailRendering = false;
-  let animFrameId: number | null = null;
-
-  const offscreen = document.createElement('canvas');
-  offscreen.width = FOV_RESOLUTION;
-
-  $effect(() => {
-    const aspect = fovW / fovH;
-    if (aspect > 0 && Number.isFinite(aspect)) offscreen.height = Math.round(FOV_RESOLUTION / aspect);
-  });
-
-  watch(
-    // Track frame index AND frame presence: on a profile switch the frames are cleared (frame → null)
-    // while frame_idx is left as-is, so keying on the index alone would leave a stale thumbnail.
-    () =>
-      instrument.preview.channels
-        .map((ch) => `${ch.overviewFrame?.frame_idx ?? -1}:${ch.overviewFrame ? 1 : 0}`)
-        .join(','),
-    () => {
-      needsRedraw = true;
-    }
-  );
-
-  const shouldClearThumbnail = $derived(instrument.mode === 'idle' && isXYMoving);
-  watch(
-    () => shouldClearThumbnail,
-    (clear) => {
-      if (clear) thumbnail = '';
-    }
-  );
-
-  async function renderFovThumbnail() {
-    if (thumbnailRendering) return;
-    thumbnailRendering = true;
-    needsRedraw = false;
-    try {
-      const channels = instrument.preview.channels;
-      if (channels.some((channel) => channel.visible && channel.overviewFrame)) {
-        await instrument.preview.renderFull(offscreen);
-        thumbnail = offscreen.toDataURL('image/png');
-      } else {
-        thumbnail = '';
-      }
-    } finally {
-      thumbnailRendering = false;
-    }
-  }
-
-  function fovFrameLoop() {
-    // Skip when the thumbnail layer is hidden — no point compositing/encoding what isn't shown.
-    if (needsRedraw && layers.thumbnail) {
-      void renderFovThumbnail();
-    }
-    animFrameId = requestAnimationFrame(fovFrameLoop);
-  }
-
-  $effect(() => {
-    fovFrameLoop();
-    return () => {
-      if (animFrameId !== null) cancelAnimationFrame(animFrameId);
-    };
   });
 
   // ── Slider targets ───────────────────────────────────────────────────
@@ -483,17 +412,6 @@
 </script>
 
 {#snippet fovLayer()}
-  {#if layers.thumbnail && thumbnail}
-    <image
-      href={thumbnail}
-      x={fovX - fovW / 2}
-      y={fovY - fovH / 2}
-      width={fovW}
-      height={fovH}
-      preserveAspectRatio="xMidYMid slice"
-      class="pointer-events-none"
-    />
-  {/if}
   <g class="pointer-events-none opacity-75">
     <line
       class="nss"

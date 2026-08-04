@@ -3,19 +3,21 @@
   import type { Component } from 'svelte';
   import { fade } from 'svelte/transition';
 
-  import { DotsSpinner, ImageLight, PanelRight } from '$lib/icons';
+  import { PanelRight } from '$lib/icons';
   import { Button } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import { getVoxelApp, type PreviewMode } from '$lib/model';
   import PreviewCanvas from '$lib/preview/PreviewCanvas.svelte';
-  import SnapshotFlyOverlay from '$lib/preview/SnapshotFlyOverlay.svelte';
+  import { getPreviewContext } from '$lib/preview/session.svelte';
   import { provideStageScene, StageLayersSidebar, StageView, type StageViewport } from '$lib/stage';
-  import { cn, createPaneSize, pref, toastError } from '$lib/utils';
+  import { cn, createPaneSize, pref } from '$lib/utils';
 
   const { children } = $props();
 
   const app = getVoxelApp();
+  const previews = getPreviewContext();
+  const preview = $derived(previews.current);
   provideStageScene();
 
   let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
@@ -109,29 +111,10 @@
               <div class="relative flex min-h-0 flex-1">
                 <div class="relative min-w-0 flex-1 overflow-hidden" data-fly-origin>
                   <div
-                    class="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2"
+                    class="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-end gap-2"
                   >
-                    <div class="pointer-events-auto">
+                    <div class="pointer-events-auto flex items-center gap-2">
                       {@render segmented(modeSegments)}
-                    </div>
-                    <div class="pointer-events-auto ml-auto flex items-center gap-2">
-                      {#if app.discovery.preview.features.includes('snapshots')}
-                        <Button
-                          variant="secondary"
-                          size="md"
-                          disabled={app.snapping}
-                          title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
-                          class="border-border bg-elevated text-lg shadow-sm"
-                          onclick={() => toastError(app.captureSnapshot())}
-                        >
-                          {#if app.snapping}
-                            <DotsSpinner width="16" height="16" />
-                          {:else}
-                            <ImageLight width="16" height="16" />
-                          {/if}
-                          Snap
-                        </Button>
-                      {/if}
                       <Button
                         variant="secondary"
                         size="icon-lg"
@@ -148,16 +131,14 @@
                     <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
                       <StageView bind:viewport={stageViewport} />
                     </div>
-                  {:else}
+                  {:else if preview}
                     <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
-                      <PreviewCanvas previewer={instrument.preview} fov={instrument.fov} />
+                      <PreviewCanvas previewer={preview} fov={instrument.fov} />
                     </div>
                   {/if}
                 </div>
                 <StageLayersSidebar collapsed={stageLayersCollapsed.get()} />
               </div>
-
-              {#if app.discovery.preview.features.includes('snapshots')}<SnapshotFlyOverlay />{/if}
             </div>
           </Pane>
           <PaneDivider direction="horizontal" ondblclick={toggleLogs} />

@@ -1,17 +1,16 @@
 <script lang="ts">
   import { watch } from 'runed';
   import { onMount } from 'svelte';
-  import { fade } from 'svelte/transition';
 
-  import { channelBoundingBox, type Preview, wheelZoomFactor } from '$lib/model';
-  import SpinBox from '$lib/prop/numeric/SpinBox.svelte';
   import { clampTopLeft } from '$lib/utils';
 
-  import LiveMinimap from './LiveMinimap.svelte';
-  import PreviewControls from './PreviewControls.svelte';
+  import PreviewChannelControls from './PreviewChannelControls.svelte';
+  import PreviewNavigationControls from './PreviewNavigationControls.svelte';
+  import { channelBoundingBox } from './render';
+  import { type PreviewSession, wheelZoomFactor } from './session.svelte';
 
   interface Props {
-    previewer: Preview;
+    previewer: PreviewSession;
     /** Field of view as a `[width, height]` µm tuple (`instrument.fov`), or null when unavailable. */
     fov: [number, number] | null;
   }
@@ -46,7 +45,7 @@
     viewW = w;
     viewH = h;
     if (w <= 0 || h <= 0) return;
-    previewer.displayAspect = w / h; // keep the model's aspect current for zoomBy
+    previewer.setDisplayAspect(w / h);
     const dpr = devicePixelRatio;
     canvasEl.width = Math.round(w * dpr);
     canvasEl.height = Math.round(h * dpr);
@@ -59,16 +58,6 @@
     let panStartX = 0;
     let panStartY = 0;
     let startViewport = { ...previewer.viewport };
-    let wheelIdleTimer: number | null = null;
-    const WHEEL_IDLE_DELAY_MS = 250;
-
-    const scheduleWheelIdleReset = () => {
-      if (wheelIdleTimer !== null) clearTimeout(wheelIdleTimer);
-      wheelIdleTimer = window.setTimeout(() => {
-        previewer.isPanZoomActive = false;
-        wheelIdleTimer = null;
-      }, WHEEL_IDLE_DELAY_MS);
-    };
 
     const pointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
@@ -77,7 +66,6 @@
       panStartX = e.clientX;
       panStartY = e.clientY;
       startViewport = { ...previewer.viewport };
-      previewer.isPanZoomActive = true;
     };
 
     const pointerMove = (e: PointerEvent) => {
@@ -88,27 +76,22 @@
       const newX = clampTopLeft(startViewport.x - dx, previewer.viewport.w);
       const newY = clampTopLeft(startViewport.y - dy, previewer.viewport.h);
       previewer.setViewport({ x: newX, y: newY, w: previewer.viewport.w, h: previewer.viewport.h });
-      previewer.queueViewportUpdate({ ...previewer.viewport });
     };
 
     const pointerUp = (e: PointerEvent) => {
       if (e.button !== 0) return;
       el.releasePointerCapture(e.pointerId);
       isPanning = false;
-      previewer.isPanZoomActive = false;
-      previewer.queueViewportUpdate({ ...previewer.viewport });
     };
 
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
-      previewer.isPanZoomActive = true;
       const rect = el.getBoundingClientRect();
       const vp = previewer.viewport;
       // Keep the sensor point under the cursor fixed on screen.
       const mouseX = (e.clientX - rect.left) / rect.width;
       const mouseY = (e.clientY - rect.top) / rect.height;
       previewer.zoomBy(wheelZoomFactor(e), vp.x + mouseX * vp.w, vp.y + mouseY * vp.h, mouseX, mouseY);
-      scheduleWheelIdleReset();
     };
 
     el.addEventListener('pointerdown', pointerDown, { passive: true });
@@ -121,7 +104,6 @@
       el.removeEventListener('pointermove', pointerMove);
       el.removeEventListener('pointerup', pointerUp);
       el.removeEventListener('wheel', wheel);
-      if (wheelIdleTimer !== null) clearTimeout(wheelIdleTimer);
     };
   }
 
@@ -187,16 +169,11 @@
     const label = barUm >= 1000 ? `${barUm / 1000} mm` : `${barUm} µm`;
     return { barPx, label };
   });
-
-  // Navigator locates the live viewport when zoomed in.
-  const hasFrames = $derived(previewer.channels.some((ch) => ch.visible && ch.overviewFrame));
-  const zoomed = $derived(previewer.viewport.w < 1 || previewer.viewport.h < 1);
-  const showNavigator = $derived(hasFrames && zoomed);
 </script>
 
 {#snippet scaleBarBadge(bar: { barPx: number; label: string } | null)}
-  <span class="font-mono text-fg-muted">{bar?.label ?? '--'}</span>
-  <div class="h-1 rounded-full bg-fg-muted" style:width="{bar?.barPx ?? 0}px"></div>
+  <span class="font-mono text-fg">{bar?.label ?? '--'}</span>
+  <div class="h-2 rounded-full bg-fg" style:width="{bar?.barPx ?? 0}px"></div>
 {/snippet}
 
 <div class="relative h-full w-full" bind:this={canvasContainerEl}>
@@ -208,57 +185,23 @@
     </div>
   {/if}
 
-  <!-- Left overlay: preview controls (live-only — this canvas renders only in Live mode) -->
-  <div class="absolute bottom-4 left-4 z-10">
-    <PreviewControls {previewer} />
+  <!-- Full-height left rail: navigation stays at the top; channels grow upward from the bottom. -->
+  <div class="pointer-events-none absolute inset-y-4 left-4 z-10 flex w-68 flex-col gap-3">
+    <PreviewNavigationControls {previewer} />
+    <div class="flex min-h-0 flex-1 items-end">
+      <PreviewChannelControls {previewer} />
+    </div>
   </div>
 
-  <!-- Right overlay: viewport minimap (when zoomed) + always-on pan/zoom controls, above the scale bar -->
-  <div class="pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-1.5">
-    <!-- Fixed height so the controls above never shift as the scale bar toggles -->
-    <div class="canvas-overlay-halo flex h-6 flex-col items-end justify-end gap-0.5">
-      {#if scaleBar}
-        {@render scaleBarBadge(scaleBar)}
-      {:else}
-        {@render scaleBarBadge(null)}
-      {/if}
-    </div>
-    <div class="pointer-events-auto flex w-fit max-w-62 flex-col gap-1.5 overlay-panel p-1.5">
-      {#if showNavigator}
-        <div transition:fade={{ duration: 150 }}>
-          <LiveMinimap {previewer} />
-        </div>
-      {/if}
-      <div class="flex items-center gap-1.5 font-mono">
-        <SpinBox
-          model={previewer.zoomModel}
-          prefix="Zoom"
-          decimals={2}
-          numCharacters={6}
-          align="right"
-          class="bg-transparent"
-          steppers={false}
-        />
-        <SpinBox
-          model={previewer.panXModel}
-          prefix="X"
-          decimals={2}
-          numCharacters={5}
-          align="right"
-          steppers={false}
-          class="bg-transparent"
-        />
-        <SpinBox
-          model={previewer.panYModel}
-          prefix="Y"
-          decimals={2}
-          numCharacters={5}
-          align="right"
-          steppers={false}
-          class="bg-transparent"
-        />
-      </div>
-    </div>
+  <!-- Isolated scale bar. -->
+  <div
+    class="canvas-overlay-halo pointer-events-none absolute right-4 bottom-4 z-10 flex h-6 flex-col items-end justify-end gap-0.5"
+  >
+    {#if scaleBar}
+      {@render scaleBarBadge(scaleBar)}
+    {:else}
+      {@render scaleBarBadge(null)}
+    {/if}
   </div>
 </div>
 
