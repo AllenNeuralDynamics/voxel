@@ -501,6 +501,15 @@ export interface ColormapGroup {
 }
 
 export type ColormapCatalog = ColormapGroup[];
+export const AUTO_COLORMAP = '__auto__';
+
+export type PreviewFeature = 'snapshots' | 'inpainting';
+
+export interface PreviewDiscovery {
+  websocket_url: string;
+  protocol_version: number;
+  features: PreviewFeature[];
+}
 
 /** Bounded resources used to initialize the application UI. */
 export interface AppDiscovery {
@@ -509,6 +518,7 @@ export interface AppDiscovery {
   remotes: Record<string, Remote>;
   colormaps: ColormapCatalog;
   metadata_schemas: Record<string, string>;
+  preview: PreviewDiscovery;
 }
 
 /** Whether an instrument's configuration loaded successfully. */
@@ -529,7 +539,7 @@ export interface AppStatus {
 export interface InstrumentStatus {
   mode: AcquisitionMode;
   active_profile_id: string;
-  preview_epoch: number;
+  delivery_stream_id: string;
   fov: [number, number] | null;
   routing_targets: Record<string, string>;
   state: InstrumentState;
@@ -614,12 +624,11 @@ export interface LogMessage {
   timestamp: string;
 }
 
-/** A preview view-state change: any combination of viewport / per-channel levels / per-channel colormaps.
+/** A shared preview view-state change: any combination of viewport and per-channel levels.
  *  Sent by a client on `preview.update`; echoed (sender-excluded) to other viewers on `preview.updates`. */
 export interface PreviewUpdate {
   viewport?: PreviewViewport | null;
   levels?: Record<string, PreviewLevels> | null;
-  colormaps?: Record<string, string> | null;
 }
 
 /** Topic → payload map for the server → client WS events (`Client.on`). */
@@ -636,7 +645,6 @@ export interface ServerTopics {
 /** Topic → payload map for the client → server WS controls (`Client.send`). The closed set of controls
  *  REST can't target: per-connection backpressure, and sender-excluded preview view-state. */
 export interface ClientTopics {
-  'client.active': { active: boolean };
   'preview.update': PreviewUpdate;
 }
 

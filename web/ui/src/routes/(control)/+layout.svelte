@@ -115,21 +115,23 @@
                       {@render segmented(modeSegments)}
                     </div>
                     <div class="pointer-events-auto ml-auto flex items-center gap-2">
-                      <Button
-                        variant="secondary"
-                        size="md"
-                        disabled={app.snapping}
-                        title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
-                        class="border-border bg-elevated text-lg shadow-sm"
-                        onclick={() => toastError(app.captureSnapshot())}
-                      >
-                        {#if app.snapping}
-                          <DotsSpinner width="16" height="16" />
-                        {:else}
-                          <ImageLight width="16" height="16" />
-                        {/if}
-                        Snap
-                      </Button>
+                      {#if app.discovery.preview.features.includes('snapshots')}
+                        <Button
+                          variant="secondary"
+                          size="md"
+                          disabled={app.snapping}
+                          title={app.snapping ? 'Snapping…' : 'Capture snapshot'}
+                          class="border-border bg-elevated text-lg shadow-sm"
+                          onclick={() => toastError(app.captureSnapshot())}
+                        >
+                          {#if app.snapping}
+                            <DotsSpinner width="16" height="16" />
+                          {:else}
+                            <ImageLight width="16" height="16" />
+                          {/if}
+                          Snap
+                        </Button>
+                      {/if}
                       <Button
                         variant="secondary"
                         size="icon-lg"
@@ -155,7 +157,7 @@
                 <StageLayersSidebar collapsed={stageLayersCollapsed.get()} />
               </div>
 
-              <SnapshotFlyOverlay />
+              {#if app.discovery.preview.features.includes('snapshots')}<SnapshotFlyOverlay />{/if}
             </div>
           </Pane>
           <PaneDivider direction="horizontal" ondblclick={toggleLogs} />

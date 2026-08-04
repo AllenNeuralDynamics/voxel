@@ -1,12 +1,11 @@
-"""Tests for viewport-first preview rendering (``vxl.camera.preview``).
+"""Tests for raw overview and viewport generation."""
 
-Covers the single-image ``preview_view`` path: overscan expansion, the "skip at a full
-viewport" guard, and the server-authoritative ``rect`` surviving the wire envelope.
-"""
+import asyncio
+from collections.abc import Callable
 
 import numpy as np
 
-from vxl.camera.preview import RENDER_CAP, PreviewFrame, PreviewGenerator, PreviewViewport
+from vxl.camera.preview import RENDER_CAP, PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
 
 
 def _frame(w: int = 2000, h: int = 1600) -> np.ndarray:
@@ -14,8 +13,13 @@ def _frame(w: int = 2000, h: int = 1600) -> np.ndarray:
     return rng.integers(0, 65535, size=(h, w), dtype=np.uint16)
 
 
-def _gen(**kwargs) -> PreviewGenerator:
-    return PreviewGenerator(frame_sink=lambda _f: None, **kwargs)
+def _discard(_frame: PreviewFrame) -> None:
+    pass
+
+
+def _gen(sink: Callable[[PreviewFrame], None] = _discard, **kwargs) -> PreviewGenerator:
+    kwargs.setdefault("uid", "camera")
+    return PreviewGenerator(sink=sink, **kwargs)
 
 
 def test_expanded_grows_and_clamps() -> None:
@@ -29,36 +33,89 @@ def test_expanded_grows_and_clamps() -> None:
     assert PreviewViewport().expanded(0.25).w == 1.0  # a full viewport stays full
 
 
-async def test_view_emitted_when_zoomed() -> None:
-    captured: list[bytes] = []
-
-    async def sink(packed: bytes) -> None:
-        captured.append(packed)
-
-    gen = _gen(view_sink=sink)
+async def test_viewport_emitted_when_zoomed() -> None:
+    captured: list[PreviewFrame] = []
+    gen = _gen(sink=captured.append)
     try:
-        await gen._generate_and_send_view(_frame(), 1, PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5))
+        await gen._schedule_viewport(
+            _frame(),
+            1,
+            PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5),
+            valid_bits=16,
+            source_stream_id="stream-1",
+        )
     finally:
-        gen.shutdown()
+        gen.close()
 
     assert len(captured) == 1
-    view = PreviewFrame.from_packed(captured[0])  # survives the msgpack wire envelope
-    assert view.info.rect.needs_adjustment
-    assert view.info.rect.w > 0.5  # overscan-expanded, server-authoritative
-    assert view.info.width <= RENDER_CAP
-    assert view.info.histogram is None  # histogram rides the overview, not the view
+    view = captured[0]
+    assert view.header.layer is PreviewLayer.VIEWPORT
+    assert view.header.source_rect_px.width > 1000  # includes overscan beyond the requested half-sensor viewport
+    assert view.header.width <= RENDER_CAP
+    assert view.decode().shape == (view.header.height, view.header.width)
 
 
-async def test_no_view_at_full_viewport() -> None:
-    captured: list[bytes] = []
-
-    async def sink(packed: bytes) -> None:
-        captured.append(packed)
-
-    gen = _gen(view_sink=sink)
+async def test_no_viewport_frame_at_full_viewport() -> None:
+    captured: list[PreviewFrame] = []
+    gen = _gen(sink=captured.append)
     try:
-        await gen._generate_and_send_view(_frame(), 1, PreviewViewport())  # full sensor → overview covers it
+        await gen._schedule_viewport(
+            _frame(),
+            1,
+            PreviewViewport(),
+            valid_bits=16,
+            source_stream_id="stream-1",
+        )
     finally:
-        gen.shutdown()
+        gen.close()
 
     assert captured == []
+
+
+async def test_overview_and_viewport_share_capture_identity_and_resize_exactly() -> None:
+    captured: list[PreviewFrame] = []
+    frame = _frame(w=230, h=180)
+    gen = _gen(
+        sink=captured.append,
+        uid="camera-1",
+        target_width=204,
+        viewport=PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5),
+    )
+    try:
+        gen.submit_frame(frame, 42)
+        assert gen._overview_future is not None
+        assert gen._viewport_task is not None
+        await gen._overview_future
+        await gen._viewport_task
+    finally:
+        gen.close()
+
+    by_layer = {source.header.layer: source for source in captured}
+    overview = by_layer[PreviewLayer.OVERVIEW]
+    viewport = by_layer[PreviewLayer.VIEWPORT]
+    assert overview.header.camera_id == viewport.header.camera_id == "camera-1"
+    assert overview.header.source_stream_id == viewport.header.source_stream_id
+    assert overview.header.frame_idx == viewport.header.frame_idx == 42
+    assert overview.header.width == 204
+    assert overview.header.source_rect_px.model_dump() == {"x": 0, "y": 0, "width": 230, "height": 180}
+
+
+async def test_reset_stream_changes_capture_identity() -> None:
+    captured: list[PreviewFrame] = []
+    gen = _gen(sink=captured.append, uid="camera-1")
+    try:
+        gen.submit_frame(_frame(w=32, h=24), 0)
+        assert gen._overview_future is not None
+        await gen._overview_future
+        await asyncio.sleep(0)  # allow the future's publish callback to run
+        first = captured[-1]
+        gen.reset_stream()
+        gen.submit_frame(_frame(w=32, h=24), 0)
+        assert gen._overview_future is not None
+        await gen._overview_future
+        await asyncio.sleep(0)
+        second = captured[-1]
+    finally:
+        gen.close()
+
+    assert first.header.source_stream_id != second.header.source_stream_id

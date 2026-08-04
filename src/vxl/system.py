@@ -11,12 +11,13 @@ the portable app config.
 import logging
 import socket
 import sys
+from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar
 
 import psutil
 from dotenv import load_dotenv
-from pydantic import Field, field_validator
+from pydantic import AnyWebsocketUrl, BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -54,14 +55,32 @@ class Remote(S3Store):
     roots: dict[str, str] = Field(default_factory=dict, description="display label -> bucket or bucket/prefix")
 
 
+class PreviewFeature(StrEnum):
+    """Optional capabilities exposed by the configured preview service."""
+
+    SNAPSHOTS = "snapshots"
+    INPAINTING = "inpainting"
+
+
+class PreviewConfig(BaseModel):
+    """Machine-local preview service selection.
+
+    When ``external_url`` is absent, the application host supplies its embedded preview endpoint.
+    """
+
+    external_url: AnyWebsocketUrl | None = None
+    features: frozenset[PreviewFeature] = Field(default_factory=frozenset)
+
+
 class System(BaseSettings):
     """This machine: ``VOXEL_*`` env knobs, the ``system.yaml`` config, and introspected facts.
 
     Construct to read and validate the environment plus ``~/.voxel/system.yaml`` (init > env >
     yaml). Exposes the local storage roots (``store``/``scratch``, overridable via
-    ``VOXEL_STORE``/``VOXEL_SCRATCH``), the object-store registry (:attr:`remotes`), the fixed
-    config home (:attr:`dir`), the pure machine facts (``cpu_count``/``platform``/``hostname``),
-    and the shared RAM budget (:class:`Ram`). Paths are resolved only; whoever writes creates them.
+    ``VOXEL_STORE``/``VOXEL_SCRATCH``), the preview service selection (:attr:`preview`), the
+    object-store registry (:attr:`remotes`), the fixed config home (:attr:`dir`), the pure machine
+    facts (``cpu_count``/``platform``/``hostname``), and the shared RAM budget (:class:`Ram`). Paths
+    are resolved only; whoever writes creates them.
     """
 
     model_config = SettingsConfigDict(env_prefix="VOXEL_", extra="ignore")
@@ -69,6 +88,7 @@ class System(BaseSettings):
     store: Path = Field(default_factory=lambda: _voxel_home() / "store", description="VOXEL_STORE")
     scratch: Path = Field(default_factory=lambda: _voxel_home() / "scratch", description="VOXEL_SCRATCH")
     max_ram_fraction: float = Field(default=0.75, gt=0.0, le=1.0)
+    preview: PreviewConfig = Field(default_factory=PreviewConfig)
     remotes: dict[str, Remote] = Field(
         default_factory=dict, description="object-store name -> connection (from ~/.voxel/system.yaml)"
     )
@@ -83,7 +103,8 @@ class System(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Layer ``~/.voxel/system.yaml`` under the env (priority: init > env > yaml). The yaml
-        carries structured config -- notably :attr:`remotes` -- that flat env vars can't express."""
+        carries structured config -- notably :attr:`preview` and :attr:`remotes` -- that flat env
+        vars can't express."""
         del dotenv_settings, file_secret_settings
         yaml_source = YamlConfigSettingsSource(settings_cls, yaml_file=_voxel_home() / "system.yaml")
         return (init_settings, env_settings, yaml_source)

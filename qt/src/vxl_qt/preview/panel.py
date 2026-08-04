@@ -27,7 +27,7 @@ def channel_bbox(channels: list[ChannelData]) -> tuple[int, int]:
     """Max sensor width/height across drawable channels (rotation-swapped) — the shared footprint."""
     max_w = max_h = 0
     for ch in channels:
-        if (ch.frame is None and ch.view is None) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
+        if (ch.frame is None and ch.viewport_frame is None) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
             continue
         swapped = ch.rotation_deg % 180 != 0
         max_w = max(max_w, ch.sensor_h if swapped else ch.sensor_w)
@@ -268,7 +268,7 @@ class PreviewPanel(QWidget):
             return (bb / vp.h) * draw_h
 
         for ch in channels:
-            if (ch.frame is None and ch.view is None) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
+            if (ch.frame is None and ch.viewport_frame is None) or ch.sensor_w <= 0 or ch.sensor_h <= 0:
                 continue
             rot = ch.rotation_deg % 360
             swapped = rot % 180 != 0
@@ -277,7 +277,7 @@ class PreviewPanel(QWidget):
             offset_x = (1 - scale_x) / 2
             offset_y = (1 - scale_y) / 2
 
-            # Per-channel offscreen: overview + view with source-over so the view cleanly replaces the
+            # Per-channel offscreen: overview + viewport with source-over so the viewport cleanly replaces the
             # backdrop, then the whole layer is added onto the canvas (no double-brightness on overlap).
             layer = QImage(cv_w, cv_h, QImage.Format.Format_ARGB32_Premultiplied)
             layer.fill(Qt.GlobalColor.transparent)
@@ -288,12 +288,12 @@ class PreviewPanel(QWidget):
                 draw_rotated(lp, ch.frame, px_x(offset_x), px_y(offset_y), px_w(scale_x), px_h(scale_y), rot)
 
             # Viewport image (high-res), positioned by its server-authoritative rect — only when zoomed
-            if vp.needs_adjustment and ch.view is not None and ch.view_rect is not None:
-                r = ch.view_rect
+            if vp.needs_adjustment and ch.viewport_frame is not None and ch.viewport_rect is not None:
+                r = ch.viewport_rect
                 sx, sy, sw, sh = sensor_to_stage(r.x, r.y, r.w, r.h, rot)
                 tx, ty = px_x(offset_x + sx * scale_x), px_y(offset_y + sy * scale_y)
                 tw, th = px_w(sw * scale_x), px_h(sh * scale_y)
-                draw_rotated(lp, ch.view, tx, ty, tw, th, rot)
+                draw_rotated(lp, ch.viewport_frame, tx, ty, tw, th, rot)
             lp.end()
 
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)

@@ -55,10 +55,7 @@ class ChannelSection(QWidget):
 
         label = (config.label or channel.uid).upper()
         color = Color.from_wavelength(config.emission) if config.emission else Colors.TEXT
-        auto = Button.icon_btn("mdi.auto-fix", size=ControlSize.SM)
-        auto.setToolTip("Auto-adjust levels")
-        auto.clicked.connect(lambda: fire_and_forget(camera.call("auto_level"), log=log))
-        layout.addWidget(Flex.hstack(Text.section(label, color=color), Stretch(), auto, spacing=Spacing.SM))
+        layout.addWidget(Flex.hstack(Text.section(label, color=color), Stretch(), spacing=Spacing.SM))
 
         layout.addWidget(CameraControl(camera))
 

@@ -36,6 +36,7 @@ import type {
   JsonSchema,
   LogMessage,
   OpticalRoutingPolicy,
+  PreviewDiscovery,
   ProfilePatch,
   Remote,
   SensorROI,
@@ -445,12 +446,14 @@ export class Instrument {
 
   constructor(
     client: Client,
+    readonly id: string,
     status: InstrumentStatus,
     acquisition: ActiveAcquisitionState | null,
     hal: HALConfig,
     defaults: InstrumentDefaults,
     devices: Record<string, DeviceSnapshot>,
     colormaps: ColormapCatalog,
+    previewDiscovery: PreviewDiscovery,
     readonly metadataSchemas: Record<string, string>
   ) {
     this.#client = client;
@@ -469,7 +472,16 @@ export class Instrument {
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
-    this.preview = new Preview(client, hal.detection, status, this.stage, () => this.mode, colormaps);
+    this.preview = new Preview(
+      client,
+      id,
+      previewDiscovery,
+      hal.detection,
+      status,
+      this.stage,
+      () => this.mode,
+      colormaps
+    );
     this.#unsubs.push(
       client.on('instrument.status', (s) => {
         this.status = s;
@@ -483,7 +495,7 @@ export class Instrument {
   }
 
   /** Hydrate the active instrument over REST, then keep it fresh from the WS streams. */
-  static async open(client: Client, discovery: AppDiscovery): Promise<Instrument> {
+  static async open(client: Client, instrumentId: string, discovery: AppDiscovery): Promise<Instrument> {
     let latest: InstrumentStatus | undefined;
     let latestAcquisition: ActiveAcquisitionState | null | undefined;
     const statusBuffer = client.on('instrument.status', (s) => (latest = s));
@@ -501,12 +513,14 @@ export class Instrument {
       ]);
       const instrument = new Instrument(
         client,
+        instrumentId,
         latest ?? fetched,
         latestAcquisition === undefined ? fetchedAcquisition : latestAcquisition,
         hal,
         defaults,
         devices,
         discovery.colormaps,
+        discovery.preview,
         discovery.metadata_schemas
       ); // a push during the fetch wins
       void instrument.#refreshDevices(); // initial prop values fill in reactively (the feed only pushes changes)
@@ -738,7 +752,8 @@ export class VoxelApp {
     templates: {},
     remotes: {},
     colormaps: [],
-    metadata_schemas: {}
+    metadata_schemas: {},
+    preview: { websocket_url: '', protocol_version: 1, features: [] }
   });
   /** Persisted acquisition manifests from the catalog, newest first. */
   acquisitions = $state.raw<AcquisitionManifest[]>([]);
@@ -890,6 +905,9 @@ export class VoxelApp {
   static readonly SNAPSHOT_THUMB_SIZE = 160;
 
   async captureSnapshot(): Promise<void> {
+    if (!this.discovery.preview.features.includes('snapshots')) {
+      throw new Error('The configured preview service does not provide snapshots.');
+    }
     const inst = this.instrument;
     if (!inst || this.snapping) return;
     this.snapping = true;
@@ -912,7 +930,7 @@ export class VoxelApp {
     const deadline = Date.now() + timeoutMs;
     const ready = () => {
       const visible = inst.preview.channels.filter((ch) => ch.visible);
-      return visible.length > 0 && visible.every((ch) => ch.frame);
+      return visible.length > 0 && visible.every((ch) => ch.overviewFrame);
     };
     while (!ready() && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1036,7 +1054,7 @@ export class VoxelApp {
         if (target === null) continue;
         let opened: Instrument | null = null;
         try {
-          opened = await Instrument.open(this.#client, this.discovery);
+          opened = await Instrument.open(this.#client, target, this.discovery);
         } catch (e) {
           this.error = errorMessage(e);
         }
@@ -1049,7 +1067,6 @@ export class VoxelApp {
         this.#openName = target;
         this.snaps.scope = target;
         this.inpaint.scope = target;
-        opened.preview.bindInpaint(this.inpaint);
         this.#lastInstrument.set(target);
       }
     } finally {

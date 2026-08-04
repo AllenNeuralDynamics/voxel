@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import type { HTMLCanvasAttributes } from 'svelte/elements';
 
-  import { compositeFullFrames, type Preview } from '$lib/model';
+  import { type Preview } from '$lib/model';
 
   interface Props extends HTMLCanvasAttributes {
     previewer: Preview;
@@ -14,12 +14,26 @@
   let { previewer, ...rest }: Props = $props();
 
   let canvasEl: HTMLCanvasElement;
-  let ctx: CanvasRenderingContext2D | null = null;
+  let drawing = false;
+  let redraw = false;
 
   const size = new ElementSize(() => canvasEl);
 
-  function draw() {
-    if (ctx && canvasEl) compositeFullFrames(ctx, canvasEl, previewer.channels);
+  async function draw() {
+    if (!canvasEl) return;
+    if (drawing) {
+      redraw = true;
+      return;
+    }
+    drawing = true;
+    try {
+      do {
+        redraw = false;
+        await previewer.renderFull(canvasEl);
+      } while (redraw);
+    } finally {
+      drawing = false;
+    }
   }
 
   watch(
@@ -29,18 +43,17 @@
       const dpr = devicePixelRatio;
       canvasEl.width = Math.round(w * dpr);
       canvasEl.height = Math.round(h * dpr);
-      draw();
+      void draw();
     }
   );
 
   watch(
     () => previewer.redrawGeneration,
-    () => draw()
+    () => void draw()
   );
 
   onMount(() => {
-    ctx = canvasEl.getContext('2d');
-    draw();
+    void draw();
   });
 </script>
 

@@ -8,7 +8,8 @@ from vxl.instrument import Instrument
 
 
 async def test_voxel_app_owns_and_passes_catalog_to_launched_instrument(monkeypatch, tmp_path: Path) -> None:
-    system = SimpleNamespace(dir=tmp_path / ".voxel", remotes={})
+    preview = object()
+    system = SimpleNamespace(dir=tmp_path / ".voxel", preview=preview, remotes={})
     monkeypatch.setattr(app_module, "System", lambda: system)
     catalog = Catalog(
         FileCatalogBackend(tmp_path / "catalog"),
@@ -35,5 +36,6 @@ async def test_voxel_app_owns_and_passes_catalog_to_launched_instrument(monkeypa
     launched = await app.launch("scope")
 
     assert app.catalog is catalog
+    assert app.preview is preview
     assert launched.path == instrument_home
     assert captured == {"home": instrument_home, "catalog": catalog}

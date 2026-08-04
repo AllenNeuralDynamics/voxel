@@ -7,6 +7,7 @@
   import { computeAutoLevels } from '$lib/utils';
 
   import ColormapPicker from './ColormapPicker.svelte';
+  import { resolveColormapStops } from './render';
 
   interface Props {
     label: string;
@@ -14,6 +15,8 @@
     levelsMin: number;
     levelsMax: number;
     onLevelsChange: (min: number, max: number) => void;
+    colormapPreference: string;
+    autoColormap: string | null;
     colormap: string | null;
     catalog: ColormapCatalog;
     onColormapChange: (colormap: string) => void;
@@ -28,6 +31,8 @@
     levelsMin,
     levelsMax,
     onLevelsChange,
+    colormapPreference,
+    autoColormap,
     colormap,
     catalog,
     onColormapChange,
@@ -55,15 +60,7 @@
 
   // ── Derived: Domain ───────────────────────────────────────────────
 
-  const colors = $derived.by(() => {
-    if (!colormap) return ['#06b6d4'];
-    if (colormap.startsWith('#')) return [colormap];
-    for (const group of catalog) {
-      const stops = group.colormaps[colormap];
-      if (stops) return stops;
-    }
-    return ['#06b6d4'];
-  });
+  const colors = $derived(resolveColormapStops(colormap, catalog));
 
   const hasValidData = $derived(!!histData && histData.length > 0);
   const numBins = $derived(histData?.length || 1);
@@ -428,6 +425,8 @@
     <div class="mx-2 min-w-0 flex-1">
       <ColormapPicker
         {label}
+        {colormapPreference}
+        {autoColormap}
         {colormap}
         {catalog}
         {onColormapChange}

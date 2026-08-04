@@ -56,7 +56,6 @@ export function errorMessage(e: unknown): string {
 }
 
 type TypedHandler = (event: unknown) => void;
-type BytesHandler = (topic: string, body: Uint8Array) => void;
 
 export class Client {
   readonly wsUrl: string;
@@ -68,10 +67,8 @@ export class Client {
 
   #ws: WebSocket | null = null;
   #typedHandlers = new SvelteMap<string, SvelteSet<TypedHandler>>();
-  #patternHandlers = new SvelteMap<string, SvelteSet<BytesHandler>>();
   #errorHandlers = new SvelteSet<(e: Error) => void>();
   #openHandlers = new SvelteSet<() => void>();
-  #visibilityHandler: (() => void) | null = null;
 
   #shouldReconnect: boolean;
   #reconnectDelay: number;
@@ -89,11 +86,6 @@ export class Client {
     const backend = resolveBackend(apiUrl);
     this.wsUrl = backend.wsUrl;
     this.baseUrl = backend.baseUrl;
-
-    if (typeof document !== 'undefined') {
-      this.#visibilityHandler = () => this.#reportActivity();
-      document.addEventListener('visibilitychange', this.#visibilityHandler);
-    }
   }
 
   // ---- connection lifecycle ----
@@ -109,7 +101,6 @@ export class Client {
           this.state = 'connected';
           this.reconnectAttempts = 0;
           this.#reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
-          this.#reportActivity(); // the server starts each connection un-paused — assert current visibility
           for (const cb of this.#openHandlers) cb();
           resolve();
         };
@@ -142,10 +133,6 @@ export class Client {
   disconnect(): void {
     this.#shouldReconnect = false;
     this.#clearReconnectTimer();
-    if (this.#visibilityHandler) {
-      document.removeEventListener('visibilitychange', this.#visibilityHandler);
-      this.#visibilityHandler = null;
-    }
     this.#cleanupSocket();
     this.state = 'idle';
   }
@@ -158,27 +145,16 @@ export class Client {
 
   // ---- WS (receive for state; send only for per-connection controls) ----
 
-  /** Send a control envelope. App/device state goes over REST; this is for per-connection controls that
-   *  REST can't target (e.g. `client.active` backpressure). No-op until the socket is open. */
+  /** Send a control envelope. App/device state goes over REST; this is for sender-excluded live controls.
+   *  No-op until the socket is open. */
   send<K extends keyof ClientTopics>(topic: K, body: ClientTopics[K]): void {
     if (this.#ws?.readyState !== WebSocket.OPEN) return;
     this.#ws.send(pack([topic, pack(body)]));
   }
 
-  /** Report this tab's visibility as connection activity; the server gates frame delivery on it. */
-  #reportActivity(): void {
-    if (typeof document === 'undefined') return;
-    this.send('client.active', { active: !document.hidden });
-  }
-
   /** Subscribe to a topic; the body is decoded to its `ServerTopics` payload type. */
   on<K extends keyof ServerTopics>(topic: K, callback: (event: ServerTopics[K]) => void): Unsub {
     return this.#register(this.#typedHandlers, topic, callback as TypedHandler);
-  }
-
-  /** Subscribe to a topic pattern; the callback receives the raw body bytes. */
-  subscribe(pattern: string, callback: BytesHandler): Unsub {
-    return this.#register(this.#patternHandlers, pattern, callback);
   }
 
   onError(callback: (e: Error) => void): Unsub {
@@ -272,11 +248,6 @@ export class Client {
       const event = unpack(bodyBytes);
       for (const cb of typed) cb(event);
     }
-    for (const [pattern, handlers] of this.#patternHandlers) {
-      if (matchesPattern(pattern, topic)) {
-        for (const cb of handlers) cb(topic, bodyBytes);
-      }
-    }
   }
 
   #notifyError(error: Error): void {
@@ -316,11 +287,4 @@ export class Client {
       this.#ws = null;
     }
   }
-}
-
-/** Whether `topic` matches `pattern` (exact, dot-prefix, or `*`). */
-function matchesPattern(pattern: string, topic: string): boolean {
-  if (pattern === topic || pattern === '*') return true;
-  if (pattern.endsWith('.*')) return topic.startsWith(pattern.slice(0, -1));
-  return topic.startsWith(pattern + '.');
 }

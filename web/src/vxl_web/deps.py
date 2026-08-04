@@ -9,7 +9,7 @@ from vxl.app import VoxelApp
 from vxl.instrument import Instrument
 
 from .live import LogMessage
-from .wire import MsgBus
+from .websocket import MsgBus
 
 
 def get_app(request: Request) -> VoxelApp:

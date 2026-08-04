@@ -1,10 +1,9 @@
 """FastAPI factory + launcher for the Voxel web backend, on the ``vxl.Instrument`` API.
 
 Lean by design: two routers (the ``VoxelApp`` surface — discovery/launch/close/history — and the active
-``Instrument`` surface), the per-instrument WS feed (:mod:`vxl_web.live`), and the ``MsgBus``
-(:mod:`vxl_web.wire`). No manager/service layer — routers call the ``Instrument``'s flat method surface
-directly, so the only lifetime-scoped object is the ``InstrumentFeed``. The previous stack lives under
-:mod:`vxl_web._classic`.
+``Instrument`` surface), the per-instrument control feed (:mod:`vxl_web.live`), and the primary/preview
+WebSocket transports (:mod:`vxl_web.websocket`). No manager/service layer — routers call the ``Instrument``'s
+flat method surface directly.
 
 Runs as a single uvicorn process: it owns the open hardware, the bus, and one event loop, so there is
 exactly one process per microscope (never multiple workers — they would each open the hardware).
@@ -35,7 +34,7 @@ from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
 from .live import AppFeed, LogMessage
 from .router import api_router
-from .wire import MsgBus
+from .websocket import MsgBus, PreviewHub
 
 log = logging.getLogger(__name__)
 
@@ -116,9 +115,11 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logging.getLogger().addHandler(handler)
     feed = AppFeed(app.state.voxel_app, app.state.bus)  # publishes app.status + owns the InstrumentFeed lifecycle
     feed.attach()
+    app.state.preview_hub.attach()
     try:
         yield
     finally:
+        await app.state.preview_hub.close()
         feed.detach()
         logging.getLogger().removeHandler(handler)  # stop streaming logs to clients
         await app.state.voxel_app.close()  # parks hardware on shutdown (closes the active instrument, if any)
@@ -138,6 +139,7 @@ def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) 
     )
     app.state.voxel_app = voxel_app or VoxelApp()
     app.state.bus = MsgBus()
+    app.state.preview_hub = PreviewHub(app.state.voxel_app)
     app.state.log_buffer = deque(maxlen=LOG_BUFFER_SIZE)
     _register_error_handlers(app)
     app.include_router(api_router, prefix="/api")

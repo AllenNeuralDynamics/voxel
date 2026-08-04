@@ -4,15 +4,15 @@
 import logging
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from rigup import PropResults
 from vxl.app import VoxelApp
-from vxl.camera import PreviewLevels, PreviewViewport
+from vxl.camera import PreviewViewport
 from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, InstrumentState
 from vxl.instrument.core import TaskTile
 
-from .wire import ClientId, MsgBus
+from .websocket import ClientId, MsgBus
 
 if TYPE_CHECKING:
     from vxlib import Teardown
@@ -39,7 +39,7 @@ class InstrumentStatus(BaseModel):
 
     mode: AcquisitionMode
     active_profile_id: str
-    preview_epoch: int
+    delivery_stream_id: str
     fov: tuple[float, float] | None
     routing_targets: dict[str, str]
     state: InstrumentState
@@ -59,14 +59,20 @@ class DevicePropsUpdate(BaseModel):
     properties: PropResults
 
 
+class PreviewLevels(BaseModel):
+    """Client-owned normalized display bounds for one preview channel."""
+
+    min: float = Field(default=0.0, ge=0.0, le=1.0)
+    max: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
 class PreviewUpdate(BaseModel):
     """Inbound ``preview.update`` control and outbound ``preview.updates`` echo: any combination of
-    viewport / per-channel levels / per-channel colormaps. The echo excludes the originating client, so
-    other viewers sync without the sender's drag fighting its own optimistic local state."""
+    viewport / per-channel levels. The echo excludes the originating client, so other viewers sync without
+    the sender's drag fighting its own optimistic local state."""
 
     viewport: PreviewViewport | None = None
     levels: dict[str, PreviewLevels] | None = None
-    colormaps: dict[str, str] | None = None
 
 
 class InstrumentFeed:
@@ -85,7 +91,7 @@ class InstrumentFeed:
             i.state.subscribe(lambda _s: self.broadcast_status()),
             i.mode.subscribe(lambda _m: self.broadcast_status()),
             i.active_profile_id.subscribe(lambda _id: self.broadcast_status()),
-            i.preview_epoch.subscribe(lambda _e: self.broadcast_status()),
+            i.delivery_stream_id.subscribe(lambda _id: self.broadcast_status()),
             i.task_tiles.subscribe(lambda _t: self.broadcast_status()),
             i.fov.subscribe(lambda _f: self.broadcast_status()),
             i.routing_targets.subscribe(lambda _r: self.broadcast_status()),
@@ -93,8 +99,6 @@ class InstrumentFeed:
                 lambda state: bus.broadcast("acquisition.state", AcquisitionUpdate(acquisition=state))
             ),
             i.default.subscribe(lambda _d: self.broadcast_default()),
-            i.frames.subscribe(self._on_frame),
-            i.views.subscribe(self._on_view),
             i.device_property_updates.subscribe(self._forward_props),
         ]
         self._unsubs.append(bus.on_command("preview.update", PreviewUpdate, self._on_preview_update))
@@ -109,13 +113,9 @@ class InstrumentFeed:
         self._unsubs = []
 
     async def _on_preview_update(self, cmd: PreviewUpdate, client_id: ClientId) -> None:
-        """Apply a viewport/levels/colormap change, then echo it to the other viewers."""
+        """Apply the camera viewport and echo shared display levels to other viewers."""
         if cmd.viewport is not None:
             self._inst.update_viewport(cmd.viewport)
-        if cmd.levels is not None:
-            self._inst.update_levels(cmd.levels)
-        if cmd.colormaps is not None:
-            self._inst.update_colormaps(cmd.colormaps)
         self._bus.broadcast("preview.updates", cmd, exclude=client_id)
 
     def broadcast_status(self) -> None:
@@ -125,7 +125,7 @@ class InstrumentFeed:
             InstrumentStatus(
                 mode=i.mode.value,
                 active_profile_id=i.active_profile_id.value,
-                preview_epoch=i.preview_epoch.value,
+                delivery_stream_id=i.delivery_stream_id.value,
                 fov=i.fov.cache,
                 routing_targets=i.routing_targets.value,
                 state=i.state.value,
@@ -141,14 +141,6 @@ class InstrumentFeed:
             "acquisition.state",
             AcquisitionUpdate(acquisition=self._inst.acquisition.value),
         )
-
-    async def _on_frame(self, item: tuple[str, bytes]) -> None:
-        channel, data = item
-        self._bus.broadcast(f"preview.frame.{channel}", data)
-
-    async def _on_view(self, item: tuple[str, bytes]) -> None:
-        channel, data = item
-        self._bus.broadcast(f"preview.view.{channel}", data)
 
     def _forward_props(self, update: tuple[str, PropResults]) -> None:
         device_id, properties = update

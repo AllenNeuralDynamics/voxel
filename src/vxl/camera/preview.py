@@ -1,42 +1,85 @@
 import asyncio
 import logging
 import time
-import zlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Self, cast
+from functools import partial
+from math import ceil
+from struct import Struct
+from typing import Literal, Self, cast
+from uuid import uuid4
 
 import cv2
 import msgpack
-import msgpack_numpy as mpack_numpy
 import numpy as np
-from pydantic import Field, field_validator
-from vxlib.color import ChannelOrder, resolve_colormap
+from numcodecs import Zstd
+from pydantic import Field, field_validator, model_validator
 
 from vxlib import SchemaModel
 
+SOURCE_MAGIC = b"VXPS"
+SOURCE_FRAMING_VERSION = 1
+SOURCE_SCHEMA_VERSION = 1
+SOURCE_ENCODING = "u16-zstd-byte-shuffle-v1"
+SOURCE_PREFIX = Struct(">4sBI")
+MAX_SOURCE_HEADER_BYTES = 64 * 1024
 
-class PreviewFmt(StrEnum):
-    RAW = "raw"
-    JPEG = "jpeg"
-    PNG = "png"
-    ZLIB = "zlib"
+DELIVERY_MAGIC = b"VXPD"
+DELIVERY_FRAMING_VERSION = 1
+DELIVERY_SCHEMA_VERSION = 1
+DELIVERY_PREFIX = Struct(">4sBI")
+MAX_DELIVERY_HEADER_BYTES = 64 * 1024
 
-    def __call__(self, frame: np.ndarray) -> bytes:
-        match self:
-            case PreviewFmt.RAW:
-                return convert_to_raw(frame)
-            case PreviewFmt.JPEG:
-                return convert_to_jpeg(frame, PREVIEW_JPEG_QUALITY)
-            case PreviewFmt.PNG:
-                return convert_to_png(frame)
-            case PreviewFmt.ZLIB:
-                return compress_uint16_frame_zlib(frame)
+# Level 1 is the measured low-latency point for real preview frames. The frame checksum lets
+# consumers reject corruption before uploading pixels; it is part of the v1 encoding contract.
+_ZSTD = Zstd(level=1, checksum=True)
 
 
-# ── Viewport & Levels ──────────────────────────────────────────────────
+OVERVIEW_WIDTH = 2048  # overview output width (the overview is the main view)
+RENDER_CAP = 2048  # max width of a single coherent viewport-image render (rendered on demand, not per frame)
+# Fraction each axis grows beyond the viewport so small pans stay covered without a re-render. Its area cost
+# is quadratic in 1 + 2*margin, so keep it small while retaining a little coverage during interaction.
+OVERSCAN_MARGIN = 0.05
+
+
+type ValidBits = Literal[8, 10, 12, 14, 16]
+
+
+def byte_shuffle_u16(frame: np.ndarray, *, valid_bits: ValidBits) -> bytes:
+    """Return canonical low-byte-plane/high-byte-plane bytes for a 2-D image."""
+    if frame.ndim != 2:
+        raise ValueError(f"preview frame must be 2-D, got shape {frame.shape}")
+    if frame.dtype.kind != "u" or frame.dtype.itemsize not in {1, 2}:
+        raise TypeError(f"preview frame must contain uint8 or uint16 samples, got {frame.dtype}")
+    if valid_bits not in {8, 10, 12, 14, 16}:
+        raise ValueError(f"unsupported valid_bits: {valid_bits}")
+    if frame.dtype.itemsize == 1 and valid_bits != 8:
+        raise ValueError("uint8 input requires valid_bits=8")
+    if frame.size and int(frame.max()) >= 1 << valid_bits:
+        raise ValueError(f"preview frame contains samples outside {valid_bits}-bit range")
+
+    canonical = np.ascontiguousarray(frame, dtype="<u2")
+    interleaved = canonical.view(np.uint8).reshape(-1, 2)
+    shuffled = np.empty(canonical.size * 2, dtype=np.uint8)
+    shuffled[: canonical.size] = interleaved[:, 0]
+    shuffled[canonical.size :] = interleaved[:, 1]
+    return shuffled.tobytes()
+
+
+def byte_unshuffle_u16(shuffled: bytes | bytearray | memoryview, *, width: int, height: int) -> np.ndarray:
+    """Reconstruct a native-endian uint16 image from canonical shuffled bytes."""
+    pixel_count = width * height
+    expected_length = pixel_count * 2
+    if len(shuffled) != expected_length:
+        raise ValueError(f"decoded payload is {len(shuffled)} bytes; expected {expected_length}")
+
+    planes = np.frombuffer(shuffled, dtype=np.uint8)
+    interleaved = np.empty((pixel_count, 2), dtype=np.uint8)
+    interleaved[:, 0] = planes[:pixel_count]
+    interleaved[:, 1] = planes[pixel_count:]
+    return interleaved.view("<u2").reshape(height, width).astype(np.uint16, copy=False)
 
 
 class PreviewViewport(SchemaModel):
@@ -92,500 +135,466 @@ class PreviewViewport(SchemaModel):
         return PreviewViewport(x=nx, y=ny, w=nw, h=nh)
 
 
-class PreviewLevels(SchemaModel):
-    min: float = Field(default=0.0, ge=0.0, le=1.0, description="black point of the preview")
-    max: float = Field(default=1.0, ge=0.0, le=1.0, description="white point of the preview")
+class PreviewLayer(StrEnum):
+    """Independently replaceable image layers derived from one camera capture."""
 
-    @property
-    def needs_adjustment(self) -> bool:
-        return self.min != 0.0 or self.max != 1.0
-
-    @classmethod
-    def from_histogram(cls, histogram: list[int], percentile: float = 1.0) -> Self:
-        """Calculate auto-levels using the requested black percentile and p99.99 white point.
-
-        Args:
-            histogram: Histogram bin counts (any number of bins)
-            percentile: Percentile used for the black point (default p1)
-
-        Returns:
-            PreviewLevels with min/max normalized to 0-1 range
-        """
-        total = sum(histogram)
-        if total == 0:
-            return cls()
-
-        low_threshold = total * (percentile / 100.0)
-        high_threshold = total * 0.9999
-
-        # Find low percentile bin
-        cumsum = 0
-        low_bin = 0
-        for i, count in enumerate(histogram):
-            cumsum += count
-            if cumsum >= low_threshold:
-                low_bin = i
-                break
-
-        # Find high percentile bin
-        cumsum = 0
-        high_bin = len(histogram) - 1
-        for i, count in enumerate(histogram):
-            cumsum += count
-            if cumsum >= high_threshold:
-                high_bin = i
-                break
-
-        # Normalize to 0-1 range
-        num_bins = len(histogram)
-        min_val = low_bin / (num_bins - 1)
-        max_val = high_bin / (num_bins - 1)
-
-        # Ensure min < max
-        if max_val <= min_val:
-            max_val = min_val + 0.01
-
-        return cls(min=min_val, max=max_val)
+    OVERVIEW = "overview"
+    VIEWPORT = "viewport"
 
 
-class PreviewConfig(SchemaModel):
-    """Current preview display configuration for a camera."""
+class SourceRectPx(SchemaModel):
+    """Source region represented by an image, in integer sensor pixels."""
 
-    viewport: PreviewViewport = Field(default_factory=PreviewViewport)
-    levels: PreviewLevels = Field(default_factory=PreviewLevels)
-    colormap: str | None = None
-
-
-# ── Frame & Tile Info Models ───────────────────────────────────────────
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
 
 
-class PreviewInfoBase(SchemaModel):
-    """Fields shared by overview frames and tiles."""
+class PreviewSourceHeader(SchemaModel):
+    """Immutable source metadata supplied by a camera node."""
 
-    frame_idx: int = Field(..., ge=0, description="Frame index of the captured image.")
-    width: int = Field(..., gt=0, description="Output pixel width.")
-    height: int = Field(..., gt=0, description="Output pixel height.")
-    full_width: int = Field(..., gt=0, description="Full sensor width in pixels.")
-    full_height: int = Field(..., gt=0, description="Full sensor height in pixels.")
-    levels: PreviewLevels = Field(default_factory=PreviewLevels)
-    fmt: PreviewFmt = Field(default=PreviewFmt.JPEG)
-    colormap: str | None = Field(default=None, description="Colormap applied, or None for grayscale.")
+    source_schema_version: Literal[1] = SOURCE_SCHEMA_VERSION
+    camera_id: str = Field(min_length=1)
+    source_stream_id: str = Field(min_length=1)
+    layer: PreviewLayer
+    frame_idx: int = Field(ge=0)
+    captured_at_unix_us: int | None = Field(default=None, ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    sensor_width: int = Field(gt=0)
+    sensor_height: int = Field(gt=0)
+    source_rect_px: SourceRectPx
+    valid_bits: ValidBits
+    encoding: Literal["u16-zstd-byte-shuffle-v1"] = SOURCE_ENCODING
+    uncompressed_byte_length: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _validate_geometry(self) -> Self:
+        rect = self.source_rect_px
+        if rect.x + rect.width > self.sensor_width or rect.y + rect.height > self.sensor_height:
+            raise ValueError("source_rect_px extends beyond the sensor")
+        expected_length = self.width * self.height * np.dtype(np.uint16).itemsize
+        if self.uncompressed_byte_length != expected_length:
+            raise ValueError(
+                f"uncompressed_byte_length must be {expected_length} for a {self.width}x{self.height} uint16 image"
+            )
+        return self
 
 
-class PreviewFrameInfo(PreviewInfoBase):
-    """Overview / viewport-image metadata. Carries the rendered region and (overview only) a histogram."""
+class PreviewDeliveryHeader(SchemaModel):
+    """Routing and sequencing metadata supplied by the control computer."""
 
-    rect: PreviewViewport = Field(
-        default_factory=PreviewViewport,
-        description="Server-rendered region (incl. overscan) in sensor-normalized coords; full frame for the overview.",
-    )
-    histogram: list[int] | None = Field(
-        default=None,
-        description="1024-bin histogram of preview intensity. Only present in overview frames.",
-    )
-
-
-# ── Data Containers ────────────────────────────────────────────────────
+    delivery_schema_version: Literal[1] = DELIVERY_SCHEMA_VERSION
+    channel_id: str = Field(min_length=1)
+    delivery_stream_id: str = Field(min_length=1)
+    delivery_seq: int = Field(ge=0)
+    frame_byte_length: int = Field(gt=0)
 
 
 @dataclass(frozen=True)
 class PreviewFrame:
-    info: PreviewFrameInfo
-    data: bytes
+    """Camera-owned source header plus an opaque shuffled Zstandard payload."""
+
+    header: PreviewSourceHeader
+    payload: bytes
 
     @classmethod
-    def from_array(cls, frame_array: np.ndarray, info: PreviewFrameInfo) -> Self:
-        """Create a PreviewFrame from a NumPy array and metadata."""
-        compressed_data = info.fmt(frame_array)
-        return cls(info=info, data=compressed_data)
+    def from_source(
+        cls,
+        source: np.ndarray,
+        *,
+        camera_id: str,
+        source_stream_id: str,
+        layer: PreviewLayer,
+        frame_idx: int,
+        viewport: PreviewViewport,
+        target_width: int,
+        valid_bits: ValidBits,
+        captured_at_unix_us: int | None = None,
+    ) -> Self:
+        """Crop, resize, shuffle, and compress a sensor frame into one decodable source frame."""
+        if source.ndim != 2:
+            raise ValueError(f"preview source must be 2-D, got shape {source.shape}")
+        if not source.size:
+            raise ValueError("preview source must not be empty")
+        if target_width <= 0:
+            raise ValueError(f"target_width must be positive, got {target_width}")
+
+        sensor_height, sensor_width = source.shape
+        x0 = max(0, min(int(viewport.x * sensor_width), sensor_width - 1))
+        y0 = max(0, min(int(viewport.y * sensor_height), sensor_height - 1))
+        x1 = max(x0 + 1, min(ceil((viewport.x + viewport.w) * sensor_width), sensor_width))
+        y1 = max(y0 + 1, min(ceil((viewport.y + viewport.h) * sensor_height), sensor_height))
+        source_rect_px = SourceRectPx(x=x0, y=y0, width=x1 - x0, height=y1 - y0)
+
+        crop = source[y0:y1, x0:x1]
+        width = min(source_rect_px.width, target_width)
+        height = max(1, round(source_rect_px.height * width / source_rect_px.width))
+        if crop.shape != (height, width):
+            frame = cv2.resize(crop, (width, height), interpolation=cv2.INTER_NEAREST_EXACT)
+        else:
+            frame = crop
+
+        shuffled = byte_shuffle_u16(frame, valid_bits=valid_bits)
+        header = PreviewSourceHeader(
+            camera_id=camera_id,
+            source_stream_id=source_stream_id,
+            layer=layer,
+            frame_idx=frame_idx,
+            captured_at_unix_us=captured_at_unix_us,
+            width=width,
+            height=height,
+            sensor_width=sensor_width,
+            sensor_height=sensor_height,
+            source_rect_px=source_rect_px,
+            valid_bits=valid_bits,
+            uncompressed_byte_length=len(shuffled),
+        )
+        return cls(header=header, payload=bytes(_ZSTD.encode(shuffled)))
 
     @classmethod
-    def from_packed(cls, packed_frame: bytes) -> Self:
-        """Unpack a packed PreviewFrame from bytes."""
-        unpacked = msgpack.unpackb(packed_frame, object_hook=mpack_numpy.decode)
-        info_dict = unpacked.get("info") or unpacked.get("metadata")
-        frame_data: bytes = unpacked.get("data") or unpacked.get("frame")
-        if info_dict is None or frame_data is None:
-            raise ValueError(f"Invalid packed frame format: {unpacked.keys()}")
-        info = PreviewFrameInfo(**info_dict)
-        return cls(info=info, data=frame_data)
+    def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
+        """Parse and validate framing and source metadata without decoding pixels."""
+        packet = memoryview(packed)
+        if len(packet) < SOURCE_PREFIX.size:
+            raise ValueError("preview source packet is truncated before its prefix")
+        magic, framing_version, header_length = SOURCE_PREFIX.unpack_from(packet)
+        if magic != SOURCE_MAGIC:
+            raise ValueError("invalid preview source magic")
+        if framing_version != SOURCE_FRAMING_VERSION:
+            raise ValueError(f"unsupported preview source framing version: {framing_version}")
+        if not 0 < header_length <= MAX_SOURCE_HEADER_BYTES:
+            raise ValueError(f"invalid preview source header length: {header_length}")
+
+        payload_offset = SOURCE_PREFIX.size + header_length
+        if len(packet) <= payload_offset:
+            raise ValueError("preview source packet is truncated before its payload")
+        try:
+            unpacked = msgpack.unpackb(packet[SOURCE_PREFIX.size : payload_offset], raw=False)
+        except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
+            raise ValueError("invalid preview source MessagePack header") from exc
+        if not isinstance(unpacked, dict):
+            raise ValueError("preview source header must be a MessagePack map")
+        header = PreviewSourceHeader.model_validate(unpacked)
+        return cls(header=header, payload=bytes(packet[payload_offset:]))
 
     def pack(self) -> bytes:
-        """Pack for transmission via msgpack."""
-        packed = msgpack.packb(
-            {"info": self.info.model_dump(), "data": self.data},
-            default=mpack_numpy.encode,
+        """Serialize prefix, MessagePack source header, and compressed payload."""
+        header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
+        if not 0 < len(header) <= MAX_SOURCE_HEADER_BYTES:
+            raise ValueError(f"preview source header is too large: {len(header)} bytes")
+        return SOURCE_PREFIX.pack(SOURCE_MAGIC, SOURCE_FRAMING_VERSION, len(header)) + header + self.payload
+
+    def decode(self) -> np.ndarray:
+        """Decompress and unshuffle the source payload into a uint16 image."""
+        try:
+            shuffled = _ZSTD.decode(self.payload)
+        except Exception as exc:
+            raise ValueError("invalid Zstandard preview payload") from exc
+        if len(shuffled) != self.header.uncompressed_byte_length:
+            raise ValueError(
+                f"decoded payload is {len(shuffled)} bytes; expected {self.header.uncompressed_byte_length}"
+            )
+        return byte_unshuffle_u16(shuffled, width=self.header.width, height=self.header.height)
+
+
+@dataclass(frozen=True)
+class PreviewFramePacket:
+    """Control-owned delivery header plus an opaque packed preview frame."""
+
+    header: PreviewDeliveryHeader
+    frame: bytes
+
+    def __post_init__(self) -> None:
+        if len(self.frame) != self.header.frame_byte_length:
+            raise ValueError(f"frame is {len(self.frame)} bytes; expected {self.header.frame_byte_length}")
+
+    @classmethod
+    def wrap(
+        cls,
+        frame: bytes | bytearray | memoryview,
+        *,
+        channel_id: str,
+        delivery_stream_id: str,
+        delivery_seq: int,
+    ) -> Self:
+        """Wrap an already-packed preview frame without parsing its contents."""
+        packed_frame = bytes(frame)
+        return cls(
+            header=PreviewDeliveryHeader(
+                channel_id=channel_id,
+                delivery_stream_id=delivery_stream_id,
+                delivery_seq=delivery_seq,
+                frame_byte_length=len(packed_frame),
+            ),
+            frame=packed_frame,
         )
-        if packed is None:
-            raise ValueError("Packing PreviewFrame failed: msgpack.packb returned None")
-        return packed
+
+    @classmethod
+    def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
+        """Parse and validate delivery framing while leaving the preview frame opaque."""
+        packet = memoryview(packed)
+        if len(packet) < DELIVERY_PREFIX.size:
+            raise ValueError("preview delivery packet is truncated before its prefix")
+        magic, framing_version, header_length = DELIVERY_PREFIX.unpack_from(packet)
+        if magic != DELIVERY_MAGIC:
+            raise ValueError("invalid preview delivery magic")
+        if framing_version != DELIVERY_FRAMING_VERSION:
+            raise ValueError(f"unsupported preview delivery framing version: {framing_version}")
+        if not 0 < header_length <= MAX_DELIVERY_HEADER_BYTES:
+            raise ValueError(f"invalid preview delivery header length: {header_length}")
+
+        frame_offset = DELIVERY_PREFIX.size + header_length
+        if len(packet) <= frame_offset:
+            raise ValueError("preview delivery packet is truncated before its frame")
+        try:
+            unpacked = msgpack.unpackb(packet[DELIVERY_PREFIX.size : frame_offset], raw=False)
+        except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
+            raise ValueError("invalid preview delivery MessagePack header") from exc
+        if not isinstance(unpacked, dict):
+            raise ValueError("preview delivery header must be a MessagePack map")
+        return cls(
+            header=PreviewDeliveryHeader.model_validate(unpacked),
+            frame=bytes(packet[frame_offset:]),
+        )
+
+    def pack(self) -> bytes:
+        """Serialize the delivery prefix, header, and unchanged preview frame."""
+        header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
+        if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
+            raise ValueError(f"preview delivery header is too large: {len(header)} bytes")
+        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, DELIVERY_FRAMING_VERSION, len(header)) + header + self.frame
 
 
-# ── Sink Types ─────────────────────────────────────────────────────────
+@dataclass(slots=True)
+class PreviewHealth:
+    frames: int = 0
+    overviews_generated: int = 0
+    overview_busy_drops: int = 0
+    generation_ms_total: float = 0.0
+    generation_ms_max: float = 0.0
+    publish_sent: int = 0
+    publish_busy_drops: int = 0
 
-type PreviewFrameSink = Callable[["PreviewFrame"], None]
-type PreviewViewSink = Callable[[bytes], Awaitable[None]]
+    @property
+    def generation_ms_average(self) -> float:
+        return self.generation_ms_total / self.overviews_generated if self.overviews_generated else 0.0
+
+    def record_frame(self) -> None:
+        self.frames += 1
+
+    def record_overview(self, elapsed_ms: float) -> None:
+        self.overviews_generated += 1
+        self.generation_ms_total += elapsed_ms
+        self.generation_ms_max = max(self.generation_ms_max, elapsed_ms)
+
+    def record_overview_drop(self) -> None:
+        self.overview_busy_drops += 1
+
+    def record_publish(self) -> None:
+        self.publish_sent += 1
+
+    def record_publish_drop(self) -> None:
+        self.publish_busy_drops += 1
+
+    def snapshot(self) -> "PreviewHealth":
+        snapshot = replace(self)
+        self.frames = 0
+        self.overviews_generated = 0
+        self.overview_busy_drops = 0
+        self.generation_ms_total = 0.0
+        self.generation_ms_max = 0.0
+        self.publish_sent = 0
+        self.publish_busy_drops = 0
+        return snapshot
 
 
-# ── Render sizing ─────────────────────────────────────────────────────
-
-
-PREVIEW_JPEG_QUALITY = 95  # single JPEG quality knob for both the overview and the viewport image
-OVERVIEW_WIDTH = 2048  # overview output width when NOT zoomed (the overview is the main view)
-# While zoomed, the viewport image carries the detail at RENDER_CAP, so the full-sensor overview is
-# only a backdrop — render it smaller to keep the per-frame, always-on overview cheap.
-OVERVIEW_WIDTH_ZOOMED = 1024
-RENDER_CAP = 2048  # max width of a single coherent viewport-image render (rendered on demand, not per frame)
-# Fraction each axis grows beyond the viewport so small pans stay covered without a re-render. Only earns
-# its keep when panning a static frame — during live acquisition the viewport re-renders every frame anyway,
-# so overscan is pure per-frame cost then. Kept modest to trim that cost (quadratic in 1 + 2*margin).
-OVERSCAN_MARGIN = 0.15
-
-
-# ── Preview Generator ─────────────────────────────────────────────────
+type _OverviewFuture = asyncio.Future[PreviewFrame]
+type _Sink = Callable[[PreviewFrame], None]
 
 
 class PreviewGenerator:
     """Generates the overview frame and the zoomed viewport image from raw camera frames.
 
-    The overview is always generated at `target_width` with a histogram. The viewport image is one
-    coherent crop (expanded by overscan) at the display resolution, replacing the old pyramid tiles.
+    The overview is always generated at `target_width`. The viewport image is one coherent crop
+    (expanded by overscan) at the display resolution, replacing the old pyramid tiles.
     """
 
     def __init__(
         self,
-        frame_sink: PreviewFrameSink,
-        view_sink: PreviewViewSink | None = None,
-        uid: str = "camera",
+        sink: _Sink,
+        uid: str,
         *,
-        target_width: int = OVERVIEW_WIDTH,
-        fmt: PreviewFmt = PreviewFmt.JPEG,
         viewport: PreviewViewport | None = None,
-        levels: PreviewLevels | None = None,
+        target_width: int = OVERVIEW_WIDTH,
     ) -> None:
-        self._uid = uid
-        self._frame_sink = frame_sink
-        # The zoomed detail layer is one coherent viewport image (preview_view via view_sink).
-        self._view_sink = view_sink
+        self._camera_id = uid
+        self._sink = sink
         self._target_width: int = target_width
-        self._fmt: PreviewFmt = fmt
-        self.viewport = viewport or PreviewViewport()
-        self.levels = levels or PreviewLevels()
-        self._idx: int = 0
+        self._viewport = viewport or PreviewViewport()
+        self._log = logging.getLogger(f"{self._camera_id}.PreviewGenerator")
+
+        self._frame_idx: int = 0
+        self._source_stream_id = uuid4().hex
+        self._work_epoch = 0
         self._current_frame: np.ndarray | None = None
-        self._last_histogram: list[int] | None = None  # most recent overview histogram, for auto-leveling
-        self._colormap: str | None = None
-        # (256, 1, 3) uint8 BGR map for cv2.applyColorMap, precomputed from the colormap LUT.
-        self._colormap_bgr: np.ndarray | None = None
-        self._view_task: asyncio.Task | None = None  # background viewport-image generation
-        self._view_futures: list[asyncio.Future] = []  # tracked for cancellation
-        self._overview_task: asyncio.Task | None = None  # background overview generation
-        self.log = logging.getLogger(f"{self._uid}.PreviewGenerator")
+        self._current_valid_bits: ValidBits = 16
 
-        # Dedicated executor for overview (never competes with the viewport render)
+        self._viewport_task: asyncio.Task[None] | None = None
+        self._overview_future: _OverviewFuture | None = None
         self._overview_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewOverview")
-        # Executor for the viewport-image crop/resample/encode
-        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PreviewView")
+        self._viewport_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewViewport")
 
-        # Preview-health counters: the overview is best-effort (skip-if-busy), so track how many frames
-        # get an overview vs are dropped, plus gen-time, and report per stack via drain_skip_stats().
-        self._skip_frames = 0
-        self._skip_overview_busy = 0
-        self._gen_ms_sum = 0.0
-        self._gen_ms_max = 0.0
-        self._gen_count = 0
+        self.health = PreviewHealth()
 
-    @property
-    def last_histogram(self) -> list[int] | None:
-        """Histogram of the most recent overview frame (pre-level-adjustment), or None before any frame."""
-        return self._last_histogram
+    def set_viewport(self, viewport: PreviewViewport, *, regenerate: bool = False) -> asyncio.Task[None] | None:
+        self._viewport = viewport
+        if regenerate and self._current_frame is not None:
+            return self._schedule_viewport(
+                self._current_frame,
+                self._frame_idx,
+                viewport,
+                valid_bits=self._current_valid_bits,
+                source_stream_id=self._source_stream_id,
+            )
+        return None
 
-    @property
-    def colormap(self) -> str | None:
-        """Colormap name applied to preview frames, or None for grayscale."""
-        return self._colormap
+    def submit_frame(self, frame: np.ndarray, idx: int, *, valid_bits: ValidBits = 16) -> None:
+        """Process a new raw frame: dispatch overview and viewport work in the background.
 
-    @colormap.setter
-    def colormap(self, value: str | None) -> None:
-        self._colormap = value
-        # Resolve straight to BGR and reshape once so the per-frame colormap is a single
-        # cv2.applyColorMap C-gather (~3x faster than the numpy LUT gather + cvtColor).
-        lut = resolve_colormap(value, order=ChannelOrder.BGR) if value else None  # (256, 3) BGR uint8
-        self._colormap_bgr = lut.reshape(-1, 1, 3) if lut is not None else None
-
-    def drain_skip_stats(self) -> dict[str, float]:
-        """Snapshot + reset the preview-health counters (overview generated vs dropped, gen-time)."""
-        gen_avg = self._gen_ms_sum / self._gen_count if self._gen_count else 0.0
-        stats = {
-            "frames": self._skip_frames,
-            "overviews_generated": self._gen_count,
-            "overview_busy_drops": self._skip_overview_busy,
-            "gen_ms_avg": gen_avg,
-            "gen_ms_max": self._gen_ms_max,
-        }
-        self._skip_frames = 0
-        self._skip_overview_busy = 0
-        self._gen_ms_sum = 0.0
-        self._gen_ms_max = 0.0
-        self._gen_count = 0
-        return stats
-
-    async def new_frame(self, frame: np.ndarray, idx: int) -> None:
-        """Process a new raw frame: dispatch overview + tiles as background tasks.
-
-        Tiles use cancel-stale (latest viewport invalidates prior work). Overview
+        The viewport uses cancel-stale (latest viewport invalidates prior work). Overview
         uses skip-if-busy — if the previous overview hasn't finished, drop this
         frame's preview rather than queueing. Returns immediately so callers
         (preview loop, acquisition grab loop) are not gated by preview work.
         """
-        self._idx = idx
+        self._frame_idx = idx
         self._current_frame = frame
+        self._current_valid_bits = valid_bits
+        source_stream_id = self._source_stream_id
 
-        if self._view_sink is not None:
-            self.cancel_view_task()
-            self._view_task = asyncio.create_task(self._generate_and_send_view(frame, idx, self.viewport))
+        self._schedule_viewport(
+            frame,
+            idx,
+            self._viewport,
+            valid_bits=valid_bits,
+            source_stream_id=source_stream_id,
+        )
 
-        self._skip_frames += 1
-        if self._overview_task is None or self._overview_task.done():
-            self._overview_task = asyncio.create_task(self._run_overview(frame, idx))
+        self.health.record_frame()
+        if self._overview_future is None or self._overview_future.done():
+            gen_start = time.perf_counter()
+            work_epoch = self._work_epoch
+            loop = asyncio.get_running_loop()
+            self._overview_future = loop.run_in_executor(
+                self._overview_executor,
+                partial(
+                    PreviewFrame.from_source,
+                    frame,
+                    camera_id=self._camera_id,
+                    source_stream_id=source_stream_id,
+                    layer=PreviewLayer.OVERVIEW,
+                    frame_idx=idx,
+                    viewport=PreviewViewport(),
+                    target_width=self._target_width,
+                    valid_bits=valid_bits,
+                ),
+            )
+            self._overview_future.add_done_callback(
+                partial(
+                    self._on_overview_done,
+                    frame_idx=idx,
+                    gen_start=gen_start,
+                    work_epoch=work_epoch,
+                )
+            )
         else:
-            self._skip_overview_busy += 1  # Gate 1 drop: prior overview still generating
+            self.health.record_overview_drop()  # Gate 1 drop: prior overview still generating
 
-    async def _run_overview(self, frame: np.ndarray, idx: int) -> None:
-        loop = asyncio.get_event_loop()
-        overview = await loop.run_in_executor(self._overview_executor, self._generate_overview, frame, idx)
-        self._frame_sink(overview)
-
-    async def reprocess(self) -> None:
-        """Regenerate overview + tiles from cached raw frame with current settings.
-
-        Useful for applying levels/colormap changes without waiting for the next camera grab,
-        including when preview is stopped.
-        """
-        if self._current_frame is not None:
-            loop = asyncio.get_event_loop()
-            frame, idx = self._current_frame, self._idx
-            overview = await loop.run_in_executor(self._overview_executor, self._generate_overview, frame, idx)
-            self._frame_sink(overview)
-            if self._view_sink is not None:
-                await self._generate_and_send_view(frame, idx, self.viewport)
-
-    async def reprocess_viewport(self, viewport: PreviewViewport) -> None:
-        """Regenerate tiles from cached raw frame for a new viewport.
-
-        Called when the viewport changes between camera grabs, so the user
-        gets updated tiles immediately without waiting for the next frame.
-        """
-        self.viewport = viewport
-        if self._current_frame is not None and self._view_sink is not None:
-            await self._generate_and_send_view(self._current_frame, self._idx, viewport)
-
-    def clear_cache(self) -> None:
-        """Clear cached raw frame. Called on profile change to prevent stale reprocessing."""
+    def reset_stream(self) -> None:
+        """Start a new camera capture identity before resetting frame indices."""
+        self.cancel_pending()
         self._current_frame = None
+        self._source_stream_id = uuid4().hex
 
-    def cancel_view_task(self) -> None:
-        """Cancel in-flight background viewport-image generation and pending executor futures."""
-        if self._view_task is not None and not self._view_task.done():
-            self._view_task.cancel()
-            self._view_task = None
-        for f in self._view_futures:
-            f.cancel()
-        self._view_futures.clear()
+    def cancel_pending(self) -> None:
+        """Cancel preview work without shutting down the reusable worker executors."""
+        self._work_epoch += 1
+        self._cancel_viewport_task()
+        if self._overview_future is not None and not self._overview_future.done():
+            self._overview_future.cancel()
+        self._overview_future = None
 
-    def shutdown(self) -> None:
+    def close(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
-        self.cancel_view_task()
-        if self._overview_task is not None and not self._overview_task.done():
-            self._overview_task.cancel()
-        self._overview_task = None
+        self.cancel_pending()
         self._overview_executor.shutdown(wait=False, cancel_futures=True)
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        self._viewport_executor.shutdown(wait=False, cancel_futures=True)
 
-    # ── Internal: Downsampling ─────────────────────────────────────────
+    def _cancel_viewport_task(self) -> None:
+        """Cancel the current viewport render and discard its result."""
+        if self._viewport_task is not None and not self._viewport_task.done():
+            self._viewport_task.cancel()
+        self._viewport_task = None
 
-    @staticmethod
-    def _downsample(frame: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
-        """Downsample a frame to at most the target dimensions via an integer stride view.
+    def _schedule_viewport(
+        self,
+        frame: np.ndarray,
+        frame_idx: int,
+        viewport: PreviewViewport,
+        *,
+        valid_bits: ValidBits,
+        source_stream_id: str,
+    ) -> asyncio.Task[None]:
+        work_epoch = self._work_epoch
 
-        Stride-only (no cv2.resize): O(output), no full-frame read. Nearest-neighbor (no
-        anti-aliasing) but fine for a live preview; the frontend's drawImage scales to canvas.
+        async def generate_and_send() -> None:
+            if not viewport.needs_adjustment:
+                return
+            render_viewport = viewport.expanded(OVERSCAN_MARGIN)
+            try:
+                viewport_frame = await asyncio.get_running_loop().run_in_executor(
+                    self._viewport_executor,
+                    partial(
+                        PreviewFrame.from_source,
+                        frame,
+                        camera_id=self._camera_id,
+                        source_stream_id=source_stream_id,
+                        layer=PreviewLayer.VIEWPORT,
+                        frame_idx=frame_idx,
+                        viewport=render_viewport,
+                        target_width=RENDER_CAP,
+                        valid_bits=valid_bits,
+                    ),
+                )
+            except asyncio.CancelledError:
+                return
+            if work_epoch != self._work_epoch:
+                return
+            self._sink(viewport_frame)
 
-        The stride is chosen by ceil, so the output never exceeds the target (a floor stride
-        overshoots up to ~2x/axis for inputs between 1x and 2x the target, which blew the
-        viewport up to ~4x its intended pixel count at mid-zoom). A uniform step preserves aspect.
-        """
-        h, w = frame.shape[:2]
-        step_w = -(-w // target_w)  # ceil(w / target_w)
-        step_h = -(-h // target_h)
-        step = max(1, step_w, step_h)
-        return np.ascontiguousarray(frame[::step, ::step])
+        self._cancel_viewport_task()
+        task = asyncio.create_task(generate_and_send())
+        self._viewport_task = task
+        return task
 
-    # ── Internal: Overview ─────────────────────────────────────────────
-
-    def _generate_overview(self, raw_frame: np.ndarray, frame_idx: int) -> PreviewFrame:
-        """Generate the overview frame: full sensor downsampled to target_width with histogram."""
-        gen_start = time.perf_counter()
-
-        full_height, full_width = raw_frame.shape[:2]
-        # Adaptive: while zoomed, the viewport image carries the detail, so the overview is a mere
-        # backdrop — render it smaller to keep this per-frame path cheap. Full width when unzoomed.
-        preview_width = OVERVIEW_WIDTH_ZOOMED if self.viewport.needs_adjustment else self._target_width
-        preview_height = int(full_height * (preview_width / full_width))
-
-        resized = self._downsample(raw_frame, preview_width, preview_height)
-
-        # Histogram on resized data BEFORE level adjustment. cv2.calcHist is ~3.6x faster than
-        # np.histogram for identical 1024-bin counts (1024 bins over the dtype range == a >>6 shift).
-        max_val = np.iinfo(raw_frame.dtype).max
-        num_bins = 1024
-        hist = cv2.calcHist([resized], [0], None, [num_bins], [0, max_val + 1])
-        self._last_histogram = hist.ravel().astype(np.int32).tolist()
-
-        # Apply levels + colormap
-        processed = self._apply_processing(resized, raw_frame.dtype)
-
-        info = PreviewFrameInfo(
-            frame_idx=frame_idx,
-            width=preview_width,
-            height=preview_height,
-            full_width=full_width,
-            full_height=full_height,
-            levels=self.levels,
-            fmt=self._fmt,
-            colormap=self._colormap,
-            histogram=self._last_histogram,
-        )
-
-        preview_frame = PreviewFrame.from_array(processed, info)
-
-        gen_time = time.perf_counter() - gen_start
-        self._gen_ms_sum += gen_time * 1000  # accumulated in the executor thread
-        self._gen_ms_max = max(self._gen_ms_max, gen_time * 1000)
-        self._gen_count += 1
-        if frame_idx < 5 or frame_idx % 100 == 0:
-            self.log.debug(f"Overview frame {frame_idx}: {gen_time * 1000:.1f}ms")
-
-        return preview_frame
-
-    # ── Internal: Viewport image ───────────────────────────────────────
-
-    async def _generate_and_send_view(self, raw_frame: np.ndarray, frame_idx: int, viewport: PreviewViewport) -> None:
-        """Render the zoomed viewport as one coherent image and send it.
-
-        No-op at a full (unzoomed) viewport: the overview frame already covers it. Latest-wins —
-        `cancel_view_task` supersedes any in-flight render whose viewport is already stale.
-        """
-        if not viewport.needs_adjustment:
+    def _on_overview_done(
+        self,
+        future: _OverviewFuture,
+        *,
+        frame_idx: int,
+        gen_start: float,
+        work_epoch: int,
+    ) -> None:
+        if future.cancelled() or work_epoch != self._work_epoch:
             return
-        loop = asyncio.get_event_loop()
-        fut = loop.run_in_executor(self._executor, self._generate_view, raw_frame, frame_idx, viewport)
-        self._view_futures = [fut]
         try:
-            view = await fut
-        except asyncio.CancelledError:
+            overview = future.result()
+        except Exception:
+            self._log.exception("Failed to generate overview frame %d", frame_idx)
             return
-        finally:
-            self._view_futures = []
-        packed = await loop.run_in_executor(self._executor, view.pack)
-        if self._view_sink is not None:
-            await self._view_sink(packed)
-
-    def _generate_view(self, raw_frame: np.ndarray, frame_idx: int, viewport: PreviewViewport) -> PreviewFrame:
-        """Crop the viewport (expanded by overscan), resample once to <= RENDER_CAP, process once, encode once."""
-        full_height, full_width = raw_frame.shape[:2]
-        rect = viewport.expanded(OVERSCAN_MARGIN)
-
-        x0 = max(0, min(int(rect.x * full_width), full_width - 1))
-        y0 = max(0, min(int(rect.y * full_height), full_height - 1))
-        x1 = max(x0 + 1, min(int((rect.x + rect.w) * full_width), full_width))
-        y1 = max(y0 + 1, min(int((rect.y + rect.h) * full_height), full_height))
-
-        crop = raw_frame[y0:y1, x0:x1]
-        crop_w = x1 - x0
-        crop_h = y1 - y0
-
-        out_w = min(crop_w, RENDER_CAP)
-        out_h = max(1, round(crop_h * out_w / crop_w))
-        resized = self._downsample(crop, out_w, out_h)
-        processed = self._apply_processing(resized, raw_frame.dtype)
-
-        rh, rw = resized.shape[:2]
-        info = PreviewFrameInfo(
-            frame_idx=frame_idx,
-            width=rw,
-            height=rh,
-            full_width=full_width,
-            full_height=full_height,
-            levels=self.levels,
-            fmt=self._fmt,
-            colormap=self._colormap,
-            rect=rect,
-            histogram=None,
-        )
-        return PreviewFrame.from_array(processed, info)
-
-    # ── Internal: Shared Processing ────────────────────────────────────
-
-    def _apply_processing(self, frame: np.ndarray, src_dtype: np.dtype) -> np.ndarray:
-        """Apply levels + colormap to a resized frame. Returns uint8 (or BGR if colormap)."""
-        max_val = np.iinfo(src_dtype).max
-        levels = self.levels
-
-        if levels.needs_adjustment:
-            # Level clip/normalize needs the float path — convertScaleAbs' abs() would fold the
-            # below-black-point values back up instead of clamping them to 0.
-            preview_float = np.clip(frame.astype(np.float32) / max_val, levels.min, levels.max)
-            denom = (levels.max - levels.min) + 1e-8
-            preview_float = (preview_float - levels.min) / denom * 255.0
-            preview_uint8 = preview_float.astype(np.uint8)
-        else:
-            # No level adjustment: a single linear scale to uint8 via a cv2 SIMD kernel
-            # (~12x faster than the astype/divide/multiply/astype float roundtrip; ±1 LSB).
-            preview_uint8 = cv2.convertScaleAbs(frame, alpha=255.0 / max_val)
-
-        if self._colormap_bgr is not None:
-            return cv2.applyColorMap(preview_uint8, self._colormap_bgr)
-        return preview_uint8
-
-
-# ── Encoding Functions ─────────────────────────────────────────────────
-
-# PNG (zlib) compression level for preview encodes. Benchmarked at 2048²: level 1 is already at the
-# size floor (level 9 saves only ~3%) at ~1/2 the encode time, so higher levels aren't worth the latency.
-PNG_COMPRESSION = 1
-
-
-def convert_to_jpeg(frame: np.ndarray, quality: int = 100) -> bytes:
-    """Convert a NumPy array (BGR image) to JPEG-encoded bytes using OpenCV."""
-    encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
-    success, encoded_image = cv2.imencode(".jpg", cast("cv2.UMat", frame), encode_params)
-    if not success:
-        raise RuntimeError("JPEG encoding failed")
-    return encoded_image.tobytes()
-
-
-def convert_to_png(frame: np.ndarray, compression: int = PNG_COMPRESSION) -> bytes:
-    """Convert a NumPy array (BGR image) to lossless PNG-encoded bytes using OpenCV.
-
-    `compression` is the zlib level 0-9 (higher = smaller + slower); the default trades near-minimal
-    size for low encode latency.
-    """
-    encode_params = [int(cv2.IMWRITE_PNG_COMPRESSION), compression]
-    success, encoded_image = cv2.imencode(".png", frame, encode_params)
-    if not success:
-        raise RuntimeError("PNG encoding failed")
-    return encoded_image.tobytes()
-
-
-def convert_to_raw(frame: np.ndarray) -> bytes:
-    """Return the raw bytes of the NumPy array without any compression or encoding."""
-    return frame.tobytes()
-
-
-def compress_uint16_frame_zlib(frame: np.ndarray) -> bytes:
-    """Compress a 2D (or 3D) NumPy array of dtype=uint16 with zlib."""
-    if not frame.flags["C_CONTIGUOUS"]:
-        frame = np.ascontiguousarray(frame)
-    raw_bytes = frame.tobytes()
-    return zlib.compress(raw_bytes, level=9)
+        gen_time = time.perf_counter() - gen_start
+        self.health.record_overview(gen_time * 1000)
+        if frame_idx < 5 or frame_idx % 100 == 0:
+            self._log.debug(f"Overview frame {frame_idx}: {gen_time * 1000:.1f}ms")
+        self._sink(overview)

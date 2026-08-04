@@ -4,10 +4,14 @@
 
   import { isValidHex } from '$lib/colors.svelte';
   import { Check, FilterVariant } from '$lib/icons';
-  import type { ColormapCatalog } from '$lib/model';
+  import { AUTO_COLORMAP, type ColormapCatalog } from '$lib/model';
+
+  import { colormapGradient, resolveColormapStops } from './render';
 
   interface Props {
     label: string;
+    colormapPreference: string;
+    autoColormap: string | null;
     colormap: string | null;
     catalog: ColormapCatalog;
     onColormapChange: (colormap: string) => void;
@@ -19,6 +23,8 @@
 
   let {
     label,
+    colormapPreference,
+    autoColormap,
     colormap,
     catalog,
     onColormapChange,
@@ -29,31 +35,16 @@
   }: Props = $props();
 
   function getTriggerColor(cmap: string | null, cat: ColormapCatalog): string {
-    if (!cmap) return '#ffffff';
-    for (const group of cat) {
-      const stops = group.colormaps[cmap];
-      if (stops) return stops[stops.length - 1];
-    }
-    return cmap.startsWith('#') ? cmap : '#ffffff';
+    return resolveColormapStops(cmap, cat).at(-1) ?? '#ffffff';
   }
 
   const triggerColor = $derived(getTriggerColor(colormap, catalog));
-  const colormapName = $derived(colormap ? (colormap.startsWith('#') ? 'custom' : colormap) : 'none');
-
-  const triggerStops = $derived.by(() => {
-    if (!colormap) return null;
-    for (const group of catalog) {
-      const stops = group.colormaps[colormap];
-      if (stops) return stops;
-    }
-    return colormap.startsWith('#') ? [colormap] : null;
-  });
-  // A gradient for multi-stop maps, a solid swatch for a single/custom color.
-  const triggerGradient = $derived(
-    triggerStops && triggerStops.length > 1
-      ? stopsToGradient(triggerStops)
-      : (triggerStops?.[0] ?? 'var(--color-floating)')
+  const colormapName = $derived(
+    colormapPreference === AUTO_COLORMAP ? 'auto' : colormapPreference.startsWith('#') ? 'custom' : colormapPreference
   );
+
+  const triggerGradient = $derived(colormapGradient(resolveColormapStops(colormap, catalog)));
+  const autoGradient = $derived(colormapGradient(resolveColormapStops(autoColormap, catalog)));
 
   const defaultTriggerClass = 'cursor-pointer text-xl leading-5 font-medium transition-colors hover:brightness-125';
 
@@ -75,10 +66,6 @@
     }
     return results;
   });
-
-  function stopsToGradient(stops: string[]): string {
-    return `linear-gradient(to right, ${stops.join(', ')})`;
-  }
 
   function pick(name: string) {
     onColormapChange(name);
@@ -167,6 +154,17 @@
       </div>
 
       <div class="max-h-80 overflow-y-auto border-y border-border px-2">
+        <div class="swatch-grid py-2">
+          <button
+            type="button"
+            onclick={() => pick(AUTO_COLORMAP)}
+            class="swatch-row {colormapPreference === AUTO_COLORMAP ? 'selected' : ''}"
+            aria-label="Select automatic colormap"
+          >
+            <span class="swatch-gradient" style="background: {autoGradient}"></span>
+            <span class="truncate text-base text-fg-muted">auto</span>
+          </button>
+        </div>
         {#if searchResults}
           {#if searchResults.length > 0}
             <div class="swatch-grid pb-2">
@@ -174,10 +172,10 @@
                 <button
                   type="button"
                   onclick={() => pick(name)}
-                  class="swatch-row {colormap === name ? 'selected' : ''}"
+                  class="swatch-row {colormapPreference === name ? 'selected' : ''}"
                   aria-label="Select colormap {name}"
                 >
-                  <span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
+                  <span class="swatch-gradient" style="background: {colormapGradient(stops)}"></span>
                   <span class="truncate text-base text-fg-muted">{name}</span>
                 </button>
               {/each}
@@ -196,10 +194,10 @@
                   <button
                     type="button"
                     onclick={() => pick(name)}
-                    class="swatch-row {colormap === name ? 'selected' : ''}"
+                    class="swatch-row {colormapPreference === name ? 'selected' : ''}"
                     aria-label="Select colormap {name}"
                   >
-                    <span class="swatch-gradient" style="background: {stopsToGradient(stops)}"></span>
+                    <span class="swatch-gradient" style="background: {colormapGradient(stops)}"></span>
                     <span class="truncate text-base text-fg-muted">{name}</span>
                   </button>
                 {/each}

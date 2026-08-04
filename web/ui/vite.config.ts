@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [tailwindcss(), Icons({ compiler: 'svelte' }), sveltekit()],
-    server: { proxy }
+    optimizeDeps: { exclude: ['@bokuweb/zstd-wasm'] },
+    server: { proxy },
+    worker: { format: 'es' }
   };
 });

@@ -5,7 +5,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from vxl_catalog import (
     AcquisitionManifest,
     AcquisitionOrigin,
@@ -19,6 +19,7 @@ from vxl_web.router import get_acquisition, get_active_acquisition, get_discover
 
 from vxl.app import Discovered
 from vxl.instrument import ActiveAcquisitionState, VolumeProgress
+from vxl.system import PreviewConfig
 from vxlib import Cell
 
 
@@ -29,32 +30,65 @@ def _catalog(tmp_path: Path) -> Catalog:
     )
 
 
-def _web_app(catalog: Catalog) -> Any:
+def _web_app(catalog: Catalog, *, preview: PreviewConfig | None = None) -> Any:
     return SimpleNamespace(
         catalog=catalog,
+        preview=preview or PreviewConfig(),
         remotes={},
         discover=lambda: Discovered(instruments={}, templates={}),
     )
 
 
+def _request(app: FastAPI) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "root_path": "",
+            "path": "/api/discovery",
+            "headers": [],
+            "router": app.router,
+        }
+    )
+
+
 async def test_discovery_composes_bounded_application_resources(tmp_path: Path) -> None:
     voxel_app = _web_app(_catalog(tmp_path))
+    web_app = create_app(cast("Any", voxel_app), serve_static=False)
 
-    discovery = await get_discovery(cast("Any", voxel_app))
+    discovery = await get_discovery(_request(web_app), cast("Any", voxel_app))
     payload = discovery.model_dump(mode="json")
 
-    assert set(payload) == {"instruments", "templates", "remotes", "colormaps", "metadata_schemas"}
+    assert set(payload) == {"instruments", "templates", "remotes", "colormaps", "metadata_schemas", "preview"}
     assert payload["instruments"] == {}
     assert payload["templates"] == {}
     assert payload["remotes"] == {}
     assert payload["colormaps"]
     assert "Base" in payload["metadata_schemas"]
+    assert payload["preview"] == {
+        "websocket_url": "ws://testserver/api/preview/ws",
+        "protocol_version": 1,
+        "features": [],
+    }
 
-    web_app = create_app(cast("Any", voxel_app), serve_static=False)
     paths = set(web_app.openapi()["paths"])
     assert "/api/discovery" in paths
     assert set(web_app.openapi()["paths"]["/api/instrument/acquisition"]) >= {"get", "post"}
     assert "/api/catalog/colormaps" not in paths
+
+    voxel_app.preview = PreviewConfig.model_validate(
+        {
+            "external_url": "wss://preview.example.org/ws",
+            "features": ["snapshots"],
+        }
+    )
+    external = await get_discovery(_request(web_app), cast("Any", voxel_app))
+    assert external.preview.model_dump(mode="json") == {
+        "websocket_url": "wss://preview.example.org/ws",
+        "protocol_version": 1,
+        "features": ["snapshots"],
+    }
 
 
 async def test_acquisition_history_routes_list_and_get_manifests(tmp_path: Path) -> None:

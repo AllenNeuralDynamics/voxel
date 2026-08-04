@@ -18,7 +18,7 @@ from vxl.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from vxl.camera.preview import PreviewConfig, PreviewLevels, PreviewViewport
+from vxl.camera.preview import PreviewViewport
 from vxlib import Coalescer
 
 if TYPE_CHECKING:
@@ -33,23 +33,17 @@ class CameraHandle(DeviceHandle[Camera]):
     Works with both local and remote cameras - the transport handles
     the communication details.
 
-    Live preview tuning is exposed as coalescers — ``camera.preview_viewport.update(v)``
-    collapses rapid updates to the latest (one RPC in flight) and ``.cancel()`` (e.g. on
-    stop_preview) discards anything pending. Each drains to a private ``_set_preview_*``.
+    Viewport updates are coalesced: ``camera.preview_viewport.update(v)`` collapses rapid
+    updates to the latest with one RPC in flight.
     """
 
     def __init__(self, adapter: Adapter[Camera]) -> None:
         super().__init__(adapter)
         self.preview_viewport: Coalescer[PreviewViewport] = Coalescer(drain=self._set_preview_viewport)
-        self.preview_levels: Coalescer[PreviewLevels] = Coalescer(drain=self._set_preview_levels)
-        self.preview_colormap: Coalescer[str | None] = Coalescer(drain=self._set_preview_colormap)
         self.roi: DeviceProperty[SensorROI] = self.props.property("roi", SensorROI.model_validate)
         self.frame_area_um: DeviceProperty[Vec2D] = self.props.property("frame_area_um", self._parse_vec2d)
         self.pixel_size_um: DeviceProperty[Vec2D] = self.props.property("pixel_size_um", self._parse_vec2d)
         self.sensor_size_px: DeviceProperty[IVec2D] = self.props.property("sensor_size_px", self._parse_ivec2d)
-        self.preview_config: DeviceProperty[PreviewConfig] = self.props.property(
-            "preview_config", PreviewConfig.model_validate
-        )
         self.ready_for_batch: DeviceProperty[bool] = self.props.property("ready_for_batch", bool)
 
     async def start_preview(
@@ -80,46 +74,14 @@ class CameraHandle(DeviceHandle[Camera]):
     async def close_preview_updates(self) -> None:
         """Stop and await the handle-owned preview update workers."""
         await self.preview_viewport.close()
-        await self.preview_levels.close()
-        await self.preview_colormap.close()
 
-    async def clear_preview_cache(self) -> None:
-        """Clear cached frame on camera. Called on profile change."""
-        await self.call("clear_preview_cache")
+    async def reset_preview_stream(self) -> None:
+        """End the current preview source stream and discard its cached frame."""
+        await self.call("reset_preview_stream")
 
     async def _set_preview_viewport(self, viewport: PreviewViewport) -> None:
         """Apply a preview viewport to the camera — drain for ``preview_viewport``."""
         await self.call("update_preview_viewport", viewport)
-
-    async def _set_preview_levels(self, levels: PreviewLevels) -> None:
-        """Apply preview levels to the camera — drain for ``preview_levels``."""
-        await self.call("update_preview_levels", levels)
-
-    async def _set_preview_colormap(self, colormap: str | None) -> None:
-        """Apply a preview colormap to the camera — drain for ``preview_colormap``."""
-        await self.call("update_preview_colormap", colormap)
-
-    # Legacy direct setters — used only by the old controllers/preview.py; remove with it.
-    async def update_preview_viewport(self, viewport: PreviewViewport) -> None:
-        """Apply a preview viewport now (uncoalesced). Prefer ``preview_viewport.update``."""
-        await self._set_preview_viewport(viewport)
-
-    async def update_preview_levels(self, levels: PreviewLevels) -> None:
-        """Apply preview levels now (uncoalesced). Prefer ``preview_levels.update``."""
-        await self._set_preview_levels(levels)
-
-    async def update_preview_colormap(self, colormap: str | None) -> None:
-        """Apply a preview colormap now (uncoalesced). Prefer ``preview_colormap.update``."""
-        await self._set_preview_colormap(colormap)
-
-    async def auto_level(self, percentile: float = 1.0) -> None:
-        """Set the preview black point from ``percentile`` and the white point from p99.99."""
-        await self.call("auto_level", percentile)
-
-    async def get_preview_config(self) -> PreviewConfig:
-        """Get the current preview display configuration."""
-        result = await self.call("get_preview_config")
-        return PreviewConfig.model_validate(result)
 
     async def check_writable(self, storage: StorageSpec) -> StorageStatus:
         """Preflight: prove this camera's node can write ``storage``. Raises if not. Returns the

@@ -22,13 +22,7 @@ from vxl_catalog import DatasetLocation, StorageSpec
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
-from vxl.camera.preview import (
-    PreviewConfig,
-    PreviewFrame,
-    PreviewGenerator,
-    PreviewLevels,
-    PreviewViewport,
-)
+from vxl.camera.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
 from vxl.camera.storage import describe_dataset_location, resolve_storage
 from vxl.device import DeviceType
 from vxl.system import System
@@ -119,7 +113,6 @@ class StreamInfo(SchemaModel):
     payload_mbs: float | None = None
 
 
-ValidBits = Literal[8, 10, 12, 14, 16]
 PixelFormat = Literal["MONO8", "MONO10", "MONO12", "MONO14", "MONO16"]
 
 PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
@@ -167,25 +160,20 @@ class CameraController(DeviceController["Camera"]):
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
-        self._previewer = PreviewGenerator(
-            frame_sink=self._on_preview_frame,
-            view_sink=self._on_preview_view,
-            uid=device.uid,
-        )
+        self._previewer = PreviewGenerator(sink=self._on_preview_frame, uid=device.uid)
         self._writer: OMEZarrWriter | None = None
         self._task: asyncio.Task[None] | None = None
         self._task_kind: Literal["batch", "close"] | None = None
-        self._preview_publishing = False
-        self._publish_task: asyncio.Task | None = None
+        self._publish_tasks: dict[PreviewLayer, asyncio.Task[None]] = {}
         # Preview-publish counters (best-effort publish is skip-if-busy); reported per stack.
-        self._pub_sent = 0
-        self._pub_busy_drops = 0
         System.Ram.reserve(self.device.uid, weight=1.0)
 
     async def close(self) -> None:
-        self._preview_publishing = False
         self._publish_fn = None
-        self._previewer.shutdown()
+        self._previewer.close()
+        for task in self._publish_tasks.values():
+            task.cancel()
+        self._publish_tasks.clear()
         if self._writer is not None:  # free the reusable ring (its slots' workers + shared memory)
             await self._run_sync(self._writer.close)
             self._writer = None
@@ -209,74 +197,29 @@ class CameraController(DeviceController["Camera"]):
         return self._writer.batches if self._writer else []
 
     def _on_preview_frame(self, frame: PreviewFrame) -> None:
-        # Publish live frames (preview/acquisition); while idle, only a one-off reprocessed frame.
-        if self._mode is CameraMode.IDLE and not self._preview_publishing:
+        task = self._publish_tasks.get(frame.header.layer)
+        if task is not None and not task.done():
+            self._previewer.health.record_publish_drop()  # Gate 2 drop: prior publish still in flight
             return
-        if self._publish_task is not None and not self._publish_task.done():
-            self._pub_busy_drops += 1  # Gate 2 drop: prior publish still in flight
-            return
-        self._pub_sent += 1
-        self._publish_task = asyncio.create_task(self._publish_overview(frame))
+        self._previewer.health.record_publish()
+        self._publish_tasks[frame.header.layer] = asyncio.create_task(self._publish_preview(frame))
 
-    async def _publish_overview(self, frame: PreviewFrame) -> None:
+    async def _publish_preview(self, frame: PreviewFrame) -> None:
+        topic = "preview" if frame.header.layer is PreviewLayer.OVERVIEW else "preview_viewport"
         with suppress(RuntimeError):
-            await self.publish("preview", frame.pack())
-
-    async def _on_preview_view(self, packed: bytes) -> None:
-        if self._mode is CameraMode.IDLE and not self._preview_publishing:
-            return
-        with suppress(RuntimeError):
-            await self.publish("preview_view", packed)
+            await self.publish(topic, frame.pack())
 
     @describe(label="Update Preview Viewport")
     async def update_preview_viewport(self, viewport: PreviewViewport):
-        if self._mode is not CameraMode.IDLE:
-            self._previewer.viewport = viewport
-        else:
-            self._preview_publishing = True
-            await self._previewer.reprocess_viewport(viewport)
-            self._preview_publishing = False
-
-    @describe(label="Update Preview Levels")
-    async def update_preview_levels(self, levels: PreviewLevels):
-        self._previewer.levels = levels
-        if self._mode is CameraMode.IDLE:
-            self._preview_publishing = True
-            await self._previewer.reprocess()
-            self._preview_publishing = False
-
-    @describe(label="Clear Preview Cache")
-    async def clear_preview_cache(self) -> None:
-        """Clear cached frame. Called on profile change."""
-        self._previewer.clear_cache()
-
-    @describe(label="Update Preview Colormap")
-    async def update_preview_colormap(self, colormap: str | None) -> None:
-        self._previewer.colormap = colormap
-        if self._mode is CameraMode.IDLE:
-            self._preview_publishing = True
-            await self._previewer.reprocess()
-            self._preview_publishing = False
-
-    @describe(label="Auto Level")
-    async def auto_level(self, percentile: float = 1.0) -> None:
-        """Set the black point from ``percentile`` and the white point from p99.99."""
-        if (histogram := self._previewer.last_histogram) is not None:
-            await self.update_preview_levels(PreviewLevels.from_histogram(histogram, percentile))
-
-    @property
-    @describe(label="Preview Config", stream=True)
-    def preview_config(self) -> PreviewConfig:
-        return PreviewConfig(
-            viewport=self._previewer.viewport,
-            levels=self._previewer.levels,
-            colormap=self._previewer.colormap,
+        task = self._previewer.set_viewport(
+            viewport,
+            regenerate=self._mode is CameraMode.IDLE,
         )
+        await task if task is not None else None
 
-    @describe(label="Get Preview Config")
-    async def get_preview_config(self) -> PreviewConfig:
-        """Deprecated — use preview_config property instead."""
-        return self.preview_config
+    @describe(label="Reset Preview Stream")
+    async def reset_preview_stream(self) -> None:
+        self._previewer.reset_stream()
 
     @describe(label="Start Preview")
     async def start_preview(
@@ -295,6 +238,7 @@ class CameraController(DeviceController["Camera"]):
 
         self._mode = CameraMode.PREVIEW
         self._frame_idx = 0
+        self._previewer.reset_stream()
         self._preview_task = asyncio.create_task(self._preview_loop())
 
         return "preview"
@@ -303,7 +247,11 @@ class CameraController(DeviceController["Camera"]):
         try:
             while self._mode == CameraMode.PREVIEW:
                 frame = await self._run_sync(self.device.grab_frame)
-                await self._previewer.new_frame(frame, idx=self._frame_idx)
+                self._previewer.submit_frame(
+                    frame,
+                    idx=self._frame_idx,
+                    valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))],
+                )
                 self._frame_idx += 1
         except asyncio.CancelledError:
             pass
@@ -317,8 +265,7 @@ class CameraController(DeviceController["Camera"]):
             return
 
         self._mode = CameraMode.IDLE
-        self._preview_publishing = False
-        self._previewer.cancel_view_task()
+        self._previewer.cancel_pending()
         if self._preview_task:
             await self._preview_task
             self._preview_task = None
@@ -371,6 +318,7 @@ class CameraController(DeviceController["Camera"]):
 
         self._mode = CameraMode.ACQUISITION
         self._frame_idx = 0
+        self._previewer.reset_stream()
         self._task = None
         self._task_kind = None
 
@@ -450,8 +398,7 @@ class CameraController(DeviceController["Camera"]):
         dropped, the buffer freed, and the mode returned to IDLE in a ``finally``, so a close failure
         can't wedge the camera into "Stack already open" on the next run.
         """
-        self._preview_publishing = False
-        self._previewer.cancel_view_task()
+        self._previewer.cancel_pending()
         try:
             if self._writer is not None:
                 await self._run_sync(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
@@ -461,21 +408,19 @@ class CameraController(DeviceController["Camera"]):
         log.info("Stack closed for %s", self.device.uid)
         # Preview health for the stack: how many frames got an overview vs were dropped (best-effort),
         # overview gen-time, and publish drops. overview_busy_drops climbing means gen can't hold 6fps.
-        pv = self._previewer.drain_skip_stats()
+        pv = self._previewer.health.snapshot()
         log.info(
             "Preview health %s: frames=%d overview_gen=%d overview_busy_drops=%d "
             "gen_ms(avg=%.1f max=%.1f) | publish_sent=%d publish_busy_drops=%d",
             self.device.uid,
-            pv["frames"],
-            pv["overviews_generated"],
-            pv["overview_busy_drops"],
-            pv["gen_ms_avg"],
-            pv["gen_ms_max"],
-            self._pub_sent,
-            self._pub_busy_drops,
+            pv.frames,
+            pv.overviews_generated,
+            pv.overview_busy_drops,
+            pv.generation_ms_average,
+            pv.generation_ms_max,
+            pv.publish_sent,
+            pv.publish_busy_drops,
         )
-        self._pub_sent = 0
-        self._pub_busy_drops = 0
 
     @describe(label="Release Writer")
     async def release_writer(self) -> None:
@@ -540,7 +485,11 @@ class CameraController(DeviceController["Camera"]):
         for _ in range(num_frames):
             frame = await self._run_sync(self.device.grab_frame)
             writer.add_frame(frame)
-            await self._previewer.new_frame(frame, self._frame_idx)
+            self._previewer.submit_frame(
+                frame,
+                self._frame_idx,
+                valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))],
+            )
             self._frame_idx += 1
         await self._run_sync(self.device.stop)
 

@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
 
-  import { channelBoundingBox, compositeViewFrames, type Preview, wheelZoomFactor } from '$lib/model';
+  import { channelBoundingBox, type Preview, wheelZoomFactor } from '$lib/model';
   import SpinBox from '$lib/prop/numeric/SpinBox.svelte';
   import { clampTopLeft } from '$lib/utils';
 
@@ -20,9 +20,9 @@
 
   let canvasEl: HTMLCanvasElement;
   let canvasContainerEl: HTMLDivElement;
-  let ctx: CanvasRenderingContext2D | null = null;
   let isRendering = false;
   let needsRedraw = false;
+  let drawPending = false;
   let animFrameId: number | null = null;
 
   // Live container size, measured from the DOM each frame (see syncSize).
@@ -128,15 +128,25 @@
   function frameLoop() {
     if (!isRendering) return;
     syncSize();
-    if (needsRedraw && ctx && canvasEl) {
-      needsRedraw = false;
-      compositeViewFrames(ctx, canvasEl, previewer.channels, previewer.viewport);
-    }
+    if (needsRedraw && !drawPending && canvasEl) void draw();
     animFrameId = requestAnimationFrame(frameLoop);
   }
 
+  async function draw() {
+    drawPending = true;
+    try {
+      do {
+        needsRedraw = false;
+        await previewer.render(canvasEl);
+      } while (needsRedraw && isRendering);
+    } catch (error) {
+      console.error('[preview] WebGPU render failed:', error);
+    } finally {
+      drawPending = false;
+    }
+  }
+
   onMount(() => {
-    ctx = canvasEl.getContext('2d');
     syncSize(); // seed size + aspect before the first frame
     isRendering = true;
     frameLoop();
@@ -179,7 +189,7 @@
   });
 
   // Navigator locates the live viewport when zoomed in.
-  const hasFrames = $derived(previewer.channels.some((ch) => ch.visible && ch.frame));
+  const hasFrames = $derived(previewer.channels.some((ch) => ch.visible && ch.overviewFrame));
   const zoomed = $derived(previewer.viewport.w < 1 || previewer.viewport.h < 1);
   const showNavigator = $derived(hasFrames && zoomed);
 </script>
@@ -192,6 +202,12 @@
 <div class="relative h-full w-full" bind:this={canvasContainerEl}>
   <canvas bind:this={canvasEl} class="h-full w-full"></canvas>
 
+  {#if previewer.error}
+    <div class="absolute inset-x-4 top-16 z-10 rounded border border-danger/40 bg-canvas/90 px-3 py-2 text-danger">
+      {previewer.error}
+    </div>
+  {/if}
+
   <!-- Left overlay: preview controls (live-only — this canvas renders only in Live mode) -->
   <div class="absolute bottom-4 left-4 z-10">
     <PreviewControls {previewer} />
@@ -199,6 +215,14 @@
 
   <!-- Right overlay: viewport minimap (when zoomed) + always-on pan/zoom controls, above the scale bar -->
   <div class="pointer-events-none absolute right-4 bottom-4 z-10 flex flex-col items-end gap-1.5">
+    <!-- Fixed height so the controls above never shift as the scale bar toggles -->
+    <div class="canvas-overlay-halo flex h-6 flex-col items-end justify-end gap-0.5">
+      {#if scaleBar}
+        {@render scaleBarBadge(scaleBar)}
+      {:else}
+        {@render scaleBarBadge(null)}
+      {/if}
+    </div>
     <div class="pointer-events-auto flex w-fit max-w-62 flex-col gap-1.5 overlay-panel p-1.5">
       {#if showNavigator}
         <div transition:fade={{ duration: 150 }}>
@@ -234,15 +258,6 @@
           class="bg-transparent"
         />
       </div>
-    </div>
-
-    <!-- Fixed height so the controls above never shift as the scale bar toggles -->
-    <div class="canvas-overlay-halo flex h-6 flex-col items-end justify-end gap-0.5">
-      {#if scaleBar}
-        {@render scaleBarBadge(scaleBar)}
-      {:else}
-        {@render scaleBarBadge(null)}
-      {/if}
     </div>
   </div>
 </div>

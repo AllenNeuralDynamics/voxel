@@ -24,7 +24,15 @@ from vxl_catalog import (
 
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from vxl.camera import CameraHandle, CaptureState, PreviewLevels, PreviewViewport, StorageSpec, resolve_storage
+from vxl.camera import (
+    CameraHandle,
+    CaptureState,
+    PreviewFramePacket,
+    PreviewLayer,
+    PreviewViewport,
+    StorageSpec,
+    resolve_storage,
+)
 from vxl.daq.clocked import Signals
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
@@ -173,7 +181,8 @@ class Instrument:
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
         self._acquisition = Cell[ActiveAcquisitionState | None](None)
-        self._preview_epoch = Cell[int](0)
+        self._delivery_stream_id = Cell[str](uuid.uuid4().hex)
+        self._delivery_seq = 0
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
         self._routing_targets = Cell[dict[str, str]]({})
@@ -183,8 +192,7 @@ class Instrument:
             reducer=merge_dicts,
         )
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
-        self.frames: Emitter[tuple[str, bytes]] = Emitter()
-        self.views: Emitter[tuple[str, bytes]] = Emitter()
+        self.preview_frames: Emitter[tuple[str, PreviewLayer, bytes]] = Emitter()
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
 
     @property
@@ -223,10 +231,9 @@ class Instrument:
         return self._active_profile_id
 
     @property
-    def preview_epoch(self) -> Readable[int]:
-        """Monotonic counter bumped whenever displayed preview frames go stale (e.g. profile switch);
-        clients clear their preview when it changes."""
-        return self._preview_epoch
+    def delivery_stream_id(self) -> Readable[str]:
+        """Identity of the current control-owned preview delivery stream."""
+        return self._delivery_stream_id
 
     @property
     def routing_targets(self) -> Readable[dict[str, str]]:
@@ -262,16 +269,6 @@ class Instrument:
         for ch_id, ch in channels.items():
             rot = self._hal.config.detection[self._channel_config(ch_id).detection].rotation_deg
             ch.camera.preview_viewport.update(self._viewport.to_sensor_space(rot) if rot else self._viewport)
-
-    def update_levels(self, levels: dict[str, PreviewLevels]) -> None:
-        for ch_id, lvl in levels.items():
-            if (ch := self.active_channels.get(ch_id)) is not None:
-                ch.camera.preview_levels.update(lvl)
-
-    def update_colormaps(self, colormaps: dict[str, str]) -> None:
-        for ch_id, cmap in colormaps.items():
-            if (ch := self.active_channels.get(ch_id)) is not None:
-                ch.camera.preview_colormap.update(cmap)
 
     async def open(self) -> None:
         """Open the hardware, activate the default profile, route preview frames, and watch the bench."""
@@ -717,7 +714,7 @@ class Instrument:
             await self._stop_preview()
 
     async def _apply_profile(self, profile_id: str) -> None:
-        """Drive hardware to a saved profile config. Pure: knows nothing about preview.
+        """Drive hardware to a saved profile config and invalidate the previous preview stream.
 
         The hardware steps read the active profile via the Cell, so the id is set first and rolled back
         on failure — it always names the last fully-applied profile. Requires exclusive access, guaranteed
@@ -729,21 +726,21 @@ class Instrument:
         previous_id = self._active_profile_id.value
         await self._active_profile_id.set(profile_id)
         try:
-            # Invalidate preview before the colormap/viewport updates below: bump the epoch (clients clear
-            # the previous profile's frames on the next status) and drop each camera's cached raw frame (so
-            # the idle reprocess those updates trigger can't re-render the previous profile).
-            await self._preview_epoch.set(self._preview_epoch.value + 1)
-            await asyncio.gather(*(ch.camera.clear_preview_cache() for ch in self.active_channels.values()))
+            await self._reset_preview_delivery()
             await self._apply_filters()
             await self._apply_settings()
-            for ch_id, ch in self.active_channels.items():
-                ch.camera.preview_colormap.update(self._channel_config(ch_id).colormap)
             await self._run_setup_commands()
             await self._apply_signals()
             self.update_viewport()
         except Exception:
             await self._active_profile_id.set(previous_id)
             raise
+
+    async def _reset_preview_delivery(self) -> None:
+        """Start a new delivery stream before previously displayed preview frames become stale."""
+        self._delivery_seq = 0
+        await self._delivery_stream_id.set(uuid.uuid4().hex)
+        await asyncio.gather(*(ch.camera.reset_preview_stream() for ch in self.active_channels.values()))
 
     async def _start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
         """Start preview for the active profile. Caller holds ``self._lock``."""
@@ -921,8 +918,6 @@ class Instrument:
             updated = imaging.channels[channel_id].model_copy(update=changes)
             imaging = imaging.model_copy(update={"channels": {**imaging.channels, channel_id: updated}})
             await self._bench.update(imaging=imaging)
-            if "emission" in changes and channel_id in self.active_channels:
-                self.active_channels[channel_id].camera.preview_colormap.update(updated.colormap)
 
     async def update_output(self, patch: WriterPatch) -> None:
         async with self._lock:
@@ -1369,16 +1364,28 @@ class Instrument:
         await self._bench.update(imaging=imaging)
 
     async def _subscribe_camera(self, cam_id: str, camera: CameraHandle) -> None:
-        async def forward_frames(data: bytes) -> None:
-            if (channel_id := self._channel_for_camera(cam_id)) is not None:
-                await self.frames.emit((channel_id, data))
+        async def forward_overview(frame: bytes) -> None:
+            await self._emit_preview_frame(cam_id, PreviewLayer.OVERVIEW, frame)
 
-        async def forward_views(data: bytes) -> None:
-            if (channel_id := self._channel_for_camera(cam_id)) is not None:
-                await self.views.emit((channel_id, data))
+        async def forward_viewport(frame: bytes) -> None:
+            await self._emit_preview_frame(cam_id, PreviewLayer.VIEWPORT, frame)
 
-        self._preview_unsubs.append(camera.subscribe("preview", forward_frames))
-        self._preview_unsubs.append(camera.subscribe("preview_view", forward_views))
+        self._preview_unsubs.append(camera.subscribe("preview", forward_overview))
+        self._preview_unsubs.append(camera.subscribe("preview_viewport", forward_viewport))
+
+    async def _emit_preview_frame(self, camera_id: str, layer: PreviewLayer, frame: bytes) -> None:
+        """Map and wrap one opaque camera frame for control-owned delivery."""
+        if (channel_id := self._channel_for_camera(camera_id)) is None:
+            return
+        delivery_seq = self._delivery_seq
+        packet = PreviewFramePacket.wrap(
+            frame,
+            channel_id=channel_id,
+            delivery_stream_id=self._delivery_stream_id.value,
+            delivery_seq=delivery_seq,
+        ).pack()
+        self._delivery_seq = delivery_seq + 1
+        await self.preview_frames.emit((channel_id, layer, packet))
 
     async def _apply_filters(self) -> None:
         desired: dict[str, str] = {}

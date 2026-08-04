@@ -11,7 +11,7 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import { ContextMenu } from '$lib/kit';
-  import { type AlignEdge, compositeFullFrames, type Instrument, type TaskTile } from '$lib/model';
+  import { type AlignEdge, type Instrument, type TaskTile } from '$lib/model';
   import { toastError } from '$lib/utils';
 
   import { getTaskSelection } from './selection.svelte';
@@ -184,11 +184,11 @@
   const FOV_RESOLUTION = 256;
   let thumbnail = $state('');
   let needsRedraw = false;
+  let thumbnailRendering = false;
   let animFrameId: number | null = null;
 
   const offscreen = document.createElement('canvas');
   offscreen.width = FOV_RESOLUTION;
-  const ctx = offscreen.getContext('2d')!;
 
   $effect(() => {
     const aspect = fovW / fovH;
@@ -199,7 +199,9 @@
     // Track frame index AND frame presence: on a profile switch the frames are cleared (frame → null)
     // while frame_idx is left as-is, so keying on the index alone would leave a stale thumbnail.
     () =>
-      instrument.preview.channels.map((ch) => `${ch.latestFrameInfo?.frame_idx ?? -1}:${ch.frame ? 1 : 0}`).join(','),
+      instrument.preview.channels
+        .map((ch) => `${ch.overviewFrame?.frame_idx ?? -1}:${ch.overviewFrame ? 1 : 0}`)
+        .join(','),
     () => {
       needsRedraw = true;
     }
@@ -213,17 +215,27 @@
     }
   );
 
-  function fovFrameLoop() {
-    // Skip when the thumbnail layer is hidden — no point compositing/encoding what isn't shown.
-    if (needsRedraw && layers.thumbnail) {
-      needsRedraw = false;
+  async function renderFovThumbnail() {
+    if (thumbnailRendering) return;
+    thumbnailRendering = true;
+    needsRedraw = false;
+    try {
       const channels = instrument.preview.channels;
-      if (channels.some((ch) => ch.visible && ch.frame)) {
-        compositeFullFrames(ctx, offscreen, channels);
+      if (channels.some((channel) => channel.visible && channel.overviewFrame)) {
+        await instrument.preview.renderFull(offscreen);
         thumbnail = offscreen.toDataURL('image/png');
       } else {
         thumbnail = '';
       }
+    } finally {
+      thumbnailRendering = false;
+    }
+  }
+
+  function fovFrameLoop() {
+    // Skip when the thumbnail layer is hidden — no point compositing/encoding what isn't shown.
+    if (needsRedraw && layers.thumbnail) {
+      void renderFovThumbnail();
     }
     animFrameId = requestAnimationFrame(fovFrameLoop);
   }

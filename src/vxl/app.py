@@ -13,7 +13,7 @@ from vxl_catalog import Catalog, FileCatalogBackend
 from vxl.camera import resolve_storage
 from vxl.errors import Loaded
 from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection, InstrumentState
-from vxl.system import Remote, System
+from vxl.system import PreviewConfig, Remote, System
 from vxlib import Cell, Readable, load_yaml, save_yaml
 
 logger = logging.getLogger(__name__)
@@ -98,11 +98,11 @@ class VoxelApp:
 
     def __init__(self, catalog: Catalog | None = None) -> None:
         self._active: Cell[Instrument | None] = Cell(None)
-        system = System()
-        system.dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
+        self._system = System()
+        self._system.dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
         self.instruments_dir.mkdir(exist_ok=True)
         self._catalog = catalog or Catalog(
-            FileCatalogBackend(system.dir / "catalog"),
+            FileCatalogBackend(self._system.dir / "catalog"),
             resolve_root=lambda spec: resolve_storage(spec).target,
         )
 
@@ -115,7 +115,12 @@ class VoxelApp:
     def remotes(self) -> dict[str, Remote]:
         """The machine's configured object stores (name → connection + selectable roots), from
         :attr:`System.remotes` — the selectable acquisition targets. Local runs use no remote."""
-        return System().remotes
+        return self._system.remotes
+
+    @property
+    def preview(self) -> PreviewConfig:
+        """The machine's configured preview service selection and optional capabilities."""
+        return self._system.preview
 
     @property
     def active(self) -> Readable[Instrument | None]:
@@ -129,7 +134,7 @@ class VoxelApp:
     @property
     def instruments_dir(self) -> Path:
         """Root holding the ``<name>.voxel`` instrument directories."""
-        return System().dir / "instruments"
+        return self._system.dir / "instruments"
 
     def discover(self) -> Discovered:
         """Existing instruments (under ``instruments_dir``) + shipped templates. No hardware."""

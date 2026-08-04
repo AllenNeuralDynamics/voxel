@@ -7,47 +7,46 @@ preview streams, plus the shared viewport; :class:`vxl_qt.preview.panel.PreviewP
 import asyncio
 from dataclasses import dataclass
 
+import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
-from vxl.camera.preview import (
-    PreviewFrame,
-    PreviewFrameInfo,
-    PreviewLevels,
-    PreviewViewport,
-)
+from vxl.camera.preview import PreviewFrame, PreviewSourceHeader, PreviewViewport
 from vxl.instrument import Instrument
 from vxlib import Teardown
 
 
-def _decode_image(data: bytes) -> QImage | None:
-    """Decode compressed bytes (JPEG/PNG) to a QImage. Safe to run off the UI thread."""
-    image = QImage()
-    return image if image.loadFromData(data) else None
+def _decode_image(data: bytes) -> tuple[PreviewSourceHeader, QImage]:
+    """Decode a raw source packet to a display-scaled grayscale image."""
+    source = PreviewFrame.from_packed(data)
+    pixels = source.decode()
+    if source.header.valid_bits < 16:
+        maximum = (1 << source.header.valid_bits) - 1
+        pixels = (pixels.astype(np.uint32) * 65535 // maximum).astype(np.uint16)
+    image = QImage(
+        pixels.data,
+        source.header.width,
+        source.header.height,
+        pixels.strides[0],
+        QImage.Format.Format_Grayscale16,
+    ).copy()
+    return source.header, image
 
 
 @dataclass
 class ChannelData:
     """Display data for one channel: the overview backdrop, the coherent high-res viewport image (when
     zoomed) + the sensor-normalized region it covers, and the sensor geometry needed to lay it out (full
-    sensor size + rotation). Decoded to ``QImage`` for direct ``QPainter`` compositing. Histogram
-    accompanies the overview."""
+    sensor size + rotation). Decoded to ``QImage`` for direct ``QPainter`` compositing."""
 
     frame: QImage | None = None  # overview backdrop (full sensor, downsampled)
-    colormap: str | None = None
-    histogram: list[int] | None = None
     sensor_w: int = 0
     sensor_h: int = 0
     rotation_deg: int = 0
-    view: QImage | None = None  # latest coherent viewport image (zoomed); None at full viewport
-    view_rect: PreviewViewport | None = None  # sensor-normalized region the view covers (incl. overscan)
-    view_frame_idx: int = -1  # for latest-wins
-
-    def levels(self, percentile: float = 1.0) -> PreviewLevels:
-        """Calculate auto-levels from histogram."""
-        if self.histogram is None:
-            return PreviewLevels()
-        return PreviewLevels.from_histogram(self.histogram, percentile)
+    source_stream_id: str = ""
+    viewport_frame: QImage | None = None  # latest coherent viewport image; None at full viewport
+    viewport_rect: PreviewViewport | None = None  # sensor-normalized region covered, including overscan
+    viewport_frame_idx: int = -1  # for latest-wins
 
 
 class PreviewStore(QObject):
@@ -86,26 +85,38 @@ class PreviewStore(QObject):
             self._channels[channel] = data
         return data
 
-    def set_frame(self, channel: str, frame: QImage, info: PreviewFrameInfo, rotation_deg: int) -> None:
+    def set_frame(self, channel: str, frame: QImage, header: PreviewSourceHeader, rotation_deg: int) -> None:
         """Store the overview backdrop for a channel, preserving any tile overlay."""
         data = self._channel(channel)
+        if data.source_stream_id != header.source_stream_id:
+            data.viewport_frame = None
+            data.viewport_rect = None
+            data.viewport_frame_idx = -1
+            data.source_stream_id = header.source_stream_id
         data.frame = frame
-        data.colormap = info.colormap
-        data.histogram = info.histogram
-        data.sensor_w = info.full_width
-        data.sensor_h = info.full_height
+        data.sensor_w = header.sensor_width
+        data.sensor_h = header.sensor_height
         data.rotation_deg = rotation_deg
         self.frame_received.emit(channel)
         self.composite_updated.emit()
 
-    def set_view(self, channel: str, info: PreviewFrameInfo, image: QImage) -> None:
+    def set_viewport_frame(self, channel: str, header: PreviewSourceHeader, image: QImage) -> None:
         """Store the latest coherent viewport image + its sensor-normalized rect (latest-wins by frame index)."""
         data = self._channel(channel)
-        if info.frame_idx < data.view_frame_idx:
+        if data.source_stream_id != header.source_stream_id:
+            data.viewport_frame_idx = -1
+            data.source_stream_id = header.source_stream_id
+        if header.frame_idx < data.viewport_frame_idx:
             return
-        data.view = image
-        data.view_rect = info.rect
-        data.view_frame_idx = info.frame_idx
+        data.viewport_frame = image
+        rect = header.source_rect_px
+        data.viewport_rect = PreviewViewport(
+            x=rect.x / header.sensor_width,
+            y=rect.y / header.sensor_height,
+            w=rect.width / header.sensor_width,
+            h=rect.height / header.sensor_height,
+        )
+        data.viewport_frame_idx = header.frame_idx
         self.composite_updated.emit()
 
     def start_feed(self, instrument: Instrument) -> Teardown:
@@ -116,7 +127,7 @@ class PreviewStore(QObject):
         self._instrument = instrument
         unsubs = [
             instrument.frames.subscribe(self._on_frame),
-            instrument.views.subscribe(self._on_view),
+            instrument.viewport_frames.subscribe(self._on_viewport_frame),
             instrument.preview_epoch.subscribe(lambda _e: self.clear_frames()),
         ]
 
@@ -128,20 +139,16 @@ class PreviewStore(QObject):
         return teardown
 
     async def _on_frame(self, update: tuple[str, bytes]) -> None:
-        # Decode off the UI thread — a synchronous loadFromData would block the qasync (UI) loop.
+        # Decompress off the UI thread so the qasync loop remains responsive.
         channel, data = update
-        frame = PreviewFrame.from_packed(data)
-        image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, frame.data)
-        if image is not None:
-            self.set_frame(channel, image, frame.info, self._rotation_for(channel))
+        header, image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, data)
+        self.set_frame(channel, image, header, self._rotation_for(channel))
 
-    async def _on_view(self, update: tuple[str, bytes]) -> None:
-        # Decode off the UI thread — a synchronous loadFromData would block the qasync (UI) loop.
+    async def _on_viewport_frame(self, update: tuple[str, bytes]) -> None:
+        # Decompress off the UI thread so the qasync loop remains responsive.
         channel, data = update
-        frame = PreviewFrame.from_packed(data)
-        image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, frame.data)
-        if image is not None:
-            self.set_view(channel, frame.info, image)
+        header, image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, data)
+        self.set_viewport_frame(channel, header, image)
 
     def _rotation_for(self, channel: str) -> int:
         """The channel's camera rotation (deg) from its channel config + HAL config; 0 if unknown."""
@@ -182,15 +189,3 @@ class PreviewStore(QObject):
         self._viewport = PreviewViewport()
         self._is_interacting = False
         self.composite_updated.emit()
-
-    def get_histogram(self, channel: str) -> list[int] | None:
-        """Get the histogram for a channel."""
-        if channel in self._channels:
-            return self._channels[channel].histogram
-        return None
-
-    def get_levels(self, channel: str, percentile: float = 1.0) -> PreviewLevels:
-        """Calculate auto-levels for a channel."""
-        if channel in self._channels:
-            return self._channels[channel].levels(percentile)
-        return PreviewLevels()

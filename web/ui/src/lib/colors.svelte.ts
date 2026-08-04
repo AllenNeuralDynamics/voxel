@@ -109,6 +109,11 @@ function spectralHex(wavelength: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+/** Stable emission pseudocolor for image rendering; unlike UI colors, this is independent of the active theme. */
+export function emissionToPreviewColor(wavelength: number | null | undefined): string | null {
+  return typeof wavelength === 'number' && Number.isFinite(wavelength) ? spectralHex(wavelength) : null;
+}
+
 /**
  * Convert an emission wavelength (nm) to a theme-legible color.
  *

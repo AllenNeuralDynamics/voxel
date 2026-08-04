@@ -9,7 +9,15 @@ from .base import (
     StorageStatus,
 )
 from .handle import CameraHandle
-from .preview import PreviewFrame, PreviewLevels, PreviewViewport
+from .preview import (
+    PreviewDeliveryHeader,
+    PreviewFrame,
+    PreviewFramePacket,
+    PreviewLayer,
+    PreviewSourceHeader,
+    PreviewViewport,
+    SourceRectPx,
+)
 from .storage import resolve_storage
 
 __all__ = [
@@ -18,11 +26,15 @@ __all__ = [
     "CameraHandle",
     "CameraMode",
     "CaptureState",
+    "PreviewDeliveryHeader",
     "PreviewFrame",
-    "PreviewLevels",
+    "PreviewFramePacket",
+    "PreviewLayer",
+    "PreviewSourceHeader",
     "PreviewViewport",
     "RemoteTarget",
     "SensorROI",
+    "SourceRectPx",
     "StorageSpec",
     "StorageStatus",
     "resolve_storage",

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { watch } from 'runed';
+  import { onMount } from 'svelte';
 
   import { Eye, EyeOff, VideoCamera } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
@@ -20,6 +21,9 @@
 
   // Manual show/hide, remembered across sessions; gates the layer while preview or capture is active.
   const show = pref('stage:live-visible', true);
+  let liveCanvas: HTMLCanvasElement;
+  let rendering = false;
+  let renderAgain = false;
 
   // The live FOV footprint (stage µm) centered on the current pose; null until pose + FOV are known.
   function liveBox(): Bounds | null {
@@ -36,17 +40,32 @@
   // laid over the map so "now" wins over any snapshot/inpaint beneath. (The off-screen pointer back to the
   // pose lives in StageView's marker chrome, so it shows whether or not a preview is running.)
   const draw = (p: Painter) => {
-    const frames = preview?.liveFrames() ?? [];
-    if (frames.length === 0) return;
+    const box = liveBox();
+    if (!box || !liveCanvas || !preview?.channels.some((channel) => channel.visible && channel.overviewFrame)) return;
     p.pass('source-over', (tile) => {
-      for (const f of frames) {
-        tile.pass('lighter', (acc) => {
-          acc.image(f.overview.src, f.overview.rect.x, f.overview.rect.y, f.overview.rect.w, f.overview.rect.h);
-          if (f.detail) acc.image(f.detail.src, f.detail.rect.x, f.detail.rect.y, f.detail.rect.w, f.detail.rect.h);
-        });
-      }
+      tile.image(liveCanvas, box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY);
     });
   };
+
+  async function renderLiveFrame() {
+    if (!preview || !liveCanvas) return;
+    if (rendering) {
+      renderAgain = true;
+      return;
+    }
+    rendering = true;
+    try {
+      do {
+        renderAgain = false;
+        liveCanvas.width = 1024;
+        liveCanvas.height = Math.max(1, Math.round(1024 / preview.boundingBoxAspect));
+        await preview.renderFull(liveCanvas);
+      } while (renderAgain);
+      scene.invalidate();
+    } finally {
+      rendering = false;
+    }
+  }
 
   function hitTest(world: [number, number]): LiveHit | null {
     const box = liveBox();
@@ -72,8 +91,10 @@
   // Repaint on every new frame / detail view / channel change, and whenever visibility flips.
   watch(
     () => [preview?.redrawGeneration, active, show.get()] as const,
-    () => scene.invalidate()
+    () => void renderLiveFrame()
   );
+
+  onMount(() => void renderLiveFrame());
 </script>
 
 {#snippet liveMenu()}
@@ -84,6 +105,7 @@
 {/snippet}
 
 <div class="flex flex-col gap-0.5">
+  <canvas bind:this={liveCanvas} class="hidden"></canvas>
   <div class="flex items-center gap-1 px-3 py-1">
     <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Live</span>
     <button

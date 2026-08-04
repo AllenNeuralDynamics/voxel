@@ -1,199 +1,141 @@
 # Camera preview
 
-This document describes how the live preview is produced and delivered — from a raw camera frame to
-pixels on the web canvas and the Qt panel. The design rationale (and the history of the tile-based
-system this replaced) lives in `notes/preview_viewport_first_plan.md`.
+The camera preview path publishes compressed raw intensity data. Camera nodes produce source frames; they do
+not render JPEGs, apply display levels, or know instrument channel IDs. The control computer routes the packed
+frames without decoding or recompressing their pixels, and clients own display processing and composition.
 
-## Overview
+The source-frame protocol, camera generation, and Instrument delivery wrapping described here are implemented.
+Qt and web still require migration to the delivery packet; the browser's raw decoder and WebGPU renderer are
+also pending.
 
-Preview is **rendered server-side** (levels + colormap are applied on the camera, "the camera is the
-renderer") and delivered to clients as **two coherent images per channel**:
+## Ownership and routing
 
-| Layer | Topic | Role | Cadence |
-|-------|-------|------|---------|
-| **Overview** | `preview` | Full sensor, downsampled to `OVERVIEW_WIDTH` (2048 px unzoomed; `OVERVIEW_WIDTH_ZOOMED` = 1024 px while zoomed, since the viewport image then carries the detail), with a 1024-bin histogram. The always-present backdrop and the fallback when a pan/zoom exceeds overscan. | every frame |
-| **Viewport image** | `preview_view` | One coherent image of the zoomed region (expanded by overscan), rendered/cropped/resampled/level-mapped/colormapped as a **single unit** at up to `RENDER_CAP` px. | every frame while zoomed |
+Preview metadata is split at the boundary where it becomes known:
 
-There are no tiles: the viewport is one image, so there are no seams, no per-tile tone differences, and
-no discrete scale-stepping. Both layers are ordinary `PreviewFrame`s (same wire envelope); the viewport
-image is distinguished only by its `info.rect` (the sub-region it covers). At a full (unzoomed) viewport
-no viewport image is sent — the overview already covers it.
+- The camera owns `camera_id`, source-stream identity, capture sequence, pixel geometry, valid bit depth, and
+  encoding details.
+- The `Instrument` maps `camera_id` to `channel_id`, assigns delivery identity and sequence, and wraps the packed
+  source frame without decoding it.
+- The client owns levels, color mapping, interpolation, layer composition, and other display state.
 
-## Architecture
+No histogram is carried on the source frame. A client that needs one can calculate it from the decoded pixels.
 
-- **Instrument** (`vxl.instrument.Instrument`) orchestrates the active profile's cameras and owns the
-  preview fan-out (`Instrument.frames`, `Instrument.views` — `Emitter[tuple[channel_id, packed_bytes]]`).
-- **Camera** (`vxl.camera`) runs device control + `PreviewGenerator` in its own service (in-process for
-  local rigs, a remote node over ZMQ for distributed rigs). It publishes on the rigup pub/sub topics
-  `preview` and `preview_view`.
-- **Web** (`vxl_web.live.InstrumentFeed`) bridges the instrument's emitters onto the WebSocket bus.
-- **Qt** (`vxl_qt.preview`) consumes the instrument's emitters directly.
-- **Threading**: an asyncio event loop per camera service + a `ThreadPoolExecutor` for the blocking
-  numpy/OpenCV work (crop, resample, encode), so the event loop is never blocked.
+Each camera capture can produce two independently replaceable layers:
 
-## Viewport model
+| Layer | Camera topic | Instrument emitter | Web bus topic | Source region |
+| --- | --- | --- | --- | --- |
+| `overview` | `preview` | `preview_frames` | `preview` (pending) | Full sensor, up to 2048 pixels wide |
+| `viewport` | `preview_viewport` | `preview_frames` | `preview` (pending) | Current viewport plus overscan, up to 2048 pixels wide |
 
-`PreviewViewport {x, y, w, h}` is the visible sensor region in normalized coordinates `[0, 1]`
-(`x, y` = top-left, `w, h` = size; `1.0` = full sensor, smaller = zoomed in). It is a shared,
-last-writer-wins state — one operator drives, other clients follow.
+The overview stays at a constant maximum width regardless of zoom. At the full viewport there is no separate
+viewport layer to generate.
 
-Clients express the viewport in **stage-normalized** coordinates. The instrument inverse-rotates it into
-each camera's **sensor-normalized** frame via `PreviewViewport.to_sensor_space(rotation_deg)` before
-handing it to that camera (`Instrument._apply_viewport`), so a rotated camera crops the correct region.
-`rotation_deg` comes from the channel's detection config.
+## Viewport coordinates
 
-## Camera-side generation (`PreviewGenerator`)
+The UI viewport is normalized to the stage view. The `Instrument` transforms it into each camera's sensor
+coordinates, accounting for camera rotation, before calling `PreviewGenerator.set_viewport()`.
 
-On each raw frame, `new_frame()` dispatches two independent jobs:
+For a viewport layer, the generator expands that sensor-space viewport by `OVERSCAN_MARGIN`, currently 5% on
+each side, and clamps it to the sensor. `source_rect_px` records the actual integer sensor footprint represented
+by the pixels after expansion and clamping. It is therefore not necessarily identical to the viewport originally
+requested by the UI.
 
-- **Overview** — `_generate_overview`, **skip-if-busy**: if the previous overview hasn't finished, this
-  frame's overview is dropped rather than queued. Downsamples the full sensor to `target_width`, computes
-  the histogram on the resized data (pre-levels), applies levels + colormap, encodes. Sent every frame.
-- **Viewport image** — `_generate_and_send_view` → `_generate_view`, **cancel-stale / latest-wins**: a
-  new frame or viewport supersedes any in-flight render (`cancel_view_task`), so a fast pan never builds
-  a backlog. No-op at a full viewport.
+The rectangle uses an inclusive floor for its origin and an exclusive ceiling for its end so partially covered
+sensor pixels are not lost.
 
-`_generate_view` is the single-image core:
+## Source-frame construction
 
-1. `rect = viewport.expanded(OVERSCAN_MARGIN)` — grow the crop so small pans stay covered.
-2. crop the raw frame to `rect` (clamped to sensor bounds).
-3. resample **once** to `min(crop_px, RENDER_CAP)` (aspect-preserving) via `_downsample` (stride-based
-   nearest — fast, GIL-releasing).
-4. `_apply_processing` **once** — normalize by dtype max, apply `PreviewLevels` clip/stretch → uint8,
-   apply the cached colormap LUT.
-5. encode **once** (`PreviewFmt`, currently lossless PNG) and publish on `preview_view` with the exact
-   rendered `rect` in `info`.
+`PreviewFrame.from_source()` performs the complete sensor-frame transformation:
 
-Rendering once (not per tile) is what removes seams and tone discontinuities. All heavy work runs on the
-`ThreadPoolExecutor`; the last raw frame is cached (`_current_frame`) so an idle re-pan/re-level
-re-renders from it without a recapture (`reprocess`, `reprocess_viewport`).
+1. Resolve the normalized viewport to `source_rect_px` and crop the sensor array.
+2. Keep native pixels if the crop fits the target width; otherwise resize to the exact target width while
+   preserving aspect ratio, using OpenCV `INTER_NEAREST_EXACT`.
+3. Normalize samples to canonical little-endian, right-aligned `uint16`.
+4. Byte-shuffle the samples into a low-byte plane followed by a high-byte plane.
+5. Compress the shuffled bytes with Zstandard level 1 and a frame checksum.
+6. Construct the camera-owned header and payload.
 
-## Distribution: camera → clients
+The current limits are `OVERVIEW_WIDTH = 2048` and `RENDER_CAP = 2048`. `valid_bits` describes meaningful
+sample bits independently of the 16-bit transport container.
 
-```
-[Camera service]
-  PreviewGenerator ── publish("preview", PreviewFrame.pack()) ─────────┐   (overview, every frame)
-                   └─ publish("preview_view", PreviewFrame.pack()) ─────┤   (view, when zoomed)
-                                                                        v
-[Instrument]  _subscribe_camera(cam):
-  camera.subscribe("preview",      forward_frames) -> self.frames.emit((channel_id, data))
-  camera.subscribe("preview_view", forward_views)  -> self.views.emit((channel_id, data))
+## Wire format
 
-[Web: InstrumentFeed]                          [Qt: PreviewStore.start_feed]
-  i.frames -> bus.broadcast("preview.frame.{ch}")  i.frames -> _on_frame -> set_frame
-  i.views  -> bus.broadcast("preview.view.{ch}")   i.views  -> _on_view  -> set_view
-                    |                                             |
-              [WebSocket clients]                          (same process)
+Every source frame is independently decodable:
+
+```text
+9-byte prefix | MessagePack source header | Zstandard payload
 ```
 
-The payload is `msgpack{"info": PreviewFrameInfo, "data": <encoded image bytes>}`. Clients decode the
-image (JPEG/PNG → `ImageBitmap` / `QImage`) **off the render/UI thread**.
+The prefix contains the `VXPS` magic, framing version, and MessagePack header length. The source header contains:
 
-## Control: clients → camera
+- source schema version and encoding identifier
+- `camera_id`, `source_stream_id`, `frame_idx`, and `layer`
+- optional `captured_at_unix_us`, when a true camera capture timestamp is available
+- rendered `width` and `height`
+- `sensor_width`, `sensor_height`, and `source_rect_px`
+- `valid_bits` and uncompressed byte length
 
-Viewport / levels / colormap changes travel back over one inbound channel:
+It intentionally excludes `channel_id`, histograms, levels, color maps, and display state.
 
-```
-[Client] pan/zoom/level/colormap (throttled ~200 ms) -> send "preview.update" {viewport?, levels?, colormaps?}
+`PreviewFramePacket` wraps that complete source packet without parsing or modifying it:
 
-[Web: InstrumentFeed._on_preview_update]
-  -> instrument.update_viewport / update_levels / update_colormaps
-  -> bus.broadcast("preview.updates", cmd, exclude=client_id)   # echo to *other* viewers (follow semantics)
-
-[Instrument._apply_viewport / update_levels / update_colormaps]
-  -> per active-profile camera: ch.camera.preview_viewport / preview_levels / preview_colormap  (Coalescers)
-  -> drain to RPC update_preview_viewport / _levels / _colormap on the CameraController
-  -> PreviewGenerator: store for the next frame, or reprocess the cached frame immediately when IDLE
+```text
+9-byte prefix | MessagePack delivery header | complete VXPS source packet
 ```
 
-The sender is excluded from the `preview.updates` echo so its own optimistic local state isn't fought.
-Cross-viewer sync rides entirely on `preview.updates`; the viewport image's `rect` is a *render* region
-(overscan-expanded), not a viewport, and is never adopted as one.
+The `VXPD` delivery header contains `delivery_schema_version`, `channel_id`, `delivery_stream_id`,
+`delivery_seq`, and `frame_byte_length`. The delivery stream identity changes when the control-owned
+preview stream is replaced; its sequence increases across delivered frames. Sequence gaps are expected when
+latest-only backpressure drops frames. Camera-owned fields such as `layer` are not duplicated in this header.
+The Instrument now emits `VXPD`; the current web and Qt consumers have not yet migrated to that emitter.
 
-## Client rendering
+Every layer, including `overview`, is positioned from `source_rect_px`. The `layer` field selects replacement
+and composition behavior; it never implies that the represented rectangle covers the full sensor.
 
-Both clients hold, per channel: the **overview** image and the **latest viewport image + its `rect`**
-(latest-wins by `frame_idx`). Compositing (`compositeViewFrames` on web, `PreviewPanel._composite` on Qt,
-kept as mirrors of each other):
+## Scheduling and backpressure
 
-1. Contain-fit the rotation-aware channel bounding box into the canvas, scaled by the live `viewport`.
-2. Draw the **overview** across the full sensor footprint (the never-blank floor).
-3. Draw the **viewport image** positioned by its `rect` (sensor → stage via the channel rotation), on top.
-4. Composite channels additively (`lighter` / `CompositionMode_Plus`) over black.
+`PreviewGenerator.submit_frame()` is synchronous and non-blocking. It caches the latest raw frame, then
+schedules layer generation on separate single-worker executors:
 
-Because content is positioned in sensor space under the *live* viewport transform, the last viewport
-image **tracks pan/zoom** (showing its overscan margin) until a fresh render lands; beyond the overscan
-the overview shows through — never blank. Nearest-neighbor sampling while interacting, smooth when
-settled; repaints are coalesced (~16 ms on Qt; a `requestAnimationFrame` loop on web).
+- The overview lane is skip-if-busy. If an overview is already being generated, the next overview is dropped
+  instead of queued.
+- The viewport lane is latest-wins. A new camera frame or viewport request cancels stale pending viewport work.
+  Work already executing in its thread may finish, but its result is discarded.
+- Overview and viewport generation do not block each other.
 
-## Data models (`preview.py`)
+The controller also applies independent publication backpressure per layer. If the previous publication for a
+layer is still in flight, that layer's new result is dropped without affecting the other layer. This produces the
+best achievable preview rate without allowing generation or transport queues to grow unbounded.
 
-```python
-class PreviewViewport(SchemaModel):      # normalized visible/rendered region
-    x: float; y: float                   # top-left [0, 1]
-    w: float; h: float                   # size (0, 1]
-    def expanded(self, margin) -> PreviewViewport      # grow about center (overscan), clamped
-    def to_sensor_space(self, rotation_deg) -> PreviewViewport
+`set_viewport()` normally affects subsequent frames. While the camera is idle, it can instead regenerate a
+viewport layer from the cached raw frame. The controller admits that requested result while rejecting unrelated
+late preview work after streaming has stopped.
 
-class PreviewInfoBase(SchemaModel):      # shared frame metadata
-    frame_idx: int
-    width: int; height: int              # rendered pixel dims
-    full_width: int; full_height: int    # full sensor dims
-    levels: PreviewLevels
-    fmt: PreviewFmt                       # jpeg | png (live; png today) · raw | zlib (deferred 16-bit paths)
-    colormap: str | None
+`PreviewHealth` owns generation and publication counters and timing. `snapshot()` returns the current values and
+resets them for the next reporting interval.
 
-class PreviewFrameInfo(PreviewInfoBase): # overview *and* viewport image
-    rect: PreviewViewport                # rendered region: full frame (overview) or sub-rect+overscan (view)
-    histogram: list[int] | None          # 1024-bin, overview only (None on the view)
+## Stream lifecycle
 
-@dataclass(frozen=True)
-class PreviewFrame:                      # the wire payload for both topics
-    info: PreviewFrameInfo
-    data: bytes                          # encoded image
-    # from_array / pack / from_packed  (msgpack + msgpack_numpy)
+`source_stream_id` identifies pixels that belong to one camera preview stream. Overview and viewport frames from
+the same stream share it; `frame_idx` identifies the source capture within that stream.
 
-class PreviewLevels(SchemaModel):        # black/white points, [0, 1]
-    min: float; max: float
-    @classmethod def from_histogram(cls, histogram, percentile=1.0) -> PreviewLevels
-```
+`PreviewGenerator.reset_stream()` cancels pending work, clears the cached raw frame, and creates a new
+`source_stream_id`. The camera controller resets the stream when previewing starts and when an acquisition stack
+opens. Profile changes also ask each active camera to reset its stream before new settings are applied, preventing
+cached pixels from the old profile from being regenerated under the new one.
 
-## Concurrency & thread safety
+Stopping a stream cancels pending work. `close()` additionally shuts down both generation executors.
 
-- **Event loop (per camera service)**: all async work — RPC commands, the preview loop, property streaming.
-- **Executor threads**: the overview render (1 dedicated worker, skip-if-busy) and the viewport render
-  (crop/resample/encode); one viewport render is in flight at a time (cancel-stale supersedes the rest).
-- **Cameras** run independently (separate processes when distributed).
-- All state mutations happen on the event loop thread. Executor threads only *read* shared state
-  (`viewport`, `levels`, `_lut`, `_current_frame`) — safe under the GIL (attribute reads; numpy-array
-  reference assignment is atomic).
+The generator's operational API is deliberately small:
 
-## Performance & WAN notes
+- `submit_frame()` accepts a captured sensor frame without awaiting generation.
+- `set_viewport()` updates the requested viewport and optionally returns a cached-regeneration task.
+- `reset_stream()` establishes a new source-stream identity and discards old cached state.
+- `cancel_pending()` invalidates scheduled work without changing stream identity or cache.
+- `close()` releases generator resources.
 
-- **Per frame per channel** (JPEG at `PREVIEW_JPEG_QUALITY`): overview (full-sensor, `OVERVIEW_WIDTH`, or
-  `OVERVIEW_WIDTH_ZOOMED` while zoomed) + one viewport image (≤ `RENDER_CAP`). One encode + one transfer +
-  one decode per layer — no per-tile multiplication.
-- **Settle latency**: after a pan/zoom settles there is one round-trip (crop + resample + level + colormap
-  + encode + network + decode) before the sharp image lands. On LAN/Qt this is sub-frame; over WAN the
-  ever-present overview + transform-tracked cached view cover the gap (never blank).
-- **Overscan** multiplies the per-frame crop cost while live + zoomed — keep `OVERSCAN_MARGIN` tighter for
-  live streaming than for idle re-pan comfort (tuning knob).
-- The codec is lossless PNG (level 1 — chosen to match JPEG's bandwidth while dropping DCT artifacts).
-  `PreviewFmt` also carries two deferred 16-bit paths, `raw` (uncompressed) and `zlib` (compressed uint16),
-  shared with the client `fmt` vocabulary but not yet decodable there (needs a GPU upload path — design §11).
-  Swapping the codec is a one-line change on this single encode path (see the plan doc, "codec swap").
+## Consumers
 
-## State transitions
-
-```
-          start_preview()
-IDLE ───────────────────────> PREVIEW
-  ^                              |
-  |        stop_preview()        |
-  └──────────────────────────────┘
-
-During PREVIEW (or IDLE, via reprocess of the cached frame):
-  update_preview_viewport()  -> re-render the viewport image
-  update_preview_levels()    -> re-apply levels
-  update_preview_colormap()  -> re-apply colormap
-```
+Qt and web must next consume the single Instrument `preview_frames` emitter and unwrap `PreviewFramePacket`.
+Browser support additionally requires the worker-based `VXPS` decoder and WebGPU renderer. Consumers must place
+every layer from `source_rect_px`, reject old delivery streams, and treat sequence gaps as expected frame drops.

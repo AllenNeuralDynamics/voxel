@@ -8,15 +8,15 @@
 (``OperationRejectedError`` → 422, ``InstrumentBusyError`` → 409).
 """
 
-import logging
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket
+from pydantic import AnyWebsocketUrl, BaseModel
 from vxl_catalog import AcquisitionManifest, ManifestNotFoundError
 
 from rigup import PropResults, Result
+from vxl.camera.preview import DELIVERY_FRAMING_VERSION
 from vxl.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRequest,
@@ -37,20 +37,25 @@ from vxl.instrument.state import (
 from vxl.instrument.topology import HALConfig
 from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
-from vxl.system import Remote
+from vxl.system import PreviewFeature, Remote
 from vxlib import ColormapGroup, get_colormap_catalog
 
 from .deps import AppDep, InstrumentDep, LogBufferDep
 from .live import AppStatus, InstrumentStatus, LogMessage
-from .wire import Client
-
-log = logging.getLogger(__name__)
 
 app_router = APIRouter(tags=["app"])
 instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
 
 
 # ---- discovery / launch / close (the VoxelApp surface) ----
+
+
+class PreviewDiscovery(BaseModel):
+    """Resolved preview connection and optional service capabilities."""
+
+    websocket_url: AnyWebsocketUrl
+    protocol_version: int
+    features: list[PreviewFeature]
 
 
 class AppDiscovery(BaseModel):
@@ -61,6 +66,7 @@ class AppDiscovery(BaseModel):
     remotes: dict[str, Remote]
     colormaps: list[ColormapGroup]
     metadata_schemas: dict[str, str]
+    preview: PreviewDiscovery
 
 
 @app_router.get("/app")
@@ -71,15 +77,21 @@ async def get_app_status(app: AppDep) -> AppStatus:
 
 
 @app_router.get("/discovery")
-async def get_discovery(app: AppDep) -> AppDiscovery:
+async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
     """Return the bounded application resources needed to initialize a client."""
     found = app.discover()
+    websocket_url = app.preview.external_url or AnyWebsocketUrl(str(request.url_for("preview_websocket")))
     return AppDiscovery(
         instruments=found.instruments,
         templates=found.templates,
         remotes=app.remotes,
         colormaps=get_colormap_catalog(),
         metadata_schemas=discover_metadata_schema(),
+        preview=PreviewDiscovery(
+            websocket_url=websocket_url,
+            protocol_version=DELIVERY_FRAMING_VERSION,
+            features=sorted(app.preview.features),
+        ),
     )
 
 
@@ -164,19 +176,13 @@ async def get_acquisition(acquisition_id: uuid.UUID, app: AppDep) -> Acquisition
 @app_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """Register the peer on the bus and relay broadcasts until disconnect. Clients hydrate via REST, not here."""
-    bus = websocket.app.state.bus
-    await websocket.accept()
-    client_id = str(uuid.uuid4())
-    client = Client(client_id, websocket)
-    await client.start()
-    await bus.add_client(client)
-    try:
-        while True:
-            await bus.dispatch_inbound(client_id, await websocket.receive_bytes())
-    except WebSocketDisconnect:
-        log.debug("client %s disconnected", client_id)
-    finally:
-        await bus.remove_client(client)
+    await websocket.app.state.bus.serve(websocket)
+
+
+@app_router.websocket("/preview/ws", name="preview_websocket")
+async def preview_websocket_endpoint(websocket: WebSocket) -> None:
+    """Deliver complete opaque VXPD packets over a dedicated latest-only connection."""
+    await websocket.app.state.preview_hub.serve(websocket)
 
 
 @app_router.get("/logs")
@@ -232,7 +238,7 @@ async def get_status(inst: InstrumentDep) -> InstrumentStatus:
     return InstrumentStatus(
         mode=inst.mode.value,
         active_profile_id=inst.active_profile_id.value,
-        preview_epoch=inst.preview_epoch.value,
+        delivery_stream_id=inst.delivery_stream_id.value,
         fov=await inst.fov.get(),
         routing_targets=inst.routing_targets.value,
         state=inst.state.value,
@@ -375,7 +381,7 @@ async def stop_preview(inst: InstrumentDep) -> None:
     await inst.stop_preview()
 
 
-# viewport / levels / colormap are WS commands (`preview.update`), not REST — they need sender-excluded
+# Viewport and levels are WS commands (`preview.update`), not REST — they need sender-excluded
 # multi-client echo (see InstrumentFeed). start/stop stay REST: they flip `mode`, which echoes via status.
 
 
