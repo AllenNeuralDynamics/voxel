@@ -234,9 +234,9 @@
   // Pane sizes
 
   const monitorsPane = createPaneSize(() => shellRef, {
-    min: 30,
-    default: 30,
-    max: 30,
+    min: 28,
+    default: 28,
+    max: 28,
     fallback: { min: 15, max: 18 }
   });
 

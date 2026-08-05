@@ -94,7 +94,7 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4f {
   let width = max(uniforms.levels.y - uniforms.levels.x, 1.0 / uniforms.channel.w);
   let mapped = clamp((normalized - uniforms.levels.x) / width, 0.0, 1.0);
   if (mapped <= 0.0) {
-    return vec4f(0.0);
+    return vec4f(0.0, 0.0, 0.0, 1.0);
   }
   let color = textureSampleLevel(color_lut, color_sampler, vec2f(mapped, 0.5), 0.0);
   return vec4f(color.rgb, 1.0);

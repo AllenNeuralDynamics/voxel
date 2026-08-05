@@ -4,7 +4,6 @@
 
   import { clampTopLeft } from '$lib/utils';
 
-  import PreviewChannelControls from './PreviewChannelControls.svelte';
   import PreviewNavigationControls from './PreviewNavigationControls.svelte';
   import { channelBoundingBox } from './render';
   import { type PreviewSession, wheelZoomFactor } from './session.svelte';
@@ -185,12 +184,8 @@
     </div>
   {/if}
 
-  <!-- Full-height left rail: navigation stays at the top; channels grow upward from the bottom. -->
-  <div class="pointer-events-none absolute inset-y-4 left-4 z-10 flex w-58 flex-col gap-3">
+  <div class="pointer-events-none absolute bottom-4 left-4 z-10 w-58">
     <PreviewNavigationControls {previewer} />
-    <div class="flex min-h-0 flex-1 items-end">
-      <PreviewChannelControls {previewer} />
-    </div>
   </div>
 
   <!-- Isolated scale bar. -->

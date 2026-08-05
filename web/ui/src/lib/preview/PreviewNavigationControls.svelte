@@ -117,6 +117,44 @@
 </script>
 
 <div class="pointer-events-auto flex w-full flex-col overflow-hidden overlay-panel">
+  {#if navigatorVisible.get()}
+    <div class="border-b border-border p-1.5">
+      <div class="relative aspect-square w-full overflow-hidden rounded-xs border border-border/40" onwheel={wheelZoom}>
+        <div
+          bind:this={minimapEl}
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
+          style:width="{minimapFit.width}%"
+          style:height="{minimapFit.height}%"
+        >
+          <canvas
+            bind:this={canvasEl}
+            role="button"
+            tabindex={-1}
+            aria-label="Recenter viewport"
+            onpointerdown={recenter}
+            class="h-full w-full cursor-pointer"
+          ></canvas>
+          {#if viewportZoomed}
+            <div
+              role="slider"
+              aria-label="Preview viewport"
+              aria-valuenow={Math.round(previewer.viewport.x * 100)}
+              tabindex="-1"
+              class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/15"
+              style:left="{previewer.viewport.x * 100}%"
+              style:top="{previewer.viewport.y * 100}%"
+              style:width="{previewer.viewport.w * 100}%"
+              style:height="{previewer.viewport.h * 100}%"
+              onpointerdown={pointerDown}
+              onpointermove={pointerMove}
+              onpointerup={pointerUp}
+            ></div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <div class="flex items-center gap-0.75 p-1 font-mono text-base">
     <SpinBox
       model={previewer.panXModel}
@@ -153,45 +191,11 @@
       aria-label={navigatorVisible.get() ? 'Hide navigator' : 'Show navigator'}
       title={navigatorVisible.get() ? 'Hide navigator' : 'Show navigator'}
     >
-      <ChevronDown width="14" height="14" class="transition-transform {navigatorVisible.get() ? '' : '-rotate-90'}" />
+      <ChevronDown
+        width="14"
+        height="14"
+        class="transition-transform {navigatorVisible.get() ? 'rotate-180' : '-rotate-90'}"
+      />
     </button>
   </div>
-
-  {#if navigatorVisible.get()}
-    <div class="border-t border-border p-1.5">
-      <div class="relative aspect-square w-full overflow-hidden rounded-xs border border-border/40" onwheel={wheelZoom}>
-        <div
-          bind:this={minimapEl}
-          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
-          style:width="{minimapFit.width}%"
-          style:height="{minimapFit.height}%"
-        >
-          <canvas
-            bind:this={canvasEl}
-            role="button"
-            tabindex={-1}
-            aria-label="Recenter viewport"
-            onpointerdown={recenter}
-            class="h-full w-full cursor-pointer"
-          ></canvas>
-          {#if viewportZoomed}
-            <div
-              role="slider"
-              aria-label="Preview viewport"
-              aria-valuenow={Math.round(previewer.viewport.x * 100)}
-              tabindex="-1"
-              class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/15"
-              style:left="{previewer.viewport.x * 100}%"
-              style:top="{previewer.viewport.y * 100}%"
-              style:width="{previewer.viewport.w * 100}%"
-              style:height="{previewer.viewport.h * 100}%"
-              onpointerdown={pointerDown}
-              onpointermove={pointerMove}
-              onpointerup={pointerUp}
-            ></div>
-          {/if}
-        </div>
-      </div>
-    </div>
-  {/if}
 </div>

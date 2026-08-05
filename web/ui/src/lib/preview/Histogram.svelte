@@ -1,11 +1,11 @@
 <script lang="ts">
   import { useEventListener } from 'runed';
+  import type { Snippet } from 'svelte';
 
   import { EyeOff } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import type { ColormapCatalog } from '$lib/model';
 
-  import ColormapPicker from './ColormapPicker.svelte';
   import { resolveColormapStops } from './render';
 
   interface Props {
@@ -15,11 +15,9 @@
     levelsMax: number;
     onLevelsChange: (min: number, max: number) => void;
     onAutoLevel: () => void;
-    colormapPreference: string;
-    autoColormap: string | null;
     colormap: string | null;
     catalog: ColormapCatalog;
-    onColormapChange: (colormap: string) => void;
+    centerControl: Snippet<[columnWidth: number]>;
     dataTypeMax?: number;
     visible?: boolean;
     onVisibilityChange?: (visible: boolean) => void;
@@ -32,11 +30,9 @@
     levelsMax,
     onLevelsChange,
     onAutoLevel,
-    colormapPreference,
-    autoColormap,
     colormap,
     catalog,
-    onColormapChange,
+    centerControl,
     dataTypeMax = 65535,
     visible,
     onVisibilityChange
@@ -329,7 +325,7 @@
       height={svgHeight}
       role="img"
       aria-label="Histogram for {label}"
-      class="bg-canvas"
+      class="bg-canvas/75"
       bind:clientWidth={svgWidth}
     >
       <defs>
@@ -352,22 +348,9 @@
 
       {@render handle(minHandleX, 'stroke-success', 'Minimum level', minIntensity, 'min')}
       {@render handle(maxHandleX, 'stroke-warning', 'Maximum level', maxIntensity, 'max')}
-
-      <rect x="0" y="0" width={minHandleX} height={svgHeight} fill="black" opacity="0.4" pointer-events="none" />
-      <rect
-        x={maxHandleX}
-        y="0"
-        width={svgWidth - maxHandleX}
-        height={svgHeight}
-        fill="black"
-        opacity="0.4"
-        pointer-events="none"
-      />
     </svg>
   {:else}
-    <div class="flex items-center justify-center" style:height="{svgHeight}px">
-      <span class="text-[10px] text-fg-muted">No histogram data</span>
-    </div>
+    <div class="bg-canvas/75" style:height="{svgHeight}px"></div>
   {/if}
 {/snippet}
 
@@ -384,9 +367,13 @@
     </div>
   {/if}
 
-  <div class="floating-row relative" class:invisible={!hasValidData}>
-    {@render floatingLabel(labelPositions.minLeft, minIntensity, 'min')}
-    {@render floatingLabel(labelPositions.maxLeft, maxIntensity, 'max')}
+  <div class="floating-row relative">
+    {#if hasValidData}
+      {@render floatingLabel(labelPositions.minLeft, minIntensity, 'min')}
+      {@render floatingLabel(labelPositions.maxLeft, maxIntensity, 'max')}
+    {:else}
+      <div class="flex h-full items-center justify-center text-[10px] text-fg-faint">No histogram data</div>
+    {/if}
   </div>
 
   <ContextMenu.Root>
@@ -422,17 +409,7 @@
     <input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
 
     <div class="mx-2 min-w-0 flex-1">
-      <ColormapPicker
-        {label}
-        {colormapPreference}
-        {autoColormap}
-        {colormap}
-        {catalog}
-        {onColormapChange}
-        width={columnWidth}
-        align="center"
-        triggerClass="text-sm font-medium cursor-pointer transition-[filter] hover:brightness-125"
-      />
+      {@render centerControl(columnWidth)}
     </div>
 
     <input

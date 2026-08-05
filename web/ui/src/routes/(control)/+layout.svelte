@@ -9,6 +9,7 @@
   import LogViewer from '$lib/LogViewer.svelte';
   import { getVoxelApp, type PreviewMode } from '$lib/model';
   import PreviewCanvas from '$lib/preview/PreviewCanvas.svelte';
+  import PreviewSidebarControls from '$lib/preview/PreviewSidebarControls.svelte';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { provideStageScene, StageLayersSidebar, StageView, type StageViewport } from '$lib/stage';
   import { cn, createPaneSize, pref } from '$lib/utils';
@@ -41,8 +42,8 @@
 
   let workspaceSplitEl = $state<HTMLElement | null>(null);
   const contentPane = createPaneSize(() => workspaceSplitEl, {
-    min: 48,
-    default: 48,
+    min: 45,
+    default: 45,
     max: 64,
     fallback: { min: 30, default: 30, max: 50 }
   });
@@ -110,22 +111,18 @@
             <div class="flex h-full flex-col bg-canvas">
               <div class="relative flex min-h-0 flex-1">
                 <div class="relative min-w-0 flex-1 overflow-hidden" data-fly-origin>
-                  <div
-                    class="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-end gap-2"
-                  >
-                    <div class="pointer-events-auto flex items-center gap-2">
-                      {@render segmented(modeSegments)}
-                      <Button
-                        variant="secondary"
-                        size="icon-lg"
-                        aria-expanded={!stageLayersCollapsed.get()}
-                        title={stageLayersCollapsed.get() ? 'Show layers' : 'Hide layers'}
-                        class="border-border bg-elevated shadow-sm"
-                        onclick={() => stageLayersCollapsed.set(!stageLayersCollapsed.get())}
-                      >
-                        <PanelRight width="22" height="22" />
-                      </Button>
-                    </div>
+                  <div class="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2">
+                    <div class="pointer-events-auto">{@render segmented(modeSegments)}</div>
+                    <Button
+                      variant="secondary"
+                      size="icon-lg"
+                      aria-expanded={!stageLayersCollapsed.get()}
+                      title={stageLayersCollapsed.get() ? 'Show layers' : 'Hide layers'}
+                      class="pointer-events-auto rounded-md border-border bg-elevated shadow-sm"
+                      onclick={() => stageLayersCollapsed.set(!stageLayersCollapsed.get())}
+                    >
+                      <PanelRight width="20" height="20" class="text-fg/75" />
+                    </Button>
                   </div>
                   {#if app.viewMode.get() === 'stage'}
                     <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
@@ -137,7 +134,26 @@
                     </div>
                   {/if}
                 </div>
-                <StageLayersSidebar collapsed={stageLayersCollapsed.get()} />
+                <aside
+                  class="shrink-0 overflow-hidden bg-surface transition-[width] duration-200 {stageLayersCollapsed.get()
+                    ? 'w-0'
+                    : 'w-64 border-l border-border'}"
+                >
+                  <div
+                    class="flex h-full min-h-0 w-full flex-col transition-opacity {stageLayersCollapsed.get()
+                      ? 'invisible opacity-0'
+                      : 'opacity-100'}"
+                  >
+                    <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
+                      <StageLayersSidebar />
+                    </div>
+                    {#if preview}
+                      <div class="max-h-[70%] shrink-0 overflow-y-auto border-t border-border">
+                        <PreviewSidebarControls previewer={preview} />
+                      </div>
+                    {/if}
+                  </div>
+                </aside>
               </div>
             </div>
           </Pane>

@@ -5,7 +5,6 @@
   import { Eye, EyeOff, VideoCamera } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
-  import PreviewDetails from '$lib/preview/PreviewDetails.svelte';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { pref } from '$lib/utils';
 
@@ -132,5 +131,4 @@
       {#if show.get()}<Eye width="14" height="14" />{:else}<EyeOff width="14" height="14" />{/if}
     </button>
   </div>
-  {#if preview}<PreviewDetails previewer={preview} />{/if}
 </div>

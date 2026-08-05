@@ -86,7 +86,8 @@ The `VXPD` delivery header contains `delivery_schema_version`, `channel_id`, `de
 `delivery_seq`, and `frame_byte_length`. The delivery stream identity changes when the control-owned
 preview stream is replaced; its sequence increases across delivered frames. Sequence gaps are expected when
 latest-only backpressure drops frames. Camera-owned fields such as `layer` are not duplicated in this header.
-The Instrument now emits `VXPD`; the current web and Qt consumers have not yet migrated to that emitter.
+The Instrument emits `VXPD`; both the web and Qt consumers subscribe to the Instrument's `preview_frames` emitter,
+unwrap the delivery packet, and reject frames from stale delivery streams.
 
 Every layer, including `overview`, is positioned from `source_rect_px`. The `layer` field selects replacement
 and composition behavior; it never implies that the represented rectangle covers the full sensor.
@@ -135,6 +136,8 @@ The generator's operational API is deliberately small:
 
 ## Consumers
 
-Qt and web must next consume the single Instrument `preview_frames` emitter and unwrap `PreviewFramePacket`.
-Browser support additionally requires the worker-based `VXPS` decoder and WebGPU renderer. Consumers must place
-every layer from `source_rect_px`, reject old delivery streams, and treat sequence gaps as expected frame drops.
+Qt consumes the Instrument's `preview_frames` emitter, decodes each `PreviewFramePacket` away from the UI thread,
+and composites the overview and viewport layers as grayscale intensity images. The web client receives the same
+delivery packets over the dedicated preview WebSocket, decodes Zstandard in a worker, and uploads the shuffled byte
+planes to shared WebGPU textures. Both consumers place every layer from `source_rect_px`, reject old delivery
+streams, and treat sequence gaps as expected frame drops.
