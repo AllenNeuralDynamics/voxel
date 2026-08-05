@@ -7,12 +7,12 @@ The web interface for Voxel: a FastAPI backend that owns the open instrument and
 
 ## Development
 
-Requires [uv](https://docs.astral.sh/uv/) and [bun](https://bun.sh/). Run from the repository root.
+Requires [uv](https://docs.astral.sh/uv/) and [Nub](https://nubjs.com/). Run from the repository root.
 
 Build the frontend, then start the backend (which serves the built assets):
 
 ```bash
-cd web/ui && bun install && bun run build && cd ../..
+cd web/ui && nub install && nub run build && cd ../..
 uv run vxl                    # http://localhost:8000  (--host, --port, --debug)
 ```
 
@@ -20,6 +20,6 @@ For frontend work with hot reload, run the Vite dev server alongside the backend
 
 ```bash
 cd web/ui
-bun run dev                   # Vite dev server
-bun check                     # type-check (svelte-check) + lint
+nub run dev                   # Vite dev server
+nub run check                 # type-check (svelte-check) + lint
 ```

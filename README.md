@@ -12,7 +12,7 @@ A light sheet microscopy platform for hardware control, acquisition orchestratio
 
 ## Getting started
 
-Requires [uv](https://docs.astral.sh/uv/) and [bun](https://bun.sh/) (for the web frontend).
+Requires [uv](https://docs.astral.sh/uv/) and [Nub](https://nubjs.com/) (for the web frontend).
 
 ```bash
 uv sync --all-packages --all-extras --all-groups
@@ -23,7 +23,7 @@ uv sync --all-packages --all-extras --all-groups
 The frontend is built once, then served by the backend:
 
 ```bash
-cd web/ui && bun install && bun run build && cd ../..
+cd web/ui && nub install && nub run build && cd ../..
 uv run vxl serve
 ```
 
@@ -59,8 +59,8 @@ uv run pytest -m "not slow"  # pre-push subset
 For frontend work with hot reload:
 
 ```bash
-cd web/ui && bun run dev      # Vite dev server
-bun check                     # type checking
+cd web/ui && nub run dev      # Vite dev server
+nub run check                 # type checking
 ```
 
 ## Concepts

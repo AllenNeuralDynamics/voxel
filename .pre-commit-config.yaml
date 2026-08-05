@@ -4,7 +4,7 @@
 # plus Astral's external uv-lock hook to keep the lockfile in sync with
 # pyproject.toml.
 #
-# Frontend (web/ui) hooks shell out to bunx and are scoped by `files:` so they
+# Frontend (web/ui) hooks shell out to Nub and are scoped by `files:` so they
 # only fire when web/ui sources are staged. Fast checks run pre-commit, slower
 # whole-project analysis runs pre-push — same split as ruff vs basedpyright.
 #
@@ -41,7 +41,7 @@ repos:
 
       - id: prettier
         name: prettier (web/ui)
-        entry: bun --cwd=web/ui run lint:prettier
+        entry: nub run --cwd web/ui lint:prettier
         language: system
         files: ^web/ui/.*\.(ts|js|svelte|css|json|html)$
         pass_filenames: false
@@ -67,7 +67,7 @@ repos:
 
       - id: eslint
         name: eslint (web/ui)
-        entry: bun --cwd=web/ui run lint:eslint
+        entry: nub run --cwd web/ui lint:eslint
         language: system
         files: ^web/ui/.*\.(ts|js|svelte)$
         pass_filenames: false

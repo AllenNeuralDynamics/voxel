@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [tailwindcss(), Icons({ compiler: 'svelte', autoInstall: true }), sveltekit()],
+    plugins: [tailwindcss(), Icons({ compiler: 'svelte' }), sveltekit()],
     server: { proxy }
   };
 });
