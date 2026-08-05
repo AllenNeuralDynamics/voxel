@@ -5,20 +5,34 @@ preview streams, plus the shared viewport; :class:`vxl_qt.preview.panel.PreviewP
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
-from vxl.camera.preview import PreviewFrame, PreviewSourceHeader, PreviewViewport
+from vxl.camera.preview import (
+    PreviewDeliveryHeader,
+    PreviewFrame,
+    PreviewFramePacket,
+    PreviewLayer,
+    PreviewSourceHeader,
+    PreviewViewport,
+)
 from vxl.instrument import Instrument
 from vxlib import Teardown
 
+log = logging.getLogger(__name__)
 
-def _decode_image(data: bytes) -> tuple[PreviewSourceHeader, QImage]:
-    """Decode a raw source packet to a display-scaled grayscale image."""
-    source = PreviewFrame.from_packed(data)
+type _FrameKey = tuple[str, PreviewLayer]
+type _QueuedFrame = tuple[bytes, int, int]
+
+
+def _decode_image(data: bytes) -> tuple[PreviewDeliveryHeader, PreviewSourceHeader, QImage]:
+    """Decode a delivered raw frame to a display-scaled grayscale image."""
+    delivery = PreviewFramePacket.from_packed(data)
+    source = PreviewFrame.from_packed(delivery.frame)
     pixels = source.decode()
     if source.header.valid_bits < 16:
         maximum = (1 << source.header.valid_bits) - 1
@@ -30,7 +44,7 @@ def _decode_image(data: bytes) -> tuple[PreviewSourceHeader, QImage]:
         pixels.strides[0],
         QImage.Format.Format_Grayscale16,
     ).copy()
-    return source.header, image
+    return delivery.header, source.header, image
 
 
 @dataclass
@@ -62,6 +76,13 @@ class PreviewStore(QObject):
         self._viewport = PreviewViewport()
         self._is_interacting = False
         self._instrument: Instrument | None = None
+        self._delivery_stream_id = ""
+        self._delivery_generation = 0
+        self._next_frame_token = 0
+        self._latest_frame_tokens: dict[_FrameKey, int] = {}
+        self._last_delivery_sequences: dict[_FrameKey, int] = {}
+        self._pending_frames: dict[_FrameKey, _QueuedFrame] = {}
+        self._decode_tasks: dict[_FrameKey, asyncio.Task[None]] = {}
 
     @property
     def viewport(self) -> PreviewViewport:
@@ -120,35 +141,91 @@ class PreviewStore(QObject):
         self.composite_updated.emit()
 
     def start_feed(self, instrument: Instrument) -> Teardown:
-        """Consume the instrument's live preview streams (overview frames + viewport images, preview and
-        acquisition alike). Clears stale data on preview-epoch bump so a previous profile's channels don't
-        linger. Returns a teardown callable that detaches the subscriptions.
-        """
+        """Consume delivered overview and viewport frames without blocking the instrument emitter."""
         self._instrument = instrument
+        self._delivery_stream_id = instrument.delivery_stream_id.value
         unsubs = [
-            instrument.frames.subscribe(self._on_frame),
-            instrument.viewport_frames.subscribe(self._on_viewport_frame),
-            instrument.preview_epoch.subscribe(lambda _e: self.clear_frames()),
+            instrument.preview_frames.subscribe(self._on_preview_frame),
+            instrument.delivery_stream_id.subscribe(self._on_delivery_stream),
         ]
 
         def teardown() -> None:
             for unsub in unsubs:
                 unsub()
+            self._delivery_generation += 1
+            self._pending_frames.clear()
+            self._latest_frame_tokens.clear()
+            self._last_delivery_sequences.clear()
+            for task in self._decode_tasks.values():
+                task.cancel()
+            self._decode_tasks.clear()
+            self._delivery_stream_id = ""
             self._instrument = None
 
         return teardown
 
-    async def _on_frame(self, update: tuple[str, bytes]) -> None:
-        # Decompress off the UI thread so the qasync loop remains responsive.
-        channel, data = update
-        header, image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, data)
-        self.set_frame(channel, image, header, self._rotation_for(channel))
+    def _on_delivery_stream(self, delivery_stream_id: str) -> None:
+        self._delivery_stream_id = delivery_stream_id
+        self._delivery_generation += 1
+        self._pending_frames.clear()
+        self._latest_frame_tokens.clear()
+        self._last_delivery_sequences.clear()
+        self.clear_frames()
 
-    async def _on_viewport_frame(self, update: tuple[str, bytes]) -> None:
-        # Decompress off the UI thread so the qasync loop remains responsive.
-        channel, data = update
-        header, image = await asyncio.get_running_loop().run_in_executor(None, _decode_image, data)
-        self.set_viewport_frame(channel, header, image)
+    def _on_preview_frame(self, update: tuple[str, PreviewLayer, bytes]) -> None:
+        channel, layer, packet = update
+        key = (channel, layer)
+        self._next_frame_token += 1
+        token = self._next_frame_token
+        self._latest_frame_tokens[key] = token
+        self._pending_frames[key] = (packet, self._delivery_generation, token)
+        task = self._decode_tasks.get(key)
+        if task is None or task.done():
+            self._decode_tasks[key] = asyncio.create_task(self._drain_frames(key))
+
+    async def _drain_frames(self, key: _FrameKey) -> None:
+        """Decode one frame plus one replaceable latest pending frame for this channel/layer."""
+        channel, layer = key
+        try:
+            while queued := self._pending_frames.pop(key, None):
+                packet, generation, token = queued
+                try:
+                    delivery, header, image = await asyncio.get_running_loop().run_in_executor(
+                        None, _decode_image, packet
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("Failed to decode %s preview frame for channel %s", layer, channel)
+                    continue
+
+                if (
+                    generation != self._delivery_generation
+                    or token != self._latest_frame_tokens.get(key)
+                    or delivery.delivery_stream_id != self._delivery_stream_id
+                ):
+                    continue
+                if delivery.channel_id != channel or header.layer != layer:
+                    log.warning(
+                        "Discarding mismatched preview frame: route=(%s, %s), packet=(%s, %s)",
+                        channel,
+                        layer,
+                        delivery.channel_id,
+                        header.layer,
+                    )
+                    continue
+                previous_sequence = self._last_delivery_sequences.get(key, -1)
+                if delivery.delivery_seq <= previous_sequence:
+                    continue
+                self._last_delivery_sequences[key] = delivery.delivery_seq
+                if layer is PreviewLayer.OVERVIEW:
+                    self.set_frame(channel, image, header, self._rotation_for(channel))
+                else:
+                    self.set_viewport_frame(channel, header, image)
+        finally:
+            task = asyncio.current_task()
+            if self._decode_tasks.get(key) is task:
+                self._decode_tasks.pop(key, None)
 
     def _rotation_for(self, channel: str) -> int:
         """The channel's camera rotation (deg) from its channel config + HAL config; 0 if unknown."""

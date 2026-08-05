@@ -4,9 +4,8 @@ The camera preview path publishes compressed raw intensity data. Camera nodes pr
 not render JPEGs, apply display levels, or know instrument channel IDs. The control computer routes the packed
 frames without decoding or recompressing their pixels, and clients own display processing and composition.
 
-The source-frame protocol, camera generation, and Instrument delivery wrapping described here are implemented.
-Qt and web still require migration to the delivery packet; the browser's raw decoder and WebGPU renderer are
-also pending.
+The source-frame protocol, camera generation, Instrument delivery wrapping, Qt raw-frame consumer, and browser
+worker/WebGPU consumer described here are implemented.
 
 ## Ownership and routing
 
@@ -22,10 +21,10 @@ No histogram is carried on the source frame. A client that needs one can calcula
 
 Each camera capture can produce two independently replaceable layers:
 
-| Layer | Camera topic | Instrument emitter | Web bus topic | Source region |
+| Layer | Camera topic | Instrument emitter | Browser delivery | Source region |
 | --- | --- | --- | --- | --- |
-| `overview` | `preview` | `preview_frames` | `preview` (pending) | Full sensor, up to 2048 pixels wide |
-| `viewport` | `preview_viewport` | `preview_frames` | `preview` (pending) | Current viewport plus overscan, up to 2048 pixels wide |
+| `overview` | `preview` | `preview_frames` | dedicated preview WebSocket | Full sensor, up to 2048 pixels wide |
+| `viewport` | `preview_viewport` | `preview_frames` | dedicated preview WebSocket | Current viewport plus overscan, up to 2048 pixels wide |
 
 The overview stays at a constant maximum width regardless of zoom. At the full viewport there is no separate
 viewport layer to generate.
