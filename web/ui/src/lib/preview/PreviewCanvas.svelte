@@ -186,7 +186,7 @@
   {/if}
 
   <!-- Full-height left rail: navigation stays at the top; channels grow upward from the bottom. -->
-  <div class="pointer-events-none absolute inset-y-4 left-4 z-10 flex w-68 flex-col gap-3">
+  <div class="pointer-events-none absolute inset-y-4 left-4 z-10 flex w-58 flex-col gap-3">
     <PreviewNavigationControls {previewer} />
     <div class="flex min-h-0 flex-1 items-end">
       <PreviewChannelControls {previewer} />

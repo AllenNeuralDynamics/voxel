@@ -4,7 +4,6 @@
   import { EyeOff } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import type { ColormapCatalog } from '$lib/model';
-  import { computeAutoLevels } from '$lib/utils';
 
   import ColormapPicker from './ColormapPicker.svelte';
   import { resolveColormapStops } from './render';
@@ -15,6 +14,7 @@
     levelsMin: number;
     levelsMax: number;
     onLevelsChange: (min: number, max: number) => void;
+    onAutoLevel: () => void;
     colormapPreference: string;
     autoColormap: string | null;
     colormap: string | null;
@@ -31,6 +31,7 @@
     levelsMin,
     levelsMax,
     onLevelsChange,
+    onAutoLevel,
     colormapPreference,
     autoColormap,
     colormap,
@@ -244,9 +245,7 @@
   }
 
   function autoLevels() {
-    if (!hasValidData || !histData) return;
-    const result = computeAutoLevels(histData);
-    if (result) onLevelsChange(result.min, result.max);
+    if (hasValidData) onAutoLevel();
   }
 
   // ── Handlers: Input Commits ───────────────────────────────────────

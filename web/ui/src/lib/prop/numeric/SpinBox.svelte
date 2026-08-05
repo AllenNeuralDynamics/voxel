@@ -5,8 +5,8 @@
   import { type NumericSource, useNumericModel } from './model.svelte';
 
   const SIZE = {
-    xs: 'h-ui-xs text-base px-1',
-    sm: 'h-ui-sm text-base px-1',
+    xs: 'h-ui-xs px-1',
+    sm: 'h-ui-sm px-1',
     md: 'h-ui-md text-base px-1.5',
     lg: 'h-ui-lg text-lg px-2'
   } as const;

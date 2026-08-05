@@ -16,7 +16,7 @@
   const visibleChannelCount = $derived(namedChannels.filter((channel) => channel.visible).length);
 </script>
 
-<div class="pointer-events-auto flex max-h-full min-h-0 w-68 flex-col overflow-hidden overlay-panel">
+<div class="pointer-events-auto flex max-h-full min-h-0 w-full flex-col overflow-hidden overlay-panel">
   {#if expanded}
     <div class="min-h-0 divide-y divide-border overflow-y-auto border-b border-border px-2.5">
       {#each namedChannels as channel (channel.idx)}
@@ -29,7 +29,10 @@
             onLevelsChange={(min, max) => {
               if (channel.name) previewer.setChannelLevels(channel.name, min, max);
             }}
-            colormapPreference={channel.colormapPreference}
+            onAutoLevel={() => {
+              if (channel.name) previewer.autoLevel(channel.name);
+            }}
+            colormapPreference={channel.preferences.colormap}
             autoColormap={emissionToPreviewColor(channel.config?.emission)}
             colormap={channel.resolvedColormap}
             catalog={previewer.catalog}

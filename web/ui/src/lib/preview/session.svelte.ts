@@ -9,11 +9,10 @@ import {
   type DetectionAssemblyConfig,
   type InstrumentStatus,
   type PreviewDiscovery,
-  type PreviewLevels,
   type PreviewUpdate,
   type PreviewViewport
 } from '$lib/model/types';
-import { clampTopLeft, computeAutoLevels, pref, sanitizeString } from '$lib/utils';
+import { clampTopLeft, pref, sanitizeString } from '$lib/utils';
 
 import type { Client } from '../model/client.svelte';
 import { NumericModel } from '../model/prop.svelte';
@@ -21,7 +20,99 @@ import type { DecodedPreviewFrame, PreviewSourceHeader } from './protocol';
 import { channelBoundingBox, PreviewGpuRenderer } from './render';
 import { PreviewStream } from './stream';
 
-type StoredColormapPreferences = Record<string, Record<string, string>>;
+export interface AutoLevelsPreference {
+  lowPercentile: number;
+  lowFloor: number;
+  highPercentile: number;
+  highCeiling: number;
+}
+
+export interface PreviewLevelsPreference {
+  mode: 'auto' | 'fixed';
+  auto: AutoLevelsPreference;
+  fixed: { low: number; high: number };
+}
+
+export interface PreviewChannelPreferences {
+  colormap: string;
+  levels: PreviewLevelsPreference;
+}
+
+type StoredPreviewPreferences = Record<string, Record<string, Record<string, PreviewChannelPreferences>>>;
+
+const DEFAULT_AUTO_LEVELS: AutoLevelsPreference = {
+  lowPercentile: 1,
+  lowFloor: 0,
+  highPercentile: 99.99,
+  highCeiling: 65535
+};
+
+function defaultChannelPreferences(): PreviewChannelPreferences {
+  return {
+    colormap: AUTO_COLORMAP,
+    levels: {
+      mode: 'auto',
+      auto: { ...DEFAULT_AUTO_LEVELS },
+      fixed: { low: 0, high: 65535 }
+    }
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeAutoLevels(preference: AutoLevelsPreference): AutoLevelsPreference {
+  let lowPercentile = Number.isFinite(preference.lowPercentile)
+    ? clamp(preference.lowPercentile, 0, 100)
+    : DEFAULT_AUTO_LEVELS.lowPercentile;
+  let highPercentile = Number.isFinite(preference.highPercentile)
+    ? clamp(preference.highPercentile, 0, 100)
+    : DEFAULT_AUTO_LEVELS.highPercentile;
+  let lowFloor = Number.isFinite(preference.lowFloor) ? Math.max(0, preference.lowFloor) : DEFAULT_AUTO_LEVELS.lowFloor;
+  let highCeiling = Number.isFinite(preference.highCeiling)
+    ? Math.max(0, preference.highCeiling)
+    : DEFAULT_AUTO_LEVELS.highCeiling;
+  if (lowPercentile >= highPercentile) {
+    lowPercentile = DEFAULT_AUTO_LEVELS.lowPercentile;
+    highPercentile = DEFAULT_AUTO_LEVELS.highPercentile;
+  }
+  if (lowFloor >= highCeiling) {
+    lowFloor = DEFAULT_AUTO_LEVELS.lowFloor;
+    highCeiling = DEFAULT_AUTO_LEVELS.highCeiling;
+  }
+  return { lowPercentile, lowFloor, highPercentile, highCeiling };
+}
+
+function percentileLevel(histogram: number[], percentile: number): number {
+  const total = histogram.reduce((sum, count) => sum + count, 0);
+  if (total <= 0 || histogram.length < 2) return percentile <= 50 ? 0 : 1;
+  const threshold = total * (percentile / 100);
+  let cumulative = 0;
+  for (let index = 0; index < histogram.length; index++) {
+    cumulative += histogram[index];
+    if (cumulative >= threshold) return index / (histogram.length - 1);
+  }
+  return 1;
+}
+
+function computeAutoLevels(
+  histogram: number[],
+  preference: AutoLevelsPreference,
+  dataTypeMax: number
+): { min: number; max: number } | null {
+  if (histogram.length === 0 || dataTypeMax <= 0) return null;
+  const normalized = normalizeAutoLevels(preference);
+  let low = Math.max(percentileLevel(histogram, normalized.lowPercentile) * dataTypeMax, normalized.lowFloor);
+  let high = Math.min(percentileLevel(histogram, normalized.highPercentile) * dataTypeMax, normalized.highCeiling);
+  low = clamp(Math.round(low), 0, dataTypeMax);
+  high = clamp(Math.round(high), 0, dataTypeMax);
+  if (low >= high) {
+    if (low < dataTypeMax) high = low + 1;
+    else low = Math.max(0, high - 1);
+  }
+  return { min: low / dataTypeMax, max: high / dataTypeMax };
+}
 
 function normalizeColormapPreference(preference: string, catalog: ColormapCatalog): string {
   if (preference === AUTO_COLORMAP || isValidHex(preference)) return preference;
@@ -38,7 +129,7 @@ function isViewportEqual(a: PreviewViewport, b: PreviewViewport): boolean {
 
 export const DEFAULT_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
 const MAX_CHANNELS = 4;
-const LEVELS_UPDATE_INTERVAL_MS = 200;
+const PREFERENCE_SAVE_DELAY_MS = 200;
 const VIEWPORT_UPDATE_INTERVAL_MS = 500;
 const WHEEL_ZOOM_SPEED = 0.0015;
 
@@ -61,9 +152,9 @@ export class PreviewChannel {
   levelsMin = $state(0);
   levelsMax = $state(1);
   latestHistogram: number[] | null = $state<number[] | null>(null);
-  colormapPreference = $state(AUTO_COLORMAP);
+  preferences = $state<PreviewChannelPreferences>(defaultChannelPreferences());
   resolvedColormap: string | null = $state<string | null>(null);
-  autoLeveledDeliveryStreamId: string | null = null;
+  levelsAppliedDeliveryStreamId: string | null = null;
   rotationDeg = $state(0);
   sensorWidth = $state(0);
   sensorHeight = $state(0);
@@ -101,16 +192,17 @@ export class PreviewSession {
   readonly #instrumentId: string;
   readonly #renderer: PreviewGpuRenderer;
   readonly #stream: PreviewStream;
-  readonly #colormapPreferences = pref<StoredColormapPreferences>('preview:colormaps', {});
+  readonly #preferenceStore = pref<StoredPreviewPreferences>('preview:channels', {});
   #displayAspect = 1;
   #unsubscribers: Array<() => void> = [];
   #deliveryStreamId = '';
+  #activeProfileId = '';
   #disposed = false;
   #lastDeliverySequences = new SvelteMap<string, number>();
+  #pendingPreferenceStore: StoredPreviewPreferences | null = null;
+  #preferenceSaveTimer: number | null = null;
   #viewportUpdateTimer: number | null = null;
   #viewportLastSent = 0;
-  #levelsUpdateTimers = new SvelteMap<string, number>();
-  #levelsLastSent = new SvelteMap<string, number>();
 
   constructor({ client, instrumentId, discovery, detection, initialStatus, catalog }: PreviewSessionOptions) {
     this.#client = client;
@@ -119,6 +211,7 @@ export class PreviewSession {
     this.channels = Array.from({ length: MAX_CHANNELS }, (_, index) => new PreviewChannel(index));
     this.#renderer = new PreviewGpuRenderer((message) => (this.error = message));
     this.#deliveryStreamId = initialStatus.delivery_stream_id;
+    this.#activeProfileId = initialStatus.active_profile_id;
     this.#stream = new PreviewStream(
       discovery.websocket_url,
       discovery.protocol_version,
@@ -153,8 +246,8 @@ export class PreviewSession {
     for (const unsubscribe of this.#unsubscribers) unsubscribe();
     this.#unsubscribers = [];
     if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
-    for (const timer of this.#levelsUpdateTimers.values()) clearTimeout(timer);
-    this.#levelsUpdateTimers.clear();
+    if (this.#preferenceSaveTimer !== null) clearTimeout(this.#preferenceSaveTimer);
+    this.#flushPreferences();
     this.#stream.dispose();
     this.#renderer.dispose();
   }
@@ -182,12 +275,57 @@ export class PreviewSession {
   setChannelLevels(name: string, min: number, max: number): void {
     const channel = this.channels.find((candidate) => candidate.name === name);
     if (!channel) return;
-    channel.autoLeveledDeliveryStreamId = this.#deliveryStreamId;
-    if (channel.levelsMin === min && channel.levelsMax === max) return;
-    channel.levelsMin = min;
-    channel.levelsMax = max;
-    this.redrawGeneration++;
-    this.#queueLevelsUpdate(name, { min, max });
+    const dataTypeMax = this.#dataTypeMax(channel);
+    let low = clamp(Math.round(min * dataTypeMax), 0, dataTypeMax);
+    let high = clamp(Math.round(max * dataTypeMax), 0, dataTypeMax);
+    if (low >= high) {
+      if (low < dataTypeMax) high = low + 1;
+      else low = Math.max(0, high - 1);
+    }
+    channel.preferences = {
+      ...channel.preferences,
+      levels: {
+        ...channel.preferences.levels,
+        mode: 'fixed',
+        fixed: { low, high }
+      }
+    };
+    channel.levelsAppliedDeliveryStreamId = this.#deliveryStreamId;
+    this.#saveChannelPreferences(name, channel.preferences);
+    this.#setCurrentLevels(channel, low / dataTypeMax, high / dataTypeMax);
+  }
+
+  setChannelAutoLevels(name: string, preference: AutoLevelsPreference): void {
+    const channel = this.channels.find((candidate) => candidate.name === name);
+    if (!channel) return;
+    channel.preferences = {
+      ...channel.preferences,
+      levels: { ...channel.preferences.levels, mode: 'auto', auto: normalizeAutoLevels(preference) }
+    };
+    channel.levelsAppliedDeliveryStreamId = null;
+    this.#saveChannelPreferences(name, channel.preferences);
+    this.autoLevel(name);
+  }
+
+  autoLevel(name: string): void {
+    const channel = this.channels.find((candidate) => candidate.name === name);
+    if (!channel) return;
+    if (channel.preferences.levels.mode !== 'auto') {
+      channel.preferences = {
+        ...channel.preferences,
+        levels: { ...channel.preferences.levels, mode: 'auto' }
+      };
+      this.#saveChannelPreferences(name, channel.preferences);
+    }
+    if (!channel.latestHistogram) return;
+    const levels = computeAutoLevels(
+      channel.latestHistogram,
+      channel.preferences.levels.auto,
+      this.#dataTypeMax(channel)
+    );
+    if (!levels) return;
+    channel.levelsAppliedDeliveryStreamId = this.#deliveryStreamId;
+    this.#setCurrentLevels(channel, levels.min, levels.max);
   }
 
   setChannelColormap(name: string, preference: string): void {
@@ -196,13 +334,9 @@ export class PreviewSession {
     const normalized = normalizeColormapPreference(preference, this.catalog);
     const resolved = resolveColormap(normalized, channel.config);
     const redraw = channel.resolvedColormap !== resolved;
-    channel.colormapPreference = normalized;
+    channel.preferences = { ...channel.preferences, colormap: normalized };
     channel.resolvedColormap = resolved;
-    const stored = this.#colormapPreferences.get() ?? {};
-    this.#colormapPreferences.set({
-      ...stored,
-      [this.#instrumentId]: { ...stored[this.#instrumentId], [name]: normalized }
-    });
+    this.#saveChannelPreferences(name, channel.preferences);
     if (redraw) this.redrawGeneration++;
   }
 
@@ -266,17 +400,6 @@ export class PreviewSession {
     this.redrawGeneration++;
   }
 
-  #autoLevel(channelName: string): void {
-    const channel = this.channels.find((candidate) => candidate.name === channelName);
-    const deliveryStreamId = this.#deliveryStreamId;
-    if (!channel || channel.autoLeveledDeliveryStreamId === deliveryStreamId || !channel.latestHistogram) return;
-    const auto = computeAutoLevels(channel.latestHistogram);
-    if (!auto) return;
-    channel.levelsMin = auto.min;
-    channel.levelsMax = auto.max;
-    channel.autoLeveledDeliveryStreamId = deliveryStreamId;
-  }
-
   #queueViewportUpdate(viewport: PreviewViewport): void {
     if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
     const now = Date.now();
@@ -296,26 +419,83 @@ export class PreviewSession {
     }
   }
 
-  #queueLevelsUpdate(channelName: string, levels: PreviewLevels): void {
-    const existing = this.#levelsUpdateTimers.get(channelName);
-    if (existing !== undefined) clearTimeout(existing);
-    const now = Date.now();
-    const lastSent = this.#levelsLastSent.get(channelName) ?? 0;
-    const send = () => this.#client.send('preview.update', { levels: { [channelName]: levels } });
-    if (now - lastSent >= LEVELS_UPDATE_INTERVAL_MS) {
-      this.#levelsLastSent.set(channelName, now);
-      send();
-    } else {
-      const timer = window.setTimeout(
-        () => {
-          this.#levelsLastSent.set(channelName, Date.now());
-          send();
-          this.#levelsUpdateTimers.delete(channelName);
-        },
-        LEVELS_UPDATE_INTERVAL_MS - (now - lastSent)
-      );
-      this.#levelsUpdateTimers.set(channelName, timer);
+  #dataTypeMax(channel: PreviewChannel): number {
+    return 2 ** (channel.overviewFrame?.valid_bits ?? channel.viewportFrame?.valid_bits ?? 16) - 1;
+  }
+
+  #setCurrentLevels(channel: PreviewChannel, min: number, max: number): void {
+    const step = 1 / this.#dataTypeMax(channel);
+    let safeMin = clamp(min, 0, 1);
+    let safeMax = clamp(max, 0, 1);
+    if (safeMin >= safeMax) {
+      if (safeMin < 1) safeMax = Math.min(1, safeMin + step);
+      else safeMin = Math.max(0, safeMax - step);
     }
+    if (channel.levelsMin === safeMin && channel.levelsMax === safeMax) return;
+    channel.levelsMin = safeMin;
+    channel.levelsMax = safeMax;
+    this.redrawGeneration++;
+  }
+
+  #applyFixedLevels(channel: PreviewChannel): void {
+    const dataTypeMax = this.#dataTypeMax(channel);
+    let low = clamp(Math.round(channel.preferences.levels.fixed.low), 0, dataTypeMax);
+    let high = clamp(Math.round(channel.preferences.levels.fixed.high), 0, dataTypeMax);
+    if (low >= high) {
+      if (low < dataTypeMax) high = low + 1;
+      else low = Math.max(0, high - 1);
+    }
+    channel.levelsAppliedDeliveryStreamId = this.#deliveryStreamId;
+    this.#setCurrentLevels(channel, low / dataTypeMax, high / dataTypeMax);
+  }
+
+  #saveChannelPreferences(name: string, preferences: PreviewChannelPreferences): void {
+    const stored = this.#pendingPreferenceStore ?? this.#preferenceStore.get() ?? {};
+    const instrument = stored[this.#instrumentId] ?? {};
+    const profile = instrument[this.#activeProfileId] ?? {};
+    this.#pendingPreferenceStore = {
+      ...stored,
+      [this.#instrumentId]: {
+        ...instrument,
+        [this.#activeProfileId]: {
+          ...profile,
+          [name]: {
+            colormap: preferences.colormap,
+            levels: {
+              mode: preferences.levels.mode,
+              auto: { ...preferences.levels.auto },
+              fixed: { ...preferences.levels.fixed }
+            }
+          }
+        }
+      }
+    };
+    if (this.#preferenceSaveTimer !== null) clearTimeout(this.#preferenceSaveTimer);
+    this.#preferenceSaveTimer = window.setTimeout(() => this.#flushPreferences(), PREFERENCE_SAVE_DELAY_MS);
+  }
+
+  #flushPreferences(): void {
+    if (this.#pendingPreferenceStore) this.#preferenceStore.set(this.#pendingPreferenceStore);
+    this.#pendingPreferenceStore = null;
+    this.#preferenceSaveTimer = null;
+  }
+
+  #loadChannelPreferences(name: string): PreviewChannelPreferences {
+    const stored = (this.#pendingPreferenceStore ?? this.#preferenceStore.get())?.[this.#instrumentId]?.[
+      this.#activeProfileId
+    ]?.[name];
+    if (!stored) return defaultChannelPreferences();
+    return {
+      colormap: normalizeColormapPreference(stored.colormap, this.catalog),
+      levels: {
+        mode: stored.levels.mode === 'fixed' ? 'fixed' : 'auto',
+        auto: normalizeAutoLevels(stored.levels.auto),
+        fixed: {
+          low: Number.isFinite(stored.levels.fixed.low) ? Math.max(0, stored.levels.fixed.low) : 0,
+          high: Number.isFinite(stored.levels.fixed.high) ? Math.max(0, stored.levels.fixed.high) : 65535
+        }
+      }
+    };
   }
 
   #clearFrames(): void {
@@ -331,34 +511,7 @@ export class PreviewSession {
 
   #applyPreviewUpdate = (update: PreviewUpdate): void => {
     const viewport = update.viewport;
-    const viewportChanged = viewport != null && !isViewportEqual(this.viewport, viewport);
-    if (viewportChanged) this.#applyViewport(viewport);
-    let levelsChanged = false;
-    for (const [name, levels] of Object.entries(update.levels ?? {})) {
-      const channel = this.channels.find((candidate) => candidate.name === name);
-      if (channel) {
-        levelsChanged ||= channel.levelsMin !== levels.min || channel.levelsMax !== levels.max;
-        channel.levelsMin = levels.min;
-        channel.levelsMax = levels.max;
-        channel.autoLeveledDeliveryStreamId = this.#deliveryStreamId;
-      }
-    }
-    if (levelsChanged && !viewportChanged) this.redrawGeneration++;
-  };
-
-  #applyColormapPreferences = (): boolean => {
-    const stored = this.#colormapPreferences.get()?.[this.#instrumentId] ?? {};
-    let changed = false;
-    for (const channel of this.channels) {
-      if (!channel.name) continue;
-      const preference = normalizeColormapPreference(stored[channel.name] ?? AUTO_COLORMAP, this.catalog);
-      const resolved = resolveColormap(preference, channel.config);
-      if (channel.colormapPreference === preference && channel.resolvedColormap === resolved) continue;
-      channel.colormapPreference = preference;
-      channel.resolvedColormap = resolved;
-      changed = true;
-    }
-    return changed;
+    if (viewport != null && !isViewportEqual(this.viewport, viewport)) this.#applyViewport(viewport);
   };
 
   #applyStatus = (status: InstrumentStatus): void => {
@@ -366,16 +519,22 @@ export class PreviewSession {
     const activeProfile = imaging.profiles[status.active_profile_id];
     const names = (activeProfile?.channels ?? []).slice(0, MAX_CHANNELS);
     const streamChanged = status.delivery_stream_id !== this.#deliveryStreamId;
+    const profileChanged = status.active_profile_id !== this.#activeProfileId;
     const channelsChanged = this.channels.some((channel, index) => (channel.name ?? '') !== (names[index] ?? ''));
-    if (!streamChanged && !channelsChanged) {
+    if (!streamChanged && !profileChanged && !channelsChanged) {
+      let changed = false;
       for (const channel of this.channels) {
         channel.config = channel.name ? imaging.channels[channel.name] : undefined;
+        const resolved = resolveColormap(channel.preferences.colormap, channel.config);
+        changed ||= channel.resolvedColormap !== resolved;
+        channel.resolvedColormap = resolved;
       }
-      if (this.#applyColormapPreferences()) this.redrawGeneration++;
+      if (changed) this.redrawGeneration++;
       return;
     }
 
     this.#deliveryStreamId = status.delivery_stream_id;
+    this.#activeProfileId = status.active_profile_id;
     this.#stream.setDeliveryStream(this.#deliveryStreamId);
     this.#lastDeliverySequences.clear();
     this.#renderer.clear();
@@ -384,23 +543,22 @@ export class PreviewSession {
       channel.overviewFrame = null;
       channel.viewportFrame = null;
       channel.latestHistogram = null;
-      if (!channelsChanged) {
-        channel.config = channel.name ? imaging.channels[channel.name] : undefined;
-        channel.rotationDeg = this.#detection[channel.config?.detection ?? '']?.rotation_deg ?? 0;
-        continue;
+      channel.levelsAppliedDeliveryStreamId = null;
+      const nameChanged = (channel.name ?? '') !== (names[index] ?? '');
+      if (nameChanged) {
+        channel.visible = names[index] !== undefined;
+        channel.name = names[index];
+        channel.sensorWidth = 0;
+        channel.sensorHeight = 0;
       }
-      channel.visible = false;
-      channel.autoLeveledDeliveryStreamId = null;
-      channel.config = undefined;
-      channel.colormapPreference = AUTO_COLORMAP;
-      channel.resolvedColormap = null;
-      channel.name = names[index];
-      if (!channel.name) continue;
-      channel.config = imaging.channels[channel.name];
+      channel.config = channel.name ? imaging.channels[channel.name] : undefined;
       channel.rotationDeg = this.#detection[channel.config?.detection ?? '']?.rotation_deg ?? 0;
-      channel.visible = true;
+      if (profileChanged || nameChanged) {
+        channel.preferences = channel.name ? this.#loadChannelPreferences(channel.name) : defaultChannelPreferences();
+      }
+      channel.resolvedColormap = resolveColormap(channel.preferences.colormap, channel.config);
+      if (!channel.name) continue;
     }
-    this.#applyColormapPreferences();
     this.redrawGeneration++;
   };
 
@@ -429,7 +587,10 @@ export class PreviewSession {
       channel.sensorHeight = frame.source.sensor_height;
       channel.overviewFrame = frame.source;
       if (frame.histogram) channel.latestHistogram = frame.histogram;
-      this.#autoLevel(frame.delivery.channel_id);
+      if (channel.levelsAppliedDeliveryStreamId !== this.#deliveryStreamId) {
+        if (channel.preferences.levels.mode === 'auto') this.autoLevel(frame.delivery.channel_id);
+        else this.#applyFixedLevels(channel);
+      }
     } else {
       if (!channel.overviewFrame) {
         channel.sensorWidth = frame.source.sensor_width;

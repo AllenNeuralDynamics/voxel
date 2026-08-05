@@ -129,7 +129,7 @@
       class="focus-visible:ring-focused inline-flex size-ui-xs shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2"
       onclick={() => show.set(!show.get())}
     >
-      {#if show.get()}<Eye width="16" height="16" />{:else}<EyeOff width="16" height="16" />{/if}
+      {#if show.get()}<Eye width="14" height="14" />{:else}<EyeOff width="14" height="14" />{/if}
     </button>
   </div>
   {#if preview}<PreviewDetails previewer={preview} />{/if}

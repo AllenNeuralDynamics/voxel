@@ -116,17 +116,8 @@
   }
 </script>
 
-<div class="pointer-events-auto flex w-68 flex-col overflow-hidden overlay-panel">
-  <div class="flex items-center gap-1 p-1.5 font-mono">
-    <SpinBox
-      model={previewer.zoomModel}
-      prefix="×"
-      decimals={2}
-      numCharacters={6}
-      align="right"
-      class="min-w-0 bg-transparent"
-      steppers={false}
-    />
+<div class="pointer-events-auto flex w-full flex-col overflow-hidden overlay-panel">
+  <div class="flex items-center gap-0.75 p-1 font-mono text-base">
     <SpinBox
       model={previewer.panXModel}
       prefix="X"
@@ -134,7 +125,7 @@
       numCharacters={4}
       align="right"
       steppers={false}
-      class="min-w-0 bg-transparent"
+      class="min-w-0 bg-transparent pr-0.5 pl-0"
     />
     <SpinBox
       model={previewer.panYModel}
@@ -143,12 +134,21 @@
       numCharacters={4}
       align="right"
       steppers={false}
-      class="min-w-0 bg-transparent"
+      class="min-w-0 bg-transparent pr-0.5 pl-0"
+    />
+    <SpinBox
+      model={previewer.zoomModel}
+      prefix="K"
+      decimals={2}
+      numCharacters={6}
+      align="right"
+      class="min-w-0 bg-transparent pr-0.5 pl-0"
+      steppers={false}
     />
     <button
       type="button"
       onclick={() => navigatorVisible.set(!navigatorVisible.get())}
-      class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+      class="flex h-6 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
       aria-expanded={navigatorVisible.get()}
       aria-label={navigatorVisible.get() ? 'Hide navigator' : 'Show navigator'}
       title={navigatorVisible.get() ? 'Hide navigator' : 'Show navigator'}
