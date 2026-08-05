@@ -113,7 +113,7 @@ class CameraHandle(DeviceHandle[Camera]):
         await self._set_preview_colormap(colormap)
 
     async def auto_level(self, percentile: float = 1.0) -> None:
-        """Auto-set preview levels from the camera's latest overview histogram (percentile clip)."""
+        """Set the preview black point from ``percentile`` and the white point from p99.99."""
         await self.call("auto_level", percentile)
 
     async def get_preview_config(self) -> PreviewConfig:

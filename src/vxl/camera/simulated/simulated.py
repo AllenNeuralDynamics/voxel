@@ -1,4 +1,5 @@
 import time
+from collections.abc import Mapping
 from typing import ClassVar, cast, final
 
 import numpy as np
@@ -8,6 +9,7 @@ from rigup import enumerated, enumerated_int, numeric
 from vxl.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
+    PIXEL_FMT_TO_VALID_BITS,
     Camera,
     IntRange,
     PixelFormat,
@@ -17,15 +19,7 @@ from vxl.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from vxl.camera.simulated.frame_gen import ReferenceFrameGenerator
-
-DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
-VP_151MX_M6H0 = IVec2D(y=10_640, x=14_192)
-# 1.00:  "10640,14192"
-# 0.75:  "7980,10,644"
-# 0.5:   "5320,7096"
-# 0.25:  "2660,3548"
-# 0.125: "1330,1774"
+from vxl.camera.simulated.frame_source import FrameSource, FrameSourceConfig, create_frame_source
 
 
 @final
@@ -51,14 +45,12 @@ class SimulatedCamera(Camera):
     def __init__(
         self,
         uid: str,
-        pixel_size_um: Vec2D | list[float] | str = DEFAULT_PIXEL_SIZE_UM,
-        sensor_size_px: IVec2D | list[int] | str = VP_151MX_M6H0,
-    ):
+        frame_source: FrameSource | FrameSourceConfig | Mapping[str, object] | None = None,
+    ) -> None:
         super().__init__(uid=uid)
-        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
-        self._sensor_size_px = sensor_size_px if isinstance(sensor_size_px, IVec2D) else IVec2D.parse(sensor_size_px)
-        self._roi_width_px = self._sensor_size_px.x
-        self._roi_height_px = self._sensor_size_px.y
+        self._frame_source = create_frame_source(frame_source)
+        self._roi_width_px = self.sensor_size_px.x
+        self._roi_height_px = self.sensor_size_px.y
         self._roi_width_offset_px = 0
         self._roi_height_offset_px = 0
         self._pixel_format: PixelFormat = "MONO16"
@@ -82,11 +74,11 @@ class SimulatedCamera(Camera):
 
     @property
     def sensor_size_px(self) -> IVec2D:
-        return self._sensor_size_px
+        return self._frame_source.sensor_size_px
 
     @property
     def pixel_size_um(self) -> Vec2D:
-        return self._pixel_size_um
+        return self._frame_source.pixel_size_um
 
     @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     def pixel_format(self) -> PixelFormat:
@@ -143,8 +135,8 @@ class SimulatedCamera(Camera):
     @property
     def roi_grid(self) -> ROIGrid:
         return ROIGrid(
-            h=IntRange(min=self._min_width, max=self._sensor_size_px.x, step=self._roi_step_width_px),
-            v=IntRange(min=self._min_height, max=self._sensor_size_px.y, step=self._roi_step_height_px),
+            h=IntRange(min=self._min_width, max=self.sensor_size_px.x, step=self._roi_step_width_px),
+            v=IntRange(min=self._min_height, max=self.sensor_size_px.y, step=self._roi_step_height_px),
         )
 
     @property
@@ -172,22 +164,15 @@ class SimulatedCamera(Camera):
         self.log.debug("trigger polarity set to %s", polarity)
 
     def _allocate_buffer(self) -> None:
-        self.log.debug("generating reference frame")
-
-        # Generate reference frame at output dimensions (post-binning)
-        frame_size = self.frame_size_px
-
-        generator = ReferenceFrameGenerator(
-            height_px=frame_size.y,
-            width_px=frame_size.x,
-            data_type=self.pixel_type.dtype,
-            apply_noise=True,
+        self.log.debug("preparing frame source")
+        frame = self._frame_source.prepare(self.roi, int(self.binning))
+        self._reference_frame = _convert_valid_bits(
+            frame,
+            source_valid_bits=self._frame_source.source_valid_bits,
+            target_valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.pixel_format))],
+            target_dtype=self.pixel_type.dtype,
         )
-
-        # Generate and cache single frame
-        reference_frame = generator.generate(nframes=1)[0]
-        self.log.debug("reference frame: %s, dtype=%s", reference_frame.shape, reference_frame.dtype)
-        self._reference_frame = reference_frame
+        self.log.debug("prepared frame: %s, dtype=%s", self._reference_frame.shape, self._reference_frame.dtype)
 
     def _start(self, frame_count: int | None = None) -> None:
         if self._frame_count >= 0:
@@ -212,7 +197,7 @@ class SimulatedCamera(Camera):
             raise RuntimeError("Camera not started. Call start() first.")
 
         if self._reference_frame is None:
-            raise RuntimeError("Reference frame not generated. Call arm() first.")
+            raise RuntimeError("Reference frame not generated. Call start() first.")
 
         # Check if we've reached requested frame count
         if self._requested_frame_count > 0 and self._frame_count >= self._requested_frame_count:
@@ -241,8 +226,12 @@ class SimulatedCamera(Camera):
                 )
 
         self._last_grab_frame_time = time.perf_counter()
+        reference_frame = self._reference_frame
+        if reference_frame is None:
+            raise RuntimeError("Reference frame not generated. Call start() first.")
+        frame = reference_frame.copy()
         self._frame_count += 1
-        return self._reference_frame.copy()
+        return frame
 
     def stop(self) -> None:
         """Stop the simulated camera."""
@@ -256,3 +245,22 @@ class SimulatedCamera(Camera):
     def _free_buffer(self) -> None:
         """Release simulated camera resources."""
         self._reference_frame = None
+
+    def close(self) -> None:
+        """Release buffer state and the device-lifetime frame source mapping."""
+        if self._frame_count >= 0:
+            self.stop()
+        self.free_buffer()
+        self._frame_source.close()
+
+
+def _convert_valid_bits(
+    frame: np.ndarray,
+    *,
+    source_valid_bits: int,
+    target_valid_bits: int,
+    target_dtype: np.dtype,
+) -> np.ndarray:
+    shift = max(0, source_valid_bits - target_valid_bits)
+    converted = np.right_shift(frame, shift) if shift else frame
+    return converted.astype(target_dtype, order="C", casting="unsafe", copy=True)

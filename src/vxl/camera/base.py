@@ -119,6 +119,7 @@ class StreamInfo(SchemaModel):
     payload_mbs: float | None = None
 
 
+ValidBits = Literal[8, 10, 12, 14, 16]
 PixelFormat = Literal["MONO8", "MONO10", "MONO12", "MONO14", "MONO16"]
 
 PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
@@ -127,6 +128,14 @@ PIXEL_FMT_TO_DTYPE: dict[PixelFormat, Dtype] = {
     "MONO12": Dtype.UINT16,
     "MONO14": Dtype.UINT16,
     "MONO16": Dtype.UINT16,
+}
+
+PIXEL_FMT_TO_VALID_BITS: dict[PixelFormat, ValidBits] = {
+    "MONO8": 8,
+    "MONO10": 10,
+    "MONO12": 12,
+    "MONO14": 14,
+    "MONO16": 16,
 }
 
 BINNING_OPTIONS = [1, 2, 4, 8]
@@ -251,7 +260,7 @@ class CameraController(DeviceController["Camera"]):
 
     @describe(label="Auto Level")
     async def auto_level(self, percentile: float = 1.0) -> None:
-        """Set preview levels by percentile-clipping the latest overview histogram (no-op before any frame)."""
+        """Set the black point from ``percentile`` and the white point from p99.99."""
         if (histogram := self._previewer.last_histogram) is not None:
             await self.update_preview_levels(PreviewLevels.from_histogram(histogram, percentile))
 

@@ -1,5 +1,5 @@
 /**
- * Computes the min and max levels for "auto levels" based on the 1st and 99th percentiles.
+ * Computes auto levels with a p1 black point and p99.99 white point.
  * @param histogram The histogram data.
  * @returns An object with the new min and max levels (normalized 0-1), or null if input is invalid.
  */
@@ -16,7 +16,7 @@ export function computeAutoLevels(histogram: number[]): { min: number; max: numb
   }
 
   const p1Threshold = totalPixels * 0.01;
-  const p99Threshold = totalPixels * 0.99;
+  const p9999Threshold = totalPixels * 0.9999;
 
   let cumulative = 0;
   let minBin = 0;
@@ -31,11 +31,11 @@ export function computeAutoLevels(histogram: number[]): { min: number; max: numb
     }
   }
 
-  // Find max (99th percentile)
+  // Find max (99.99th percentile)
   cumulative = 0;
   for (let i = 0; i < numBins; i++) {
     cumulative += histogram[i];
-    if (cumulative >= p99Threshold) {
+    if (cumulative >= p9999Threshold) {
       maxBin = i;
       break;
     }

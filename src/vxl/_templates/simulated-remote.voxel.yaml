@@ -89,8 +89,9 @@ hal:
         camera_1: &sim_camera
           target: vxl.camera.simulated.SimulatedCamera
           init:
-            pixel_size_um: "3.76,3.76"
-            sensor_size_px: "10640,14192"
+            frame_source:
+              sensor_size_px: "10640,14192"
+              pixel_size_um: "3.76,3.76"
         camera_2: *sim_camera
 
   stage:

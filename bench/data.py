@@ -21,6 +21,7 @@ from cloudpathlib import S3Path
 from ome_zarr_writer.array.ts import TSArrayReader
 from rich.console import Console
 
+from vxl.camera.base import ValidBits
 from vxlib import S3Store
 
 REGION = "us-west-2"  # aind-open-data (the real-data source) lives here
@@ -33,11 +34,13 @@ console = Console()
 @dataclass(frozen=True)
 class DataRef:
     """A reference to a block of real frames: an OME-Zarr tile `link` and a z-window [z_start, z_end).
-    `v3` forces the Zarr format (None = auto-detect from the array metadata)."""
+    `valid_bits` records the acquisition's encoding independently of observed values. `v3` forces the Zarr
+    format (None = auto-detect from the array metadata)."""
 
     link: str
     z_start: int
     z_end: int
+    valid_bits: ValidBits
     v3: bool | None = None
 
     @property
@@ -51,13 +54,22 @@ class DataRef:
 # BATCH_SIZE block is ~38 GB, so load only a couple per run.
 _DS = "s3://aind-open-data/exaSPIM_786399_2026-04-14_17-47-27/SPIM.ome.zarr"
 CATALOG = [
-    DataRef(f"{_DS}/tile_000001_ch_488.zarr", 10496, 10496 + BATCH_SIZE),  # max ~12700 (level-0 validated)
-    DataRef(f"{_DS}/tile_000004_ch_488.zarr", 7488, 7488 + BATCH_SIZE),  # max ~3600  (level-0 validated)
-    DataRef(f"{_DS}/tile_000008_ch_488.zarr", 8128, 8128 + BATCH_SIZE),  # max ~4500  (level-0 validated)
-    DataRef(f"{_DS}/tile_000002_ch_488.zarr", 11200, 11200 + BATCH_SIZE),  # max ~2800  (coarse survey)
-    DataRef(f"{_DS}/tile_000006_ch_488.zarr", 7936, 7936 + BATCH_SIZE),  # max ~2400  (coarse survey)
+    DataRef(f"{_DS}/tile_000001_ch_488.zarr", 10496, 10496 + BATCH_SIZE, valid_bits=16),  # max ~12700 (l0 validated)
+    DataRef(f"{_DS}/tile_000004_ch_488.zarr", 7488, 7488 + BATCH_SIZE, valid_bits=16),  # max ~3600  (0 validated)
+    DataRef(f"{_DS}/tile_000008_ch_488.zarr", 8128, 8128 + BATCH_SIZE, valid_bits=16),  # max ~4500  (0 validated)
+    DataRef(f"{_DS}/tile_000002_ch_488.zarr", 11200, 11200 + BATCH_SIZE, valid_bits=16),  # max ~2800  (coarse survey)
+    DataRef(f"{_DS}/tile_000006_ch_488.zarr", 7936, 7936 + BATCH_SIZE, valid_bits=16),  # max ~2400  (coarse survey)
 ]
 DEFAULT_REF = CATALOG[0]
+
+
+@dataclass(frozen=True)
+class LoadedBlock:
+    """A loaded frame block plus the actual clamped Z range read from the source."""
+
+    frames: np.ndarray
+    z_start: int
+    z_end: int
 
 
 def _detect_v3(array_url: str) -> bool | None:
@@ -111,23 +123,47 @@ def open_full_res(url: str = DEFAULT_REF.link, *, v3: bool | None = None, verbos
     raise SystemExit("could not open the array (tried level 0 and the tile, v3 and v2)")
 
 
-def load_real_block(ref: DataRef = DEFAULT_REF, *, verbose: bool = True) -> np.ndarray:
-    """Read the z-window `ref` selects into RAM as a `(n, y, x)` array; the range is clamped in-range."""
+def load_real_selection(
+    ref: DataRef = DEFAULT_REF,
+    *,
+    frame_count: int | None = None,
+    verbose: bool = True,
+) -> LoadedBlock:
+    """Read only the requested prefix of a catalog Z window and report the actual clamped range."""
+    n = ref.n if frame_count is None else frame_count
+    if n <= 0:
+        raise ValueError(f"frame_count must be positive, got {n}")
+    if n > ref.n:
+        raise ValueError(f"frame_count {n} exceeds catalog window length {ref.n}")
+
     reader = open_full_res(ref.link, v3=ref.v3, verbose=verbose)
     z, y, x = reader.shape[-3], reader.shape[-2], reader.shape[-1]
-    n = ref.n
+    if n > z:
+        raise ValueError(f"frame_count {n} exceeds source depth {z}")
     z0 = max(0, min(ref.z_start, z - n))
     if verbose:
         console.print(f"reading {n} frames @ z0={z0}/{z} (y={y} x={x}, ~{n * y * x * 2 / 1e9:.1f} GB)...")
     t0 = time.perf_counter()
     block = reader.read_3d(z0=z0, n=n)
+    if block.shape != (n, y, x):
+        raise RuntimeError(f"source returned shape {block.shape}, expected {(n, y, x)}")
     if verbose:
         gb, dt = block.nbytes / 1e9, time.perf_counter() - t0
         console.print(
             f"read {block.shape} {block.dtype} = {gb:.2f} GB in {dt:.1f}s -> {gb / dt * 1000:.0f} MB/s "
             f"| min={int(block.min())} max={int(block.max())} mean={float(block.mean()):.1f}"
         )
-    return block
+    return LoadedBlock(frames=block, z_start=z0, z_end=z0 + n)
+
+
+def load_real_block(
+    ref: DataRef = DEFAULT_REF,
+    *,
+    frame_count: int | None = None,
+    verbose: bool = True,
+) -> np.ndarray:
+    """Read a catalog block into RAM, optionally limiting the number of source planes."""
+    return load_real_selection(ref, frame_count=frame_count, verbose=verbose).frames
 
 
 if __name__ == "__main__":

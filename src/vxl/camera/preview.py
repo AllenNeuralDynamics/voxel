@@ -102,11 +102,11 @@ class PreviewLevels(SchemaModel):
 
     @classmethod
     def from_histogram(cls, histogram: list[int], percentile: float = 1.0) -> Self:
-        """Calculate auto-levels from a histogram using percentile clipping.
+        """Calculate auto-levels using the requested black percentile and p99.99 white point.
 
         Args:
             histogram: Histogram bin counts (any number of bins)
-            percentile: Percentile to clip at low/high ends (default 1.0 means 1st and 99th percentile)
+            percentile: Percentile used for the black point (default p1)
 
         Returns:
             PreviewLevels with min/max normalized to 0-1 range
@@ -116,7 +116,7 @@ class PreviewLevels(SchemaModel):
             return cls()
 
         low_threshold = total * (percentile / 100.0)
-        high_threshold = total * ((100.0 - percentile) / 100.0)
+        high_threshold = total * 0.9999
 
         # Find low percentile bin
         cumsum = 0
