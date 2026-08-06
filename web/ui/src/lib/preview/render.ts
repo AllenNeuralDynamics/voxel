@@ -201,8 +201,8 @@ export class PreviewGpuRenderer {
     const layer = frame.source.layer;
     const existing = stored[layer];
     if (
-      existing?.deliveryStreamId === frame.delivery.delivery_stream_id &&
-      existing.deliverySeq >= frame.delivery.delivery_seq
+      existing?.deliveryStreamId === frame.delivery.delivery_cursor.stream_id &&
+      existing.deliverySeq >= frame.delivery.delivery_cursor.seq
     ) {
       return false;
     }
@@ -421,8 +421,8 @@ export class PreviewGpuRenderer {
       low,
       high,
       header,
-      deliveryStreamId: frame.delivery.delivery_stream_id,
-      deliverySeq: frame.delivery.delivery_seq
+      deliveryStreamId: frame.delivery.delivery_cursor.stream_id,
+      deliverySeq: frame.delivery.delivery_cursor.seq
     };
   }
 

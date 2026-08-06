@@ -90,11 +90,11 @@ function connect(): void {
     try {
       if (!(event.data instanceof ArrayBuffer)) throw new Error('Preview service sent a non-binary message.');
       const packet = parsePreviewPacket(event.data);
-      if (packet.delivery.delivery_stream_id !== deliveryStreamId) return;
+      if (packet.delivery.delivery_cursor.stream_id !== deliveryStreamId) return;
       const key = packetKey(packet);
       const previous = latestSeen.get(key) ?? -1;
-      if (packet.delivery.delivery_seq <= previous) return;
-      latestSeen.set(key, packet.delivery.delivery_seq);
+      if (packet.delivery.delivery_cursor.seq <= previous) return;
+      latestSeen.set(key, packet.delivery.delivery_cursor.seq);
       pending.set(key, packet);
       void drain();
     } catch (error) {
@@ -144,7 +144,7 @@ async function decompressZstd(payload: Uint8Array): Promise<ArrayBuffer> {
 
 function histogramFor(frame: ParsedPreviewPacket, shuffled: ArrayBuffer): number[] | null {
   if (frame.source.layer !== 'overview') return null;
-  const identity = `${frame.delivery.delivery_stream_id}:${frame.delivery.channel_id}`;
+  const identity = `${frame.delivery.delivery_cursor.stream_id}:${frame.delivery.channel_id}`;
   if (histogrammed.has(identity)) return null;
   histogrammed.add(identity);
 
@@ -177,8 +177,8 @@ async function drain(): Promise<void> {
         );
       }
       // If a newer packet for this key arrived while decoding, skip the stale upload as well as queued stale work.
-      if ((pending.get(key)?.delivery.delivery_seq ?? -1) > packet.delivery.delivery_seq) continue;
-      if (packet.delivery.delivery_stream_id !== deliveryStreamId) continue;
+      if ((pending.get(key)?.delivery.delivery_cursor.seq ?? -1) > packet.delivery.delivery_cursor.seq) continue;
+      if (packet.delivery.delivery_cursor.stream_id !== deliveryStreamId) continue;
 
       const frame: DecodedPreviewFrame = {
         delivery: packet.delivery,

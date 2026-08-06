@@ -101,9 +101,9 @@ class StageStore(QObject):
         y_adapter.properties_changed.connect(self._on_y_props)
         z_adapter.properties_changed.connect(self._on_z_props)
 
-        x_adapter.request_initial_properties()
-        y_adapter.request_initial_properties()
-        z_adapter.request_initial_properties()
+        x_adapter.replay_cached_properties()
+        y_adapter.replay_cached_properties()
+        z_adapter.replay_cached_properties()
 
         log.info("StageStore bound to adapters: x=%s, y=%s, z=%s", x_adapter.uid, y_adapter.uid, z_adapter.uid)
 

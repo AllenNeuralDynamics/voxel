@@ -62,6 +62,14 @@
     };
   });
 
+  $effect(() => {
+    const instrument = app.instrument;
+    const session = previews.current;
+    if (!instrument || !session) return;
+    const status = instrument.status;
+    untrack(() => session.applyInstrumentStatus(status));
+  });
+
   async function configureServiceWorker(): Promise<void> {
     if (!('serviceWorker' in navigator)) return;
     if (import.meta.env.DEV) {

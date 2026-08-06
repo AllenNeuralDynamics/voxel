@@ -25,7 +25,7 @@ log = logging.getLogger("rigup.wire")
 type WireFormat = Literal["json", "msgpack"]
 
 
-def pack(body: BaseModel, *, fmt: WireFormat = "msgpack") -> bytes:
+def pack(body: BaseModel, *, fmt: WireFormat = "msgpack", exclude_unset: bool = False) -> bytes:
     """Serialize a typed event body for the broadcast channel.
 
     Topic is handled separately at the transport layer (multipart frame on
@@ -36,8 +36,8 @@ def pack(body: BaseModel, *, fmt: WireFormat = "msgpack") -> bytes:
     """
     if fmt == "msgpack":
         # msgpack stubs declare `bytes | None`; for valid input it always returns bytes.
-        return cast("bytes", msgpack.packb(body.model_dump(mode="json")))
-    return body.model_dump_json().encode()
+        return cast("bytes", msgpack.packb(body.model_dump(mode="json", exclude_unset=exclude_unset)))
+    return body.model_dump_json(exclude_unset=exclude_unset).encode()
 
 
 def unpack(data: bytes) -> dict[str, Any]:

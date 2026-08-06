@@ -40,7 +40,7 @@
 
   // ── Constants ─────────────────────────────────────────────────────
 
-  const svgHeight = 36;
+  const svgHeight = 40;
   const labelWidth = 36;
   const labelGap = 4;
   const gradientId = `ch-grad-${Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
@@ -106,7 +106,7 @@
   });
 
   const fgEntries = $derived.by(() => {
-    if (displayHist.length < 2) return [];
+    if (displayHist.length < 2 || svgWidth <= 0) return [];
     const step = svgWidth / (displayHist.length - 1);
     const yAt = (x: number): number => {
       const fIdx = x / step;

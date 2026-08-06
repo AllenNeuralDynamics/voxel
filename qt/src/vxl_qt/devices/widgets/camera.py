@@ -142,8 +142,8 @@ class CameraControl(QWidget):
         self._size_w.valueChanged.connect(self._on_roi_changed)
         self._size_h.valueChanged.connect(self._on_roi_changed)
 
-        # Request initial property values
-        self._adapter.request_initial_properties()
+        # Replay the feed state after connecting this widget's signals.
+        self._adapter.replay_cached_properties()
 
     def _on_properties_changed(self, props: dict[str, Any]) -> None:
         """Update UI from device properties."""

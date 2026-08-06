@@ -3,15 +3,15 @@ import datetime
 import getpass
 import logging
 import math
+import time
 import uuid
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ValidationError
 from vxl_catalog import (
     AcquisitionManifest,
     AcquisitionOrigin,
@@ -31,6 +31,7 @@ from vxl.camera import (
     PreviewLayer,
     PreviewViewport,
     StorageSpec,
+    StreamCursor,
     resolve_storage,
 )
 from vxl.daq.clocked import Signals
@@ -40,7 +41,9 @@ from vxl.system import System
 from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
 from .bench import PROMOTABLE_FIELDS, InstrumentBench
+from .feed import InstrumentFeed
 from .hal import HAL
+from .models import AcquisitionMode, ActiveAcquisitionState, DeviceSnapshot, TaskTile, VolumeProgress
 from .state import (
     AcquisitionTask,
     ChannelConfig,
@@ -56,15 +59,9 @@ from .state import (
     ZStack,
 )
 from .topology import HALConfig
-from .traversal import Tile, TileOrder
+from .traversal import TileOrder
 
 logger = logging.getLogger(__name__)
-
-
-class AcquisitionMode(StrEnum):
-    IDLE = "idle"
-    PREVIEW = "preview"
-    CAPTURE = "capture"
 
 
 class AcquisitionRequest(BaseModel):
@@ -73,60 +70,6 @@ class AcquisitionRequest(BaseModel):
     storage: StorageSpec
     task_ids: list[str] | None = None  # None → every planned task, in traversal order
     operator: str | None = None
-
-
-class VolumeProgress(BaseModel, frozen=True):
-    """Transient frame progress for one task/profile volume.
-
-    A profile's channels capture in synchronized batches, so the captured-frame count is shared across
-    them. This state is retained by the instrument for live clients but is not written to the catalog.
-    """
-
-    task: str = Field(min_length=1)
-    profile: str = Field(min_length=1)
-    frames_captured: int = Field(ge=0)
-    frames_total: int = Field(gt=0)
-
-    @model_validator(mode="after")
-    def _check_frames(self) -> Self:
-        if self.frames_captured > self.frames_total:
-            raise ValueError("frames_captured cannot exceed frames_total")
-        return self
-
-    def updated(self, *, frames_captured: int) -> Self:
-        return type(self).model_validate({**self.model_dump(), "frames_captured": frames_captured})
-
-
-class ActiveAcquisitionState(BaseModel, frozen=True):
-    """The latest durable manifest plus transient progress for the instrument's current run."""
-
-    manifest: AcquisitionManifest
-    progress: VolumeProgress
-
-    @model_validator(mode="after")
-    def _check_progress_volume(self) -> Self:
-        key = (self.progress.task, self.progress.profile)
-        if key not in {(volume.task, volume.profile) for volume in self.manifest.volumes}:
-            raise ValueError("progress must identify a volume in the manifest")
-        return self
-
-
-class DeviceSnapshot(BaseModel, frozen=True):
-    """One device's identity and introspected interface, or the error that prevented introspection."""
-
-    id: str
-    connected: bool
-    interface: DeviceInterface | None = None
-    error: str | None = None
-
-
-class TaskTile(Tile):
-    """A task's footprint tile (a :class:`Tile`) tagged with its ``task_id``. Because :class:`TileOrder`
-    is generic over the tile subtype, an ordered ``list[TaskTile]`` carries both the per-task geometry
-    and the traversal order — replacing a separate tiles-map and order-list with one value."""
-
-    task_id: str
-    routes: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -195,6 +138,8 @@ class Instrument:
         self.preview_frames: Emitter[tuple[str, PreviewLayer, bytes]] = Emitter()
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
 
+        self._feed = InstrumentFeed(self)
+
     @property
     def path(self) -> Path:
         """The instrument's on-disk home (``<name>.voxel/``)."""
@@ -209,6 +154,11 @@ class Instrument:
     def hardware_config(self) -> HALConfig:
         """The immutable hardware topology without access to runtime device handles."""
         return self._hal.config
+
+    @property
+    def feed(self) -> InstrumentFeed:
+        """Materialized, sequenced view of this instrument and its device properties."""
+        return self._feed
 
     @property
     def device_property_updates(self) -> Subscribable[tuple[str, PropResults]]:
@@ -290,6 +240,7 @@ class Instrument:
                 for cam_id, camera in self._hal.cameras.items():
                     await self._subscribe_camera(cam_id, camera)
                 await self.task_tiles.refresh()
+                await self._feed.open()
         except BaseException:
             try:
                 await self.close()
@@ -599,6 +550,7 @@ class Instrument:
 
     async def close(self) -> None:
         """Stop preview, drop the feed, close hardware, and keep the logical active profile id."""
+        self._feed.close()
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
@@ -1378,11 +1330,13 @@ class Instrument:
         if (channel_id := self._channel_for_camera(camera_id)) is None:
             return
         delivery_seq = self._delivery_seq
+        instrument_cursor = self._feed.cursor
         packet = PreviewFramePacket.wrap(
             frame,
             channel_id=channel_id,
-            delivery_stream_id=self._delivery_stream_id.value,
-            delivery_seq=delivery_seq,
+            delivery_cursor=StreamCursor(stream_id=self._delivery_stream_id.value, seq=delivery_seq),
+            state_cursor=StreamCursor(stream_id=instrument_cursor.stream_id, seq=instrument_cursor.seq),
+            stamped_at_unix_us=time.time_ns() // 1_000,
         ).pack()
         self._delivery_seq = delivery_seq + 1
         await self.preview_frames.emit((channel_id, layer, packet))

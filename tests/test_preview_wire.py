@@ -19,6 +19,7 @@ from vxl.camera.preview import (
     PreviewSourceHeader,
     PreviewViewport,
     SourceRectPx,
+    StreamCursor,
     ValidBits,
     byte_shuffle_u16,
     byte_unshuffle_u16,
@@ -96,8 +97,9 @@ def test_delivery_packet_wraps_frame_without_modifying_it() -> None:
     delivery = PreviewFramePacket.wrap(
         frame,
         channel_id="channel-1",
-        delivery_stream_id="delivery-1",
-        delivery_seq=9,
+        delivery_cursor=StreamCursor(stream_id="delivery-1", seq=9),
+        state_cursor=StreamCursor(stream_id="state-1", seq=17),
+        stamped_at_unix_us=1_234_567,
     )
 
     packed = delivery.pack()
@@ -106,8 +108,9 @@ def test_delivery_packet_wraps_frame_without_modifying_it() -> None:
 
     assert (magic, version) == (DELIVERY_MAGIC, DELIVERY_FRAMING_VERSION)
     assert parsed.header.channel_id == "channel-1"
-    assert parsed.header.delivery_stream_id == "delivery-1"
-    assert parsed.header.delivery_seq == 9
+    assert parsed.header.delivery_cursor == StreamCursor(stream_id="delivery-1", seq=9)
+    assert parsed.header.state_cursor == StreamCursor(stream_id="state-1", seq=17)
+    assert parsed.header.stamped_at_unix_us == 1_234_567
     assert parsed.frame == frame
     assert PreviewFrame.from_packed(parsed.frame).header.camera_id == "camera-1"
 

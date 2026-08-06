@@ -181,7 +181,7 @@ class Footer(QWidget):
             self._laser_box.add(dot)
             self._indicators[uid] = dot
             adapter.properties_changed.connect(lambda props, u=uid: self._on_laser_props(u, props))
-            adapter.request_initial_properties()
+            adapter.replay_cached_properties()
 
     def _on_laser_props(self, uid: str, props: dict[str, Any]) -> None:
         dot = self._indicators.get(uid)

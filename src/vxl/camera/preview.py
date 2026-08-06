@@ -182,13 +182,21 @@ class PreviewSourceHeader(SchemaModel):
         return self
 
 
+class StreamCursor(SchemaModel):
+    """Position in one identified ordered stream."""
+
+    stream_id: str = Field(min_length=1)
+    seq: int = Field(ge=0)
+
+
 class PreviewDeliveryHeader(SchemaModel):
-    """Routing and sequencing metadata supplied by the control computer."""
+    """Delivery sequencing and instrument-state association supplied by the control computer."""
 
     delivery_schema_version: Literal[1] = DELIVERY_SCHEMA_VERSION
     channel_id: str = Field(min_length=1)
-    delivery_stream_id: str = Field(min_length=1)
-    delivery_seq: int = Field(ge=0)
+    delivery_cursor: StreamCursor
+    state_cursor: StreamCursor
+    stamped_at_unix_us: int = Field(ge=0)
     frame_byte_length: int = Field(gt=0)
 
 
@@ -316,16 +324,18 @@ class PreviewFramePacket:
         frame: bytes | bytearray | memoryview,
         *,
         channel_id: str,
-        delivery_stream_id: str,
-        delivery_seq: int,
+        delivery_cursor: StreamCursor,
+        state_cursor: StreamCursor,
+        stamped_at_unix_us: int,
     ) -> Self:
         """Wrap an already-packed preview frame without parsing its contents."""
         packed_frame = bytes(frame)
         return cls(
             header=PreviewDeliveryHeader(
                 channel_id=channel_id,
-                delivery_stream_id=delivery_stream_id,
-                delivery_seq=delivery_seq,
+                delivery_cursor=delivery_cursor,
+                state_cursor=state_cursor,
+                stamped_at_unix_us=stamped_at_unix_us,
                 frame_byte_length=len(packed_frame),
             ),
             frame=packed_frame,

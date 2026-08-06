@@ -1,13 +1,17 @@
 """Qt adapters for the active instrument's controlled device API."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from rigup import DeviceInterface, PropertyModel, PropResults
-from vxl.instrument import Instrument
-from vxlib import Teardown, fire_and_forget
+if TYPE_CHECKING:
+    from rigup import DeviceInterface, PropertyModel, PropResults
+    from vxl.instrument import Instrument
+    from vxl.instrument.feed import InstrumentUpdate
+    from vxlib import Teardown
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +20,7 @@ class DeviceHandleQt(QObject):
     """Bridges one instrument-owned device to Qt signals.
 
     This adapter:
-    - Subscribes to device property streaming
+    - Subscribes to device-property sections in the instrument feed
     - Emits signals when properties change
     - Provides a clean interface for widgets to call device commands
 
@@ -55,38 +59,38 @@ class DeviceHandleQt(QObject):
         return self._interface.type
 
     async def start(self) -> None:
-        """Start the adapter and subscribe to device property updates."""
+        """Start the adapter and subscribe to the instrument feed."""
         if self._started:
             return
 
         try:
-            self._unsubscribe = self._instrument.device_property_updates.subscribe(self._on_device_properties)
+            feed = self._instrument.feed
+            self._unsubscribe = feed.updates.subscribe(self._on_feed_update)
+            initial = feed.view().device_props.get(self._uid)
+            if initial is not None:
+                await self._on_properties(initial)
             self._started = True
             self.connected.emit(True)
             self.log.info("Adapter started")
 
         except Exception as e:
+            if self._unsubscribe is not None:
+                self._unsubscribe()
+                self._unsubscribe = None
             self.log.exception("Error starting adapter")
             self.fault.emit(f"Start error: {e!r}")
 
-    def request_initial_properties(self) -> None:
-        """Request initial property values. Call after connecting to properties_changed signal."""
+    def replay_cached_properties(self) -> None:
+        """Re-emit cached property values after connecting to ``properties_changed``."""
         if not self._started:
             return
         # Use QTimer to ensure this runs after the current event loop iteration
-        QTimer.singleShot(0, lambda: fire_and_forget(self._emit_initial_properties(), log=self.log))
+        QTimer.singleShot(0, self._emit_cached_properties)
 
-    async def _emit_initial_properties(self) -> None:
-        """Fetch all properties and emit them to initialize widgets."""
-        try:
-            prop_names = list(self._interface.properties)
-            self.log.debug("Fetching initial properties: %s", prop_names)
-            if prop_names:
-                props = await self._instrument.get_device_properties(self._uid, prop_names)
-                self.log.debug("Got initial properties: %s", list(props.ok.keys()))
-                await self._on_properties(props)
-        except Exception as e:
-            self.log.warning("Failed to fetch initial properties: %s", e, exc_info=True)
+    def _emit_cached_properties(self) -> None:
+        """Emit the latest values already materialized by the instrument feed."""
+        if self._models:
+            self.properties_changed.emit({name: model.value for name, model in self._models.items()})
 
     async def stop(self) -> None:
         """Stop the adapter and cleanup."""
@@ -110,10 +114,9 @@ class DeviceHandleQt(QObject):
         self._models.update(props.ok)
         self.properties_changed.emit({name: model.value for name, model in props.ok.items()})
 
-    async def _on_device_properties(self, update: tuple[str, PropResults]) -> None:
+    async def _on_feed_update(self, update: InstrumentUpdate) -> None:
         """Forward property updates for this adapter's device."""
-        device_id, props = update
-        if device_id == self._uid:
+        if update.device_props is not None and (props := update.device_props.get(self._uid)) is not None:
             await self._on_properties(props)
 
     def model(self, name: str) -> PropertyModel | None:
@@ -215,13 +218,13 @@ class DevicesStore(QObject):
         return self._adapters
 
     async def start(self, instrument: Instrument) -> None:
-        """Inspect the instrument and create adapters for its available devices."""
+        """Create adapters from the instrument feed's materialized device view."""
         if self._started:
             log.warning("DevicesStore already started")
             return
 
         self._instrument = instrument
-        snapshots = await instrument.inspect_devices()
+        snapshots = instrument.feed.view().devices
         log.info("Starting DevicesStore with %d devices", len(snapshots))
 
         for uid, snapshot in snapshots.items():
@@ -231,9 +234,9 @@ class DevicesStore(QObject):
             adapter = DeviceHandleQt(instrument, snapshot.interface, parent=self)
             adapter.properties_changed.connect(lambda props, uid=uid: self._on_properties(uid, props))
 
+            self._property_cache[uid] = {}
             await adapter.start()
             self._adapters[uid] = adapter
-            self._property_cache[uid] = {}
             self.device_added.emit(uid)
 
         self._started = True
@@ -268,7 +271,7 @@ class DevicesStore(QObject):
     def get_property(self, device_id: str, prop_name: str) -> Any | None:
         """Get a cached property value.
 
-        Note: This returns the last known value from property streaming.
+        Note: This returns the last known value from the instrument feed.
         For the latest value, use adapter.get(prop_name) which is async.
         """
         device_cache = self._property_cache.get(device_id)

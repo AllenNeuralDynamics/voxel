@@ -263,7 +263,7 @@ export interface InstrumentState extends InstrumentDefaults {
   last_modified: string;
 }
 
-// ---- bench mutation payloads (partial edits; the server echoes the full state on instrument.status) ----
+// ---- bench mutation payloads (partial edits; the server echoes the full status section on instrument.update) ----
 
 /** Edit a profile's top-level fields. */
 export interface ProfilePatch {
@@ -535,7 +535,7 @@ export interface AppStatus {
   active: string | null;
 }
 
-/** The `instrument.status` payload: mode, active profile, field of view, and the full bench. */
+/** The dynamic `status` section of an instrument feed view or update. */
 export interface InstrumentStatus {
   mode: AcquisitionMode;
   active_profile_id: string;
@@ -558,10 +558,6 @@ export interface VolumeProgress {
 export interface ActiveAcquisitionState {
   manifest: AcquisitionManifest;
   progress: VolumeProgress;
-}
-
-export interface AcquisitionUpdate {
-  acquisition: ActiveAcquisitionState | null;
 }
 
 /** A command parameter's introspected signature. */
@@ -609,10 +605,28 @@ export interface PropResults {
   results: Record<string, PropResult>;
 }
 
-/** The `device.props.update` payload. */
-export interface DevicePropsUpdate {
-  device: string;
-  properties: PropResults;
+/** Complete cached instrument state returned on connect or resynchronization. */
+export interface InstrumentView {
+  stream_id: string;
+  seq: number;
+  generated_at_unix_us: number;
+  status: InstrumentStatus;
+  device_props: Record<string, PropResults>;
+  active_acquisition: ActiveAcquisitionState | null;
+  defaults: InstrumentDefaults;
+  hardware: HALConfig;
+  devices: Record<string, DeviceSnapshot>;
+}
+
+/** One ordered partial change to an `InstrumentView`; omitted sections are unchanged. */
+export interface InstrumentUpdate {
+  stream_id: string;
+  seq: number;
+  observed_at_unix_us: number;
+  status?: InstrumentStatus;
+  device_props?: Record<string, PropResults>;
+  active_acquisition?: ActiveAcquisitionState | null;
+  defaults?: InstrumentDefaults;
 }
 
 /** The `logs` payload. `seq` is a process-monotonic id used to merge backlog with the live stream. */
@@ -634,10 +648,7 @@ export interface PreviewUpdate {
 /** Topic → payload map for the server → client WS events (`Client.on`). */
 export interface ServerTopics {
   'app.status': AppStatus;
-  'instrument.status': InstrumentStatus;
-  'instrument.default': InstrumentDefaults;
-  'device.props.update': DevicePropsUpdate;
-  'acquisition.state': AcquisitionUpdate;
+  'instrument.update': InstrumentUpdate;
   'preview.updates': PreviewUpdate;
   logs: LogMessage;
 }

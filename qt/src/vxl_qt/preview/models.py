@@ -202,7 +202,7 @@ class PreviewStore(QObject):
                 if (
                     generation != self._delivery_generation
                     or token != self._latest_frame_tokens.get(key)
-                    or delivery.delivery_stream_id != self._delivery_stream_id
+                    or delivery.delivery_cursor.stream_id != self._delivery_stream_id
                 ):
                     continue
                 if delivery.channel_id != channel or header.layer != layer:
@@ -215,9 +215,9 @@ class PreviewStore(QObject):
                     )
                     continue
                 previous_sequence = self._last_delivery_sequences.get(key, -1)
-                if delivery.delivery_seq <= previous_sequence:
+                if delivery.delivery_cursor.seq <= previous_sequence:
                     continue
-                self._last_delivery_sequences[key] = delivery.delivery_seq
+                self._last_delivery_sequences[key] = delivery.delivery_cursor.seq
                 if layer is PreviewLayer.OVERVIEW:
                     self.set_frame(channel, image, header, self._rotation_for(channel))
                 else:

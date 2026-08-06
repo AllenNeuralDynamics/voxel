@@ -76,8 +76,8 @@ class LaserControl(QWidget):
         self._enable_toggle.toggled.connect(self._on_toggle_changed)
         self._power_slider.inputReleased.connect(self._on_power_changed)
 
-        # Request initial property values
-        self._adapter.request_initial_properties()
+        # Replay the feed state after connecting this widget's signals.
+        self._adapter.replay_cached_properties()
 
     def _on_properties_changed(self, props: dict[str, Any]) -> None:
         """Update UI from device properties."""

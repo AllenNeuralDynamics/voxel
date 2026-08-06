@@ -82,10 +82,12 @@ It intentionally excludes `channel_id`, histograms, levels, color maps, and disp
 9-byte prefix | MessagePack delivery header | complete VXPS source packet
 ```
 
-The `VXPD` delivery header contains `delivery_schema_version`, `channel_id`, `delivery_stream_id`,
-`delivery_seq`, and `frame_byte_length`. The delivery stream identity changes when the control-owned
-preview stream is replaced; its sequence increases across delivered frames. Sequence gaps are expected when
-latest-only backpressure drops frames. Camera-owned fields such as `layer` are not duplicated in this header.
+The `VXPD` delivery header contains `delivery_schema_version`, `channel_id`, `delivery_cursor`, `state_cursor`,
+`stamped_at_unix_us`, and `frame_byte_length`. Each cursor contains a `stream_id` and `seq`. The delivery stream
+identity changes when the control-owned preview stream is replaced; its sequence increases across delivered
+frames. The state cursor identifies the latest instrument state known when the Instrument received and wrapped
+the camera frame; the stamp records when that association was made. Sequence gaps are expected when latest-only
+backpressure drops frames. Camera-owned fields such as `layer` are not duplicated in this header.
 The Instrument emits `VXPD`; both the web and Qt consumers subscribe to the Instrument's `preview_frames` emitter,
 unwrap the delivery packet, and reject frames from stale delivery streams.
 

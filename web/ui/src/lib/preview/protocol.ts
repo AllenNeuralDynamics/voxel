@@ -1,7 +1,8 @@
-import { unpack } from 'msgpackr';
+import { Unpackr } from 'msgpackr';
 
 const PREFIX_BYTES = 9;
 const MAX_HEADER_BYTES = 64 * 1024;
+const unpackr = new Unpackr({ useRecords: false, int64AsType: 'number' });
 
 export const PREVIEW_PROTOCOL_VERSION = 1;
 export const PREVIEW_ENCODING = 'u16-zstd-byte-shuffle-v1' as const;
@@ -36,9 +37,15 @@ export interface PreviewSourceHeader {
 export interface PreviewDeliveryHeader {
   delivery_schema_version: 1;
   channel_id: string;
-  delivery_stream_id: string;
-  delivery_seq: number;
+  delivery_cursor: StreamCursor;
+  state_cursor: StreamCursor;
+  stamped_at_unix_us: number;
   frame_byte_length: number;
+}
+
+export interface StreamCursor {
+  stream_id: string;
+  seq: number;
 }
 
 export interface ParsedPreviewPacket {
@@ -83,7 +90,7 @@ function parsePrefix(packet: Uint8Array, magic: string, label: string): { header
 }
 
 function decodeHeader<T>(packet: Uint8Array, start: number, end: number, label: string): T {
-  const value = unpack(packet.subarray(start, end));
+  const value = unpackr.unpack(packet.subarray(start, end));
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error(`${label} header must be a MessagePack map`);
   }
@@ -98,11 +105,17 @@ function nonnegativeInteger(value: unknown, field: string): asserts value is num
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error(`${field} must be a non-negative integer`);
 }
 
+function validateCursor(cursor: StreamCursor | undefined, field: string): void {
+  if (!cursor?.stream_id) throw new Error(`${field}.stream_id must not be empty`);
+  nonnegativeInteger(cursor.seq, `${field}.seq`);
+}
+
 function validateDelivery(header: PreviewDeliveryHeader, actualFrameLength: number): void {
   if (header.delivery_schema_version !== 1) throw new Error('unsupported preview delivery schema version');
-  if (!header.channel_id || !header.delivery_stream_id)
-    throw new Error('preview delivery routing fields must not be empty');
-  nonnegativeInteger(header.delivery_seq, 'delivery_seq');
+  if (!header.channel_id) throw new Error('preview delivery channel must not be empty');
+  validateCursor(header.delivery_cursor, 'delivery_cursor');
+  validateCursor(header.state_cursor, 'state_cursor');
+  nonnegativeInteger(header.stamped_at_unix_us, 'stamped_at_unix_us');
   positiveInteger(header.frame_byte_length, 'frame_byte_length');
   if (header.frame_byte_length !== actualFrameLength) {
     throw new Error(`preview frame is ${actualFrameLength} bytes; expected ${header.frame_byte_length}`);

@@ -20,7 +20,7 @@ import type { DeviceInterface, DeviceSnapshot, PropResult, PropResults, SensorRO
 
 /**
  * A single device: its introspected interface plus a live, reactive cache of property models.
- * Reads come off `props` (kept fresh by `device.props.update`); writes (`setProps`, `runCommand`)
+ * Reads come off `props` (hydrated and kept fresh by the instrument feed); writes (`setProps`, `runCommand`)
  * go out over REST. Role/accent are NOT carried here — those are profile-derived on `Instrument`.
  */
 export class DeviceHandle {
@@ -56,6 +56,12 @@ export class DeviceHandle {
       if (!result.ok) continue; // error envelope — skip
       this.#upsert(name, result.value);
     }
+  }
+
+  /** Replace the property cache from a complete instrument feed view. */
+  replaceProperties(results?: PropResults): void {
+    this.props.clear();
+    if (results) this.ingest(results);
   }
 
   /** Fetch property values over REST and merge them; all properties when `names` is empty. */

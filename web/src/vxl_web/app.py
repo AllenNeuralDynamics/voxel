@@ -1,7 +1,7 @@
 """FastAPI factory + launcher for the Voxel web backend, on the ``vxl.Instrument`` API.
 
 Lean by design: two routers (the ``VoxelApp`` surface — discovery/launch/close/history — and the active
-``Instrument`` surface), the per-instrument control feed (:mod:`vxl_web.live`), and the primary/preview
+``Instrument`` surface), the application feed bridge (:mod:`vxl_web.feed`), and the primary/preview
 WebSocket transports (:mod:`vxl_web.websocket`). No manager/service layer — routers call the ``Instrument``'s
 flat method surface directly.
 
@@ -32,7 +32,7 @@ from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.system import load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
-from .live import AppFeed, LogMessage
+from .feed import AppFeed, LogMessage
 from .router import api_router
 from .websocket import MsgBus, PreviewHub
 
@@ -113,7 +113,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     handler = _LogHandler(asyncio.get_running_loop(), app.state.bus, app.state.log_buffer)
     handler.setLevel(logging.DEBUG)  # stream everything to the UI; the client filters by level
     logging.getLogger().addHandler(handler)
-    feed = AppFeed(app.state.voxel_app, app.state.bus)  # publishes app.status + owns the InstrumentFeed lifecycle
+    feed = AppFeed(app.state.voxel_app, app.state.bus)
     feed.attach()
     app.state.preview_hub.attach()
     try:

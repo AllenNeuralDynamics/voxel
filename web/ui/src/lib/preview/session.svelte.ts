@@ -221,15 +221,17 @@ export class PreviewSession {
     );
     this.catalog = catalog;
     this.#applyStatus(initialStatus);
-    this.#unsubscribers.push(
-      this.#client.on('preview.updates', this.#applyPreviewUpdate),
-      this.#client.on('instrument.status', this.#applyStatus)
-    );
+    this.#unsubscribers.push(this.#client.on('preview.updates', this.#applyPreviewUpdate));
   }
 
   get boundingBoxAspect(): number {
     const { maxW, maxH } = channelBoundingBox(this.channels);
     return maxW > 0 && maxH > 0 ? maxW / maxH : 4 / 3;
+  }
+
+  /** Apply status after it has been ordered and reconciled by the Instrument model. */
+  applyInstrumentStatus(status: InstrumentStatus): void {
+    if (!this.#disposed) this.#applyStatus(status);
   }
 
   render(canvas: HTMLCanvasElement, viewport = this.viewport): Promise<void> {
@@ -563,13 +565,13 @@ export class PreviewSession {
   };
 
   async #handleFrame(frame: DecodedPreviewFrame): Promise<void> {
-    if (frame.delivery.delivery_stream_id !== this.#deliveryStreamId) return;
+    if (frame.delivery.delivery_cursor.stream_id !== this.#deliveryStreamId) return;
     const channel = this.channels.find((candidate) => candidate.name === frame.delivery.channel_id);
     if (!channel) return;
     const key = `${frame.delivery.channel_id}:${frame.source.layer}`;
     const previous = this.#lastDeliverySequences.get(key) ?? -1;
-    if (frame.delivery.delivery_seq <= previous) return;
-    this.#lastDeliverySequences.set(key, frame.delivery.delivery_seq);
+    if (frame.delivery.delivery_cursor.seq <= previous) return;
+    this.#lastDeliverySequences.set(key, frame.delivery.delivery_cursor.seq);
 
     try {
       if (!(await this.#renderer.upload(frame))) return;
@@ -578,8 +580,8 @@ export class PreviewSession {
       return;
     }
     if (
-      frame.delivery.delivery_stream_id !== this.#deliveryStreamId ||
-      this.#lastDeliverySequences.get(key) !== frame.delivery.delivery_seq
+      frame.delivery.delivery_cursor.stream_id !== this.#deliveryStreamId ||
+      this.#lastDeliverySequences.get(key) !== frame.delivery.delivery_cursor.seq
     )
       return;
     if (frame.source.layer === 'overview') {

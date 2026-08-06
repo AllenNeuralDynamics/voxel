@@ -198,9 +198,16 @@ class MsgBus:
 
     # ---- Outbound — typed events ----
 
-    def broadcast(self, topic: str, body: BaseModel, *, exclude: ClientId | None = None) -> None:
-        """Send a typed event to all connected clients, optionally excluding one."""
-        body_bytes = pack(body)
+    def broadcast(
+        self,
+        topic: str,
+        body: BaseModel,
+        *,
+        exclude: ClientId | None = None,
+        exclude_unset: bool = False,
+    ) -> None:
+        """Send a typed event to all connected clients, optionally excluding one or unset model fields."""
+        body_bytes = pack(body, exclude_unset=exclude_unset)
         # msgpack stubs declare `bytes | None`; for valid input it always returns bytes.
         msg = cast("bytes", msgpack.packb([topic, body_bytes]))
         for cid, client in self._clients.items():

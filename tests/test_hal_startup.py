@@ -135,6 +135,11 @@ class _FakeRoutingUpdates:
         pass
 
 
+class _FakeFeed:
+    def close(self) -> None:
+        pass
+
+
 class _FailsAfterHALOpen(Instrument):
     async def _validate_startup(self) -> None:
         pass
@@ -405,6 +410,7 @@ async def test_instrument_startup_failure_closes_open_hal() -> None:
     instrument._routing_updates = _FakeRoutingUpdates()
     instrument._routing_unsubs = []
     instrument._mode = Cell(AcquisitionMode.IDLE)
+    instrument._feed = _FakeFeed()
     instrument.fov = _FakeFov()
 
     with pytest.raises(RuntimeError, match="channel initialization failed"):
@@ -425,6 +431,7 @@ async def test_instrument_validation_failure_closes_open_hal() -> None:
     instrument._routing_updates = _FakeRoutingUpdates()
     instrument._routing_unsubs = []
     instrument._mode = Cell(AcquisitionMode.IDLE)
+    instrument._feed = _FakeFeed()
     instrument.fov = _FakeFov()
 
     with pytest.raises(StartupError, match="instrument validation failed"):
@@ -587,6 +594,31 @@ async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None
         if not task.done() and getattr(task.get_coro(), "__qualname__", "") == "Coalescer._run"
     ]
     assert not remaining
+
+
+async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
+    config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
+    instrument = Instrument.from_path(
+        config.instantiate("feed-lifecycle", tmp_path),
+        catalog=_catalog(tmp_path),
+    )
+
+    await instrument.open()
+    try:
+        initial = instrument.feed.view()
+        assert instrument.feed.is_open
+        assert initial.cursor == instrument.feed.cursor
+        assert initial.status.state == instrument.state.value
+        assert "position" in initial.device_props["x_axis"].results
+
+        await instrument.move_stage(x=1, wait=True)
+        assert instrument.feed.cursor.seq > initial.seq
+    finally:
+        await instrument.close()
+
+    assert not instrument.feed.is_open
+    with pytest.raises(RuntimeError, match="instrument feed is not open"):
+        instrument.feed.view()
 
 
 async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:

@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, Request
 from vxl.app import VoxelApp
 from vxl.instrument import Instrument
 
-from .live import LogMessage
+from .feed import LogMessage
 from .websocket import MsgBus
 
 

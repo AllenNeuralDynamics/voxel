@@ -17,6 +17,7 @@ from .preview import (
     PreviewSourceHeader,
     PreviewViewport,
     SourceRectPx,
+    StreamCursor,
 )
 from .storage import resolve_storage
 
@@ -37,5 +38,6 @@ __all__ = [
     "SourceRectPx",
     "StorageSpec",
     "StorageStatus",
+    "StreamCursor",
     "resolve_storage",
 ]

@@ -39,19 +39,19 @@
   );
 </script>
 
-<div class="flex flex-col">
-  <div class="flex w-full items-center px-2 py-1 text-sm text-fg-muted">Channels</div>
-  <div class="">
+<div class="flex flex-col gap-1">
+  <div class="flex w-full flex-col px-2.5 py-1">
+    <span class="flex-1 text-sm text-fg-muted">Channels</span>
     {#each namedChannels as channel (channel.idx)}
-      <div class="px-2.5 py-1">
+      <div class="px-0.5 py-1">
         <PreviewChannelPrefs {previewer} {channel} />
       </div>
     {/each}
   </div>
-  <div class="border-t border-border">
+  <div class="border-t border-border px-3 py-1">
     <button
       type="button"
-      class="flex h-7 w-full cursor-pointer items-center gap-2 px-2 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+      class="flex h-7 w-full cursor-pointer items-center gap-2 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
       aria-expanded={framesExpanded}
       onclick={() => (framesExpanded = !framesExpanded)}
     >
@@ -60,7 +60,7 @@
     </button>
 
     {#if framesExpanded}
-      <div class="space-y-2 px-2 pb-2 text-sm">
+      <div class="space-y-2 pb-2 text-sm">
         {#each [{ key: 'overview' as const, label: 'Overview' }, { key: 'viewport' as const, label: 'Viewport' }, { key: 'sensor' as const, label: 'Sensor' }] as group (group.key)}
           <div class="space-y-0.5">
             <div class="text-fg-muted">{group.label}</div>

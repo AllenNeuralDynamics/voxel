@@ -25,6 +25,7 @@ from vxl.instrument import (
     InstrumentConfig,
     InstrumentInspection,
 )
+from vxl.instrument.feed import InstrumentView
 from vxl.instrument.state import (
     ChannelPatch,
     InstrumentDefaults,
@@ -41,7 +42,7 @@ from vxl.system import PreviewFeature, Remote
 from vxlib import ColormapGroup, get_colormap_catalog
 
 from .deps import AppDep, InstrumentDep, LogBufferDep
-from .live import AppStatus, InstrumentStatus, LogMessage
+from .feed import AppStatus, LogMessage
 
 app_router = APIRouter(tags=["app"])
 instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
@@ -233,17 +234,9 @@ class _OpticalRouteOverride(BaseModel):
 
 
 @instrument_router.get("")
-async def get_status(inst: InstrumentDep) -> InstrumentStatus:
-    """The current whole-instrument snapshot — same shape as the ``instrument.status`` WS topic."""
-    return InstrumentStatus(
-        mode=inst.mode.value,
-        active_profile_id=inst.active_profile_id.value,
-        delivery_stream_id=inst.delivery_stream_id.value,
-        fov=await inst.fov.get(),
-        routing_targets=inst.routing_targets.value,
-        state=inst.state.value,
-        task_tiles=inst.task_tiles.value,
-    )
+async def get_status(inst: InstrumentDep) -> InstrumentView:
+    """Complete cached instrument view and cursor for continuing on ``instrument.update``."""
+    return inst.feed.view()
 
 
 @instrument_router.get("/hardware")
@@ -258,8 +251,7 @@ async def get_hardware(inst: InstrumentDep) -> HALConfig:
 
 @instrument_router.get("/default")
 async def get_default(inst: InstrumentDep) -> InstrumentDefaults:
-    """The on-disk baseline (``config.yaml`` ``default``). Bootstrap for the divergence view; live
-    updates arrive on the ``instrument.default`` topic when ``save_as_default`` changes it."""
+    """The on-disk baseline (``config.yaml`` ``default``); retained as a compatibility endpoint."""
     return inst.default.value
 
 
@@ -382,7 +374,7 @@ async def stop_preview(inst: InstrumentDep) -> None:
 
 
 # Viewport and levels are WS commands (`preview.update`), not REST — they need sender-excluded
-# multi-client echo (see InstrumentFeed). start/stop stay REST: they flip `mode`, which echoes via status.
+# Multi-client preview state uses the AppFeed command bridge. Start/stop remain REST controls.
 
 
 @instrument_router.get("/devices")
@@ -402,8 +394,7 @@ async def get_device_properties(device_id: str, inst: InstrumentDep, props: list
 
 @instrument_router.patch("/devices/{device_id}/properties")
 async def set_device_properties(device_id: str, body: _SetProps, inst: InstrumentDep) -> PropResults:
-    """Set properties; the returned ``PropResults`` carries per-property accept/reject. Subscribers get
-    a ``device.props.update`` push via the feed (``props.set`` notifies)."""
+    """Set properties and return per-property accept/reject results; the feed publishes the accepted update."""
     try:
         return await inst.set_device_properties(device_id, body.properties)
     except KeyError as error:
@@ -429,7 +420,7 @@ async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> Ac
     """Launch the requested acquisition and return its retained state once the run has started.
 
     The synchronous preflight writes a marker to the destination; an unwritable target raises ``OSError``
-    here (mapped to 422) before any capture. State streams on the ``acquisition.state`` WS topic.
+    here (mapped to 422) before any capture. State streams through ``instrument.update``.
     """
     try:
         return await inst.start_acquisition(body)

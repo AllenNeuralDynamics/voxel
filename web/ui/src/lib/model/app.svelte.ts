@@ -21,15 +21,15 @@ import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionManifest,
   AcquisitionRequest,
-  AcquisitionUpdate,
   ActiveAcquisitionState,
   AppDiscovery,
   AppStatus,
   ChannelPatch,
-  DeviceSnapshot,
   HALConfig,
   InstrumentDefaults,
   InstrumentStatus,
+  InstrumentUpdate,
+  InstrumentView,
   JsonSchema,
   LogMessage,
   OpticalRoutingPolicy,
@@ -436,105 +436,158 @@ export class Instrument {
   readonly #client: Client;
   #unsubs: Unsub[] = [];
   #schemaCls: string | null = null; // metadata_cls the schema was last fetched for
+  #streamId: string;
+  #seq: number;
+  #bufferedUpdates: InstrumentUpdate[] | null = null;
+  #rehydratePromise: Promise<void> | null = null;
 
   constructor(
     client: Client,
     readonly id: string,
-    status: InstrumentStatus,
-    acquisition: ActiveAcquisitionState | null,
-    hal: HALConfig,
-    defaults: InstrumentDefaults,
-    devices: Record<string, DeviceSnapshot>,
+    view: InstrumentView,
     readonly metadataSchemas: Record<string, string>
   ) {
     this.#client = client;
-    this.status = status;
-    this.acquisition = acquisition;
-    this.hal = hal;
-    this.default = defaults;
-    for (const [id, snapshot] of Object.entries(devices)) {
+    this.#streamId = view.stream_id;
+    this.#seq = view.seq;
+    this.status = view.status;
+    this.acquisition = view.active_acquisition;
+    this.hal = view.hardware;
+    this.default = view.defaults;
+    for (const [id, snapshot] of Object.entries(view.devices)) {
       this.devices.set(
         id,
         createDevice(client, snapshot, () => this.mode === 'capture')
       );
     }
+    for (const [id, properties] of Object.entries(view.device_props)) this.devices.get(id)?.ingest(properties);
     const sx = this.#stageAxis('x');
     const sy = this.#stageAxis('y');
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
-    this.#unsubs.push(
-      client.on('instrument.status', (s) => {
-        this.status = s;
-        void this.#syncMetadataSchema();
-      })
-    );
-    this.#unsubs.push(client.on('device.props.update', (u) => this.devices.get(u.device)?.ingest(u.properties)));
-    this.#unsubs.push(client.on('acquisition.state', (update) => (this.acquisition = update.acquisition)));
-    this.#unsubs.push(client.on('instrument.default', (d) => (this.default = d)));
     void this.#syncMetadataSchema();
   }
 
-  /** Hydrate the active instrument over REST, then keep it fresh from the WS streams. */
+  /** Subscribe first, hydrate one complete view, then replay newer ordered updates. */
   static async open(client: Client, instrumentId: string, discovery: AppDiscovery): Promise<Instrument> {
-    let latest: InstrumentStatus | undefined;
-    let latestAcquisition: ActiveAcquisitionState | null | undefined;
-    const statusBuffer = client.on('instrument.status', (s) => (latest = s));
-    const acquisitionBuffer = client.on(
-      'acquisition.state',
-      (update: AcquisitionUpdate) => (latestAcquisition = update.acquisition)
-    );
+    const buffered: InstrumentUpdate[] = [];
+    let instrument: Instrument | null = null;
+    const unsubscribe = client.on('instrument.update', (update) => {
+      if (instrument === null) buffered.push(update);
+      else instrument.#receiveUpdate(update);
+    });
     try {
-      const [fetched, fetchedAcquisition, hal, defaults, devices] = await Promise.all([
-        client.get<InstrumentStatus>('/instrument'),
-        client.get<ActiveAcquisitionState | null>('/instrument/acquisition'),
-        client.get<HALConfig>('/instrument/hardware'),
-        client.get<InstrumentDefaults>('/instrument/default'),
-        client.get<Record<string, DeviceSnapshot>>('/instrument/devices')
-      ]);
-      const instrument = new Instrument(
-        client,
-        instrumentId,
-        latest ?? fetched,
-        latestAcquisition === undefined ? fetchedAcquisition : latestAcquisition,
-        hal,
-        defaults,
-        devices,
-        discovery.metadata_schemas
-      ); // a push during the fetch wins
-      void instrument.#refreshDevices(); // initial prop values fill in reactively (the feed only pushes changes)
+      const view = await client.get<InstrumentView>('/instrument');
+      instrument = new Instrument(client, instrumentId, view, discovery.metadata_schemas);
+      instrument.#unsubs.push(unsubscribe);
+      instrument.#bufferedUpdates = buffered;
+      await instrument.#drainBufferedUpdates();
       return instrument;
-    } finally {
-      statusBuffer();
-      acquisitionBuffer();
+    } catch (error) {
+      if (instrument === null) unsubscribe();
+      else instrument.dispose();
+      throw error;
     }
   }
 
-  /** Re-fetch state + hal + device props over REST — after a reconnect, where pushes may have been missed. */
+  /** Re-fetch one complete view after reconnect or a detected cursor discontinuity. */
   async rehydrate(): Promise<void> {
-    let latestAcquisition: ActiveAcquisitionState | null | undefined;
-    const acquisitionBuffer = this.#client.on(
-      'acquisition.state',
-      (update) => (latestAcquisition = update.acquisition)
-    );
+    if (this.#rehydratePromise !== null) return this.#rehydratePromise;
+    this.#bufferedUpdates ??= [];
+    const promise = this.#rehydrate();
+    this.#rehydratePromise = promise;
     try {
-      const [status, acquisition, hal, defaults] = await Promise.all([
-        this.#client.get<InstrumentStatus>('/instrument'),
-        this.#client.get<ActiveAcquisitionState | null>('/instrument/acquisition'),
-        this.#client.get<HALConfig>('/instrument/hardware'),
-        this.#client.get<InstrumentDefaults>('/instrument/default')
-      ]);
-      this.status = status;
-      this.acquisition = latestAcquisition === undefined ? acquisition : latestAcquisition;
-      this.hal = hal;
-      this.default = defaults;
-      void this.#refreshDevices();
+      await promise;
     } finally {
-      acquisitionBuffer();
+      if (this.#rehydratePromise === promise) this.#rehydratePromise = null;
     }
   }
 
-  // Bench edits: each applies server-side, which re-broadcasts the full state on instrument.status —
+  async #rehydrate(): Promise<void> {
+    try {
+      this.#adoptView(await this.#client.get<InstrumentView>('/instrument'));
+      await this.#drainBufferedUpdates();
+    } catch (error) {
+      this.#bufferedUpdates = null;
+      throw error;
+    }
+  }
+
+  async #drainBufferedUpdates(): Promise<void> {
+    while (this.#bufferedUpdates !== null) {
+      const pending = this.#bufferedUpdates.splice(0);
+      let gap = false;
+      for (const update of pending) {
+        // A complete view is authoritative for its stream; mismatched buffered updates are stale.
+        if (update.stream_id !== this.#streamId || update.seq <= this.#seq) continue;
+        if (update.seq !== this.#seq + 1) {
+          gap = true;
+          break;
+        }
+        this.#applyUpdate(update);
+      }
+      if (gap) {
+        this.#adoptView(await this.#client.get<InstrumentView>('/instrument'));
+        continue;
+      }
+      if (this.#bufferedUpdates.length === 0) {
+        this.#bufferedUpdates = null;
+        return;
+      }
+    }
+  }
+
+  #receiveUpdate(update: InstrumentUpdate): void {
+    if (this.#bufferedUpdates !== null) {
+      this.#bufferedUpdates.push(update);
+      return;
+    }
+    if (update.stream_id !== this.#streamId || update.seq > this.#seq + 1) {
+      this.#bufferedUpdates = [update];
+      void this.rehydrate().catch((error: unknown) => console.error('[Instrument] feed resync failed:', error));
+      return;
+    }
+    if (update.seq <= this.#seq) return;
+    this.#applyUpdate(update);
+  }
+
+  #applyUpdate(update: InstrumentUpdate): void {
+    this.#seq = update.seq;
+    if (update.status !== undefined) {
+      this.status = update.status;
+      void this.#syncMetadataSchema();
+    }
+    if (update.defaults !== undefined) this.default = update.defaults;
+    if (update.device_props !== undefined) {
+      for (const [id, properties] of Object.entries(update.device_props)) this.devices.get(id)?.ingest(properties);
+    }
+    if (Object.hasOwn(update, 'active_acquisition')) this.acquisition = update.active_acquisition ?? null;
+  }
+
+  #adoptView(view: InstrumentView): void {
+    this.#streamId = view.stream_id;
+    this.#seq = view.seq;
+    this.status = view.status;
+    this.acquisition = view.active_acquisition;
+    this.hal = view.hardware;
+    this.default = view.defaults;
+
+    for (const id of this.devices.keys()) if (!Object.hasOwn(view.devices, id)) this.devices.delete(id);
+    for (const [id, snapshot] of Object.entries(view.devices)) {
+      const device = this.devices.get(id);
+      if (device) device.applySnapshot(snapshot);
+      else
+        this.devices.set(
+          id,
+          createDevice(this.#client, snapshot, () => this.mode === 'capture')
+        );
+    }
+    for (const [id, device] of this.devices) device.replaceProperties(view.device_props[id]);
+    void this.#syncMetadataSchema();
+  }
+
+  // Bench edits apply server-side; the resulting full status section arrives on instrument.update —
   // no local mutation here, so derived reads converge automatically. Callers handle thrown ApiErrors.
 
   setActiveProfile(profileId: string): Promise<{ active: string }> {
@@ -635,7 +688,9 @@ export class Instrument {
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
   async startAcquisition(request: AcquisitionRequest): Promise<ActiveAcquisitionState> {
     let latest: ActiveAcquisitionState | null | undefined;
-    const buffer = this.#client.on('acquisition.state', (update) => (latest = update.acquisition));
+    const buffer = this.#client.on('instrument.update', (update) => {
+      if (Object.hasOwn(update, 'active_acquisition')) latest = update.active_acquisition ?? null;
+    });
     try {
       const acquisition = await this.#client.post<ActiveAcquisitionState>('/instrument/acquisition', request);
       this.acquisition = latest === undefined ? acquisition : latest;
@@ -652,10 +707,6 @@ export class Instrument {
   dispose(): void {
     for (const unsub of this.#unsubs) unsub();
     this.#unsubs = [];
-  }
-
-  async #refreshDevices(): Promise<void> {
-    await Promise.all([...this.devices.values()].map((d) => d.refresh().catch(() => undefined)));
   }
 
   /** Re-fetch the resolved schema when `metadata_cls` changes; no-op otherwise. */
@@ -679,48 +730,6 @@ export class Instrument {
 
 /** Top-level view mode. Snaps and Inpaint hold their own item selection (on their stores); Live is the stream. */
 export type PreviewMode = 'live' | 'stage';
-
-/**
- * The center viewer's top-level mode. Item selection lives on the stores — `snaps.activeSnap`,
- * `inpaint.viewed` — so toggling modes preserves each mode's selection for free.
- */
-// export class PreviewView {
-//   readonly #snaps!: SnapshotStore;
-//   // Persisted so the chosen view (Live / Snaps / Inpaint) survives a page refresh.
-//   readonly #mode = pref<PreviewMode>('preview:mode', 'live');
-
-//   constructor(snaps: SnapshotStore) {
-//     this.#snaps = snaps;
-//   }
-
-//   get mode(): PreviewMode {
-//     return this.#mode.current;
-//   }
-
-//   set mode(value: PreviewMode) {
-//     this.#mode.current = value;
-//   }
-
-//   get isLive(): boolean {
-//     return this.mode === 'live';
-//   }
-
-//   /** Whether there's saved snapshot content to enter Snaps mode with. */
-//   get hasSnaps(): boolean {
-//     return this.#snaps.hasSnaps;
-//   }
-
-//   /** Switch top-level mode; entering Snaps auto-selects an item if the store has none yet. */
-//   setMode(mode: PreviewMode): void {
-//     this.mode = mode;
-//     if (mode === 'snaps' && !this.#snaps.activeSnap) this.#snaps.selectMostRecent();
-//     // 'inpaint' auto-select lands with the Inpaint canvas in a later phase.
-//   }
-
-//   goLive(): void {
-//     this.mode = 'live';
-//   }
-// }
 
 export class VoxelApp {
   readonly #client: Client;
