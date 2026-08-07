@@ -18,7 +18,7 @@ from vxl.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from vxl.camera.preview import PreviewViewport
+from vxl.preview import PreviewViewport
 from vxlib import Coalescer
 
 if TYPE_CHECKING:

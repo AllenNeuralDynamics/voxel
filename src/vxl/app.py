@@ -8,12 +8,14 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import AnyWebsocketUrl
 from vxl_catalog import Catalog, FileCatalogBackend
 
 from vxl.camera import resolve_storage
 from vxl.errors import Loaded
 from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection, InstrumentState
-from vxl.system import PreviewConfig, Remote, System
+from vxl.instrument.publishers import PreviewPub, StatusPub
+from vxl.system import Remote, System
 from vxlib import Cell, Readable, load_yaml, save_yaml
 
 logger = logging.getLogger(__name__)
@@ -105,6 +107,8 @@ class VoxelApp:
             FileCatalogBackend(self._system.dir / "catalog"),
             resolve_root=lambda spec: resolve_storage(spec).target,
         )
+        self._status_pub: StatusPub | None = None
+        self._preview_pub: PreviewPub | None = None
 
     @property
     def catalog(self) -> Catalog:
@@ -118,9 +122,9 @@ class VoxelApp:
         return self._system.remotes
 
     @property
-    def preview(self) -> PreviewConfig:
-        """The machine's configured preview service selection and optional capabilities."""
-        return self._system.preview
+    def preview_url(self) -> AnyWebsocketUrl | None:
+        """External preview WebSocket URL, or ``None`` when the web host supplies it."""
+        return self._system.preview_url
 
     @property
     def active(self) -> Readable[Instrument | None]:
@@ -161,6 +165,15 @@ class VoxelApp:
             raise FileNotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
         instrument = Instrument.from_path(directory, catalog=self._catalog)
         await instrument.open()
+        try:
+            await self._open_publishers(instrument)
+        except BaseException:
+            try:
+                await self._close_publishers()
+                await instrument.close()
+            except Exception:
+                logger.exception("Failed to clean up preview publishers after launch error")
+            raise
         await self._active.set(instrument)
         return instrument
 
@@ -204,5 +217,34 @@ class VoxelApp:
     async def close(self) -> None:
         """Close the active instrument (no-op if none)."""
         if (active := self._active.value) is not None:
+            await self._close_publishers()
             await active.close()
             await self._active.set(None)
+
+    async def _open_publishers(self, instrument: Instrument) -> None:
+        """Open configured network publishers for one active instrument."""
+        feed_endpoint = self._system.instrument_feed_endpoint
+        frame_endpoint = self._system.preview_frame_endpoint
+        if feed_endpoint is None and frame_endpoint is None:
+            return
+
+        source_id = f"{self._system.hostname()}/{instrument.path.stem}"
+        if feed_endpoint is not None:
+            self._status_pub = StatusPub(feed_endpoint, source_id)
+            await self._status_pub.open(instrument.feed)
+        if frame_endpoint is not None:
+            self._preview_pub = PreviewPub(frame_endpoint, source_id)
+            await self._preview_pub.open(instrument.feed)
+
+    async def _close_publishers(self) -> None:
+        """Release configured publisher sockets."""
+        publishers = (self._preview_pub, self._status_pub)
+        self._preview_pub = None
+        self._status_pub = None
+        for publisher in publishers:
+            if publisher is None:
+                continue
+            try:
+                await publisher.close()
+            except Exception:
+                logger.exception("Failed to close %s", type(publisher).__name__)

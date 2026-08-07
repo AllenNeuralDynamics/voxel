@@ -28,6 +28,7 @@ from vxl.instrument.topology import (
     OpticalRoutingConfig,
     StageConfig,
 )
+from vxl.preview import PreviewFramePacket, PreviewLayer
 from vxlib import Cell
 
 
@@ -613,6 +614,26 @@ async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
 
         await instrument.move_stage(x=1, wait=True)
         assert instrument.feed.cursor.seq > initial.seq
+
+        delivered: list[tuple[str, PreviewLayer, bytes]] = []
+        unsub = instrument.feed.frames.subscribe(delivered.append)
+        status_cursor = instrument.feed.cursor
+        delivery_stream_id = instrument.feed.delivery_stream_id.value
+        await instrument.feed.deliver_preview("488", PreviewLayer.OVERVIEW, b"VXPS")
+        first = PreviewFramePacket.from_packed(delivered[-1][2])
+        assert first.header.delivery_cursor.stream_id == delivery_stream_id
+        assert first.header.delivery_cursor.seq == 0
+        assert first.header.state_cursor.stream_id == status_cursor.stream_id
+        assert first.header.state_cursor.seq == status_cursor.seq
+        assert first.header.stamped_at_unix_us > 0
+
+        await instrument.feed.reset_preview()
+        assert instrument.feed.delivery_stream_id.value != delivery_stream_id
+        await instrument.feed.deliver_preview("488", PreviewLayer.OVERVIEW, b"VXPS")
+        second = PreviewFramePacket.from_packed(delivered[-1][2])
+        assert second.header.delivery_cursor.seq == 0
+        assert second.header.state_cursor.seq == instrument.feed.cursor.seq
+        unsub()
     finally:
         await instrument.close()
 

@@ -16,7 +16,6 @@ from pydantic import AnyWebsocketUrl, BaseModel
 from vxl_catalog import AcquisitionManifest, ManifestNotFoundError
 
 from rigup import PropResults, Result
-from vxl.camera.preview import DELIVERY_FRAMING_VERSION
 from vxl.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRequest,
@@ -38,11 +37,12 @@ from vxl.instrument.state import (
 from vxl.instrument.topology import HALConfig
 from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
-from vxl.system import PreviewFeature, Remote
+from vxl.preview.protocol import DELIVERY_FRAMING_VERSION
+from vxl.system import Remote
 from vxlib import ColormapGroup, get_colormap_catalog
 
+from .adapter import AppStatus, LogMessage
 from .deps import AppDep, InstrumentDep, LogBufferDep
-from .feed import AppStatus, LogMessage
 
 app_router = APIRouter(tags=["app"])
 instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
@@ -52,11 +52,10 @@ instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
 
 
 class PreviewDiscovery(BaseModel):
-    """Resolved preview connection and optional service capabilities."""
+    """Resolved preview connection."""
 
     websocket_url: AnyWebsocketUrl
     protocol_version: int
-    features: list[PreviewFeature]
 
 
 class AppDiscovery(BaseModel):
@@ -81,7 +80,7 @@ async def get_app_status(app: AppDep) -> AppStatus:
 async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
     """Return the bounded application resources needed to initialize a client."""
     found = app.discover()
-    websocket_url = app.preview.external_url or AnyWebsocketUrl(str(request.url_for("preview_websocket")))
+    websocket_url = app.preview_url or AnyWebsocketUrl(str(request.url_for("preview_websocket")))
     return AppDiscovery(
         instruments=found.instruments,
         templates=found.templates,
@@ -91,7 +90,6 @@ async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
         preview=PreviewDiscovery(
             websocket_url=websocket_url,
             protocol_version=DELIVERY_FRAMING_VERSION,
-            features=sorted(app.preview.features),
         ),
     )
 
@@ -100,7 +98,7 @@ async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
 async def launch(name: str, app: AppDep) -> dict[str, str]:
     """Open ``<name>.voxel`` and make it active. 404 if missing, 409 if one is already active.
 
-    The live feed follows from ``VoxelApp.active`` (wired in the lifespan's ``AppFeed``) — no feed work here.
+    The web adapter follows ``VoxelApp.active`` and attaches to the instrument feed — no feed work here.
     """
     try:
         instrument = await app.launch(name)
@@ -177,18 +175,18 @@ async def get_acquisition(acquisition_id: uuid.UUID, app: AppDep) -> Acquisition
 @app_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """Register the peer on the bus and relay broadcasts until disconnect. Clients hydrate via REST, not here."""
-    await websocket.app.state.bus.serve(websocket)
+    await websocket.app.state.vxl.serve(websocket)
 
 
 @app_router.websocket("/preview/ws", name="preview_websocket")
 async def preview_websocket_endpoint(websocket: WebSocket) -> None:
     """Deliver complete opaque VXPD packets over a dedicated latest-only connection."""
-    await websocket.app.state.preview_hub.serve(websocket)
+    await websocket.app.state.vxl.serve_preview(websocket)
 
 
 @app_router.get("/logs")
 async def get_logs(logs: LogBufferDep) -> list[LogMessage]:
-    """Recent log backlog for (re)connect hydration; clients merge it with the live ``logs`` stream by ``seq``."""
+    """Recent log backlog for (re)connect hydration; clients merge it with ``app.logs`` by ``seq``."""
     return list(logs)
 
 
@@ -235,7 +233,7 @@ class _OpticalRouteOverride(BaseModel):
 
 @instrument_router.get("")
 async def get_status(inst: InstrumentDep) -> InstrumentView:
-    """Complete cached instrument view and cursor for continuing on ``instrument.update``."""
+    """Complete cached instrument view and cursor for continuing on ``instrument.feed.updates``."""
     return inst.feed.view()
 
 
@@ -373,8 +371,8 @@ async def stop_preview(inst: InstrumentDep) -> None:
     await inst.stop_preview()
 
 
-# Viewport and levels are WS commands (`preview.update`), not REST — they need sender-excluded
-# Multi-client preview state uses the AppFeed command bridge. Start/stop remain REST controls.
+# Viewport and levels use the bidirectional `instrument.preview` topic, not REST — they need sender-excluded
+# Multi-client preview state uses the web adapter. Start/stop remain REST controls.
 
 
 @instrument_router.get("/devices")
@@ -420,7 +418,7 @@ async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> Ac
     """Launch the requested acquisition and return its retained state once the run has started.
 
     The synchronous preflight writes a marker to the destination; an unwritable target raises ``OSError``
-    here (mapped to 422) before any capture. State streams through ``instrument.update``.
+    here (mapped to 422) before any capture. State streams through ``instrument.feed.updates``.
     """
     try:
         return await inst.start_acquisition(body)

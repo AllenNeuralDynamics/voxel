@@ -11,7 +11,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPixmap, QResizeEvent, QWheelEvent
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-from vxl.camera.preview import PreviewViewport
+from vxl.preview import PreviewViewport
 from vxl_qt.ui.assets import VOXEL_LOGO
 from vxl_qt.ui.kit import Colors
 

@@ -23,8 +23,8 @@ Each camera capture can produce two independently replaceable layers:
 
 | Layer | Camera topic | Instrument emitter | Browser delivery | Source region |
 | --- | --- | --- | --- | --- |
-| `overview` | `preview` | `preview_frames` | dedicated preview WebSocket | Full sensor, up to 2048 pixels wide |
-| `viewport` | `preview_viewport` | `preview_frames` | dedicated preview WebSocket | Current viewport plus overscan, up to 2048 pixels wide |
+| `overview` | `preview` | `Instrument.feed.frames` | dedicated preview WebSocket | Full sensor, up to 2048 pixels wide |
+| `viewport` | `preview_viewport` | `Instrument.feed.frames` | dedicated preview WebSocket | Current viewport plus overscan, up to 2048 pixels wide |
 
 The overview stays at a constant maximum width regardless of zoom. At the full viewport there is no separate
 viewport layer to generate.
@@ -88,7 +88,7 @@ identity changes when the control-owned preview stream is replaced; its sequence
 frames. The state cursor identifies the latest instrument state known when the Instrument received and wrapped
 the camera frame; the stamp records when that association was made. Sequence gaps are expected when latest-only
 backpressure drops frames. Camera-owned fields such as `layer` are not duplicated in this header.
-The Instrument emits `VXPD`; both the web and Qt consumers subscribe to the Instrument's `preview_frames` emitter,
+`InstrumentFeed` emits `VXPD`; both the web and Qt consumers subscribe to `Instrument.feed.frames`,
 unwrap the delivery packet, and reject frames from stale delivery streams.
 
 Every layer, including `overview`, is positioned from `source_rect_px`. The `layer` field selects replacement
@@ -138,7 +138,7 @@ The generator's operational API is deliberately small:
 
 ## Consumers
 
-Qt consumes the Instrument's `preview_frames` emitter, decodes each `PreviewFramePacket` away from the UI thread,
+Qt consumes `Instrument.feed.frames`, decodes each `PreviewFramePacket` away from the UI thread,
 and composites the overview and viewport layers as grayscale intensity images. The web client receives the same
 delivery packets over the dedicated preview WebSocket, decodes Zstandard in a worker, and uploads the shuffled byte
 planes to shared WebGPU textures. Both consumers place every layer from `source_rect_px`, reject old delivery

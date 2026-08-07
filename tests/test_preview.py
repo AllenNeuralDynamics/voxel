@@ -5,7 +5,8 @@ from collections.abc import Callable
 
 import numpy as np
 
-from vxl.camera.preview import RENDER_CAP, PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
+from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
+from vxl.preview.generator import RENDER_CAP
 
 
 def _frame(w: int = 2000, h: int = 1600) -> np.ndarray:

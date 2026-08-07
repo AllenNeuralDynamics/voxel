@@ -22,9 +22,9 @@ from vxl_catalog import DatasetLocation, StorageSpec
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
-from vxl.camera.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
 from vxl.camera.storage import describe_dataset_location, resolve_storage
 from vxl.device import DeviceType
+from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
 from vxl.system import System
 from vxlib import Dtype, SchemaModel
 

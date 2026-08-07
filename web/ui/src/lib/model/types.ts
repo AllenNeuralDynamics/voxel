@@ -263,7 +263,7 @@ export interface InstrumentState extends InstrumentDefaults {
   last_modified: string;
 }
 
-// ---- bench mutation payloads (partial edits; the server echoes the full status section on instrument.update) ----
+// ---- bench mutation payloads (the server echoes the full status section on instrument.feed.updates) ----
 
 /** Edit a profile's top-level fields. */
 export interface ProfilePatch {
@@ -503,12 +503,9 @@ export interface ColormapGroup {
 export type ColormapCatalog = ColormapGroup[];
 export const AUTO_COLORMAP = '__auto__';
 
-export type PreviewFeature = 'snapshots' | 'inpainting';
-
 export interface PreviewDiscovery {
   websocket_url: string;
   protocol_version: number;
-  features: PreviewFeature[];
 }
 
 /** Bounded resources used to initialize the application UI. */
@@ -629,7 +626,7 @@ export interface InstrumentUpdate {
   defaults?: InstrumentDefaults;
 }
 
-/** The `logs` payload. `seq` is a process-monotonic id used to merge backlog with the live stream. */
+/** The `app.logs` payload. `seq` is a process-monotonic id used to merge backlog with the live stream. */
 export interface LogMessage {
   seq: number;
   level: string;
@@ -639,7 +636,7 @@ export interface LogMessage {
 }
 
 /** A shared preview view-state change: any combination of viewport and per-channel levels.
- *  Sent by a client on `preview.update`; echoed (sender-excluded) to other viewers on `preview.updates`. */
+ *  Sent bidirectionally on `instrument.preview`; the server echo excludes the originating client. */
 export interface PreviewUpdate {
   viewport?: PreviewViewport | null;
   levels?: Record<string, PreviewLevels> | null;
@@ -648,15 +645,15 @@ export interface PreviewUpdate {
 /** Topic → payload map for the server → client WS events (`Client.on`). */
 export interface ServerTopics {
   'app.status': AppStatus;
-  'instrument.update': InstrumentUpdate;
-  'preview.updates': PreviewUpdate;
-  logs: LogMessage;
+  'app.logs': LogMessage;
+  'instrument.feed.updates': InstrumentUpdate;
+  'instrument.preview': PreviewUpdate;
 }
 
 /** Topic → payload map for the client → server WS controls (`Client.send`). The closed set of controls
  *  REST can't target: per-connection backpressure, and sender-excluded preview view-state. */
 export interface ClientTopics {
-  'preview.update': PreviewUpdate;
+  'instrument.preview': PreviewUpdate;
 }
 
 /** Per-axis display sign: +1 if increasing the stage coordinate goes in the canonical screen direction,

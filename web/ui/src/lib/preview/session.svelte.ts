@@ -221,7 +221,7 @@ export class PreviewSession {
     );
     this.catalog = catalog;
     this.#applyStatus(initialStatus);
-    this.#unsubscribers.push(this.#client.on('preview.updates', this.#applyPreviewUpdate));
+    this.#unsubscribers.push(this.#client.on('instrument.preview', this.#applyPreviewUpdate));
   }
 
   get boundingBoxAspect(): number {
@@ -405,7 +405,7 @@ export class PreviewSession {
   #queueViewportUpdate(viewport: PreviewViewport): void {
     if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
     const now = Date.now();
-    const send = () => this.#client.send('preview.update', { viewport });
+    const send = () => this.#client.send('instrument.preview', { viewport });
     if (now - this.#viewportLastSent >= VIEWPORT_UPDATE_INTERVAL_MS) {
       this.#viewportLastSent = now;
       send();
