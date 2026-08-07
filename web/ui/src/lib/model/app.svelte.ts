@@ -473,7 +473,7 @@ export class Instrument {
   static async open(client: Client, instrumentId: string, discovery: AppDiscovery): Promise<Instrument> {
     const buffered: InstrumentUpdate[] = [];
     let instrument: Instrument | null = null;
-    const unsubscribe = client.on('instrument.update', (update) => {
+    const unsubscribe = client.on('instrument.feed.updates', (update) => {
       if (instrument === null) buffered.push(update);
       else instrument.#receiveUpdate(update);
     });
@@ -587,7 +587,7 @@ export class Instrument {
     void this.#syncMetadataSchema();
   }
 
-  // Bench edits apply server-side; the resulting full status section arrives on instrument.update —
+  // Bench edits apply server-side; the resulting full status section arrives on instrument.feed.updates —
   // no local mutation here, so derived reads converge automatically. Callers handle thrown ApiErrors.
 
   setActiveProfile(profileId: string): Promise<{ active: string }> {
@@ -688,7 +688,7 @@ export class Instrument {
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
   async startAcquisition(request: AcquisitionRequest): Promise<ActiveAcquisitionState> {
     let latest: ActiveAcquisitionState | null | undefined;
-    const buffer = this.#client.on('instrument.update', (update) => {
+    const buffer = this.#client.on('instrument.feed.updates', (update) => {
       if (Object.hasOwn(update, 'active_acquisition')) latest = update.active_acquisition ?? null;
     });
     try {
@@ -740,7 +740,7 @@ export class VoxelApp {
     remotes: {},
     colormaps: [],
     metadata_schemas: {},
-    preview: { websocket_url: '', protocol_version: 1, features: [] }
+    preview: { websocket_url: '', protocol_version: 1 }
   });
   /** Persisted acquisition manifests from the catalog, newest first. */
   acquisitions = $state.raw<AcquisitionManifest[]>([]);
@@ -795,7 +795,7 @@ export class VoxelApp {
   async initialize(): Promise<void> {
     if (browser) void navigator.storage?.persist?.(); // durable storage so snapshots survive eviction
     this.#unsubs.push(this.#client.on('app.status', (s) => this.#onPresence(s)));
-    this.#unsubs.push(this.#client.on('logs', (m) => this.#pushLog(m)));
+    this.#unsubs.push(this.#client.on('app.logs', (m) => this.#pushLog(m)));
     this.#unsubs.push(this.#client.onOpen(() => void this.#resync()));
     await this.#client.connect(); // onOpen → #resync hydrates presence + the active instrument
     void this.#pruneSnapshots(); // GC snapshots whose instrument no longer exists
@@ -807,7 +807,7 @@ export class VoxelApp {
   }
 
   /**
-   * Hydrate the log backlog on (re)connect and merge it with whatever the live `logs` stream has already
+   * Hydrate the log backlog on (re)connect and merge it with whatever the live `app.logs` stream has already
    * delivered. Keyed by the server's monotonic `seq`, so the overlap dedupes and nothing is missed —
    * the live subscription covers connect-onward, this fills in the history from before connect.
    */

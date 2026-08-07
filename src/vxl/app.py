@@ -13,7 +13,7 @@ from vxl_catalog import Catalog, FileCatalogBackend
 from vxl.camera import resolve_storage
 from vxl.errors import Loaded
 from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection, InstrumentState
-from vxl.system import PreviewConfig, Remote, System
+from vxl.system import Remote, System
 from vxlib import Cell, Readable, load_yaml, save_yaml
 
 logger = logging.getLogger(__name__)
@@ -116,11 +116,6 @@ class VoxelApp:
         """The machine's configured object stores (name → connection + selectable roots), from
         :attr:`System.remotes` — the selectable acquisition targets. Local runs use no remote."""
         return self._system.remotes
-
-    @property
-    def preview(self) -> PreviewConfig:
-        """The machine's configured preview service selection and optional capabilities."""
-        return self._system.preview
 
     @property
     def active(self) -> Readable[Instrument | None]:

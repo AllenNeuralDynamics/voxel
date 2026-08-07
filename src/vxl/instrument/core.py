@@ -3,7 +3,6 @@ import datetime
 import getpass
 import logging
 import math
-import time
 import uuid
 from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
@@ -24,19 +23,11 @@ from vxl_catalog import (
 
 from rigup import DeviceHandle, DeviceInterface, PropResults, Result
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from vxl.camera import (
-    CameraHandle,
-    CaptureState,
-    PreviewFramePacket,
-    PreviewLayer,
-    PreviewViewport,
-    StorageSpec,
-    StreamCursor,
-    resolve_storage,
-)
+from vxl.camera import CameraHandle, CaptureState, StorageSpec, resolve_storage
 from vxl.daq.clocked import Signals
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.preview import PreviewLayer, PreviewViewport
 from vxl.system import System
 from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
@@ -124,8 +115,6 @@ class Instrument:
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
         self._acquisition = Cell[ActiveAcquisitionState | None](None)
-        self._delivery_stream_id = Cell[str](uuid.uuid4().hex)
-        self._delivery_seq = 0
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
         self._routing_targets = Cell[dict[str, str]]({})
@@ -135,7 +124,6 @@ class Instrument:
             reducer=merge_dicts,
         )
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
-        self.preview_frames: Emitter[tuple[str, PreviewLayer, bytes]] = Emitter()
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
 
         self._feed = InstrumentFeed(self)
@@ -157,7 +145,7 @@ class Instrument:
 
     @property
     def feed(self) -> InstrumentFeed:
-        """Materialized, sequenced view of this instrument and its device properties."""
+        """Materialized status and state-associated preview frame feed."""
         return self._feed
 
     @property
@@ -179,11 +167,6 @@ class Instrument:
     def active_profile_id(self) -> Readable[str]:
         """The currently selected profile id. This is always a valid profile key."""
         return self._active_profile_id
-
-    @property
-    def delivery_stream_id(self) -> Readable[str]:
-        """Identity of the current control-owned preview delivery stream."""
-        return self._delivery_stream_id
 
     @property
     def routing_targets(self) -> Readable[dict[str, str]]:
@@ -550,7 +533,6 @@ class Instrument:
 
     async def close(self) -> None:
         """Stop preview, drop the feed, close hardware, and keep the logical active profile id."""
-        self._feed.close()
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
@@ -562,6 +544,7 @@ class Instrument:
         for unsub in self._preview_unsubs:
             unsub()
         self._preview_unsubs = []
+        self._feed.close()
         self.fov.clear_triggers()
         await self._hal.close()
         self._channels = {}
@@ -690,8 +673,7 @@ class Instrument:
 
     async def _reset_preview_delivery(self) -> None:
         """Start a new delivery stream before previously displayed preview frames become stale."""
-        self._delivery_seq = 0
-        await self._delivery_stream_id.set(uuid.uuid4().hex)
+        await self._feed.reset_preview()
         await asyncio.gather(*(ch.camera.reset_preview_stream() for ch in self.active_channels.values()))
 
     async def _start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
@@ -1329,17 +1311,7 @@ class Instrument:
         """Map and wrap one opaque camera frame for control-owned delivery."""
         if (channel_id := self._channel_for_camera(camera_id)) is None:
             return
-        delivery_seq = self._delivery_seq
-        instrument_cursor = self._feed.cursor
-        packet = PreviewFramePacket.wrap(
-            frame,
-            channel_id=channel_id,
-            delivery_cursor=StreamCursor(stream_id=self._delivery_stream_id.value, seq=delivery_seq),
-            state_cursor=StreamCursor(stream_id=instrument_cursor.stream_id, seq=instrument_cursor.seq),
-            stamped_at_unix_us=time.time_ns() // 1_000,
-        ).pack()
-        self._delivery_seq = delivery_seq + 1
-        await self.preview_frames.emit((channel_id, layer, packet))
+        await self._feed.deliver_preview(channel_id, layer, frame)
 
     async def _apply_filters(self) -> None:
         desired: dict[str, str] = {}

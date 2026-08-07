@@ -12,7 +12,8 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
-from vxl.camera.preview import (
+from vxl.instrument import Instrument
+from vxl.preview import (
     PreviewDeliveryHeader,
     PreviewFrame,
     PreviewFramePacket,
@@ -20,7 +21,6 @@ from vxl.camera.preview import (
     PreviewSourceHeader,
     PreviewViewport,
 )
-from vxl.instrument import Instrument
 from vxlib import Teardown
 
 log = logging.getLogger(__name__)
@@ -143,10 +143,10 @@ class PreviewStore(QObject):
     def start_feed(self, instrument: Instrument) -> Teardown:
         """Consume delivered overview and viewport frames without blocking the instrument emitter."""
         self._instrument = instrument
-        self._delivery_stream_id = instrument.delivery_stream_id.value
+        self._delivery_stream_id = instrument.feed.delivery_stream_id.value
         unsubs = [
-            instrument.preview_frames.subscribe(self._on_preview_frame),
-            instrument.delivery_stream_id.subscribe(self._on_delivery_stream),
+            instrument.feed.frames.subscribe(self._on_preview_frame),
+            instrument.feed.delivery_stream_id.subscribe(self._on_delivery_stream),
         ]
 
         def teardown() -> None:

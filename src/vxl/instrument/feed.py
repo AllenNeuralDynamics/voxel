@@ -1,9 +1,8 @@
-"""Instrument-owned, transport-neutral state feed.
+"""Instrument-owned, transport-neutral status and preview feeds.
 
-The feed materializes the current instrument view from reactive instrument state
-and pushed device-property updates, assigns one ordered cursor to changes, and
-exposes that same view and update stream to web and preview-service transport
-adapters.
+The feed materializes the current instrument view from reactive state and pushed
+device-property updates, and associates packed preview source frames with that
+same status timeline.
 
 The :class:`~vxl.instrument.core.Instrument` owns the feed and its lifecycle.
 """
@@ -12,13 +11,14 @@ import asyncio
 import logging
 import time
 import uuid
-from collections.abc import Callable, Collection
+from collections.abc import Collection
 from typing import Any, ClassVar, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from rigup import PropResults
-from vxlib import Emitter, ReactiveQuery, Readable, Subscribable, Teardown
+from vxl.preview.protocol import PreviewEmission, PreviewFramePacket, PreviewLayer, StreamCursor
+from vxlib import Cell, Emitter, ReactiveQuery, Readable, Subscribable, Teardown
 
 from .models import AcquisitionMode, ActiveAcquisitionState, DeviceSnapshot, TaskTile
 from .state import InstrumentDefaults, InstrumentState
@@ -41,7 +41,7 @@ class InstrumentCursor(BaseModel, frozen=True):
     seq: int = Field(ge=0)
 
 
-class InstrumentStatus(BaseModel, frozen=True):
+class InstrumentRuntimeStatus(BaseModel, frozen=True):
     """Current dynamic instrument state, excluding device properties."""
 
     mode: AcquisitionMode
@@ -59,7 +59,7 @@ class InstrumentView(BaseModel, frozen=True):
     stream_id: str = Field(min_length=1)
     seq: int = Field(ge=0)
     generated_at_unix_us: UnixMicroseconds = Field(ge=0)
-    status: InstrumentStatus
+    status: InstrumentRuntimeStatus
     device_props: dict[str, PropResults]
     active_acquisition: ActiveAcquisitionState | None
     defaults: InstrumentDefaults
@@ -87,7 +87,7 @@ class InstrumentUpdate(BaseModel, frozen=True):
     stream_id: str = Field(min_length=1)
     seq: int = Field(gt=0)
     observed_at_unix_us: UnixMicroseconds = Field(ge=0)
-    status: InstrumentStatus | None = None
+    status: InstrumentRuntimeStatus | None = None
     device_props: dict[str, PropResults] | None = None
     active_acquisition: ActiveAcquisitionState | None = None
     defaults: InstrumentDefaults | None = None
@@ -108,7 +108,7 @@ class InstrumentUpdate(BaseModel, frozen=True):
         return self.model_dump(mode="json", exclude_unset=True)
 
 
-class InstrumentFeedSource(Protocol):
+class InstrumentSource(Protocol):
     """Instrument surface required by :class:`InstrumentFeed`.
 
     ``Instrument`` satisfies this protocol; tests may use a hardware-free fake.
@@ -128,9 +128,6 @@ class InstrumentFeedSource(Protocol):
 
     @property
     def active_profile_id(self) -> Readable[str]: ...
-
-    @property
-    def delivery_stream_id(self) -> Readable[str]: ...
 
     @property
     def routing_targets(self) -> Readable[dict[str, str]]: ...
@@ -153,27 +150,23 @@ class InstrumentFeedSource(Protocol):
 
 
 class InstrumentFeed:
-    """Materialized, sequenced read feed owned by one :class:`Instrument`.
+    """Materialized status and preview frame feed owned by one :class:`Instrument`.
 
     Construction is inert. :meth:`open` attaches subscriptions and primes the
     property cache once; consumer connections subsequently use :meth:`view`
-    without querying hardware. :meth:`close` detaches every subscription.
+    without querying hardware. Preview frames use a separate delivery cursor
+    while carrying the current status cursor in each VXPD packet.
     """
 
-    def __init__(
-        self,
-        source: InstrumentFeedSource,
-        *,
-        clock: Callable[[], UnixMicroseconds] = _unix_time_us,
-        stream_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
-    ) -> None:
+    def __init__(self, source: InstrumentSource) -> None:
         self._source = source
-        self._clock = clock
-        self._stream_id_factory = stream_id_factory
         self._updates = Emitter[InstrumentUpdate]()
+        self._frames = Emitter[PreviewEmission]()
         self._unsubs: list[Teardown] = []
         self._stream_id: str | None = None
         self._seq = 0
+        self._delivery_stream_id = Cell(uuid.uuid4().hex)
+        self._delivery_seq = 0
         self._device_props: dict[str, PropResults] = {}
         self._devices: dict[str, DeviceSnapshot] = {}
         self._prop_versions: dict[tuple[str, str], int] = {}
@@ -183,6 +176,16 @@ class InstrumentFeed:
     def updates(self) -> Subscribable[InstrumentUpdate]:
         """Ordered partial updates produced after the feed is opened."""
         return self._updates
+
+    @property
+    def frames(self) -> Subscribable[PreviewEmission]:
+        """Delivered VXPD preview packets."""
+        return self._frames
+
+    @property
+    def delivery_stream_id(self) -> Readable[str]:
+        """Identity of the current preview delivery stream."""
+        return self._delivery_stream_id
 
     @property
     def is_open(self) -> bool:
@@ -199,7 +202,7 @@ class InstrumentFeed:
         if self._stream_id is not None:
             raise RuntimeError("instrument feed is already open")
 
-        self._stream_id = self._stream_id_factory()
+        self._stream_id = uuid.uuid4().hex
         self._seq = 0
         self._device_props = {}
         self._devices = {}
@@ -233,7 +236,7 @@ class InstrumentFeed:
         return InstrumentView(
             stream_id=self._require_stream_id(),
             seq=self._seq,
-            generated_at_unix_us=self._clock(),
+            generated_at_unix_us=_unix_time_us(),
             status=self._status(),
             device_props=dict(self._device_props),
             active_acquisition=self._source.acquisition.value,
@@ -242,13 +245,32 @@ class InstrumentFeed:
             devices=dict(self._devices),
         )
 
+    async def reset_preview(self) -> None:
+        """Begin a new preview delivery stream and reset its frame sequence."""
+        self._delivery_seq = 0
+        await self._delivery_stream_id.set(uuid.uuid4().hex)
+
+    async def deliver_preview(self, channel_id: str, layer: PreviewLayer, frame: bytes) -> None:
+        """Wrap one packed VXPS source frame and emit the resulting VXPD packet."""
+        status_cursor = self.cursor
+        delivery_seq = self._delivery_seq
+        packet = PreviewFramePacket.wrap(
+            frame,
+            channel_id=channel_id,
+            delivery_cursor=StreamCursor(stream_id=self._delivery_stream_id.value, seq=delivery_seq),
+            state_cursor=StreamCursor(stream_id=status_cursor.stream_id, seq=status_cursor.seq),
+            stamped_at_unix_us=_unix_time_us(),
+        ).pack()
+        self._delivery_seq = delivery_seq + 1
+        await self._frames.emit((channel_id, layer, packet))
+
     def _attach(self) -> None:
         source = self._source
         self._unsubs = [
             source.state.subscribe(self._on_status),
             source.mode.subscribe(self._on_status),
             source.active_profile_id.subscribe(self._on_status),
-            source.delivery_stream_id.subscribe(self._on_status),
+            self._delivery_stream_id.subscribe(self._on_status),
             source.task_tiles.subscribe(self._on_status),
             source.fov.subscribe(self._on_status),
             source.routing_targets.subscribe(self._on_status),
@@ -299,7 +321,7 @@ class InstrumentFeed:
             InstrumentUpdate(
                 stream_id=self._stream_id,
                 seq=seq,
-                observed_at_unix_us=self._clock(),
+                observed_at_unix_us=_unix_time_us(),
                 device_props={device_id: properties},
             )
         )
@@ -311,17 +333,17 @@ class InstrumentFeed:
             InstrumentUpdate(
                 stream_id=stream_id,
                 seq=seq,
-                observed_at_unix_us=self._clock(),
+                observed_at_unix_us=_unix_time_us(),
                 **sections,
             )
         )
 
-    def _status(self) -> InstrumentStatus:
+    def _status(self) -> InstrumentRuntimeStatus:
         source = self._source
-        return InstrumentStatus(
+        return InstrumentRuntimeStatus(
             mode=source.mode.value,
             active_profile_id=source.active_profile_id.value,
-            delivery_stream_id=source.delivery_stream_id.value,
+            delivery_stream_id=self._delivery_stream_id.value,
             fov=source.fov.cache,
             routing_targets=source.routing_targets.value,
             state=source.state.value,

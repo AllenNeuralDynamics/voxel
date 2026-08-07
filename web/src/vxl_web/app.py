@@ -1,7 +1,7 @@
 """FastAPI factory + launcher for the Voxel web backend, on the ``vxl.Instrument`` API.
 
 Lean by design: two routers (the ``VoxelApp`` surface — discovery/launch/close/history — and the active
-``Instrument`` surface), the application feed bridge (:mod:`vxl_web.feed`), and the primary/preview
+``Instrument`` surface), the web adapter (:mod:`vxl_web.adapter`), and the primary/preview
 WebSocket transports (:mod:`vxl_web.websocket`). No manager/service layer — routers call the ``Instrument``'s
 flat method surface directly.
 
@@ -32,9 +32,8 @@ from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.system import load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
-from .feed import AppFeed, LogMessage
+from .adapter import LogMessage, VoxelWebAdapter
 from .router import api_router
-from .websocket import MsgBus, PreviewHub
 
 log = logging.getLogger(__name__)
 
@@ -84,10 +83,10 @@ class _LogHandler(logging.Handler):
     whatever thread logged, so it only captures fields — sequencing, buffering, and delivery are marshalled
     onto the loop (the seq counter, buffer, and bus may only be touched from its loop)."""
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, bus: MsgBus, buffer: deque[LogMessage]) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop, vxl: VoxelWebAdapter, buffer: deque[LogMessage]) -> None:
         super().__init__()
         self._loop = loop
-        self._bus = bus
+        self._vxl = vxl
         self._buffer = buffer
         self._seq = 0
 
@@ -104,23 +103,21 @@ class _LogHandler(logging.Handler):
         self._seq += 1
         msg = LogMessage(seq=self._seq, level=level, message=message, logger=logger, timestamp=timestamp)
         self._buffer.append(msg)
-        self._bus.broadcast("logs", msg)
+        self._vxl.publish_log(msg)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     log.info("Starting Voxel web backend")
-    handler = _LogHandler(asyncio.get_running_loop(), app.state.bus, app.state.log_buffer)
+    vxl = app.state.vxl
+    handler = _LogHandler(asyncio.get_running_loop(), vxl, app.state.log_buffer)
     handler.setLevel(logging.DEBUG)  # stream everything to the UI; the client filters by level
     logging.getLogger().addHandler(handler)
-    feed = AppFeed(app.state.voxel_app, app.state.bus)
-    feed.attach()
-    app.state.preview_hub.attach()
+    vxl.attach()
     try:
         yield
     finally:
-        await app.state.preview_hub.close()
-        feed.detach()
+        await vxl.close()
         logging.getLogger().removeHandler(handler)  # stop streaming logs to clients
         await app.state.voxel_app.close()  # parks hardware on shutdown (closes the active instrument, if any)
         log.info("Voxel web backend stopped")
@@ -138,8 +135,7 @@ def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) 
         allow_headers=["*"],
     )
     app.state.voxel_app = voxel_app or VoxelApp()
-    app.state.bus = MsgBus()
-    app.state.preview_hub = PreviewHub(app.state.voxel_app)
+    app.state.vxl = VoxelWebAdapter(app.state.voxel_app)
     app.state.log_buffer = deque(maxlen=LOG_BUFFER_SIZE)
     _register_error_handlers(app)
     app.include_router(api_router, prefix="/api")

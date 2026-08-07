@@ -6,7 +6,7 @@ import msgpack
 import numpy as np
 import pytest
 
-from vxl.camera.preview import (
+from vxl.preview.protocol import (
     DELIVERY_FRAMING_VERSION,
     DELIVERY_MAGIC,
     DELIVERY_PREFIX,

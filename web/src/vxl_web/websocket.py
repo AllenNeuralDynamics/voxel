@@ -2,7 +2,7 @@
 
 Public abstractions:
     - :class:`MsgBus` — typed topic pubsub over the primary control WebSocket.
-    - :class:`PreviewHub` — opaque latest-only packets over the preview WebSocket.
+    - :class:`PreviewBus` — opaque latest-only packets over the preview WebSocket.
 
 The primary wire format is ``msgpack.packb([topic, body_bytes])``. The dedicated
 preview socket sends one complete opaque VXPD packet per binary message.
@@ -11,7 +11,7 @@ preview socket sends one complete opaque VXPD packet per binary message.
 import asyncio
 import logging
 import uuid
-from collections import OrderedDict, deque
+from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any, cast
@@ -21,18 +21,16 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from rigup.wire import pack, unpack
 
-from vxl.app import VoxelApp
-from vxl.camera import PreviewLayer
 from vxl.instrument import Instrument
+from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewKey
 from vxlib import Teardown
 
 log = logging.getLogger(__name__)
 
-__all__ = ["MsgBus", "PreviewHub"]
+__all__ = ["MsgBus", "PreviewBus"]
 
 type ClientId = str
 type CommandHandler[T] = Callable[[T, ClientId], Awaitable[None]]
-type PreviewKey = tuple[str, PreviewLayer]
 
 PREVIEW_DISCONNECT_GRACE_SECONDS = 2.0
 
@@ -130,6 +128,13 @@ class MsgBus:
         self._handlers: dict[str, _CommandEntry[Any]] = {}
         self._log = log
 
+    async def close(self) -> None:
+        """Close every connected peer and discard registered command handlers."""
+        clients = tuple(self._clients.values())
+        self._clients.clear()
+        self._handlers.clear()
+        await asyncio.gather(*(client.close() for client in clients))
+
     async def serve(self, websocket: WebSocket) -> None:
         """Accept and retain one primary peer until it disconnects."""
         await websocket.accept()
@@ -216,35 +221,12 @@ class MsgBus:
             client.enqueue(msg)
 
 
-class _LatestFrameQueue:
-    """One pending latest frame per routing key, preserving fair key insertion order."""
-
-    def __init__(self) -> None:
-        self._frames: OrderedDict[PreviewKey, bytes] = OrderedDict()
-        self._ready = asyncio.Event()
-
-    def put(self, key: PreviewKey, frame: bytes) -> None:
-        self._frames[key] = frame
-        self._ready.set()
-
-    async def get(self) -> bytes:
-        while not self._frames:
-            self._ready.clear()
-            await self._ready.wait()
-        _key, frame = self._frames.popitem(last=False)
-        return frame
-
-    def clear(self) -> None:
-        self._frames.clear()
-        self._ready.clear()
-
-
 class _PreviewClient:
     """One preview peer with independent latest-only backpressure."""
 
     def __init__(self, websocket: WebSocket) -> None:
         self._websocket = websocket
-        self._queue = _LatestFrameQueue()
+        self._queue = LatestFrameQueue()
 
     def publish(self, key: PreviewKey, frame: bytes) -> None:
         self._queue.put(key, frame)
@@ -268,7 +250,8 @@ class _PreviewClient:
 
     async def _send(self) -> None:
         while True:
-            await self._websocket.send_bytes(await self._queue.get())
+            _key, frame = await self._queue.get()
+            await self._websocket.send_bytes(frame)
 
     async def _receive(self) -> None:
         while True:
@@ -276,33 +259,36 @@ class _PreviewClient:
                 return
 
 
-class PreviewHub:
+class PreviewBus:
     """Follow the active Instrument and fan opaque preview packets out to WebSocket clients."""
 
-    def __init__(self, app: VoxelApp) -> None:
-        self._app = app
+    def __init__(self) -> None:
         self._clients: set[_PreviewClient] = set()
         self._instrument: Instrument | None = None
         self._disconnect_stop_task: asyncio.Task[None] | None = None
-        self._app_unsub: Teardown | None = None
         self._instrument_unsubs: list[Teardown] = []
 
-    def attach(self) -> None:
-        """Follow the active Instrument and its current delivery stream."""
-        if self._app_unsub is not None:
-            return
-        self._app_unsub = self._app.active.subscribe(self._set_instrument)
-        self._set_instrument(self._app.active.value)
-
     async def close(self) -> None:
-        """Detach all subscriptions and close connected preview peers."""
-        if self._app_unsub is not None:
-            self._app_unsub()
-            self._app_unsub = None
-        self._set_instrument(None)
+        """Detach from the instrument and close connected preview peers."""
+        self.set_instrument(None)
         clients = tuple(self._clients)
         self._clients.clear()
         await asyncio.gather(*(client.close() for client in clients))
+
+    def set_instrument(self, instrument: Instrument | None) -> None:
+        """Follow one instrument's preview frames, or detach when ``None``."""
+        self._cancel_disconnect_stop()
+        for unsub in self._instrument_unsubs:
+            unsub()
+        self._instrument_unsubs = []
+        self._instrument = instrument
+        self._clear_pending()
+        if instrument is None:
+            return
+        self._instrument_unsubs = [
+            instrument.feed.frames.subscribe(self.publish),
+            instrument.feed.delivery_stream_id.subscribe(lambda _stream_id: self._clear_pending()),
+        ]
 
     async def serve(self, websocket: WebSocket) -> None:
         """Accept and retain one peer until either side disconnects."""
@@ -320,26 +306,12 @@ class PreviewHub:
             if not self._clients:
                 self._schedule_disconnect_stop()
 
-    def publish(self, item: tuple[str, PreviewLayer, bytes]) -> None:
+    def publish(self, item: PreviewEmission) -> None:
         """Offer an opaque packet to every client without waiting for network delivery."""
         channel_id, layer, frame = item
         key = (channel_id, layer)
         for client in tuple(self._clients):
             client.publish(key, frame)
-
-    def _set_instrument(self, instrument: Instrument | None) -> None:
-        self._cancel_disconnect_stop()
-        for unsub in self._instrument_unsubs:
-            unsub()
-        self._instrument_unsubs = []
-        self._instrument = instrument
-        self._clear_pending()
-        if instrument is None:
-            return
-        self._instrument_unsubs = [
-            instrument.preview_frames.subscribe(self.publish),
-            instrument.delivery_stream_id.subscribe(lambda _stream_id: self._clear_pending()),
-        ]
 
     def _clear_pending(self) -> None:
         for client in tuple(self._clients):
