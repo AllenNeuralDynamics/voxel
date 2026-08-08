@@ -75,6 +75,16 @@ dev = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "--strict-markers"
+norecursedirs = ["notes"]
+testpaths = [
+    "tests",
+    "catalog/tests",
+    "cli/tests",
+    "drivers/tests",
+    "omezarr/tests",
+    "rigup/tests",
+    "web/tests",
+]
 markers = [
     "slow: integration-flavored tests (ZMQ networking, zarr I/O); excluded from pre-push, run in CI",
 ]
