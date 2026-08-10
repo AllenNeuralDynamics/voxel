@@ -508,8 +508,15 @@ export interface PreviewDiscovery {
   protocol_version: number;
 }
 
+/** Stable identity of the control station serving this application. */
+export interface StationInfo {
+  id: string;
+  name: string;
+}
+
 /** Bounded resources used to initialize the application UI. */
 export interface AppDiscovery {
+  station: StationInfo;
   instruments: Record<string, InstrumentInspection>;
   templates: Record<string, InstrumentConfig>;
   remotes: Record<string, Remote>;

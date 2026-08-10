@@ -38,7 +38,7 @@ from vxl.instrument.topology import HALConfig
 from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
 from vxl.preview.protocol import DELIVERY_FRAMING_VERSION
-from vxl.system import Remote
+from vxl.system import Remote, StationInfo
 from vxlib import ColormapGroup, get_colormap_catalog
 
 from .adapter import AppStatus, LogMessage
@@ -61,6 +61,7 @@ class PreviewDiscovery(BaseModel):
 class AppDiscovery(BaseModel):
     """Bounded resources a client needs to discover and configure this Voxel application."""
 
+    station: StationInfo
     instruments: dict[str, InstrumentInspection]
     templates: dict[str, InstrumentConfig]
     remotes: dict[str, Remote]
@@ -81,6 +82,7 @@ async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
     """Return the bounded application resources needed to initialize a client."""
     found = app.discover()
     return AppDiscovery(
+        station=app.station.info,
         instruments=found.instruments,
         templates=found.templates,
         remotes=app.remotes,

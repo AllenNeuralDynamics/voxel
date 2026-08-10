@@ -12,6 +12,7 @@ The app is IDE-style, with two top-level windows:
 Requires [uv](https://docs.astral.sh/uv/). Run from the repository root:
 
 ```bash
+uv run vxl station init --name my-microscope  # one-time control-host setup
 uv run vxl qt                 # launch; optionally: uv run vxl qt config.yaml
 uv run vxl qt -v              # verbose (debug) logging
 ```

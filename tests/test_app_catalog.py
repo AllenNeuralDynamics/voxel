@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 from vxl_catalog import Catalog, FileCatalogBackend
 
@@ -8,16 +9,16 @@ from vxl.instrument import Instrument
 
 
 async def test_voxel_app_owns_and_passes_catalog_to_launched_instrument(monkeypatch, tmp_path: Path) -> None:
-    system = SimpleNamespace(
+    station = SimpleNamespace(
         dir=tmp_path / ".voxel",
         remotes={},
+        info=SimpleNamespace(id=uuid4(), name="test"),
     )
-    monkeypatch.setattr(app_module, "System", lambda: system)
     catalog = Catalog(
         FileCatalogBackend(tmp_path / "catalog"),
         resolve_root=lambda _spec: tmp_path / "acquisition",
     )
-    app = app_module.VoxelApp(catalog=catalog)
+    app = app_module.VoxelApp(catalog=catalog, station=station)
     instrument_home = app.instruments_dir / "scope.voxel"
     instrument_home.mkdir()
     captured: dict[str, object] = {}

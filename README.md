@@ -16,7 +16,12 @@ Requires [uv](https://docs.astral.sh/uv/) and [Nub](https://nubjs.com/) (for the
 
 ```bash
 uv sync --all-packages --all-extras --all-groups
+uv run vxl station init --name my-microscope
 ```
+
+The one-time station command creates `~/.voxel/station.yaml`, which is required by the web and desktop control
+applications. Remote device nodes do not require a station; they may use an optional `~/.voxel/system.yaml`,
+`VOXEL_*` environment variables, or machine defaults.
 
 ### Web interface (FastAPI + SvelteKit)
 

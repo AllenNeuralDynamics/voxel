@@ -735,6 +735,7 @@ export class VoxelApp {
   readonly #client: Client;
 
   discovery = $state<AppDiscovery>({
+    station: { id: '', name: '' },
     instruments: {},
     templates: {},
     remotes: {},

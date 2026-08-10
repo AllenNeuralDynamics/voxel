@@ -1,5 +1,7 @@
 import io
 from importlib import import_module
+from typing import TextIO
+from uuid import UUID
 
 import pytest
 from vxl_cli import main as console_main
@@ -35,6 +37,26 @@ def test_node_command_uses_the_cli_node_launcher(monkeypatch: pytest.MonkeyPatch
 
     assert status == 0
     assert called == [("cameras", "tcp://127.0.0.1:5555", True)]
+
+
+def test_station_init_dispatches_to_station_initializer(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[tuple[str, object]] = []
+
+    def initialize(name: str, *, station_id: UUID | None, output: TextIO, errors: TextIO) -> int:
+        del output, errors
+        called.append((name, station_id))
+        return 0
+
+    monkeypatch.setattr(main_module, "initialize_station", initialize)
+
+    status = main_module.run(
+        ["station", "init", "--name", "scope", "--id", "12345678-1234-5678-1234-567812345678"],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+
+    assert status == 0
+    assert called == [("scope", main_module.UUID("12345678-1234-5678-1234-567812345678"))]
 
 
 def test_console_main_exits_with_dispatch_status(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -2,7 +2,7 @@ import datetime
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request
@@ -33,6 +33,7 @@ def _web_app(catalog: Catalog) -> Any:
     return SimpleNamespace(
         catalog=catalog,
         remotes={},
+        station=SimpleNamespace(info={"id": UUID("12345678-1234-5678-1234-567812345678"), "name": "scope"}),
         discover=lambda: Discovered(instruments={}, templates={}),
     )
 
@@ -58,7 +59,16 @@ async def test_discovery_composes_bounded_application_resources(tmp_path: Path) 
     discovery = await get_discovery(_request(web_app), cast("Any", voxel_app))
     payload = discovery.model_dump(mode="json")
 
-    assert set(payload) == {"instruments", "templates", "remotes", "colormaps", "metadata_schemas", "preview"}
+    assert set(payload) == {
+        "station",
+        "instruments",
+        "templates",
+        "remotes",
+        "colormaps",
+        "metadata_schemas",
+        "preview",
+    }
+    assert payload["station"] == {"id": "12345678-1234-5678-1234-567812345678", "name": "scope"}
     assert payload["instruments"] == {}
     assert payload["templates"] == {}
     assert payload["remotes"] == {}

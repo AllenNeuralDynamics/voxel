@@ -1,9 +1,10 @@
-"""Machine-local facts, config, and YAML I/O for the box this code runs on.
+"""Machine-local facts and configuration for the box this code runs on.
 
 ``System`` exposes what is true of *this* machine — CPU count, platform, hostname,
 the RAM budget (:class:`System.Ram`), and the local storage roots (``store``/``scratch``).
-Machine-specific knobs are sourced from ``VOXEL_*`` env vars, deliberately kept out of
-the portable app config.
+Machine-specific knobs are sourced from ``VOXEL_*`` env vars and one machine file. A
+control station's ``station.yaml`` is a superset of ``system.yaml`` and takes its place
+when present; nodes and other non-control processes can use ``system.yaml`` or defaults.
 
 ``load_yaml``/``save_yaml`` are re-exported from :mod:`vxlib` for compatibility.
 """
@@ -12,25 +13,27 @@ import logging
 import socket
 import sys
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal, Self
+from uuid import UUID, uuid4
 
 import psutil
 from dotenv import load_dotenv
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
+    EnvSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     YamlConfigSettingsSource,
 )
 
-from vxlib import S3Store
+from vxlib import S3Store, save_yaml
 
 log = logging.getLogger(__name__)
 
 
 def _voxel_home() -> Path:
-    """The fixed config/state home, ``~/.voxel`` -- holds ``system.yaml`` and ``instruments/``.
+    """The fixed config/state home, ``~/.voxel`` -- holds machine config and ``instruments/``.
     Relocate it by setting ``$HOME``; move the data roots independently with
     ``VOXEL_STORE`` / ``VOXEL_SCRATCH``."""
     return Path.home() / ".voxel"
@@ -55,10 +58,11 @@ class Remote(S3Store):
 
 
 class System(BaseSettings):
-    """This machine: ``VOXEL_*`` env knobs, the ``system.yaml`` config, and introspected facts.
+    """This machine: ``VOXEL_*`` env knobs, machine YAML config, and introspected facts.
 
-    Construct to read and validate the environment plus ``~/.voxel/system.yaml`` (init > env >
-    yaml). Exposes the local storage roots (``store``/``scratch``, overridable via
+    Construct to read and validate the environment plus ``~/.voxel/station.yaml`` when it exists,
+    otherwise ``~/.voxel/system.yaml`` (init > env > yaml). The selected file is not merged with
+    the fallback. Exposes the local storage roots (``store``/``scratch``, overridable via
     ``VOXEL_STORE``/``VOXEL_SCRATCH``), the object-store registry (:attr:`remotes`), the fixed config
     home (:attr:`dir`), the pure machine
     facts (``cpu_count``/``platform``/``hostname``), and the shared RAM budget (:class:`Ram`). Paths
@@ -71,8 +75,18 @@ class System(BaseSettings):
     scratch: Path = Field(default_factory=lambda: _voxel_home() / "scratch", description="VOXEL_SCRATCH")
     max_ram_fraction: float = Field(default=0.75, gt=0.0, le=1.0)
     remotes: dict[str, Remote] = Field(
-        default_factory=dict, description="object-store name -> connection (from ~/.voxel/system.yaml)"
+        default_factory=dict, description="object-store name -> connection (from the selected machine config)"
     )
+
+    @classmethod
+    def config_path(cls) -> Path:
+        """Return the selected machine config: station first, then system.
+
+        Selection is whole-file precedence, not a merge. This keeps exactly one authority for
+        structured machine settings while allowing nodes to run without a station identity.
+        """
+        station = _voxel_home() / "station.yaml"
+        return station if station.is_file() else _voxel_home() / "system.yaml"
 
     @classmethod
     def settings_customise_sources(
@@ -83,10 +97,9 @@ class System(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Layer ``~/.voxel/system.yaml`` under the env (priority: init > env > yaml). The yaml
-        carries structured config -- notably :attr:`remotes` -- that flat env vars can't express."""
+        """Layer the selected machine YAML under env (priority: init > env > yaml)."""
         del dotenv_settings, file_secret_settings
-        yaml_source = YamlConfigSettingsSource(settings_cls, yaml_file=_voxel_home() / "system.yaml")
+        yaml_source = YamlConfigSettingsSource(settings_cls, yaml_file=cls.config_path())
         return (init_settings, env_settings, yaml_source)
 
     @property
@@ -157,3 +170,97 @@ class System(BaseSettings):
                 raise KeyError(consumer_id)
             total_weight = sum(cls._consumers.values()) or 1.0
             return int(cls.max_bytes() * cls._consumers[consumer_id] / total_weight)
+
+
+class StationNotConfiguredError(FileNotFoundError):
+    """Raised when a control application is started without ``station.yaml``."""
+
+
+class StationInfo(BaseModel):
+    """Stable public identity of a Voxel control station."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+
+
+class _SystemFieldsEnvSource(EnvSettingsSource):
+    """Restrict station env overrides to machine policy; identity remains file-backed."""
+
+    def __call__(self) -> dict[str, object]:
+        return {key: value for key, value in super().__call__().items() if key in System.model_fields}
+
+
+class Station(System):
+    """A control station: stable identity plus the complete local :class:`System` config.
+
+    Unlike :class:`System`, a station never falls back to ``system.yaml``. Control entrypoints use
+    :meth:`load` so a missing station is reported clearly; remote nodes continue to construct
+    ``System`` and therefore need no station identity.
+    """
+
+    schema_version: Literal[1] = 1
+    id: UUID
+    name: str = Field(min_length=1)
+
+    @classmethod
+    def config_path(cls) -> Path:
+        """Return the required control-station configuration path."""
+        return _voxel_home() / "station.yaml"
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Read station YAML only; ``system.yaml`` is not a second configuration authority."""
+        del env_settings, dotenv_settings, file_secret_settings
+        return (
+            init_settings,
+            _SystemFieldsEnvSource(settings_cls),
+            YamlConfigSettingsSource(settings_cls, yaml_file=cls.config_path()),
+        )
+
+    @classmethod
+    def load(cls) -> Self:
+        """Load the control station or explain how to initialize one."""
+        path = cls.config_path()
+        if not path.is_file():
+            raise StationNotConfiguredError(
+                f"No control station configured at {path}. Initialize one with `vxl station init --name <name>`."
+            )
+        return cls()  # pyright: ignore[reportCallIssue] -- required fields come from the checked YAML source
+
+    @classmethod
+    def initialize(cls, name: str, *, station_id: UUID | None = None) -> Self:
+        """Create ``station.yaml`` from the effective System config, refusing to overwrite it."""
+        path = cls.config_path()
+        if path.exists():
+            raise FileExistsError(f"A control station is already configured at {path}")
+
+        system = System()
+        station = cls(
+            schema_version=1,
+            id=station_id or uuid4(),
+            name=name,
+            store=system.store,
+            scratch=system.scratch,
+            max_ram_fraction=system.max_ram_fraction,
+            remotes=system.remotes,
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_yaml(path, station)
+        return station
+
+    @property
+    def info(self) -> StationInfo:
+        """Return the bounded station identity safe to expose to clients."""
+        return StationInfo(id=self.id, name=self.name)
+
+
+__all__ = ["Remote", "Station", "StationInfo", "StationNotConfiguredError", "System", "load_voxel_env"]
