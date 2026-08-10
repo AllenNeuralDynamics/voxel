@@ -105,7 +105,7 @@ class InstrumentUpdate(BaseModel, frozen=True):
 
     def wire_dict(self) -> dict[str, Any]:
         """Serialize only explicitly populated sections, preserving explicit nulls."""
-        return self.model_dump(mode="json", exclude_unset=True)
+        return self.model_dump(mode="json", include=self.model_fields_set)
 
 
 class InstrumentSource(Protocol):

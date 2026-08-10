@@ -1,6 +1,7 @@
 /** WS + REST transport for the Voxel API: a (mostly) receive-only msgpack WebSocket and typed REST verbs. */
-import { pack, unpack } from 'msgpackr';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+
+import { decodeMsgpack, encodeMsgpack } from '$lib/utils/msgpack';
 
 import type { ClientTopics, ServerTopics } from './types';
 
@@ -149,7 +150,7 @@ export class Client {
    *  No-op until the socket is open. */
   send<K extends keyof ClientTopics>(topic: K, body: ClientTopics[K]): void {
     if (this.#ws?.readyState !== WebSocket.OPEN) return;
-    this.#ws.send(pack([topic, pack(body)]));
+    this.#ws.send(encodeMsgpack([topic, encodeMsgpack(body)]));
   }
 
   /** Subscribe to a topic; the body is decoded to its `ServerTopics` payload type. */
@@ -237,7 +238,7 @@ export class Client {
   }
 
   #handleMessage(data: ArrayBuffer): void {
-    const envelope = unpack(new Uint8Array(data)) as [string, Uint8Array];
+    const envelope = decodeMsgpack<[string, Uint8Array]>(new Uint8Array(data));
     if (!Array.isArray(envelope) || envelope.length !== 2) {
       console.warn('[Client] malformed envelope:', envelope);
       return;
@@ -245,7 +246,7 @@ export class Client {
     const [topic, bodyBytes] = envelope;
     const typed = this.#typedHandlers.get(topic);
     if (typed && typed.size > 0) {
-      const event = unpack(bodyBytes);
+      const event = decodeMsgpack(bodyBytes);
       for (const cb of typed) cb(event);
     }
   }

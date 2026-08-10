@@ -1,8 +1,7 @@
-import { Unpackr } from 'msgpackr';
+import { decodeMsgpack } from '$lib/utils/msgpack';
 
 const PREFIX_BYTES = 9;
 const MAX_HEADER_BYTES = 64 * 1024;
-const unpackr = new Unpackr({ useRecords: false, int64AsType: 'number' });
 
 export const PREVIEW_PROTOCOL_VERSION = 1;
 export const PREVIEW_ENCODING = 'u16-zstd-byte-shuffle-v1' as const;
@@ -90,7 +89,7 @@ function parsePrefix(packet: Uint8Array, magic: string, label: string): { header
 }
 
 function decodeHeader<T>(packet: Uint8Array, start: number, end: number, label: string): T {
-  const value = unpackr.unpack(packet.subarray(start, end));
+  const value = decodeMsgpack<unknown>(packet.subarray(start, end));
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error(`${label} header must be a MessagePack map`);
   }

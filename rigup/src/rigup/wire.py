@@ -32,12 +32,15 @@ def pack(body: BaseModel, *, fmt: WireFormat = "msgpack", exclude_unset: bool = 
     ZMQ; ``[topic, body]`` array on WS). The body is just the data.
 
     Defaults to ``msgpack`` — smaller and faster than JSON. Pass ``fmt="json"``
-    when human-readable bytes are required.
+    when human-readable bytes are required. ``exclude_unset`` applies only to
+    the body's top-level fields so selected nested models retain required wire
+    discriminators and defaults.
     """
+    include = body.model_fields_set if exclude_unset else None
     if fmt == "msgpack":
         # msgpack stubs declare `bytes | None`; for valid input it always returns bytes.
-        return cast("bytes", msgpack.packb(body.model_dump(mode="json", exclude_unset=exclude_unset)))
-    return body.model_dump_json(exclude_unset=exclude_unset).encode()
+        return cast("bytes", msgpack.packb(body.model_dump(mode="json", include=include)))
+    return body.model_dump_json(include=include).encode()
 
 
 def unpack(data: bytes) -> dict[str, Any]:
