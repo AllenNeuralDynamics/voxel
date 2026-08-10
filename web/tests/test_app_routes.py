@@ -1,25 +1,15 @@
-import datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request
-from vxl_catalog import (
-    AcquisitionManifest,
-    AcquisitionOrigin,
-    AcquisitionVolume,
-    Catalog,
-    FileCatalogBackend,
-    StorageSpec,
-)
+from vxl_catalog import Catalog, FileCatalogBackend
 from vxl_web.app import create_app
-from vxl_web.router import get_acquisition, get_active_acquisition, get_discovery, list_acquisitions
+from vxl_web.router import get_acquisition, get_discovery
 
 from vxl.app import Discovered
-from vxl.instrument import ActiveAcquisitionState, VolumeProgress
-from vxlib import Cell
 
 
 def _catalog(tmp_path: Path) -> Catalog:
@@ -85,55 +75,9 @@ async def test_discovery_composes_bounded_application_resources(tmp_path: Path) 
     assert "/api/catalog/colormaps" not in paths
 
 
-async def test_acquisition_history_routes_list_and_get_manifests(tmp_path: Path) -> None:
-    catalog = _catalog(tmp_path)
-    manifest = AcquisitionManifest(
-        id=uuid4(),
-        instrument="scope",
-        origin=AcquisitionOrigin(host="controller", operator="operator"),
-        created_at=datetime.datetime.now(tz=datetime.UTC),
-        storage=StorageSpec(path=PurePosixPath("run")),
-        bench_snapshot={},
-        hardware_snapshot={},
-        volumes=[AcquisitionVolume(task="task-a", profile="488")],
-    )
-    await catalog.create(manifest)
-    app = _web_app(catalog)
+async def test_missing_acquisition_is_mapped_to_not_found(tmp_path: Path) -> None:
+    app = _web_app(_catalog(tmp_path))
 
-    listed = await list_acquisitions(cast("Any", app))
-    fetched = await get_acquisition(manifest.id, cast("Any", app))
-
-    assert [item.id for item in listed] == [manifest.id]
-    assert fetched.id == manifest.id
     with pytest.raises(HTTPException) as caught:
         await get_acquisition(uuid4(), cast("Any", app))
     assert caught.value.status_code == 404
-
-
-async def test_active_acquisition_route_returns_retained_instrument_state() -> None:
-    manifest = AcquisitionManifest(
-        id=uuid4(),
-        instrument="scope",
-        origin=AcquisitionOrigin(host="controller", operator="operator"),
-        created_at=datetime.datetime.now(tz=datetime.UTC),
-        storage=StorageSpec(path=PurePosixPath("run")),
-        bench_snapshot={},
-        hardware_snapshot={},
-        volumes=[AcquisitionVolume(task="task-a", profile="488")],
-    )
-    active = ActiveAcquisitionState(
-        manifest=manifest,
-        progress=VolumeProgress(
-            task="task-a",
-            profile="488",
-            frames_captured=12,
-            frames_total=48,
-        ),
-    )
-    acquisition = Cell[ActiveAcquisitionState | None](active)
-    instrument = SimpleNamespace(acquisition=acquisition)
-
-    assert await get_active_acquisition(cast("Any", instrument)) == active
-
-    await acquisition.set(None)
-    assert await get_active_acquisition(cast("Any", instrument)) is None

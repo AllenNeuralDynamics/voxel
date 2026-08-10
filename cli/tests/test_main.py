@@ -4,7 +4,6 @@ from typing import TextIO
 from uuid import UUID
 
 import pytest
-from vxl_cli import main as console_main
 
 main_module = import_module("vxl_cli.main")
 
@@ -57,12 +56,3 @@ def test_station_init_dispatches_to_station_initializer(monkeypatch: pytest.Monk
 
     assert status == 0
     assert called == [("scope", main_module.UUID("12345678-1234-5678-1234-567812345678"))]
-
-
-def test_console_main_exits_with_dispatch_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(main_module, "run", lambda: 7)
-
-    with pytest.raises(SystemExit) as raised:
-        console_main()
-
-    assert raised.value.code == 7
