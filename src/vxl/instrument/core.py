@@ -1176,6 +1176,7 @@ class Instrument:
             async with self._lock:
                 await self._move_optical_routes(routes)
             await scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
+            await scanning_axis.queue_relative_move(z_step)
             init_coros = []
             for ch_id, ch in channels.items():
                 config = self._channel_config(ch_id)
@@ -1203,8 +1204,6 @@ class Instrument:
 
             for batch_idx in range(math.ceil(num_frames / batch_z)):
                 frames_in_batch = min(batch_z, num_frames - batch_idx * batch_z)
-                for _ in range(frames_in_batch):
-                    await scanning_axis.queue_relative_move(z_step)
                 # begin_batch waits for a free writer slot and arms the camera before returning,
                 # so the signal generator is safe to fire once these resolve.
                 await asyncio.gather(*(ch.camera.begin_batch(frames_in_batch) for ch in channels.values()))

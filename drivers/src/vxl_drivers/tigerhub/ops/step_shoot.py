@@ -9,9 +9,11 @@ from vxl_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
 
 
 class RingBufferMode(Enum):
-    TTL = 0
-    ONE_SHOT = 1
-    REPEATING = 2
+    CONSUME = 0
+    TTL_TRIGGERED = 1
+    ONE_SHOT_AUTOPLAY = 2
+    REPEAT_AUTOPLAY = 3
+    ONE_SHOT_AUTOPLAY_NO_RETURN = 4
 
 
 class TTLIn0Mode(Enum):
@@ -42,7 +44,7 @@ class StepShootConfig:
     in0_mode: TTLIn0Mode  # ABS or REL stepping (1 or 12) … or any valid enum above
     out0_mode: TTLOut0Mode = TTLOut0Mode.PULSE_AFTER_MOVING
     out_polarity_inverted: bool = False  # TTL F=-1 if True, else F=1
-    ring_mode: RingBufferMode = RingBufferMode.TTL
+    ring_mode: RingBufferMode = RingBufferMode.TTL_TRIGGERED
     clear_buffer_first: bool = True  # RM X=0
     aux_state: int = 0  # Z
     aux_mask: int = 0  # R

@@ -39,9 +39,9 @@ class TigerTTLStepper(TTLStepper):
         )
         out0_mode = TTLOut0Mode.PULSE_AFTER_MOVING if cfg.pulse_after_move else TTLOut0Mode.ALWAYS_LOW
         ring_mode_map = {
-            TriggerMode.TTL: RingBufferMode.TTL,
-            TriggerMode.ONE_SHOT: RingBufferMode.ONE_SHOT,
-            TriggerMode.REPEATING: RingBufferMode.REPEATING,
+            TriggerMode.TTL: RingBufferMode.TTL_TRIGGERED,
+            TriggerMode.ONE_SHOT: RingBufferMode.ONE_SHOT_AUTOPLAY,
+            TriggerMode.REPEATING: RingBufferMode.REPEAT_AUTOPLAY,
         }
         ring_mode = ring_mode_map[cfg.trigger_mode]
 
