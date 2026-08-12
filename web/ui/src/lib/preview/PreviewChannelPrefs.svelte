@@ -117,10 +117,10 @@
 
       <Popover.Portal>
         <Popover.Content
-          class="z-50 flex flex-col-reverse rounded-t border border-border bg-surface shadow-xl outline-none"
+          class="z-50 flex flex-col-reverse rounded border border-border bg-surface shadow-xl outline-none"
           style="width: {columnWidth}px;"
           side="top"
-          sideOffset={0}
+          sideOffset={2}
           align="center"
           onOpenAutoFocus={focusSearch}
         >

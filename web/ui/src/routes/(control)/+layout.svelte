@@ -1,28 +1,26 @@
 <script lang="ts">
+  import { Popover } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
   import type { Component } from 'svelte';
   import { fade } from 'svelte/transition';
 
-  import { PanelRight } from '$lib/icons';
-  import { Button } from '$lib/kit';
+  import { Info } from '$lib/icons';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import { getVoxelApp, type PreviewMode } from '$lib/model';
   import PreviewCanvas from '$lib/preview/PreviewCanvas.svelte';
-  import PreviewSidebarControls from '$lib/preview/PreviewSidebarControls.svelte';
+  import PreviewFrameInfo from '$lib/preview/PreviewFrameInfo.svelte';
   import { getPreviewContext } from '$lib/preview/session.svelte';
-  import { provideStageScene, StageLayersSidebar, StageView, type StageViewport } from '$lib/stage';
-  import { cn, createPaneSize, pref } from '$lib/utils';
+  import { StageView, type StageViewport } from '$lib/stage';
+  import { cn, createPaneSize } from '$lib/utils';
 
   const { children } = $props();
 
   const app = getVoxelApp();
   const previews = getPreviewContext();
   const preview = $derived(previews.current);
-  provideStageScene();
 
   let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
-  const stageLayersCollapsed = pref('stage:sidebar-collapsed', false);
 
   type Segment = { key: string; label: string; icon?: Component; active: boolean; select: () => void };
 
@@ -111,18 +109,31 @@
             <div class="flex h-full flex-col bg-canvas">
               <div class="relative flex min-h-0 flex-1">
                 <div class="relative min-w-0 flex-1 overflow-hidden" data-fly-origin>
-                  <div class="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2">
+                  <div class="pointer-events-none absolute top-3 left-3 z-20 flex items-center gap-2">
                     <div class="pointer-events-auto">{@render segmented(modeSegments)}</div>
-                    <Button
-                      variant="secondary"
-                      size="icon-lg"
-                      aria-expanded={!stageLayersCollapsed.get()}
-                      title={stageLayersCollapsed.get() ? 'Show layers' : 'Hide layers'}
-                      class="pointer-events-auto rounded-md border-border bg-elevated shadow-sm"
-                      onclick={() => stageLayersCollapsed.set(!stageLayersCollapsed.get())}
-                    >
-                      <PanelRight width="20" height="20" class="text-fg/75" />
-                    </Button>
+                    {#if preview}
+                      <div class="pointer-events-auto">
+                        <Popover.Root>
+                          <Popover.Trigger
+                            class="flex h-ui-md w-ui-md cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:text-fg"
+                            aria-label="Frame info"
+                            title="Frame info"
+                          >
+                            <Info width="14" height="14" />
+                          </Popover.Trigger>
+                          <Popover.Portal>
+                            <Popover.Content
+                              class="z-50 min-w-48 rounded border border-border bg-surface p-3 shadow-xl outline-none"
+                              side="bottom"
+                              align="start"
+                              sideOffset={6}
+                            >
+                              <PreviewFrameInfo previewer={preview} />
+                            </Popover.Content>
+                          </Popover.Portal>
+                        </Popover.Root>
+                      </div>
+                    {/if}
                   </div>
                   {#if app.viewMode.get() === 'stage'}
                     <div class="absolute inset-0" transition:fade={{ duration: 120 }}>
@@ -134,26 +145,6 @@
                     </div>
                   {/if}
                 </div>
-                <aside
-                  class="shrink-0 overflow-hidden bg-surface transition-[width] duration-200 {stageLayersCollapsed.get()
-                    ? 'w-0'
-                    : 'w-64 border-l border-border'}"
-                >
-                  <div
-                    class="flex h-full min-h-0 w-full flex-col transition-opacity {stageLayersCollapsed.get()
-                      ? 'invisible opacity-0'
-                      : 'opacity-100'}"
-                  >
-                    <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
-                      <StageLayersSidebar />
-                    </div>
-                    {#if preview}
-                      <div class="max-h-[70%] shrink-0 overflow-y-auto border-t border-border">
-                        <PreviewSidebarControls previewer={preview} />
-                      </div>
-                    {/if}
-                  </div>
-                </aside>
               </div>
             </div>
           </Pane>

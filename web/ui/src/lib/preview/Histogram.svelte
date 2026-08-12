@@ -367,21 +367,23 @@
     </div>
   {/if}
 
-  <div class="floating-row relative">
-    {#if hasValidData}
-      {@render floatingLabel(labelPositions.minLeft, minIntensity, 'min')}
-      {@render floatingLabel(labelPositions.maxLeft, maxIntensity, 'max')}
-    {:else}
-      <div class="flex h-full items-center justify-center text-[10px] text-fg-faint">No histogram data</div>
-    {/if}
+  <div class="flex items-center justify-between">
+    <input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
+
+    <div class="mx-2 min-w-0 flex-1">
+      {@render centerControl(columnWidth)}
+    </div>
+
+    <input
+      type="text"
+      class="hist-input hist-input-right"
+      value={windowMax}
+      onchange={(e) => commitWindowInput(e, 'max')}
+    />
   </div>
 
   <ContextMenu.Root>
-    <ContextMenu.Trigger
-      class="relative border-b border-b-input bg-transparent"
-      bind:ref={histContainerEl}
-      ondblclick={autoLevels}
-    >
+    <ContextMenu.Trigger class="relative bg-transparent" bind:ref={histContainerEl} ondblclick={autoLevels}>
       {@render histSvg()}
     </ContextMenu.Trigger>
     <ContextMenu.Content class="min-w-36" side="top" align="start">
@@ -405,19 +407,13 @@
     </ContextMenu.Content>
   </ContextMenu.Root>
 
-  <div class="flex -translate-y-px items-center justify-between">
-    <input type="text" class="hist-input" value={windowMin} onchange={(e) => commitWindowInput(e, 'min')} />
-
-    <div class="mx-2 min-w-0 flex-1">
-      {@render centerControl(columnWidth)}
-    </div>
-
-    <input
-      type="text"
-      class="hist-input hist-input-right"
-      value={windowMax}
-      onchange={(e) => commitWindowInput(e, 'max')}
-    />
+  <div class="floating-row relative">
+    {#if hasValidData}
+      {@render floatingLabel(labelPositions.minLeft, minIntensity, 'min')}
+      {@render floatingLabel(labelPositions.maxLeft, maxIntensity, 'max')}
+    {:else}
+      <div class="flex h-full items-center justify-center text-[10px] text-fg-faint">No histogram data</div>
+    {/if}
   </div>
 </div>
 
@@ -465,6 +461,6 @@
 
   .floating-input {
     position: absolute;
-    bottom: 0;
+    top: 0;
   }
 </style>

@@ -4,6 +4,7 @@
 
   import { clampTopLeft } from '$lib/utils';
 
+  import PreviewChannels from './PreviewChannels.svelte';
   import PreviewNavigationControls from './PreviewNavigationControls.svelte';
   import { channelBoundingBox } from './render';
   import { type PreviewSession, wheelZoomFactor } from './session.svelte';
@@ -184,8 +185,12 @@
     </div>
   {/if}
 
-  <div class="pointer-events-none absolute bottom-4 left-4 z-10 w-58">
+  <div class="pointer-events-none absolute top-3 right-3 z-10 w-58">
     <PreviewNavigationControls {previewer} />
+  </div>
+
+  <div class="pointer-events-none absolute bottom-4 left-4 z-10 w-62">
+    <PreviewChannels {previewer} />
   </div>
 
   <!-- Isolated scale bar. -->
