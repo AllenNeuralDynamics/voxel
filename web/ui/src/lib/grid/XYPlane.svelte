@@ -97,7 +97,10 @@
     return activeProfileId ? (tasks[taskId]?.profile_ids.includes(activeProfileId) ?? false) : false;
   }
 
-  /** Whether the active profile already has a task placed at (x, y). */
+  /** Auto-grid cells are stencil-relative; tasks and stage positions are absolute stage µm. */
+  const gridToAbs = (t: GridTile): { x: number; y: number } => ({ x: sxLower + t.x, y: syLower + t.y });
+
+  /** Whether the active profile already has a task placed at absolute (x, y). */
   function taskAt(x: number, y: number): boolean {
     return activeTiles.some((t) => Math.abs(t.x - x) < 1 && Math.abs(t.y - y) < 1);
   }
@@ -204,7 +207,7 @@
 
   function moveTo(x: number, y: number) {
     if (isXYMoving || !sx || !sy) return;
-    toastError(instrument.stage.moveTo({ x: sxLower + x, y: syLower + y }));
+    toastError(instrument.stage.moveTo({ x, y }));
   }
 
   function addTasksAt(positions: Array<{ x: number; y: number }>) {
@@ -284,8 +287,8 @@
 
     // Move here
     const moveAction = () => {
-      if (target.kind === 'empty') moveTo(target.x - sxLower, target.y - syLower);
-      else moveTo(target.tile.x, target.tile.y);
+      const p = target.kind === 'tile' ? gridToAbs(target.tile) : target.kind === 'task' ? target.tile : target;
+      moveTo(p.x, p.y);
     };
     items.push({ type: 'action', label: 'Move here', action: moveAction, disabled: isXYMoving });
 
@@ -319,10 +322,7 @@
 
     // Align grid (empty + task targets — tiles ARE the grid)
     if (target.kind !== 'tile') {
-      const pos =
-        target.kind === 'empty'
-          ? { x: target.x, y: target.y }
-          : { x: sxLower + target.tile.x, y: syLower + target.tile.y };
+      const pos = target.kind === 'empty' ? { x: target.x, y: target.y } : { x: target.tile.x, y: target.tile.y };
       items.push({
         type: 'submenu',
         label: 'Align grid',
@@ -336,7 +336,7 @@
 
     // Copy / paste
     if (target.kind === 'tile' || target.kind === 'task') {
-      const { x, y } = target.tile;
+      const { x, y } = target.kind === 'tile' ? gridToAbs(target.tile) : target.tile;
       items.push({ type: 'separator' });
       items.push({ type: 'action', label: 'Copy X', action: () => (clipboard = { ...clipboard, x }) });
       items.push({ type: 'action', label: 'Copy Y', action: () => (clipboard = { ...clipboard, y }) });
@@ -387,10 +387,10 @@
       items.push({
         type: 'action',
         label: 'Add task',
-        action: () => addTasksAt([{ x: target.x - sxLower, y: target.y - syLower }])
+        action: () => addTasksAt([{ x: target.x, y: target.y }])
       });
     } else if (target.kind === 'tile') {
-      const empty = selectedTiles.filter((t) => !taskAt(t.x, t.y));
+      const empty = selectedTiles.map(gridToAbs).filter((t) => !taskAt(t.x, t.y));
       if (empty.length > 0) {
         items.push({ type: 'separator' });
         items.push({
@@ -477,8 +477,8 @@
         {@const active = isActive(tile.task_id)}
         {@const selected = taskSelection.has(tile.task_id)}
         <rect
-          x={ox * tile.x - tile.w / 2}
-          y={oy * tile.y - tile.h / 2}
+          x={ox * (tile.x - sxLower) - tile.w / 2}
+          y={oy * (tile.y - syLower) - tile.h / 2}
           width={tile.w}
           height={tile.h}
           class="nss outline-none"
@@ -504,7 +504,7 @@
 
 {#snippet pathLayer()}
   {#if layers.path && taskTiles.length > 1}
-    {@const points = taskTiles.map((t) => ({ x: ox * t.x, y: oy * t.y }))}
+    {@const points = taskTiles.map((t) => ({ x: ox * (t.x - sxLower), y: oy * (t.y - syLower) }))}
     <g class="pointer-events-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
       <polyline
         class="nss fill-none opacity-60"

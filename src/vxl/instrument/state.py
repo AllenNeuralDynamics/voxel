@@ -326,6 +326,8 @@ class StencilPatch(Patch):
 
 
 class ZStack(SchemaModel):
+    """A stage position and z-range. All coordinates are absolute stage positions in micrometers (µm)."""
+
     x: float
     y: float
     start: float

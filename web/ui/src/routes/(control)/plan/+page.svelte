@@ -136,12 +136,10 @@
   const setField = (row: TaskRow, field: 'x' | 'y' | 'start' | 'end', value: number) =>
     applyField(row, field, value * unit.scale);
 
-  // Current stage value for a field: X/Y are relative to the axis lower limit; Z start/end are absolute stage Z.
   function stageValue(field: 'x' | 'y' | 'start' | 'end'): number | undefined {
     const s = instrument?.stage;
     if (field === 'start' || field === 'end') return s?.z?.position?.value;
-    const axis = field === 'x' ? s?.x : s?.y;
-    return axis ? (axis.position?.value ?? 0) - (axis.lowerLimit?.value ?? 0) : undefined;
+    return (field === 'x' ? s?.x : s?.y)?.position?.value;
   }
 
   // Match-stage from the column headers: applies the current stage value to every selected task.
