@@ -122,6 +122,10 @@
   const fovX = $derived(sx ? sxPos - sxLower : 0);
   const fovY = $derived(sy ? syPos - syLower : 0);
 
+  const orient = $derived(instrument.stage.orientation);
+  const ox = $derived(orient.x); // ±1 for X, multiplied onto all SVG X coords
+  const oy = $derived(-orient.y); // ±1 for Y; minus because SVG is Y-down, world is Y-up
+
   // ── ViewBox + canvas sizing ──────────────────────────────────────────
 
   const tileHalfW = $derived(Math.max(fovW / 2, ...taskTiles.map((t) => t.w / 2)));
@@ -130,7 +134,9 @@
   const marginY = $derived(Number.isFinite(tileHalfH) ? tileHalfH : fovH / 2);
   const viewBoxWidth = $derived(stageWidth + marginX * 2);
   const viewBoxHeight = $derived(stageHeight + marginY * 2);
-  const viewBoxStr = $derived(`${-marginX} ${-marginY} ${viewBoxWidth} ${viewBoxHeight}`);
+  const viewBoxMinX = $derived(Math.min(0, ox * stageWidth) - marginX);
+  const viewBoxMinY = $derived(Math.min(0, oy * stageHeight) - marginY);
+  const viewBoxStr = $derived(`${viewBoxMinX} ${viewBoxMinY} ${viewBoxWidth} ${viewBoxHeight}`);
 
   let containerRef = $state<HTMLDivElement | null>(null);
   let canvasWidth = $state(400);
@@ -266,7 +272,7 @@
     if (e.target !== svgRef) return;
     const pt = svgPoint(e);
     if (!pt || !sx || !sy) return;
-    contextTarget = { kind: 'empty', x: sxLower + pt.x, y: syLower + pt.y };
+    contextTarget = { kind: 'empty', x: sxLower + pt.x * ox, y: syLower + pt.y * oy };
   }
 
   const menuItems = $derived.by<MenuItem[]>(() => {
@@ -415,19 +421,19 @@
   <g class="pointer-events-none opacity-75">
     <line
       class="nss"
-      x1={-marginX - fovExtension}
-      y1={fovY}
-      x2={-marginX + viewBoxWidth}
-      y2={fovY}
+      x1={viewBoxMinX - fovExtension}
+      y1={oy * fovY}
+      x2={viewBoxMinX + viewBoxWidth}
+      y2={oy * fovY}
       stroke-width="1"
       stroke={syMoving ? 'var(--color-danger)' : 'var(--color-success)'}
     />
     <line
       class="nss"
-      x1={fovX}
-      y1={-marginY - fovExtension}
-      x2={fovX}
-      y2={-marginY + viewBoxHeight}
+      x1={ox * fovX}
+      y1={viewBoxMinY - fovExtension}
+      x2={ox * fovX}
+      y2={viewBoxMinY + viewBoxHeight}
       stroke-width="1"
       stroke={sxMoving ? 'var(--color-danger)' : 'var(--color-success)'}
     />
@@ -443,8 +449,8 @@
       {#each sorted as tile (`${tile.row}_${tile.col}`)}
         {@const selected = isTileSelected(tile.row, tile.col)}
         <rect
-          x={tile.x - tile.w / 2}
-          y={tile.y - tile.h / 2}
+          x={ox * tile.x - tile.w / 2}
+          y={oy * tile.y - tile.h / 2}
           width={tile.w}
           height={tile.h}
           class="nss fill-transparent stroke-1 outline-none {selected ? 'stroke-fg/50' : 'stroke-border'}"
@@ -471,8 +477,8 @@
         {@const active = isActive(tile.task_id)}
         {@const selected = taskSelection.has(tile.task_id)}
         <rect
-          x={tile.x - tile.w / 2}
-          y={tile.y - tile.h / 2}
+          x={ox * tile.x - tile.w / 2}
+          y={oy * tile.y - tile.h / 2}
           width={tile.w}
           height={tile.h}
           class="nss outline-none"
@@ -498,7 +504,7 @@
 
 {#snippet pathLayer()}
   {#if layers.path && taskTiles.length > 1}
-    {@const points = taskTiles.map((t) => ({ x: t.x, y: t.y }))}
+    {@const points = taskTiles.map((t) => ({ x: ox * t.x, y: oy * t.y }))}
     <g class="pointer-events-none text-fg-muted" stroke="currentColor" stroke-linecap="square">
       <polyline
         class="nss fill-none opacity-60"
@@ -558,7 +564,7 @@
     />
     <input
       type="range"
-      class="stage-slider vertical-ltr absolute z-10"
+      class="stage-slider {oy < 0 ? 'vertical-rtl' : 'vertical-ltr'} absolute z-10"
       style:--thumb-length="{XY_SLIDER_WIDTH}px"
       style={ySliderStyle}
       min={syLower}
@@ -644,6 +650,11 @@
     &.vertical-ltr {
       writing-mode: vertical-rl;
       direction: ltr;
+      --_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
+    }
+    &.vertical-rtl {
+      writing-mode: vertical-rl;
+      direction: rtl;
       --_track-bg: linear-gradient(var(--_track-color), var(--_track-color)) center / var(--_track-width) 100% no-repeat;
     }
   }
