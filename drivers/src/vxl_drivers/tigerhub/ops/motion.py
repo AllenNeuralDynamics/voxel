@@ -1,7 +1,7 @@
 from collections.abc import Mapping, Sequence
 
 from vxl_drivers.tigerhub.model import Reply
-from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
+from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError, ASINoReplyError
 from vxl_drivers.tigerhub.protocol.linefmt import _ax, _fmt_axes, _fmt_q_axes, _line
 
 
@@ -14,6 +14,9 @@ class WhereOp:
     def decode(r: Reply, q: Sequence[str]) -> dict[str, float]:
         if r.kind == "ERR":
             raise ASIDecodeError("WHERE", r)
+        if r.kind == "EMPTY":
+            # Returning {} here would silently leave the caller's cached position stale.
+            raise ASINoReplyError("WHERE", r)
         req = tuple(_ax(a) for a in q)
         if r.kv:
             req_set = set(req)
@@ -91,6 +94,8 @@ class IsAxisBusyOp:
 
     @staticmethod
     def decode(r: Reply, q: Sequence[str]) -> dict[str, bool]:
+        if r.kind == "EMPTY":
+            raise ASINoReplyError("RDSTAT", r)
         s = (r.text or "").strip()
         if not s or any(ch not in "BN" for ch in s):
             raise ASIDecodeError("RDSTAT", r)

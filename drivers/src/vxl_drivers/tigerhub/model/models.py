@@ -10,7 +10,7 @@ class ASIMode(Enum):
 
 @dataclass
 class Reply:
-    kind: str  # "ACK" | "DATA" | "ERR"
+    kind: str  # "ACK" | "DATA" | "ERR" | "EMPTY" (no reply received)
     kv: dict[str, str] | None = None
     text: str | None = None
     err: str | None = None

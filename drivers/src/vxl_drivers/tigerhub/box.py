@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -99,6 +100,8 @@ class ScanSession:
 
 # TODO: Addd a reset op
 
+logger = logging.getLogger("tiger_box")
+
 
 class TigerBox:
     TIMEOUT_S: float = 180.0  # needs to be super long so it doesn't time out when moving long distances
@@ -120,10 +123,19 @@ class TigerBox:
     # ---------- helpers ----------
 
     def _t_once(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
-        """Send a command and read+parse the reply."""
+        """Send a command and read+parse the reply.
+
+        Stale input is dropped before writing. The transport lock means no transaction is in flight
+        here, so anything still queued belongs to a transaction that already returned — reading it as
+        this command's reply would offset every subsequent transaction by one.
+        """
         with self.t.transaction() as port:
+            if stale := port.in_waiting:
+                logger.warning("Discarding %d stale byte(s) before %r", stale, payload)
+                port.reset_input_buffer()
             port.write(payload)
             raw = port.readline() or b""
+        logger.debug("%r -> %r", payload, raw)
         reply, mode = asi_parse(raw, requested_axes=requested_axes)
         self._last_mode = mode
         return reply

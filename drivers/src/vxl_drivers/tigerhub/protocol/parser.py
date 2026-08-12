@@ -28,8 +28,11 @@ def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Repl
             return Reply("DATA", kv=kv), ASIMode.MS2000
         return Reply("DATA", text=tail), ASIMode.MS2000
 
+    # An empty read is NOT an acknowledgement — it means the reply never arrived (or arrived late and
+    # was consumed by a later transaction). Kept distinct from "ACK" so ops that need data can reject
+    # it, while ops that only acknowledge keep treating it as success.
     if s == "":
-        return Reply("ACK"), ASIMode.TIGER
+        return Reply("EMPTY"), ASIMode.TIGER
 
     # Parse TIGER mode response
     kv = {}
