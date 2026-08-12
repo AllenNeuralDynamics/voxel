@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +17,8 @@ from starlette.types import Receive, Scope, Send
 
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.station import InstrumentTemplates, Station
+from vxl.system import StationConfig, load_voxel_env
+from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
 from .realtime import StationRealtime
 from .router import api_router
@@ -99,4 +102,33 @@ def create_app(
     return app
 
 
-__all__ = ["create_app"]
+def serve(*, host: str, port: int = 8000, debug: bool = False) -> None:
+    """Run the Station-backed Voxel web application as the sole hardware owner."""
+    load_voxel_env()
+    console_level = logging.DEBUG if debug else logging.INFO
+    configure_logging(level=console_level, fmt="%(message)s", datefmt="[%X]")
+    root_logger = logging.getLogger()
+    if debug:
+        root_logger.setLevel(logging.DEBUG)
+    else:
+        root_logger.setLevel(logging.INFO)
+        for name in ("vxl", "vxlib", "rigup", "vxl_web", "vxl_drivers"):
+            logging.getLogger(name).setLevel(logging.DEBUG)
+    for handler in root_logger.handlers:
+        handler.setLevel(console_level)
+
+    log.info("Starting Voxel...")
+    log.info("Web UI: http://localhost:%d", port)
+    if (local_ip := get_local_ip()) != "127.0.0.1":
+        log.info("      or http://%s:%d", local_ip, port)
+    uvicorn.run(
+        create_app(Station(StationConfig.load())),
+        host=host,
+        port=port,
+        log_config=get_uvicorn_log_config(),
+        loop="auto",
+        ws_ping_interval=None,
+    )
+
+
+__all__ = ["create_app", "serve"]

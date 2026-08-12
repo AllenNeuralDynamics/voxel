@@ -29,7 +29,7 @@ from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
 from vxl.preview.protocol import STATION_DELIVERY_FRAMING_VERSION
 from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
-from vxl.system import StationInfo
+from vxl.system import Remote, StationInfo
 from vxlib import ColormapGroup, get_colormap_catalog
 
 station_router = APIRouter(prefix="/stations", tags=["station"])
@@ -82,6 +82,7 @@ class StationDiscovery(BaseModel):
     station: StationInfo
     instruments: dict[str, InstrumentInspection]
     templates: dict[str, InstrumentConfig]
+    remotes: dict[str, Remote]
     colormaps: list[ColormapGroup]
     metadata_schemas: dict[str, str]
     realtime: RealtimeDiscovery
@@ -152,6 +153,7 @@ async def get_discovery(
         station=station.config.info,
         instruments=station.discover_instruments(),
         templates=templates.discover(),
+        remotes=station.config.remotes,
         colormaps=get_colormap_catalog(),
         metadata_schemas=discover_metadata_schema(),
         realtime=RealtimeDiscovery(

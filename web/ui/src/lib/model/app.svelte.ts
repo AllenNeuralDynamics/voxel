@@ -5,8 +5,9 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { browser } from '$app/environment';
 import { type DeviceRole, type DeviceRoleKind, sortByRoleOrder } from '$lib/model/role';
 import { pref, sanitizeString } from '$lib/utils';
+import { decodeMsgpack } from '$lib/utils/msgpack';
 
-import { Client, type ClientOptions, errorMessage, type Unsub } from './client.svelte';
+import { Client, type ClientOptions, errorMessage, resolveWebSocketUrl, type Unsub } from './client.svelte';
 import {
   AxisHandle,
   CameraHandle,
@@ -22,22 +23,23 @@ import type {
   AcquisitionManifest,
   AcquisitionRequest,
   ActiveAcquisitionState,
-  AppDiscovery,
-  AppStatus,
   ChannelPatch,
+  DeviceState,
   HALConfig,
   InstrumentDefaults,
   InstrumentStatus,
-  InstrumentUpdate,
-  InstrumentView,
   JsonSchema,
   LogEntry,
   OpticalRoutingPolicy,
   ProfilePatch,
   Remote,
   SensorROI,
+  SessionState,
   Signals,
   StageOrientation,
+  StationDiscovery,
+  StationFeedView,
+  StationInfo,
   StencilPatch,
   TaskPatch,
   TileOrder,
@@ -434,33 +436,36 @@ export class Instrument {
   metadataSchema = $state.raw<JsonSchema | null>(null);
 
   readonly #client: Client;
-  #unsubs: Unsub[] = [];
+  readonly #base: string;
+  readonly #stationBase: string;
+  readonly #onAcquisitionCreated: (manifest: AcquisitionManifest) => void;
   #schemaCls: string | null = null; // metadata_cls the schema was last fetched for
-  #streamId: string;
-  #seq: number;
-  #bufferedUpdates: InstrumentUpdate[] | null = null;
-  #rehydratePromise: Promise<void> | null = null;
 
   constructor(
     client: Client,
     readonly id: string,
-    view: InstrumentView,
-    readonly metadataSchemas: Record<string, string>
+    readonly sessionId: string,
+    readonly stationId: string,
+    session: SessionState,
+    readonly metadataSchemas: Record<string, string>,
+    onAcquisitionCreated: (manifest: AcquisitionManifest) => void
   ) {
     this.#client = client;
-    this.#streamId = view.stream_id;
-    this.#seq = view.seq;
-    this.status = view.status;
-    this.acquisition = view.active_acquisition;
-    this.hal = view.hardware;
-    this.default = view.defaults;
-    for (const [id, snapshot] of Object.entries(view.devices)) {
+    this.#stationBase = `/stations/${encodeURIComponent(stationId)}`;
+    this.#base = `${this.#stationBase}/sessions/${encodeURIComponent(sessionId)}/instrument`;
+    this.#onAcquisitionCreated = onAcquisitionCreated;
+    this.status = this.#statusFrom(session);
+    this.acquisition = session.acquisition;
+    this.hal = session.hardware;
+    this.default = session.defaults;
+    for (const [deviceId, device] of Object.entries(session.devices)) {
+      const base = `${this.#base}/devices/${encodeURIComponent(deviceId)}`;
       this.devices.set(
-        id,
-        createDevice(client, snapshot, () => this.mode === 'capture')
+        deviceId,
+        createDevice(client, base, this.#snapshotFrom(deviceId, device), () => this.mode === 'capture')
       );
+      this.devices.get(deviceId)?.replaceProperties(this.#resultsFrom(device));
     }
-    for (const [id, properties] of Object.entries(view.device_props)) this.devices.get(id)?.ingest(properties);
     const sx = this.#stageAxis('x');
     const sy = this.#stageAxis('y');
     const sz = this.#stageAxis('z');
@@ -469,129 +474,60 @@ export class Instrument {
     void this.#syncMetadataSchema();
   }
 
-  /** Subscribe first, hydrate one complete view, then replay newer ordered updates. */
-  static async open(client: Client, instrumentId: string, discovery: AppDiscovery): Promise<Instrument> {
-    const buffered: InstrumentUpdate[] = [];
-    let instrument: Instrument | null = null;
-    const unsubscribe = client.on('instrument.feed.updates', (update) => {
-      if (instrument === null) buffered.push(update);
-      else instrument.#receiveUpdate(update);
-    });
-    try {
-      const view = await client.get<InstrumentView>('/instrument');
-      instrument = new Instrument(client, instrumentId, view, discovery.metadata_schemas);
-      instrument.#unsubs.push(unsubscribe);
-      instrument.#bufferedUpdates = buffered;
-      await instrument.#drainBufferedUpdates();
-      return instrument;
-    } catch (error) {
-      if (instrument === null) unsubscribe();
-      else instrument.dispose();
-      throw error;
-    }
-  }
-
-  /** Re-fetch one complete view after reconnect or a detected cursor discontinuity. */
-  async rehydrate(): Promise<void> {
-    if (this.#rehydratePromise !== null) return this.#rehydratePromise;
-    this.#bufferedUpdates ??= [];
-    const promise = this.#rehydrate();
-    this.#rehydratePromise = promise;
-    try {
-      await promise;
-    } finally {
-      if (this.#rehydratePromise === promise) this.#rehydratePromise = null;
-    }
-  }
-
-  async #rehydrate(): Promise<void> {
-    try {
-      this.#adoptView(await this.#client.get<InstrumentView>('/instrument'));
-      await this.#drainBufferedUpdates();
-    } catch (error) {
-      this.#bufferedUpdates = null;
-      throw error;
-    }
-  }
-
-  async #drainBufferedUpdates(): Promise<void> {
-    while (this.#bufferedUpdates !== null) {
-      const pending = this.#bufferedUpdates.splice(0);
-      let gap = false;
-      for (const update of pending) {
-        // A complete view is authoritative for its stream; mismatched buffered updates are stale.
-        if (update.stream_id !== this.#streamId || update.seq <= this.#seq) continue;
-        if (update.seq !== this.#seq + 1) {
-          gap = true;
-          break;
-        }
-        this.#applyUpdate(update);
-      }
-      if (gap) {
-        this.#adoptView(await this.#client.get<InstrumentView>('/instrument'));
-        continue;
-      }
-      if (this.#bufferedUpdates.length === 0) {
-        this.#bufferedUpdates = null;
-        return;
-      }
-    }
-  }
-
-  #receiveUpdate(update: InstrumentUpdate): void {
-    if (this.#bufferedUpdates !== null) {
-      this.#bufferedUpdates.push(update);
-      return;
-    }
-    if (update.stream_id !== this.#streamId || update.seq > this.#seq + 1) {
-      this.#bufferedUpdates = [update];
-      void this.rehydrate().catch((error: unknown) => console.error('[Instrument] feed resync failed:', error));
-      return;
-    }
-    if (update.seq <= this.#seq) return;
-    this.#applyUpdate(update);
-  }
-
-  #applyUpdate(update: InstrumentUpdate): void {
-    this.#seq = update.seq;
-    if (update.status !== undefined) {
-      this.status = update.status;
-      void this.#syncMetadataSchema();
-    }
-    if (update.defaults !== undefined) this.default = update.defaults;
-    if (update.device_props !== undefined) {
-      for (const [id, properties] of Object.entries(update.device_props)) this.devices.get(id)?.ingest(properties);
-    }
-    if (Object.hasOwn(update, 'active_acquisition')) this.acquisition = update.active_acquisition ?? null;
-  }
-
-  #adoptView(view: InstrumentView): void {
-    this.#streamId = view.stream_id;
-    this.#seq = view.seq;
-    this.status = view.status;
-    this.acquisition = view.active_acquisition;
-    this.hal = view.hardware;
-    this.default = view.defaults;
-
-    for (const id of this.devices.keys()) if (!Object.hasOwn(view.devices, id)) this.devices.delete(id);
-    for (const [id, snapshot] of Object.entries(view.devices)) {
+  /** Replace every runtime field from one authoritative complete Station session view. */
+  applySession(session: SessionState): void {
+    if (session.info.id !== this.sessionId) return;
+    this.status = this.#statusFrom(session);
+    this.acquisition = session.acquisition;
+    this.hal = session.hardware;
+    this.default = session.defaults;
+    for (const id of this.devices.keys()) if (!Object.hasOwn(session.devices, id)) this.devices.delete(id);
+    for (const [id, state] of Object.entries(session.devices)) {
       const device = this.devices.get(id);
+      const snapshot = this.#snapshotFrom(id, state);
       if (device) device.applySnapshot(snapshot);
       else
         this.devices.set(
           id,
-          createDevice(this.#client, snapshot, () => this.mode === 'capture')
+          createDevice(
+            this.#client,
+            `${this.#base}/devices/${encodeURIComponent(id)}`,
+            snapshot,
+            () => this.mode === 'capture'
+          )
         );
+      this.devices.get(id)?.replaceProperties(this.#resultsFrom(state));
     }
-    for (const [id, device] of this.devices) device.replaceProperties(view.device_props[id]);
     void this.#syncMetadataSchema();
   }
 
-  // Bench edits apply server-side; the resulting full status section arrives on instrument.feed.updates —
+  #statusFrom(session: SessionState): InstrumentStatus {
+    return {
+      mode: session.info.mode,
+      active_profile_id: session.info.active_profile_id,
+      preview_revision: session.info.preview_revision,
+      fov: session.info.fov,
+      routing_targets: session.info.routing_targets,
+      state: session.bench,
+      task_tiles: session.task_tiles
+    };
+  }
+
+  #snapshotFrom(id: string, state: DeviceState): import('./types').DeviceSnapshot {
+    return { id, connected: true, interface: state.interface, error: null };
+  }
+
+  #resultsFrom(state: DeviceState): import('./types').PropResults {
+    return {
+      results: Object.fromEntries(Object.entries(state.props).map(([name, value]) => [name, { ok: true, value }]))
+    };
+  }
+
+  // Bench edits apply server-side; the resulting complete session arrives on the Station feed —
   // no local mutation here, so derived reads converge automatically. Callers handle thrown ApiErrors.
 
   setActiveProfile(profileId: string): Promise<{ active: string }> {
-    return this.#client.post<{ active: string }>('/instrument/profile/active', { profile_id: profileId });
+    return this.#client.post<{ active: string }>(`${this.#base}/profile/active`, { profile_id: profileId });
   }
 
   /** Shift the stencil mosaic offset so `edge` aligns to a stage position (default: current). µm. */
@@ -606,59 +542,59 @@ export class Instrument {
   }
 
   updateProfile(patch: ProfilePatch): Promise<void> {
-    return this.#client.patch('/instrument/profile', patch);
+    return this.#client.patch(`${this.#base}/profile`, patch);
   }
 
   updateSignals(generatorUid: string, signals: Signals): Promise<void> {
-    return this.#client.patch(`/instrument/profile/sync/${encodeURIComponent(generatorUid)}`, signals);
+    return this.#client.patch(`${this.#base}/profile/sync/${encodeURIComponent(generatorUid)}`, signals);
   }
 
   applySettings(): Promise<void> {
-    return this.#client.post('/instrument/settings/apply');
+    return this.#client.post(`${this.#base}/settings/apply`);
   }
 
   saveSettings(): Promise<void> {
-    return this.#client.post('/instrument/settings/save');
+    return this.#client.post(`${this.#base}/settings/save`);
   }
 
   applyOpticalRouting(): Promise<void> {
-    return this.#client.post('/instrument/optical-routing/apply');
+    return this.#client.post(`${this.#base}/optical-routing/apply`);
   }
 
   updateOpticalRoutingPolicy(dimension: string, policy: OpticalRoutingPolicy): Promise<void> {
-    return this.#client.put(`/instrument/optical-routing/${encodeURIComponent(dimension)}/policy`, policy);
+    return this.#client.put(`${this.#base}/optical-routing/${encodeURIComponent(dimension)}/policy`, policy);
   }
 
   overrideOpticalRoute(dimension: string, route: string): Promise<void> {
-    return this.#client.post(`/instrument/optical-routing/${encodeURIComponent(dimension)}/override`, { route });
+    return this.#client.post(`${this.#base}/optical-routing/${encodeURIComponent(dimension)}/override`, { route });
   }
 
   saveAsDefault(): Promise<void> {
-    return this.#client.post('/instrument/default/save', {});
+    return this.#client.post(`${this.#base}/default/save`, {});
   }
 
   restoreDefault(): Promise<void> {
-    return this.#client.post('/instrument/default/restore', {});
+    return this.#client.post(`${this.#base}/default/restore`, {});
   }
 
   updateChannel(channelId: string, patch: ChannelPatch): Promise<void> {
-    return this.#client.patch(`/instrument/channels/${encodeURIComponent(channelId)}`, patch);
+    return this.#client.patch(`${this.#base}/channels/${encodeURIComponent(channelId)}`, patch);
   }
 
   updateOutput(patch: WriterPatch): Promise<void> {
-    return this.#client.patch('/instrument/output', patch);
+    return this.#client.patch(`${this.#base}/output`, patch);
   }
 
   updateStencil(patch: StencilPatch): Promise<void> {
-    return this.#client.patch('/instrument/stencil', patch);
+    return this.#client.patch(`${this.#base}/stencil`, patch);
   }
 
   updateMetadata(fields: Record<string, unknown>): Promise<void> {
-    return this.#client.patch('/instrument/metadata', fields);
+    return this.#client.patch(`${this.#base}/metadata`, fields);
   }
 
   setMetadataSchema(target: string): Promise<void> {
-    return this.#client.put('/instrument/metadata/schema', { target });
+    return this.#client.put(`${this.#base}/metadata/schema`, { target });
   }
 
   /** The discovered metadata schema registry (display name → target identifier). */
@@ -667,46 +603,37 @@ export class Instrument {
   }
 
   setTraversal(order: TileOrder): Promise<void> {
-    return this.#client.put('/instrument/traversal', { order });
+    return this.#client.put(`${this.#base}/traversal`, { order });
   }
 
   addTasks(xy: [number, number][], profileIds?: string[]): Promise<void> {
-    return this.#client.post('/instrument/tasks', { xy, profile_ids: profileIds ?? null });
+    return this.#client.post(`${this.#base}/tasks`, { xy, profile_ids: profileIds ?? null });
   }
 
   /** Apply a per-task patch to one or more tasks in a single request. */
   updateTasks(patches: Record<string, TaskPatch>): Promise<void> {
-    return this.#client.patch('/instrument/tasks', { patches });
+    return this.#client.patch(`${this.#base}/tasks`, { patches });
   }
 
   /** Delete one or more tasks in a single request. */
   removeTasks(taskIds: string[]): Promise<void> {
     const query = taskIds.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
-    return this.#client.del(`/instrument/tasks?${query}`);
+    return this.#client.del(`${this.#base}/tasks?${query}`);
   }
 
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
   async startAcquisition(request: AcquisitionRequest): Promise<ActiveAcquisitionState> {
-    let latest: ActiveAcquisitionState | null | undefined;
-    const buffer = this.#client.on('instrument.feed.updates', (update) => {
-      if (Object.hasOwn(update, 'active_acquisition')) latest = update.active_acquisition ?? null;
-    });
-    try {
-      const acquisition = await this.#client.post<ActiveAcquisitionState>('/instrument/acquisition', request);
-      this.acquisition = latest === undefined ? acquisition : latest;
-      return acquisition;
-    } finally {
-      buffer();
-    }
+    const acquisition = await this.#client.post<ActiveAcquisitionState>(`${this.#base}/acquisition`, request);
+    this.#onAcquisitionCreated(acquisition.manifest);
+    return acquisition;
   }
 
   stopAcquisition(): Promise<void> {
-    return this.#client.post('/instrument/acquisition/stop');
+    return this.#client.post(`${this.#base}/acquisition/stop`);
   }
 
   dispose(): void {
-    for (const unsub of this.#unsubs) unsub();
-    this.#unsubs = [];
+    // Instrument owns no transport subscriptions; VoxelApp applies complete Station views.
   }
 
   /** Re-fetch the resolved schema when `metadata_cls` changes; no-op otherwise. */
@@ -715,7 +642,9 @@ export class Instrument {
     if (cls === this.#schemaCls) return;
     this.#schemaCls = cls;
     try {
-      this.metadataSchema = await this.#client.get<JsonSchema>(`/metadata/schema?target=${encodeURIComponent(cls)}`);
+      this.metadataSchema = await this.#client.get<JsonSchema>(
+        `${this.#stationBase}/metadata/schema?target=${encodeURIComponent(cls)}`
+      );
     } catch {
       this.metadataSchema = null;
     }
@@ -734,14 +663,19 @@ export type PreviewMode = 'live' | 'stage';
 export class VoxelApp {
   readonly #client: Client;
 
-  discovery = $state<AppDiscovery>({
+  discovery = $state<StationDiscovery>({
     station: { id: '', name: '' },
     instruments: {},
     templates: {},
     remotes: {},
     colormaps: [],
     metadata_schemas: {},
-    preview: { websocket_url: '', protocol_version: 1 }
+    realtime: {
+      state_websocket_url: '',
+      preview_websocket_url: '',
+      log_websocket_url: '',
+      preview_protocol_version: 2
+    }
   });
   /** Persisted acquisition manifests from the catalog, newest first. */
   acquisitions = $state.raw<AcquisitionManifest[]>([]);
@@ -760,9 +694,13 @@ export class VoxelApp {
   readonly viewMode = pref<PreviewMode>('preview:mode', 'live');
 
   #unsubs: Unsub[] = [];
-  #desired = $state<string | null | undefined>(undefined); // undefined until app presence is first hydrated
-  #openName = $state<string | null>(null); // name of the instrument actually open
-  #reconciling = false;
+  #desired = $state<string | null | undefined>(undefined);
+  #openName = $state<string | null>(null);
+  #stationId = '';
+  #latestView: StationFeedView | null = null;
+  #logSocket: WebSocket | null = null;
+  #logReconnectTimer: number | null = null;
+  #disposed = false;
   readonly #lastInstrument = pref<string | null>('last-instrument', null);
 
   constructor(options: ClientOptions = {}) {
@@ -793,12 +731,21 @@ export class VoxelApp {
     return this.#lastInstrument.get();
   }
 
+  get stateCursor(): import('./types').StreamCursor {
+    return this.#latestView?.cursor ?? { stream_id: '', seq: 0 };
+  }
+
   async initialize(): Promise<void> {
     if (browser) void navigator.storage?.persist?.(); // durable storage so snapshots survive eviction
-    this.#unsubs.push(this.#client.on('app.status', (s) => this.#onPresence(s)));
-    this.#unsubs.push(this.#client.on('app.logs', (m) => this.#pushLog(m)));
-    this.#unsubs.push(this.#client.onOpen(() => void this.#resync()));
-    await this.#client.connect(); // onOpen → #resync hydrates presence + the active instrument
+    this.#unsubs.push(this.#client.onView((view) => this.#applyView(view)));
+    this.#unsubs.push(this.#client.onOpen(() => void this.#refreshResources()));
+    const stations = await this.#client.get<StationInfo[]>('/stations');
+    const station = stations[0];
+    if (!station) throw new Error('No control station is available.');
+    this.#stationId = station.id;
+    await this.#refreshResources();
+    this.#connectLogs();
+    await this.#client.connect(this.discovery.realtime.state_websocket_url);
     void this.#pruneSnapshots(); // GC snapshots whose instrument no longer exists
   }
 
@@ -815,7 +762,7 @@ export class VoxelApp {
   async #hydrateLogs(): Promise<void> {
     let backlog: LogEntry[];
     try {
-      backlog = await this.#client.get<LogEntry[]>('/logs');
+      backlog = await this.#client.get<LogEntry[]>(`${this.#stationBase}/logs`);
     } catch {
       return; // logs are diagnostic; the live stream still works without the backlog
     }
@@ -833,13 +780,17 @@ export class VoxelApp {
     this.instrument?.dispose();
     this.instrument = null;
     this.#openName = null;
+    this.#disposed = true;
+    if (this.#logReconnectTimer !== null) clearTimeout(this.#logReconnectTimer);
+    this.#logSocket?.close();
+    this.#logSocket = null;
     this.inpaint.dispose();
     this.#client.disconnect();
   }
 
   async retryConnection(): Promise<void> {
     this.#client.resetReconnectState();
-    await this.#client.connect();
+    await this.#client.connect(this.discovery.realtime.state_websocket_url);
   }
 
   /** Configured object stores (name → connection + selectable roots); empty when only local storage. */
@@ -851,12 +802,7 @@ export class VoxelApp {
   async refresh(): Promise<void> {
     this.error = null;
     try {
-      const [discovery, acquisitions] = await Promise.all([
-        this.#client.get<AppDiscovery>('/discovery'),
-        this.#client.get<AcquisitionManifest[]>('/acquisitions').catch(() => this.acquisitions)
-      ]);
-      this.discovery = discovery;
-      this.acquisitions = acquisitions;
+      await this.#refreshResources();
     } catch (e) {
       this.error = errorMessage(e);
     }
@@ -864,56 +810,50 @@ export class VoxelApp {
 
   /** Launch an existing instrument by name. */
   async launch(name: string): Promise<void> {
-    await this.#run(() => this.#client.post(`/instruments/${encodeURIComponent(name)}/launch`));
+    await this.#run(() => this.#client.post(`${this.#stationBase}/sessions`, { instrument_name: name }));
   }
 
   /** Launch a new instrument from a template; `name` defaults to the template's. */
   async launchTemplate(template: string, name?: string): Promise<void> {
-    const query = name ? `?name=${encodeURIComponent(name)}` : '';
-    await this.#run(() => this.#client.post(`/templates/${encodeURIComponent(template)}/launch${query}`));
+    const instrumentName = name ?? template;
+    await this.#run(async () => {
+      await this.#client.post(`${this.#stationBase}/instruments`, { template, name: instrumentName });
+      await this.#client.post(`${this.#stationBase}/sessions`, { instrument_name: instrumentName });
+    });
   }
 
   async archiveBench(name: string): Promise<void> {
-    await this.#run(() => this.#client.post(`/instruments/${encodeURIComponent(name)}/archive-bench`));
+    await this.#run(() =>
+      this.#client.post(`${this.#stationBase}/instruments/${encodeURIComponent(name)}/archive-bench`)
+    );
     await this.refresh();
   }
 
   /** Close the active instrument. */
   async close(): Promise<void> {
-    await this.#run(() => this.#client.post('/close'));
+    const sessionId = this.instrument?.sessionId;
+    if (!sessionId) return;
+    await this.#run(() => this.#client.del(`${this.#stationBase}/sessions/${encodeURIComponent(sessionId)}`));
   }
 
-  /** REST re-sync on every (re)connect: refresh presence, then refresh a surviving instrument's state. */
-  async #resync(): Promise<void> {
-    const existing = this.instrument;
-    void this.#hydrateLogs(); // independent of the instrument flow; backlog fills in alongside reconcile
-    try {
-      const [status, discovery, acquisitions] = await Promise.all([
-        this.#client.get<AppStatus>('/app'),
-        this.#client.get<AppDiscovery>('/discovery'),
-        this.#client.get<AcquisitionManifest[]>('/acquisitions').catch(() => this.acquisitions)
-      ]);
-      this.#desired = status.active;
-      this.discovery = discovery;
-      this.acquisitions = acquisitions;
-    } catch (e) {
-      this.error = errorMessage(e);
-      return;
-    }
-    await this.#reconcile();
-    if (this.instrument && this.instrument === existing) {
-      try {
-        await this.instrument.rehydrate(); // same instrument survived the gap — catch up on missed pushes
-      } catch (e) {
-        this.error = errorMessage(e);
-      }
-    }
+  get #stationBase(): string {
+    return `/stations/${encodeURIComponent(this.#stationId)}`;
+  }
+
+  async #refreshResources(): Promise<void> {
+    if (!this.#stationId) return;
+    const [discovery, acquisitions] = await Promise.all([
+      this.#client.get<StationDiscovery>(`${this.#stationBase}/discovery`),
+      this.#client.get<AcquisitionManifest[]>(`${this.#stationBase}/acquisitions`).catch(() => this.acquisitions)
+    ]);
+    this.discovery = discovery;
+    this.acquisitions = acquisitions;
   }
 
   /** Sweep persisted snapshots whose instrument no longer exists (frontend-only GC, on connect). */
   async #pruneSnapshots(): Promise<void> {
     try {
-      const { instruments } = await this.#client.get<AppDiscovery>('/discovery');
+      const { instruments } = await this.#client.get<StationDiscovery>(`${this.#stationBase}/discovery`);
       const names = Object.keys(instruments);
       await Promise.all([this.snaps.reconcile(names), this.inpaint.reconcile(names)]);
     } catch {
@@ -921,48 +861,67 @@ export class VoxelApp {
     }
   }
 
-  #onPresence(status: AppStatus): void {
-    this.#desired = status.active;
-    void this.#reconcile();
+  #applyView(view: StationFeedView): void {
+    if (view.station.id !== this.#stationId) return;
+    const previous = this.#latestView?.cursor;
+    if (previous?.stream_id === view.cursor.stream_id && view.cursor.seq <= previous.seq) return;
+    this.#latestView = view;
+    this.error = view.error;
+    const session = view.session;
+    this.#desired = session?.info.instrument_name ?? null;
+    if (!session) {
+      if (this.instrument) this.instrument.dispose();
+      this.instrument = null;
+      this.#openName = null;
+      this.snaps.scope = null;
+      this.inpaint.scope = null;
+      this.viewMode.set('live');
+      return;
+    }
+    if (this.instrument?.sessionId === session.info.id) {
+      this.instrument.applySession(session);
+      return;
+    }
+    this.instrument?.dispose();
+    try {
+      this.instrument = new Instrument(
+        this.#client,
+        session.info.instrument_name,
+        session.info.id,
+        this.#stationId,
+        session,
+        this.discovery.metadata_schemas,
+        (manifest) => {
+          this.acquisitions = [manifest, ...this.acquisitions.filter((candidate) => candidate.id !== manifest.id)];
+        }
+      );
+      this.#openName = session.info.instrument_name;
+      this.snaps.scope = this.#openName;
+      this.inpaint.scope = this.#openName;
+      this.#lastInstrument.set(this.#openName);
+    } catch (error) {
+      this.instrument = null;
+      this.#openName = null;
+      this.error = errorMessage(error);
+    }
   }
 
-  /** Converge the open instrument to `#desired`. Single-flight; re-checks `#desired` across awaits. */
-  async #reconcile(): Promise<void> {
-    if (this.#desired === undefined || this.#reconciling) return;
-    this.#reconciling = true;
-    try {
-      while (this.#desired !== this.#openName) {
-        const target: string | null | undefined = this.#desired;
-        if (target === undefined) return;
-        if (this.instrument) {
-          this.instrument.dispose();
-          this.instrument = null;
-          this.#openName = null;
-          this.snaps.scope = null;
-          this.inpaint.scope = null;
-          this.viewMode.set('live'); // the previous instrument's view shouldn't linger
-        }
-        if (target === null) continue;
-        let opened: Instrument | null = null;
-        try {
-          opened = await Instrument.open(this.#client, target, this.discovery);
-        } catch (e) {
-          this.error = errorMessage(e);
-        }
-        if (this.#desired !== target) {
-          opened?.dispose(); // presence moved on during the open — discard and re-reconcile
-          continue;
-        }
-        if (opened === null) break; // open failed; retry on the next presence / reconnect
-        this.instrument = opened;
-        this.#openName = target;
-        this.snaps.scope = target;
-        this.inpaint.scope = target;
-        this.#lastInstrument.set(target);
-      }
-    } finally {
-      this.#reconciling = false;
-    }
+  #connectLogs(): void {
+    if (this.#disposed || !this.discovery.realtime.log_websocket_url) return;
+    this.#logSocket?.close();
+    const socket = new WebSocket(resolveWebSocketUrl(this.discovery.realtime.log_websocket_url));
+    socket.binaryType = 'arraybuffer';
+    this.#logSocket = socket;
+    socket.onopen = () => void this.#hydrateLogs();
+    socket.onmessage = (event) => {
+      if (!(event.data instanceof ArrayBuffer)) return;
+      this.#pushLog(decodeMsgpack<LogEntry>(new Uint8Array(event.data)));
+    };
+    socket.onclose = () => {
+      if (this.#disposed || this.#logSocket !== socket) return;
+      this.#logSocket = null;
+      this.#logReconnectTimer = window.setTimeout(() => this.#connectLogs(), 1000);
+    };
   }
 
   async #run(fn: () => Promise<unknown>): Promise<void> {

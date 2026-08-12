@@ -49,9 +49,13 @@
         new PreviewSession({
           client: app.client,
           instrumentId: instrument.id,
-          discovery: app.discovery.preview,
+          stationId: instrument.stationId,
+          sessionId: instrument.sessionId,
+          websocketUrl: app.discovery.realtime.preview_websocket_url,
+          protocolVersion: app.discovery.realtime.preview_protocol_version,
           detection: instrument.hal.detection,
           initialStatus: instrument.status,
+          initialStateCursor: app.stateCursor,
           catalog: app.discovery.colormaps
         })
     );
@@ -67,7 +71,8 @@
     const session = previews.current;
     if (!instrument || !session) return;
     const status = instrument.status;
-    untrack(() => session.applyInstrumentStatus(status));
+    const cursor = app.stateCursor;
+    untrack(() => session.applyInstrumentStatus(status, cursor));
   });
 
   async function configureServiceWorker(): Promise<void> {

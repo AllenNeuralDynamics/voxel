@@ -3,7 +3,8 @@ import { decodeMsgpack } from '$lib/utils/msgpack';
 const PREFIX_BYTES = 9;
 const MAX_HEADER_BYTES = 64 * 1024;
 
-export const PREVIEW_PROTOCOL_VERSION = 1;
+export const PREVIEW_PROTOCOL_VERSION = 2;
+const SOURCE_PROTOCOL_VERSION = 1;
 export const PREVIEW_ENCODING = 'u16-zstd-byte-shuffle-v1' as const;
 
 export type PreviewLayer = 'overview' | 'viewport';
@@ -34,8 +35,10 @@ export interface PreviewSourceHeader {
 }
 
 export interface PreviewDeliveryHeader {
-  delivery_schema_version: 1;
+  delivery_schema_version: 2;
   channel_id: string;
+  seq: number;
+  /** Normalized locally for the renderer; Station wire packets carry `seq` directly. */
   delivery_cursor: StreamCursor;
   state_cursor: StreamCursor;
   stamped_at_unix_us: number;
@@ -62,8 +65,7 @@ export interface DecodedPreviewFrame {
 }
 
 export type PreviewWorkerCommand =
-  | { type: 'configure'; websocketUrl: string; protocolVersion: number; deliveryStreamId: string; visible: boolean }
-  | { type: 'stream'; deliveryStreamId: string }
+  | { type: 'configure'; websocketUrl: string; protocolVersion: number; visible: boolean }
   | { type: 'visibility'; visible: boolean }
   | { type: 'flush' }
   | { type: 'close' };
@@ -73,12 +75,17 @@ export type PreviewWorkerEvent =
   | { type: 'state'; state: 'connecting' | 'connected' | 'disconnected' }
   | { type: 'error'; message: string };
 
-function parsePrefix(packet: Uint8Array, magic: string, label: string): { headerStart: number; bodyStart: number } {
+function parsePrefix(
+  packet: Uint8Array,
+  magic: string,
+  label: string,
+  expectedVersion: number
+): { headerStart: number; bodyStart: number } {
   if (packet.byteLength < PREFIX_BYTES) throw new Error(`${label} packet is truncated before its prefix`);
   const foundMagic = String.fromCharCode(packet[0], packet[1], packet[2], packet[3]);
   if (foundMagic !== magic) throw new Error(`invalid ${label} magic: ${foundMagic}`);
   const version = packet[4];
-  if (version !== PREVIEW_PROTOCOL_VERSION) throw new Error(`unsupported ${label} framing version: ${version}`);
+  if (version !== expectedVersion) throw new Error(`unsupported ${label} framing version: ${version}`);
   const headerLength = new DataView(packet.buffer, packet.byteOffset, packet.byteLength).getUint32(5, false);
   if (headerLength <= 0 || headerLength > MAX_HEADER_BYTES) {
     throw new Error(`invalid ${label} header length: ${headerLength}`);
@@ -110,9 +117,9 @@ function validateCursor(cursor: StreamCursor | undefined, field: string): void {
 }
 
 function validateDelivery(header: PreviewDeliveryHeader, actualFrameLength: number): void {
-  if (header.delivery_schema_version !== 1) throw new Error('unsupported preview delivery schema version');
+  if (header.delivery_schema_version !== 2) throw new Error('unsupported preview delivery schema version');
   if (!header.channel_id) throw new Error('preview delivery channel must not be empty');
-  validateCursor(header.delivery_cursor, 'delivery_cursor');
+  nonnegativeInteger(header.seq, 'seq');
   validateCursor(header.state_cursor, 'state_cursor');
   nonnegativeInteger(header.stamped_at_unix_us, 'stamped_at_unix_us');
   positiveInteger(header.frame_byte_length, 'frame_byte_length');
@@ -152,17 +159,21 @@ function validateSource(header: PreviewSourceHeader): void {
 /** Parse the control-owned delivery envelope and camera-owned source frame without decompressing its payload. */
 export function parsePreviewPacket(data: ArrayBuffer): ParsedPreviewPacket {
   const packet = new Uint8Array(data);
-  const deliveryPrefix = parsePrefix(packet, 'VXPD', 'preview delivery');
-  const delivery = decodeHeader<PreviewDeliveryHeader>(
+  const deliveryPrefix = parsePrefix(packet, 'VXPD', 'preview delivery', PREVIEW_PROTOCOL_VERSION);
+  const wireDelivery = decodeHeader<Omit<PreviewDeliveryHeader, 'delivery_cursor'>>(
     packet,
     deliveryPrefix.headerStart,
     deliveryPrefix.bodyStart,
     'preview delivery'
   );
+  const delivery: PreviewDeliveryHeader = {
+    ...wireDelivery,
+    delivery_cursor: { stream_id: wireDelivery.state_cursor.stream_id, seq: wireDelivery.seq }
+  };
   const frame = packet.subarray(deliveryPrefix.bodyStart);
   validateDelivery(delivery, frame.byteLength);
 
-  const sourcePrefix = parsePrefix(frame, 'VXPS', 'preview source');
+  const sourcePrefix = parsePrefix(frame, 'VXPS', 'preview source', SOURCE_PROTOCOL_VERSION);
   const source = decodeHeader<PreviewSourceHeader>(
     frame,
     sourcePrefix.headerStart,

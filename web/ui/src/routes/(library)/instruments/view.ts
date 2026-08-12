@@ -1,10 +1,10 @@
 import {
-  type AppDiscovery,
   type HALConfig,
   type InstrumentConfig,
   type InstrumentDefaults,
   type InstrumentInspection,
   isLoaded,
+  type StationDiscovery,
   type Violation
 } from '$lib/model';
 
@@ -43,7 +43,10 @@ export function violationLocation(violation: Violation): string {
 }
 
 /** Resolve a selection against discovery into a normalized view, or null when the entry is unknown. */
-export function resolveInstrumentView(discovery: AppDiscovery, selection: InstrumentSelection): InstrumentView | null {
+export function resolveInstrumentView(
+  discovery: StationDiscovery,
+  selection: InstrumentSelection
+): InstrumentView | null {
   if (selection.kind === 'template') {
     const config = discovery.templates[selection.name];
     if (!config) return null;

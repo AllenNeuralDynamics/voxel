@@ -8,9 +8,8 @@ import {
   type ColormapCatalog,
   type DetectionAssemblyConfig,
   type InstrumentStatus,
-  type PreviewDiscovery,
-  type PreviewUpdate,
-  type PreviewViewport
+  type PreviewViewport,
+  type StreamCursor
 } from '$lib/model/types';
 import { clampTopLeft, pref, sanitizeString } from '$lib/utils';
 
@@ -169,9 +168,13 @@ export class PreviewChannel {
 export interface PreviewSessionOptions {
   readonly client: Client;
   readonly instrumentId: string;
-  readonly discovery: PreviewDiscovery;
+  readonly stationId: string;
+  readonly sessionId: string;
+  readonly websocketUrl: string;
+  readonly protocolVersion: number;
   readonly detection: Record<string, DetectionAssemblyConfig>;
   readonly initialStatus: InstrumentStatus;
+  readonly initialStateCursor: StreamCursor;
   readonly catalog: ColormapCatalog;
 }
 
@@ -190,12 +193,16 @@ export class PreviewSession {
   readonly #client: Client;
   readonly #detection: Record<string, DetectionAssemblyConfig>;
   readonly #instrumentId: string;
+  readonly #sessionId: string;
+  readonly #instrumentBase: string;
   readonly #renderer: PreviewGpuRenderer;
   readonly #stream: PreviewStream;
   readonly #preferenceStore = pref<StoredPreviewPreferences>('preview:channels', {});
   #displayAspect = 1;
   #unsubscribers: Array<() => void> = [];
-  #deliveryStreamId = '';
+  #previewRevision = -1;
+  #previewStateCursor: StreamCursor;
+  #latestStateCursor: StreamCursor;
   #activeProfileId = '';
   #disposed = false;
   #lastDeliverySequences = new SvelteMap<string, number>();
@@ -204,24 +211,39 @@ export class PreviewSession {
   #viewportUpdateTimer: number | null = null;
   #viewportLastSent = 0;
 
-  constructor({ client, instrumentId, discovery, detection, initialStatus, catalog }: PreviewSessionOptions) {
+  constructor({
+    client,
+    instrumentId,
+    stationId,
+    sessionId,
+    websocketUrl,
+    protocolVersion,
+    detection,
+    initialStatus,
+    initialStateCursor,
+    catalog
+  }: PreviewSessionOptions) {
     this.#client = client;
     this.#detection = detection;
     this.#instrumentId = instrumentId;
+    this.#sessionId = sessionId;
+    this.#instrumentBase = `/stations/${encodeURIComponent(stationId)}/sessions/${encodeURIComponent(
+      sessionId
+    )}/instrument`;
     this.channels = Array.from({ length: MAX_CHANNELS }, (_, index) => new PreviewChannel(index));
     this.#renderer = new PreviewGpuRenderer((message) => (this.error = message));
-    this.#deliveryStreamId = initialStatus.delivery_stream_id;
+    this.#previewRevision = initialStatus.preview_revision;
+    this.#previewStateCursor = initialStateCursor;
+    this.#latestStateCursor = initialStateCursor;
     this.#activeProfileId = initialStatus.active_profile_id;
     this.#stream = new PreviewStream(
-      discovery.websocket_url,
-      discovery.protocol_version,
-      this.#deliveryStreamId,
+      websocketUrl,
+      protocolVersion,
       (frame) => void this.#handleFrame(frame),
       (message) => (this.error = message)
     );
     this.catalog = catalog;
     this.#applyStatus(initialStatus);
-    this.#unsubscribers.push(this.#client.on('instrument.preview', this.#applyPreviewUpdate));
   }
 
   get boundingBoxAspect(): number {
@@ -230,8 +252,8 @@ export class PreviewSession {
   }
 
   /** Apply status after it has been ordered and reconciled by the Instrument model. */
-  applyInstrumentStatus(status: InstrumentStatus): void {
-    if (!this.#disposed) this.#applyStatus(status);
+  applyInstrumentStatus(status: InstrumentStatus, stateCursor: StreamCursor): void {
+    if (!this.#disposed) this.#applyStatus(status, stateCursor);
   }
 
   render(canvas: HTMLCanvasElement, viewport = this.viewport): Promise<void> {
@@ -260,11 +282,11 @@ export class PreviewSession {
       return;
     }
     this.#clearFrames();
-    void this.#client.post('/instrument/preview/start');
+    void this.#client.post(`${this.#instrumentBase}/preview/start`);
   }
 
   stopPreview(): void {
-    void this.#client.post('/instrument/preview/stop');
+    void this.#client.post(`${this.#instrumentBase}/preview/stop`);
   }
 
   setChannelVisible(name: string, visible: boolean): void {
@@ -292,7 +314,7 @@ export class PreviewSession {
         fixed: { low, high }
       }
     };
-    channel.levelsAppliedDeliveryStreamId = this.#deliveryStreamId;
+    channel.levelsAppliedDeliveryStreamId = String(this.#previewRevision);
     this.#saveChannelPreferences(name, channel.preferences);
     this.#setCurrentLevels(channel, low / dataTypeMax, high / dataTypeMax);
   }
@@ -326,7 +348,7 @@ export class PreviewSession {
       this.#dataTypeMax(channel)
     );
     if (!levels) return;
-    channel.levelsAppliedDeliveryStreamId = this.#deliveryStreamId;
+    channel.levelsAppliedDeliveryStreamId = String(this.#previewRevision);
     this.#setCurrentLevels(channel, levels.min, levels.max);
   }
 
@@ -405,7 +427,8 @@ export class PreviewSession {
   #queueViewportUpdate(viewport: PreviewViewport): void {
     if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
     const now = Date.now();
-    const send = () => this.#client.send('instrument.preview', { viewport });
+    const send = () =>
+      this.#client.sendViewport({ action: 'preview.viewport.update', session_id: this.#sessionId, viewport });
     if (now - this.#viewportLastSent >= VIEWPORT_UPDATE_INTERVAL_MS) {
       this.#viewportLastSent = now;
       send();
@@ -447,7 +470,7 @@ export class PreviewSession {
       if (low < dataTypeMax) high = low + 1;
       else low = Math.max(0, high - 1);
     }
-    channel.levelsAppliedDeliveryStreamId = this.#deliveryStreamId;
+    channel.levelsAppliedDeliveryStreamId = String(this.#previewRevision);
     this.#setCurrentLevels(channel, low / dataTypeMax, high / dataTypeMax);
   }
 
@@ -511,16 +534,12 @@ export class PreviewSession {
     this.redrawGeneration++;
   }
 
-  #applyPreviewUpdate = (update: PreviewUpdate): void => {
-    const viewport = update.viewport;
-    if (viewport != null && !isViewportEqual(this.viewport, viewport)) this.#applyViewport(viewport);
-  };
-
-  #applyStatus = (status: InstrumentStatus): void => {
+  #applyStatus = (status: InstrumentStatus, stateCursor = this.#previewStateCursor): void => {
+    this.#latestStateCursor = stateCursor;
     const imaging = status.state.imaging;
     const activeProfile = imaging.profiles[status.active_profile_id];
     const names = (activeProfile?.channels ?? []).slice(0, MAX_CHANNELS);
-    const streamChanged = status.delivery_stream_id !== this.#deliveryStreamId;
+    const streamChanged = status.preview_revision !== this.#previewRevision;
     const profileChanged = status.active_profile_id !== this.#activeProfileId;
     const channelsChanged = this.channels.some((channel, index) => (channel.name ?? '') !== (names[index] ?? ''));
     if (!streamChanged && !profileChanged && !channelsChanged) {
@@ -535,9 +554,10 @@ export class PreviewSession {
       return;
     }
 
-    this.#deliveryStreamId = status.delivery_stream_id;
+    this.#previewRevision = status.preview_revision;
+    if (streamChanged) this.#previewStateCursor = stateCursor;
     this.#activeProfileId = status.active_profile_id;
-    this.#stream.setDeliveryStream(this.#deliveryStreamId);
+    if (streamChanged) this.#stream.flush();
     this.#lastDeliverySequences.clear();
     this.#renderer.clear();
     for (let index = 0; index < MAX_CHANNELS; index++) {
@@ -565,13 +585,18 @@ export class PreviewSession {
   };
 
   async #handleFrame(frame: DecodedPreviewFrame): Promise<void> {
-    if (frame.delivery.delivery_cursor.stream_id !== this.#deliveryStreamId) return;
+    if (
+      frame.delivery.state_cursor.stream_id !== this.#previewStateCursor.stream_id ||
+      frame.delivery.state_cursor.seq < this.#previewStateCursor.seq ||
+      frame.delivery.state_cursor.seq > this.#latestStateCursor.seq
+    )
+      return;
     const channel = this.channels.find((candidate) => candidate.name === frame.delivery.channel_id);
     if (!channel) return;
     const key = `${frame.delivery.channel_id}:${frame.source.layer}`;
     const previous = this.#lastDeliverySequences.get(key) ?? -1;
-    if (frame.delivery.delivery_cursor.seq <= previous) return;
-    this.#lastDeliverySequences.set(key, frame.delivery.delivery_cursor.seq);
+    if (frame.delivery.seq <= previous) return;
+    this.#lastDeliverySequences.set(key, frame.delivery.seq);
 
     try {
       if (!(await this.#renderer.upload(frame))) return;
@@ -579,17 +604,13 @@ export class PreviewSession {
       this.error = error instanceof Error ? error.message : String(error);
       return;
     }
-    if (
-      frame.delivery.delivery_cursor.stream_id !== this.#deliveryStreamId ||
-      this.#lastDeliverySequences.get(key) !== frame.delivery.delivery_cursor.seq
-    )
-      return;
+    if (this.#lastDeliverySequences.get(key) !== frame.delivery.seq) return;
     if (frame.source.layer === 'overview') {
       channel.sensorWidth = frame.source.sensor_width;
       channel.sensorHeight = frame.source.sensor_height;
       channel.overviewFrame = frame.source;
       if (frame.histogram) channel.latestHistogram = frame.histogram;
-      if (channel.levelsAppliedDeliveryStreamId !== this.#deliveryStreamId) {
+      if (channel.levelsAppliedDeliveryStreamId !== String(this.#previewRevision)) {
         if (channel.preferences.levels.mode === 'auto') this.autoLevel(frame.delivery.channel_id);
         else this.#applyFixedLevels(channel);
       }

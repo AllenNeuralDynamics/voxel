@@ -1,9 +1,9 @@
-/** WS + REST transport for the Voxel API: a (mostly) receive-only msgpack WebSocket and typed REST verbs. */
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+/** Station-scoped REST plus the reliable, complete-view Station WebSocket. */
+import { SvelteSet, SvelteURL } from 'svelte/reactivity';
 
 import { decodeMsgpack, encodeMsgpack } from '$lib/utils/msgpack';
 
-import type { ClientTopics, ServerTopics } from './types';
+import type { PreviewViewportUpdate, StationFeedView } from './types';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
 export type Unsub = () => void;
@@ -11,17 +11,17 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 const DEFAULT_API_URL = 'http://localhost:8000';
 
-function resolveBackend(apiUrl?: string): { wsUrl: string; baseUrl: string } {
+function resolveBackend(apiUrl?: string): string {
   const api = apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL;
-  if (typeof window === 'undefined') {
-    return { wsUrl: api.replace(/^http/, 'ws') + '/api/ws', baseUrl: api };
-  }
-  if (import.meta.env.DEV) {
-    // Dev: WS direct to backend (Bun can't proxy upgrades), REST relative (Vite proxy).
-    return { wsUrl: api.replace(/^http/, 'ws') + '/api/ws', baseUrl: location.origin };
-  }
-  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return { wsUrl: `${wsProto}//${location.host}/api/ws`, baseUrl: location.origin };
+  if (typeof window === 'undefined') return api;
+  return import.meta.env.DEV ? location.origin : apiUrl || location.origin;
+}
+
+export function resolveWebSocketUrl(url: string): string {
+  if (/^wss?:\/\//.test(url)) return url;
+  if (/^https?:\/\//.test(url)) return url.replace(/^http/, 'ws');
+  const base = typeof window === 'undefined' ? DEFAULT_API_URL : location.origin;
+  return new SvelteURL(url, base).toString().replace(/^http/, 'ws');
 }
 
 export interface ClientOptions {
@@ -51,82 +51,83 @@ export class ApiError extends Error {
   }
 }
 
-/** The display message for a thrown value. */
-export function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-type TypedHandler = (event: unknown) => void;
-
 export class Client {
-  readonly wsUrl: string;
   readonly baseUrl: string;
 
   state = $state<ConnectionState>('idle');
   reconnectAttempts = $state(0);
   isConnected = $derived(this.state === 'connected');
 
-  #ws: WebSocket | null = null;
-  #typedHandlers = new SvelteMap<string, SvelteSet<TypedHandler>>();
-  #errorHandlers = new SvelteSet<(e: Error) => void>();
+  #socket: WebSocket | null = null;
+  #socketUrl = '';
+  #viewHandlers = new SvelteSet<(view: StationFeedView) => void>();
+  #errorHandlers = new SvelteSet<(error: Error) => void>();
   #openHandlers = new SvelteSet<() => void>();
-
   #shouldReconnect: boolean;
+  #initialReconnectDelay: number;
   #reconnectDelay: number;
   #reconnectTimer: number | null = null;
-  readonly #maxReconnectDelay: number;
-  readonly #maxReconnectAttempts: number;
+  #maxReconnectDelay: number;
+  #maxReconnectAttempts: number;
 
   constructor(options: ClientOptions = {}) {
-    const { apiUrl, ...connectionOpts } = options;
-    const resolved = { ...DEFAULT_OPTIONS, ...connectionOpts };
+    const { apiUrl, ...connectionOptions } = options;
+    const resolved = { ...DEFAULT_OPTIONS, ...connectionOptions };
+    this.baseUrl = resolveBackend(apiUrl);
     this.#shouldReconnect = resolved.autoReconnect;
+    this.#initialReconnectDelay = resolved.initialReconnectDelayMs;
     this.#reconnectDelay = resolved.initialReconnectDelayMs;
     this.#maxReconnectDelay = resolved.maxReconnectDelayMs;
     this.#maxReconnectAttempts = resolved.maxReconnectAttempts;
-    const backend = resolveBackend(apiUrl);
-    this.wsUrl = backend.wsUrl;
-    this.baseUrl = backend.baseUrl;
   }
 
-  // ---- connection lifecycle ----
+  get wsUrl(): string {
+    return this.#socketUrl;
+  }
 
-  async connect(): Promise<void> {
+  async connect(websocketUrl: string): Promise<void> {
+    this.#socketUrl = resolveWebSocketUrl(websocketUrl);
+    this.#shouldReconnect = true;
     if (this.state !== 'reconnecting') this.state = 'connecting';
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       try {
         this.#cleanupSocket();
-        this.#ws = new WebSocket(this.wsUrl);
-        this.#ws.binaryType = 'arraybuffer';
-        this.#ws.onopen = () => {
+        const socket = new WebSocket(this.#socketUrl);
+        socket.binaryType = 'arraybuffer';
+        this.#socket = socket;
+        socket.onopen = () => {
           this.state = 'connected';
           this.reconnectAttempts = 0;
-          this.#reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
-          for (const cb of this.#openHandlers) cb();
+          this.#reconnectDelay = this.#initialReconnectDelay;
+          for (const callback of this.#openHandlers) callback();
           resolve();
         };
-        this.#ws.onmessage = (event) => {
+        socket.onmessage = (event) => {
           try {
-            this.#handleMessage(event.data as ArrayBuffer);
-          } catch (e) {
-            this.#notifyError(e instanceof Error ? e : new Error(String(e)));
+            if (!(event.data instanceof ArrayBuffer)) throw new Error('Station feed sent a non-binary view.');
+            const view = decodeMsgpack<StationFeedView>(new Uint8Array(event.data));
+            for (const callback of this.#viewHandlers) callback(view);
+          } catch (error) {
+            this.#notifyError(error instanceof Error ? error : new Error(String(error)));
           }
         };
-        this.#ws.onerror = (event) => {
-          console.debug('[Client] WebSocket error:', event);
-          const err = new Error('WebSocket connection error');
-          if (!this.#shouldReconnect) this.state = 'failed';
-          this.#notifyError(err);
-          reject(err);
+        socket.onerror = () => {
+          const error = new Error('Station connection error');
+          this.#notifyError(error);
+          reject(error);
         };
-        this.#ws.onclose = (event) => {
-          console.debug('[Client] connection closed:', event.code, event.reason);
+        socket.onclose = () => {
+          if (this.#socket === socket) this.#socket = null;
           if (this.#shouldReconnect) this.#scheduleReconnect();
           else this.state = 'idle';
         };
-      } catch (e) {
+      } catch (error) {
         this.state = 'failed';
-        reject(e instanceof Error ? e : new Error(String(e)));
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -140,36 +141,28 @@ export class Client {
 
   resetReconnectState(): void {
     this.reconnectAttempts = 0;
-    this.#reconnectDelay = DEFAULT_OPTIONS.initialReconnectDelayMs;
+    this.#reconnectDelay = this.#initialReconnectDelay;
     this.#clearReconnectTimer();
   }
 
-  // ---- WS (receive for state; send only for per-connection controls) ----
-
-  /** Send a control envelope. App/device state goes over REST; this is for sender-excluded live controls.
-   *  No-op until the socket is open. */
-  send<K extends keyof ClientTopics>(topic: K, body: ClientTopics[K]): void {
-    if (this.#ws?.readyState !== WebSocket.OPEN) return;
-    this.#ws.send(encodeMsgpack([topic, encodeMsgpack(body)]));
+  sendViewport(update: PreviewViewportUpdate): void {
+    if (this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(encodeMsgpack(update));
   }
 
-  /** Subscribe to a topic; the body is decoded to its `ServerTopics` payload type. */
-  on<K extends keyof ServerTopics>(topic: K, callback: (event: ServerTopics[K]) => void): Unsub {
-    return this.#register(this.#typedHandlers, topic, callback as TypedHandler);
+  onView(callback: (view: StationFeedView) => void): Unsub {
+    this.#viewHandlers.add(callback);
+    return () => this.#viewHandlers.delete(callback);
   }
 
-  onError(callback: (e: Error) => void): Unsub {
+  onError(callback: (error: Error) => void): Unsub {
     this.#errorHandlers.add(callback);
     return () => this.#errorHandlers.delete(callback);
   }
 
-  /** Fires whenever the socket (re)opens — initial connect and every reconnect. Use to re-sync over REST. */
   onOpen(callback: () => void): Unsub {
     this.#openHandlers.add(callback);
     return () => this.#openHandlers.delete(callback);
   }
-
-  // ---- REST (typed; encodes the backend's conventions) ----
 
   get<T>(path: string): Promise<T> {
     return this.#fetch<T>('GET', path);
@@ -197,20 +190,20 @@ export class Client {
       init.headers = { 'Content-Type': 'application/json' };
       init.body = JSON.stringify(body);
     }
-    const res = await fetch(`${this.baseUrl}/api${path}`, init);
-    if (!res.ok) throw await this.#toError(res);
-    if (res.status === 204) return undefined as T;
-    const text = await res.text();
+    const response = await fetch(`${this.baseUrl}/api${path}`, init);
+    if (!response.ok) throw await this.#toError(response);
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
     return (text ? JSON.parse(text) : undefined) as T;
   }
 
-  async #toError(res: Response): Promise<ApiError> {
-    let detail: unknown = `HTTP ${res.status}`;
+  async #toError(response: Response): Promise<ApiError> {
+    let detail: unknown = `HTTP ${response.status}`;
     try {
-      const body = (await res.json()) as { detail?: unknown };
+      const body = (await response.json()) as { detail?: unknown };
       detail = body.detail ?? body;
     } catch {
-      /* non-JSON body — keep the status-line detail */
+      // Keep the status-line detail for non-JSON responses.
     }
     const message =
       typeof detail === 'string'
@@ -222,37 +215,11 @@ export class Client {
             )
           ? detail.map((item) => item.msg).join('; ')
           : JSON.stringify(detail);
-    return new ApiError(res.status, detail, message);
-  }
-
-  // ---- internals ----
-
-  #register<H>(map: SvelteMap<string, SvelteSet<H>>, key: string, handler: H): Unsub {
-    const handlers = map.get(key) ?? new SvelteSet<H>();
-    handlers.add(handler);
-    map.set(key, handlers);
-    return () => {
-      handlers.delete(handler);
-      if (handlers.size === 0) map.delete(key);
-    };
-  }
-
-  #handleMessage(data: ArrayBuffer): void {
-    const envelope = decodeMsgpack<[string, Uint8Array]>(new Uint8Array(data));
-    if (!Array.isArray(envelope) || envelope.length !== 2) {
-      console.warn('[Client] malformed envelope:', envelope);
-      return;
-    }
-    const [topic, bodyBytes] = envelope;
-    const typed = this.#typedHandlers.get(topic);
-    if (typed && typed.size > 0) {
-      const event = decodeMsgpack(bodyBytes);
-      for (const cb of typed) cb(event);
-    }
+    return new ApiError(response.status, detail, message);
   }
 
   #notifyError(error: Error): void {
-    for (const cb of this.#errorHandlers) cb(error);
+    for (const callback of this.#errorHandlers) callback(error);
   }
 
   #scheduleReconnect(): void {
@@ -265,7 +232,7 @@ export class Client {
     const delay = Math.min(this.#reconnectDelay, this.#maxReconnectDelay);
     this.#reconnectDelay = Math.min(this.#reconnectDelay * 2, this.#maxReconnectDelay);
     this.#reconnectTimer = window.setTimeout(() => {
-      this.connect().catch((e) => console.debug('[Client] reconnect failed:', e));
+      this.connect(this.#socketUrl).catch((error) => console.debug('[Client] reconnect failed:', error));
     }, delay);
   }
 
@@ -277,15 +244,13 @@ export class Client {
   }
 
   #cleanupSocket(): void {
-    if (this.#ws) {
-      this.#ws.onopen = null;
-      this.#ws.onmessage = null;
-      this.#ws.onerror = null;
-      this.#ws.onclose = null;
-      if (this.#ws.readyState === WebSocket.OPEN || this.#ws.readyState === WebSocket.CONNECTING) {
-        this.#ws.close();
-      }
-      this.#ws = null;
-    }
+    const socket = this.#socket;
+    if (!socket) return;
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close();
+    this.#socket = null;
   }
 }

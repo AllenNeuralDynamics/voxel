@@ -12,7 +12,6 @@ export class PreviewStream {
   constructor(
     websocketUrl: string,
     protocolVersion: number,
-    deliveryStreamId: string,
     frameHandler: FrameHandler,
     errorHandler: (message: string | null) => void
   ) {
@@ -27,13 +26,8 @@ export class PreviewStream {
       type: 'configure',
       websocketUrl,
       protocolVersion,
-      deliveryStreamId,
       visible: !document.hidden
     });
-  }
-
-  setDeliveryStream(deliveryStreamId: string): void {
-    this.#post({ type: 'stream', deliveryStreamId });
   }
 
   flush(): void {

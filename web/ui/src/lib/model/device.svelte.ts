@@ -32,9 +32,11 @@ export class DeviceHandle {
 
   #client: Client;
   #disabled: () => boolean;
+  #base: string;
 
-  constructor(client: Client, snapshot: DeviceSnapshot, disabled: () => boolean) {
+  constructor(client: Client, base: string, snapshot: DeviceSnapshot, disabled: () => boolean) {
     this.#client = client;
+    this.#base = base;
     this.#disabled = disabled;
     this.id = snapshot.id;
     this.applySnapshot(snapshot);
@@ -56,12 +58,28 @@ export class DeviceHandle {
       if (!result.ok) continue; // error envelope — skip
       this.#upsert(name, result.value);
     }
+    this.observe(results);
   }
 
   /** Replace the property cache from a complete instrument feed view. */
   replaceProperties(results?: PropResults): void {
-    this.props.clear();
-    if (results) this.ingest(results);
+    if (!results) {
+      this.props.clear();
+      return;
+    }
+    const changed: PropResults = { results: {} };
+    for (const name of this.props.keys()) if (!Object.hasOwn(results.results, name)) this.props.delete(name);
+    for (const [name, result] of Object.entries(results.results)) {
+      if (!result.ok) continue;
+      if (!Object.is(this.props.get(name)?.value, result.value.value)) changed.results[name] = result;
+      this.#upsert(name, result.value);
+    }
+    this.observe(changed);
+  }
+
+  /** Observe genuinely changed values after either a delta merge or complete-cache replacement. */
+  protected observe(results: PropResults): void {
+    void results;
   }
 
   /** Fetch property values over REST and merge them; all properties when `names` is empty. */
@@ -76,10 +94,6 @@ export class DeviceHandle {
 
   runCommand(name: string, args: unknown[] = [], kwargs: Record<string, unknown> = {}): Promise<unknown> {
     return this.#client.post<unknown>(`${this.#base}/commands/${encodeURIComponent(name)}`, { args, kwargs });
-  }
-
-  get #base(): string {
-    return `/instrument/devices/${encodeURIComponent(this.id)}`;
   }
 
   #upsert(name: string, snapshot: PropSnapshot<unknown>): void {
@@ -207,9 +221,8 @@ export class LaserHandle extends DeviceHandle {
     return this.isEnabled?.value ? this.disable() : this.enable();
   }
 
-  /** Record measured power and setpoint into their time-series whenever the stream reports them. */
-  ingest(results: PropResults): void {
-    super.ingest(results);
+  /** Record measured power and setpoint into their time-series whenever their values change. */
+  protected observe(results: PropResults): void {
     const t = performance.now();
     const r = results.results;
     if (isFresh(r.power) && typeof this.power?.value === 'number') {
@@ -424,19 +437,24 @@ export class CameraHandle extends DeviceHandle {
 }
 
 /** Instantiate the typed handle matching a device's introspected `interface.type`. */
-export function createDevice(client: Client, snapshot: DeviceSnapshot, disabled: () => boolean): DeviceHandle {
+export function createDevice(
+  client: Client,
+  base: string,
+  snapshot: DeviceSnapshot,
+  disabled: () => boolean
+): DeviceHandle {
   switch (snapshot.interface?.type) {
     case 'camera':
-      return new CameraHandle(client, snapshot, disabled);
+      return new CameraHandle(client, base, snapshot, disabled);
     case 'laser':
-      return new LaserHandle(client, snapshot, disabled);
+      return new LaserHandle(client, base, snapshot, disabled);
     case 'continuous_axis':
-      return new AxisHandle(client, snapshot, disabled);
+      return new AxisHandle(client, base, snapshot, disabled);
     case 'discrete_axis':
-      return new DiscreteAxisHandle(client, snapshot, disabled);
+      return new DiscreteAxisHandle(client, base, snapshot, disabled);
     case 'signal_generator':
-      return new SignalGeneratorHandle(client, snapshot, disabled);
+      return new SignalGeneratorHandle(client, base, snapshot, disabled);
     default:
-      return new DeviceHandle(client, snapshot, disabled);
+      return new DeviceHandle(client, base, snapshot, disabled);
   }
 }

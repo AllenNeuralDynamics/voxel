@@ -504,26 +504,28 @@ export interface ColormapGroup {
 export type ColormapCatalog = ColormapGroup[];
 export const AUTO_COLORMAP = '__auto__';
 
-export interface PreviewDiscovery {
-  websocket_url: string;
-  protocol_version: number;
-}
-
 /** Stable identity of the control station serving this application. */
 export interface StationInfo {
   id: string;
   name: string;
 }
 
-/** Bounded resources used to initialize the application UI. */
-export interface AppDiscovery {
+export interface RealtimeDiscovery {
+  state_websocket_url: string;
+  preview_websocket_url: string;
+  log_websocket_url: string;
+  preview_protocol_version: number;
+}
+
+/** Bounded resources used to initialize one selected station UI. */
+export interface StationDiscovery {
   station: StationInfo;
   instruments: Record<string, InstrumentInspection>;
   templates: Record<string, InstrumentConfig>;
   remotes: Record<string, Remote>;
   colormaps: ColormapCatalog;
   metadata_schemas: Record<string, string>;
-  preview: PreviewDiscovery;
+  realtime: RealtimeDiscovery;
 }
 
 /** Whether an instrument's configuration loaded successfully. */
@@ -531,20 +533,15 @@ export function isLoaded<T>(inspected: Inspected<T>): inspected is Loaded<T> {
   return inspected.status === 'loaded';
 }
 
-// ---- WS event payloads (server → client) ----
+// ---- Station feed ----
 
 export type AcquisitionMode = 'idle' | 'preview' | 'capture';
 
-/** The `app.status` payload: the active instrument's name, or null. */
-export interface AppStatus {
-  active: string | null;
-}
-
-/** The dynamic `status` section of an instrument feed view or update. */
+/** The active session's lightweight values, replaced together in every complete Station view. */
 export interface InstrumentStatus {
   mode: AcquisitionMode;
   active_profile_id: string;
-  delivery_stream_id: string;
+  preview_revision: number;
   fov: [number, number] | null;
   routing_targets: Record<string, string>;
   state: InstrumentState;
@@ -590,7 +587,7 @@ export interface DeviceInterface {
   properties: Record<string, PropertyInfo>;
 }
 
-/** One device's identity + interface, or the error its introspection raised. */
+/** Legacy device inspection shape retained by installed-instrument inspection models. */
 export interface DeviceSnapshot {
   id: string;
   connected: boolean;
@@ -610,28 +607,46 @@ export interface PropResults {
   results: Record<string, PropResult>;
 }
 
-/** Complete cached instrument state returned on connect or resynchronization. */
-export interface InstrumentView {
+export interface StreamCursor {
   stream_id: string;
   seq: number;
-  generated_at_unix_us: number;
-  status: InstrumentStatus;
-  device_props: Record<string, PropResults>;
-  active_acquisition: ActiveAcquisitionState | null;
-  defaults: InstrumentDefaults;
-  hardware: HALConfig;
-  devices: Record<string, DeviceSnapshot>;
 }
 
-/** One ordered partial change to an `InstrumentView`; omitted sections are unchanged. */
-export interface InstrumentUpdate {
-  stream_id: string;
-  seq: number;
+export interface SessionInfo {
+  id: string;
+  instrument_name: string;
+  mode: AcquisitionMode;
+  active_profile_id: string;
+  preview_revision: number;
+  fov: [number, number] | null;
+  routing_targets: Record<string, string>;
+}
+
+export interface DeviceState {
+  interface: DeviceInterface;
+  props: Record<string, PropSnapshot<unknown>>;
+}
+
+export interface SessionState {
+  info: SessionInfo;
+  bench: InstrumentState;
+  task_tiles: TaskTile[];
+  devices: Record<string, DeviceState>;
+  acquisition: ActiveAcquisitionState | null;
+  defaults: InstrumentDefaults;
+  hardware: HALConfig;
+}
+
+export type StationStatus = 'idle' | 'opening' | 'active' | 'closing' | 'faulted' | 'closed';
+
+/** One complete materialized Station view; later views replace earlier views rather than patching them. */
+export interface StationFeedView {
+  cursor: StreamCursor;
   observed_at_unix_us: number;
-  status?: InstrumentStatus;
-  device_props?: Record<string, PropResults>;
-  active_acquisition?: ActiveAcquisitionState | null;
-  defaults?: InstrumentDefaults;
+  station: StationInfo;
+  status: StationStatus;
+  session: SessionState | null;
+  error: string | null;
 }
 
 export interface LogException {
@@ -654,25 +669,10 @@ export interface LogEntry {
   exception: LogException | null;
 }
 
-/** A shared preview view-state change: any combination of viewport and per-channel levels.
- *  Sent bidirectionally on `instrument.preview`; the server echo excludes the originating client. */
-export interface PreviewUpdate {
-  viewport?: PreviewViewport | null;
-  levels?: Record<string, PreviewLevels> | null;
-}
-
-/** Topic → payload map for the server → client WS events (`Client.on`). */
-export interface ServerTopics {
-  'app.status': AppStatus;
-  'app.logs': LogEntry;
-  'instrument.feed.updates': InstrumentUpdate;
-  'instrument.preview': PreviewUpdate;
-}
-
-/** Topic → payload map for the client → server WS controls (`Client.send`). The closed set of controls
- *  REST can't target: per-connection backpressure, and sender-excluded preview view-state. */
-export interface ClientTopics {
-  'instrument.preview': PreviewUpdate;
+export interface PreviewViewportUpdate {
+  action: 'preview.viewport.update';
+  session_id: string;
+  viewport: PreviewViewport;
 }
 
 /** Per-axis display sign: +1 if increasing the stage coordinate goes in the canonical screen direction,

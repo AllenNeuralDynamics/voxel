@@ -14,7 +14,6 @@ const MAX_HISTOGRAM_SAMPLES = 256 * 1024;
 
 let websocketUrl = '';
 let protocolVersion = 0;
-let deliveryStreamId = '';
 let visible = true;
 let closed = false;
 let socket: WebSocket | null = null;
@@ -41,7 +40,7 @@ function clearQueuedFrames(): void {
   latestSeen.clear();
 }
 
-function resetDeliveryStream(): void {
+function resetPreview(): void {
   clearQueuedFrames();
   histogrammed.clear();
 }
@@ -73,7 +72,7 @@ function scheduleReconnect(): void {
 
 function connect(): void {
   if (closed || !visible || !websocketUrl || socket) return;
-  if (protocolVersion !== 1) {
+  if (protocolVersion !== 2) {
     post({ type: 'error', message: `Unsupported preview protocol version ${protocolVersion}.` });
     return;
   }
@@ -90,7 +89,6 @@ function connect(): void {
     try {
       if (!(event.data instanceof ArrayBuffer)) throw new Error('Preview service sent a non-binary message.');
       const packet = parsePreviewPacket(event.data);
-      if (packet.delivery.delivery_cursor.stream_id !== deliveryStreamId) return;
       const key = packetKey(packet);
       const previous = latestSeen.get(key) ?? -1;
       if (packet.delivery.delivery_cursor.seq <= previous) return;
@@ -178,7 +176,6 @@ async function drain(): Promise<void> {
       }
       // If a newer packet for this key arrived while decoding, skip the stale upload as well as queued stale work.
       if ((pending.get(key)?.delivery.delivery_cursor.seq ?? -1) > packet.delivery.delivery_cursor.seq) continue;
-      if (packet.delivery.delivery_cursor.stream_id !== deliveryStreamId) continue;
 
       const frame: DecodedPreviewFrame = {
         delivery: packet.delivery,
@@ -203,17 +200,10 @@ scope.onmessage = (event: MessageEvent<PreviewWorkerCommand>) => {
     case 'configure':
       websocketUrl = command.websocketUrl;
       protocolVersion = command.protocolVersion;
-      deliveryStreamId = command.deliveryStreamId;
       visible = command.visible;
       closed = false;
-      resetDeliveryStream();
+      resetPreview();
       if (visible) connect();
-      break;
-    case 'stream':
-      if (deliveryStreamId !== command.deliveryStreamId) {
-        deliveryStreamId = command.deliveryStreamId;
-        resetDeliveryStream();
-      }
       break;
     case 'visibility':
       visible = command.visible;
@@ -224,11 +214,11 @@ scope.onmessage = (event: MessageEvent<PreviewWorkerCommand>) => {
       }
       break;
     case 'flush':
-      clearQueuedFrames();
+      resetPreview();
       break;
     case 'close':
       closed = true;
-      resetDeliveryStream();
+      resetPreview();
       closeSocket();
       scope.close();
       break;

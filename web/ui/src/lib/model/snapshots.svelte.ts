@@ -24,7 +24,7 @@ export interface SnapshotChannel {
 export interface Snapshot {
   id: string;
   label: string;
-  /** Name of the instrument this snapshot was captured on (its identity — see AppStatus.active). */
+  /** Name of the instrument this snapshot was captured on. */
   instrument: string;
   /** Owning SnapshotGroup (folder). Every snapshot belongs to a group. */
   groupId: string;
