@@ -634,13 +634,24 @@ export interface InstrumentUpdate {
   defaults?: InstrumentDefaults;
 }
 
-/** The `app.logs` payload. `seq` is a process-monotonic id used to merge backlog with the live stream. */
-export interface LogMessage {
+export interface LogException {
+  kind: string;
+  message: string;
+  traceback: string;
+  truncated: boolean;
+}
+
+/** One durable `app.logs` entry. `seq` merges SQLite backlog with the committed live stream. */
+export interface LogEntry {
   seq: number;
-  level: string;
+  emitted_at: string;
+  recorded_at: string;
+  level: number;
   message: string;
   logger: string;
-  timestamp: string;
+  node_id: string | null;
+  attributes: Record<string, unknown>;
+  exception: LogException | null;
 }
 
 /** A shared preview view-state change: any combination of viewport and per-channel levels.
@@ -653,7 +664,7 @@ export interface PreviewUpdate {
 /** Topic → payload map for the server → client WS events (`Client.on`). */
 export interface ServerTopics {
   'app.status': AppStatus;
-  'app.logs': LogMessage;
+  'app.logs': LogEntry;
   'instrument.feed.updates': InstrumentUpdate;
   'instrument.preview': PreviewUpdate;
 }

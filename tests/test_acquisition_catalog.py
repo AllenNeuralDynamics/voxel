@@ -3,15 +3,15 @@ from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any, cast
 
-from vxl_catalog import (
+from vxl_records import (
+    AcquisitionCatalog,
     AcquisitionStatus,
     AcquisitionVolume,
-    Catalog,
     DatasetStatus,
-    FileCatalogBackend,
     LocalLocation,
     LocationRole,
     LocationStatus,
+    SQLiteRecords,
     StorageSpec,
     VolumeStatus,
 )
@@ -28,6 +28,7 @@ TEMPLATE = Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel
 
 class _FakeCamera:
     def __init__(self, root: Path, *, close_error: bool = False) -> None:
+        self.uid = "camera_1"
         self._root = root
         self._close_error = close_error
         self._closing = False
@@ -59,6 +60,9 @@ class _FakeCamera:
     async def release_writer(self) -> None:
         self.released = True
 
+    async def reset_preview_stream(self) -> str:
+        return "preview-source"
+
 
 class _FakeLaser:
     async def call(self, _command: str) -> None:
@@ -79,23 +83,20 @@ class _FakeAxis:
         return
 
 
-def _catalog(tmp_path: Path) -> Catalog:
-    return Catalog(
-        FileCatalogBackend(tmp_path / "catalog"),
-        resolve_root=lambda spec: tmp_path / "data" / spec.path.as_posix(),
-    )
-
-
-def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrument, Catalog, StorageSpec]:
+def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrument, AcquisitionCatalog, StorageSpec]:
     config = InstrumentConfig.read(TEMPLATE)
     task = AcquisitionTask(x=0, y=0, start=0, end=0, profile_ids=["single_gfp"])
     state = InstrumentState(**config.default.model_dump()).model_copy(update={"tasks": {"task-a": task}})
-    catalog = _catalog(tmp_path)
+    records = SQLiteRecords(
+        tmp_path / "records.sqlite3",
+        resolve_root=lambda spec: tmp_path / "data" / spec.path.as_posix(),
+    )
+    catalog = records.acquisitions
     camera = _FakeCamera(tmp_path / "data", close_error=close_error)
     axis = _FakeAxis()
     instrument = cast("Any", object.__new__(Instrument))
     instrument._bench = SimpleNamespace(value=state, home=tmp_path / "scope.voxel")
-    instrument._catalog = catalog
+    instrument._records = records
     instrument._hal = SimpleNamespace(
         cameras={"camera_1": camera},
         config=config.hal,
@@ -103,6 +104,9 @@ def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrumen
     )
     instrument._channels = {"gfp": Channel(uid="gfp", camera=cast("Any", camera), laser=cast("Any", _FakeLaser()))}
     instrument._active_profile_id = Cell("single_gfp")
+    instrument._preview_revision = Cell(0)
+    instrument._preview_source_ids = {}
+    instrument._accept_preview = False
     instrument._routing_targets = Cell({})
     instrument._mode = Cell(AcquisitionMode.IDLE)
     instrument._acquisition = Cell(None)

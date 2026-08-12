@@ -40,6 +40,7 @@ class LocalAdapter[D: Device](Adapter[D]):
     """
 
     def __init__(self, controller: DeviceController[D]) -> None:
+        super().__init__()
         self._controller = controller
         self._log = logging.getLogger(f"{controller.uid}.LocalAdapter")
         self._signals: defaultdict[str, TopicDispatcher] = defaultdict(TopicDispatcher)

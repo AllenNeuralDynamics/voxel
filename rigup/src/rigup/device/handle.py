@@ -1,7 +1,9 @@
 """User-facing device handle."""
 
+import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
+from types import MappingProxyType
 from typing import Any, Literal, Self, cast, overload
 
 from pydantic import BaseModel
@@ -15,6 +17,7 @@ from .schema import CommandRequest, DeviceInterface, PropResults, Result, Result
 type PropertyCallback[T] = Callable[[T], Awaitable[None] | None]
 type PropertyParser[T] = Callable[[object], T]
 type PropertyAccess = Literal["ro", "rw", "all"]
+type DeviceProps = Mapping[str, PropertyModel]
 
 
 class Adapter[D: Device](ABC):
@@ -24,6 +27,23 @@ class Adapter[D: Device](ABC):
     for forwarders); typed form (with ``schema=...``) deserializes into a
     Pydantic model. Both return a ``Teardown`` callable.
     """
+
+    def __init__(self) -> None:
+        self._interface_cache: DeviceInterface | None = None
+        self._props: DeviceProperties | None = None
+
+    @property
+    def props(self) -> "DeviceProperties":
+        """Property state shared by every handle view over this adapter."""
+        if self._props is None:
+            self._props = DeviceProperties(self)
+        return self._props
+
+    async def cached_interface(self) -> DeviceInterface:
+        """Return the device interface, fetching it once per adapter."""
+        if self._interface_cache is None:
+            self._interface_cache = await self.interface()
+        return self._interface_cache
 
     @property
     @abstractmethod
@@ -67,18 +87,13 @@ class Adapter[D: Device](ABC):
 
 
 class DeviceProperty[T](Subscribable[T]):
-    """Typed live view of one streamed device property.
-
-    It caches the latest parsed value observed through ``props.update`` or an explicit ``get``.
-    """
+    """Typed live view over one entry in a :class:`DeviceProperties` cache."""
 
     def __init__(self, owner: "DeviceProperties", name: str, parser: PropertyParser[T]) -> None:
         super().__init__()
         self._owner = owner
         self._name = name
         self._parser = parser
-        self._value: T | None = None
-        self._model: PropertyModel | None = None
 
     @property
     def name(self) -> str:
@@ -87,56 +102,67 @@ class DeviceProperty[T](Subscribable[T]):
     @property
     def value(self) -> T | None:
         """Latest parsed value, or ``None`` until the property has been observed/read."""
-        return self._value
+        model = self._owner.cache.get(self._name)
+        return None if model is None else self._parser(model.value)
 
     @property
     def model(self) -> PropertyModel | None:
         """Latest full property model, including metadata such as options/bounds when present."""
-        return self._model
+        return self._owner.cache.get(self._name)
 
     async def get(self) -> T:
         """Read this property now, update the cache, and emit if the parsed value changed."""
         model = await self._owner.get_model(self._name)
-        return await self.adopt_model(model, emit=True)
+        return self._parser(model.value)
 
     async def set(self, value: T) -> T:
         """Set this property through ``set_props`` and update the cache from the accepted value."""
         results = await self._owner.set(**{self._name: value})
-        return await self.adopt_model(results[self._name].unwrap(), emit=True)
+        return self._parser(results[self._name].unwrap().value)
 
-    async def adopt_model(self, model: PropertyModel, *, emit: bool) -> T:
-        parsed = self._parser(model.value)
-        changed = self._value != parsed
-        self._model = model
-        self._value = parsed
-        if emit and changed:
-            await self._notify(parsed)
-        return parsed
+    async def notify_change(self, previous: PropertyModel | None, current: PropertyModel) -> None:
+        """Notify typed subscribers when the shared cached value changed."""
+        value = self._parser(current.value)
+        if previous is None or self._parser(previous.value) != value:
+            await self._notify(value)
 
 
-class DeviceProperties(Subscribable[PropResults]):
-    """Property hub for one :class:`DeviceHandle`.
+class DeviceProperties(Subscribable[DeviceProps]):
+    """Latest successful property observations for one underlying device handle.
 
     The hub owns a single subscription to ``props.update`` and fans updates out to:
-    - whole-update subscribers via :meth:`subscribe`
+    - complete-cache subscribers via :meth:`subscribe`
     - typed per-property wrappers returned by :meth:`property`
+
+    Operation methods still return their operation-specific :class:`PropResults`,
+    including errors. Only successful observations enter :attr:`cache`.
     """
 
-    def __init__(self, handle: "DeviceHandle[Any]") -> None:
+    def __init__(self, adapter: Adapter[Any]) -> None:
         super().__init__()
-        self._handle = handle
+        self._adapter = adapter
+        self._cache: dict[str, PropertyModel] = {}
         self._properties: dict[str, DeviceProperty[Any]] = {}
-        self._unsub: Teardown | None = self._handle.adapter.subscribe(
+        self._lock = asyncio.Lock()
+        self._closed = False
+        self._unsub: Teardown | None = self._adapter.subscribe(
             "props.update",
             self._on_update,
             schema=PropResults,
         )
 
+    @property
+    def cache(self) -> DeviceProps:
+        """Complete latest-successful observations for this handle lifetime."""
+        return self._cache_snapshot()
+
     def close(self) -> None:
-        """Release the shared upstream subscription. Idempotent."""
+        """Release the shared upstream subscription and discard cached observations."""
+        self._closed = True
         if self._unsub is not None:
             self._unsub()
             self._unsub = None
+        self._cache = {}
 
     def property[T](self, name: str, parser: PropertyParser[T]) -> DeviceProperty[T]:
         """Return a typed wrapper for one property, creating it on first use."""
@@ -147,28 +173,29 @@ class DeviceProperties(Subscribable[PropResults]):
         return prop
 
     async def get(self, *props: str) -> PropResults:
-        """Fetch properties now and update any matching typed wrappers without emitting updates."""
-        results = await self._handle.adapter.get_props(*props)
-        await self._adopt(results, emit_changed=False, emit_properties=False)
-        return results
+        """Fetch properties now and adopt every changed successful observation."""
+        async with self._lock:
+            results = await self._adapter.get_props(*props)
+            await self._adopt(results)
+            return results
 
-    async def prime(self) -> None:
-        """Fetch every registered typed property once to populate each wrapper's cached ``.value``.
-
-        One batch round-trip, adopted silently (no change notifications) — this is an initial hydrate,
-        not an update. Properties the device fails to return are left un-cached (``.value`` stays ``None``).
-        """
-        if self._properties:
-            await self.get(*self._properties)
+    async def refresh(self, access: PropertyAccess = "all") -> PropResults:
+        """Refresh the cache from every property matching the requested access mode."""
+        interface = await self._adapter.cached_interface()
+        names = [name for name, info in interface.properties.items() if access in ("all", info.access)]
+        if not names:
+            return PropResults()
+        return await self.get(*names)
 
     async def set(self, **props: Any) -> PropResults:
-        """Set properties and publish the accepted values through this hub immediately."""
-        results = await self._handle.adapter.set_props(**props)
-        await self._adopt(results, emit_changed=True, emit_properties=True)
-        return results
+        """Set properties and adopt every changed successful accepted value."""
+        async with self._lock:
+            results = await self._adapter.set_props(**props)
+            await self._adopt(results)
+            return results
 
     async def get_model(self, name: str) -> PropertyModel:
-        results = await self._handle.adapter.get_props(name)
+        results = await self.get(name)
         return results[name].unwrap()
 
     async def get_value(self, name: str) -> Any:
@@ -178,22 +205,34 @@ class DeviceProperties(Subscribable[PropResults]):
 
     async def get_values(self, access: PropertyAccess = "all") -> dict[str, Any]:
         """Fetch property values by access mode: read-only, read-write, or all."""
-        iface = await self._handle.interface()
-        names = [name for name, info in iface.properties.items() if access in ("all", info.access)]
-        if not names:
-            return {}
-        results = await self.get(*names)
-        return {name: results[name].unwrap().value for name in names if name in results and results[name].is_ok}
+        results = await self.refresh(access)
+        return {name: result.unwrap().value for name, result in results.results.items() if result.is_ok}
 
     async def _on_update(self, results: PropResults) -> None:
-        await self._adopt(results, emit_changed=True, emit_properties=True)
+        async with self._lock:
+            await self._adopt(results)
 
-    async def _adopt(self, results: PropResults, *, emit_changed: bool, emit_properties: bool) -> None:
+    async def _adopt(self, results: PropResults) -> None:
+        if self._closed:
+            return
+        interface = await self._adapter.cached_interface()
+        changed: dict[str, tuple[PropertyModel | None, PropertyModel]] = {}
         for name, model in results.ok.items():
+            if name not in interface.properties or self._cache.get(name) == model:
+                continue
+            current = model.model_copy(deep=True)
+            changed[name] = (self._cache.get(name), current)
+            self._cache[name] = current
+        if not changed:
+            return
+
+        for name, (previous, current) in changed.items():
             if (prop := self._properties.get(name)) is not None:
-                await prop.adopt_model(model, emit=emit_properties)
-        if emit_changed:
-            await self._notify(results)
+                await prop.notify_change(previous, current)
+        await self._notify(self._cache_snapshot())
+
+    def _cache_snapshot(self) -> DeviceProps:
+        return MappingProxyType({name: model.model_copy(deep=True) for name, model in self._cache.items()})
 
 
 class DeviceHandle[D: Device]:
@@ -211,12 +250,11 @@ class DeviceHandle[D: Device]:
 
     def __init__(self, adapter: Adapter[D]):
         self._adapter = adapter
-        self._interface: DeviceInterface | None = None
-        self._props = DeviceProperties(self)
+        self._props = adapter.props
 
     @classmethod
     def wrap(cls, handle: "DeviceHandle") -> Self:
-        """Create a typed handle sharing another handle's adapter."""
+        """Create a typed view sharing another handle's adapter and client-side state."""
         return cls(handle.adapter)
 
     @property
@@ -233,9 +271,7 @@ class DeviceHandle[D: Device]:
         return self._props
 
     async def interface(self) -> DeviceInterface:
-        if self._interface is None:
-            self._interface = await self._adapter.interface()
-        return self._interface
+        return await self._adapter.cached_interface()
 
     async def call(self, command: str, *args: Any, **kwargs: Any) -> Any:
         """Call a command and return the result, raising on error."""

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 from ome_zarr_writer import WriterSettings
 from pydantic import TypeAdapter
 from rigup.device.handle import Adapter, DeviceProperty
-from vxl_catalog import DatasetLocation, StorageSpec
+from vxl_records import DatasetLocation, StorageSpec
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import DeviceHandle
@@ -75,9 +75,12 @@ class CameraHandle(DeviceHandle[Camera]):
         """Stop and await the handle-owned preview update workers."""
         await self.preview_viewport.close()
 
-    async def reset_preview_stream(self) -> None:
-        """End the current preview source stream and discard its cached frame."""
-        await self.call("reset_preview_stream")
+    async def reset_preview_stream(self) -> str:
+        """End the current preview source stream and return its replacement identity."""
+        result = await self.call("reset_preview_stream")
+        if not isinstance(result, str):
+            raise RuntimeError(f"{self.uid} returned an invalid preview source-stream identity")
+        return result
 
     async def _set_preview_viewport(self, viewport: PreviewViewport) -> None:
         """Apply a preview viewport to the camera — drain for ``preview_viewport``."""
@@ -99,7 +102,7 @@ class CameraHandle(DeviceHandle[Camera]):
         magnification: float,
         settings: WriterSettings,
     ) -> DatasetLocation:
-        """Prepare camera and writer for a stack acquisition; return its catalog location.
+        """Prepare camera and writer for a stack acquisition; return its durable dataset location.
 
         ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
         under it (the node resolves it against machine-local storage); ``settings`` are the broadcast

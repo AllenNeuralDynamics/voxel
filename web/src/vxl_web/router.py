@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket
 from pydantic import AnyWebsocketUrl, BaseModel
-from vxl_catalog import AcquisitionManifest, ManifestNotFoundError
+from vxl_records import AcquisitionManifest, LogEntry, ManifestNotFoundError
 
 from rigup import PropResults, Result
 from vxl.daq.clocked import Signals
@@ -41,8 +41,8 @@ from vxl.preview.protocol import DELIVERY_FRAMING_VERSION
 from vxl.system import Remote, StationInfo
 from vxlib import ColormapGroup, get_colormap_catalog
 
-from .adapter import AppStatus, LogMessage
-from .deps import AppDep, InstrumentDep, LogBufferDep
+from .adapter import AppStatus
+from .deps import AppDep, InstrumentDep
 
 app_router = APIRouter(tags=["app"])
 instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
@@ -82,7 +82,7 @@ async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
     """Return the bounded application resources needed to initialize a client."""
     found = app.discover()
     return AppDiscovery(
-        station=app.station.info,
+        station=app.station_config.info,
         instruments=found.instruments,
         templates=found.templates,
         remotes=app.remotes,
@@ -158,16 +158,38 @@ async def get_metadata_schema(target: str) -> dict[str, Any]:
 @app_router.get("/acquisitions")
 async def list_acquisitions(app: AppDep) -> list[AcquisitionManifest]:
     """Return acquisition manifests from newest to oldest."""
-    return await app.catalog.list_manifests()
+    return await app.records.acquisitions.list_manifests()
 
 
 @app_router.get("/acquisitions/{acquisition_id}")
 async def get_acquisition(acquisition_id: uuid.UUID, app: AppDep) -> AcquisitionManifest:
     """Return one durable acquisition manifest."""
     try:
-        return await app.catalog.get(acquisition_id)
+        return await app.records.acquisitions.get(acquisition_id)
     except ManifestNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@app_router.get("/acquisitions/{acquisition_id}/logs")
+async def get_acquisition_logs(
+    acquisition_id: uuid.UUID,
+    app: AppDep,
+    after_seq: Annotated[int, Query(ge=0)] = 0,
+    minimum_level: Annotated[int | None, Query(ge=0)] = None,
+    node_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 500,
+) -> list[LogEntry]:
+    """Return committed logs within one acquisition's recorded journal window."""
+    try:
+        return await app.records.logs.for_acquisition(
+            acquisition_id,
+            after_seq=after_seq,
+            minimum_level=minimum_level,
+            node_id=node_id,
+            limit=limit,
+        )
+    except ManifestNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 # ---- WebSocket (msgpack [topic, body] over MsgBus) ----
@@ -186,9 +208,9 @@ async def preview_websocket_endpoint(websocket: WebSocket) -> None:
 
 
 @app_router.get("/logs")
-async def get_logs(logs: LogBufferDep) -> list[LogMessage]:
-    """Recent log backlog for (re)connect hydration; clients merge it with ``app.logs`` by ``seq``."""
-    return list(logs)
+async def get_logs(app: AppDep, limit: Annotated[int, Query(ge=1, le=10_000)] = 500) -> list[LogEntry]:
+    """Return the newest committed log entries in ascending journal order."""
+    return await app.records.logs.tail(limit=limit)
 
 
 # ---- active-instrument read + edit (the Instrument surface) ----
@@ -378,8 +400,11 @@ async def stop_preview(inst: InstrumentDep) -> None:
 
 @instrument_router.get("/devices")
 async def list_devices(inst: InstrumentDep) -> dict[str, DeviceSnapshot]:
-    """Each device's interface. Per-device fault tolerance: a failed introspection is reported, not raised."""
-    return await inst.inspect_devices()
+    """Each device interface in the legacy snapshot representation."""
+    return {
+        device_id: DeviceSnapshot(id=device_id, connected=True, interface=interface)
+        for device_id, interface in inst.device_interfaces.items()
+    }
 
 
 @instrument_router.get("/devices/{device_id}/properties")

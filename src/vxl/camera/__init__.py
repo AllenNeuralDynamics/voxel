@@ -1,4 +1,4 @@
-from vxl_catalog import RemoteTarget, StorageSpec
+from vxl_records import RemoteTarget, StorageSpec
 
 from .base import Camera, CameraController, CameraMode, CaptureState, SensorROI, StorageStatus
 from .handle import CameraHandle

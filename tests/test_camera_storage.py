@@ -3,14 +3,14 @@ from types import SimpleNamespace
 
 from cloudpathlib import S3Path
 from ome_zarr_writer import DirectS3, Local, StagedS3
-from vxl_catalog import (
+from vxl_records import (
     LocalLocation,
     LocationRole,
     LocationStatus,
     ObjectLocation,
     RemoteTarget,
 )
-from vxl_catalog import StorageSpec as CatalogStorageSpec
+from vxl_records import StorageSpec as RecordsStorageSpec
 
 from vxl.camera import StorageSpec, resolve_storage
 from vxl.camera import storage as camera_storage
@@ -18,14 +18,14 @@ from vxl.system import Remote
 from vxlib import S3Store
 
 
-def test_catalog_storage_spec_remains_available_from_camera(monkeypatch, tmp_path) -> None:
+def test_records_storage_spec_remains_available_from_camera(monkeypatch, tmp_path) -> None:
     system = SimpleNamespace(store=tmp_path / "store", scratch=tmp_path / "scratch", remotes={})
     monkeypatch.setattr(camera_storage, "System", lambda: system)
     spec = StorageSpec(path=PurePosixPath("experiment/run"))
 
     resolved = resolve_storage(spec, PurePosixPath("tile/profile/channel"))
 
-    assert StorageSpec is CatalogStorageSpec
+    assert StorageSpec is RecordsStorageSpec
     assert isinstance(resolved, Local)
     assert resolved.target == tmp_path / "store/experiment/run/tile/profile/channel"
 

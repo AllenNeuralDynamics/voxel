@@ -20,6 +20,7 @@ members = [
     "vxl-cli",
     "vxl-drivers",
     "vxl-qt",
+    "vxl-records",
     "vxl-web",
     "vxlib",
 ]
@@ -2741,6 +2742,7 @@ dependencies = [
     { name = "rich" },
     { name = "rigup" },
     { name = "vxl-catalog" },
+    { name = "vxl-records" },
     { name = "vxlib" },
 ]
 
@@ -2766,6 +2768,7 @@ requires-dist = [
     { name = "rich", specifier = ">=14.2.0" },
     { name = "rigup", editable = "rigup" },
     { name = "vxl-catalog", editable = "catalog" },
+    { name = "vxl-records", editable = "records" },
     { name = "vxlib", editable = "vxlib" },
 ]
 
@@ -2798,6 +2801,7 @@ version = "0.1.0"
 source = { editable = "cli" }
 dependencies = [
     { name = "vxl" },
+    { name = "vxl-records" },
 ]
 
 [package.optional-dependencies]
@@ -2817,6 +2821,7 @@ requires-dist = [
     { name = "vxl", editable = "." },
     { name = "vxl-qt", marker = "extra == 'all'", editable = "qt" },
     { name = "vxl-qt", marker = "extra == 'qt'", editable = "qt" },
+    { name = "vxl-records", editable = "records" },
     { name = "vxl-web", marker = "extra == 'all'", editable = "web" },
     { name = "vxl-web", marker = "extra == 'web'", editable = "web" },
 ]
@@ -2902,6 +2907,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "vxl-records"
+version = "0.1.0"
+source = { editable = "records" }
+dependencies = [
+    { name = "cloudpathlib", extra = ["s3"] },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cloudpathlib", extras = ["s3"], specifier = ">=0.24.0" },
+    { name = "pydantic", specifier = ">=2.11" },
+]
+
+[[package]]
 name = "vxl-web"
 version = "0.1.0"
 source = { editable = "web" }
@@ -2910,6 +2930,7 @@ dependencies = [
     { name = "uvicorn" },
     { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "vxl" },
+    { name = "vxl-records" },
     { name = "websockets" },
 ]
 
@@ -2919,6 +2940,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "uvloop", marker = "sys_platform != 'win32'" },
     { name = "vxl", editable = "." },
+    { name = "vxl-records", editable = "records" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
 

@@ -8,12 +8,12 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from vxl_catalog import Catalog, FileCatalogBackend
+from vxl_records import SQLiteRecords, VoxelRecords
 
 from vxl.camera import resolve_storage
 from vxl.errors import Loaded
 from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection, InstrumentState
-from vxl.system import Remote, Station
+from vxl.system import Remote, StationConfig
 from vxlib import Cell, Readable, load_yaml, save_yaml
 
 logger = logging.getLogger(__name__)
@@ -89,37 +89,37 @@ class Discovered:
 class VoxelApp:
     """Entry point: discover the instruments and templates on this box, and launch one.
 
-    Instruments are ``<name>.voxel/`` directories under ``Station.dir / "instruments"``.
+    Instruments are ``<name>.voxel/`` directories under ``StationConfig.dir / "instruments"``.
     :meth:`discover` lists existing instruments + shipped templates (no hardware). :meth:`launch`
     opens an existing instrument; :meth:`launch_template` creates one from a template, then opens it.
     One instrument is active at a time — launching raises while another is open, so the caller
     ``close()``s then launches to switch.
     """
 
-    def __init__(self, catalog: Catalog | None = None, *, station: Station | None = None) -> None:
+    def __init__(self, records: VoxelRecords | None = None, *, station_config: StationConfig | None = None) -> None:
         self._active: Cell[Instrument | None] = Cell(None)
-        self._station = station or Station.load()
-        self._station.dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
+        self._station_config = station_config or StationConfig.load()
+        self._station_config.dir.mkdir(parents=True, exist_ok=True)  # ensure ~/.voxel/ and instruments/ exist
         self.instruments_dir.mkdir(exist_ok=True)
-        self._catalog = catalog or Catalog(
-            FileCatalogBackend(self._station.dir / "catalog"),
+        self._records = records or SQLiteRecords(
+            self._station_config.dir / "records.sqlite3",
             resolve_root=lambda spec: resolve_storage(spec).target,
         )
 
     @property
-    def station(self) -> Station:
-        """The configured control station that owns this application instance."""
-        return self._station
+    def station_config(self) -> StationConfig:
+        """The persisted configuration for this application's control station."""
+        return self._station_config
 
     @property
-    def catalog(self) -> Catalog:
-        """The acquisition catalog shared with the active instrument."""
-        return self._catalog
+    def records(self) -> VoxelRecords:
+        """The durable record service composed with this application."""
+        return self._records
 
     @property
     def remotes(self) -> dict[str, Remote]:
         """The station's configured object stores (name → connection + selectable roots)."""
-        return self._station.remotes
+        return self._station_config.remotes
 
     @property
     def active(self) -> Readable[Instrument | None]:
@@ -133,7 +133,7 @@ class VoxelApp:
     @property
     def instruments_dir(self) -> Path:
         """Root holding the ``<name>.voxel`` instrument directories."""
-        return self._station.dir / "instruments"
+        return self._station_config.dir / "instruments"
 
     def discover(self) -> Discovered:
         """Existing instruments (under ``instruments_dir``) + shipped templates. No hardware."""
@@ -158,7 +158,7 @@ class VoxelApp:
         directory = self.instruments_dir / f"{name}.voxel"
         if not directory.is_dir():
             raise FileNotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
-        instrument = Instrument.from_path(directory, catalog=self._catalog)
+        instrument = Instrument.from_path(directory, records=self._records)
         await instrument.open()
         await self._active.set(instrument)
         return instrument

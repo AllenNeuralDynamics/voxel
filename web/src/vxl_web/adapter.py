@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import WebSocket
 from pydantic import BaseModel, Field
+from vxl_records import LogEntry
 
 from vxl.app import VoxelApp
 from vxl.instrument import Instrument
@@ -17,20 +18,6 @@ if TYPE_CHECKING:
     from vxlib import Teardown
 
 log = logging.getLogger(__name__)
-
-
-class LogMessage(BaseModel):
-    """A captured log record. Broadcast on ``app.logs`` and served as backlog from ``GET /logs``.
-
-    ``seq`` is a process-monotonic id assigned when the record is delivered; clients merge backlog and live
-    records by ``seq`` (dedup + order), so a (re)connecting client never misses or duplicates a log.
-    """
-
-    seq: int
-    level: str
-    message: str
-    logger: str
-    timestamp: str
 
 
 class PreviewLevels(BaseModel):
@@ -75,6 +62,7 @@ class VoxelWebAdapter:
             return
         self._unsubs = [
             self._app.active.subscribe(self._on_active),
+            self._app.records.logs.subscribe(self._publish_log),
             self._messages.on_command("instrument.preview", PreviewUpdate, self._on_preview_update),
         ]
         self._on_active(self._app.active.value)
@@ -98,9 +86,9 @@ class VoxelWebAdapter:
         """Serve one latest-only preview WebSocket peer."""
         await self._preview.serve(websocket)
 
-    def publish_log(self, message: LogMessage) -> None:
-        """Publish one app-scoped log record on the primary transport."""
-        self._broadcast("app.logs", message)
+    def _publish_log(self, entry: LogEntry) -> None:
+        """Publish one committed journal entry on the primary transport."""
+        self._broadcast("app.logs", entry)
 
     def _broadcast(
         self,

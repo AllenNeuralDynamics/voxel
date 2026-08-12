@@ -2,8 +2,9 @@ import asyncio
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import pytest
-from vxl_catalog import Catalog, FileCatalogBackend
+from vxl_records import SQLiteRecords
 
 from rigup import (
     BuildConfig,
@@ -11,6 +12,7 @@ from rigup import (
     CommandRequest,
     DeviceHandle,
     DeviceInterface,
+    DeviceProps,
     PropertyModel,
     PropResults,
     Result,
@@ -28,13 +30,13 @@ from vxl.instrument.topology import (
     OpticalRoutingConfig,
     StageConfig,
 )
-from vxl.preview import PreviewFramePacket, PreviewLayer
+from vxl.preview import PreviewFrame, PreviewFramePacket, PreviewLayer, PreviewViewport
 from vxlib import Cell
 
 
-def _catalog(tmp_path: Path) -> Catalog:
-    return Catalog(
-        FileCatalogBackend(tmp_path / "catalog"),
+def _records(tmp_path: Path) -> SQLiteRecords:
+    return SQLiteRecords(
+        tmp_path / "records.sqlite3",
         resolve_root=lambda _spec: tmp_path / "acquisitions",
     )
 
@@ -349,7 +351,7 @@ async def test_camera_geometry_transport_failures_are_collected_and_close_the_ri
     camera_a = _CameraWithFailingProperties("first failure")
     camera_b = _CameraWithFailingProperties("second failure")
 
-    async def inspect_devices() -> tuple[list[Violation], set[str]]:
+    async def inspect_and_classify_devices() -> tuple[list[Violation], set[str]]:
         hal.cameras.update(
             {
                 "camera_a": cast("Any", camera_a),
@@ -358,7 +360,7 @@ async def test_camera_geometry_transport_failures_are_collected_and_close_the_ri
         )
         return [], set()
 
-    monkeypatch.setattr(hal, "_inspect_devices", inspect_devices)
+    monkeypatch.setattr(hal, "_inspect_and_classify_devices", inspect_and_classify_devices)
     monkeypatch.setattr(hal, "_compatibility_violations", lambda _: [])
 
     with pytest.raises(StartupError) as raised:
@@ -383,11 +385,11 @@ async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch
         )
     )
 
-    async def inspect_devices() -> tuple[list[Violation], set[str]]:
+    async def inspect_and_classify_devices() -> tuple[list[Violation], set[str]]:
         hal.cameras["camera"] = cast("Any", camera)
         return [], set()
 
-    monkeypatch.setattr(hal, "_inspect_devices", inspect_devices)
+    monkeypatch.setattr(hal, "_inspect_and_classify_devices", inspect_and_classify_devices)
     monkeypatch.setattr(hal, "_compatibility_violations", lambda _: [])
 
     with pytest.raises(StartupError) as raised:
@@ -509,7 +511,7 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
     config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("runtime-validation", tmp_path),
-        catalog=_catalog(tmp_path),
+        records=_records(tmp_path),
     )
 
     try:
@@ -517,17 +519,17 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
         positions: list[float] = []
         arrived = asyncio.Event()
 
-        def observe_position(update: tuple[str, PropResults]) -> None:
-            device_id, results = update
-            position = results.results.get("position")
-            if device_id != "x_axis" or position is None or not position.is_ok:
+        def observe_position(update: tuple[str, DeviceProps]) -> None:
+            device_id, props = update
+            position = props.get("position")
+            if device_id != "x_axis" or position is None:
                 return
-            value = float(position.unwrap().value)
+            value = float(position.value)
             positions.append(value)
             if value == 1:
                 arrived.set()
 
-        unsubscribe = instrument.device_property_updates.subscribe(observe_position)
+        unsubscribe = instrument.device_props_updates.subscribe(observe_position)
         await instrument.move_stage(x=1, wait=True)
         await asyncio.wait_for(arrived.wait(), timeout=1)
         unsubscribe()
@@ -573,7 +575,7 @@ async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None
     config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("coalescer-cleanup", tmp_path),
-        catalog=_catalog(tmp_path),
+        records=_records(tmp_path),
     )
 
     await instrument.open()
@@ -601,7 +603,7 @@ async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
     config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("feed-lifecycle", tmp_path),
-        catalog=_catalog(tmp_path),
+        records=_records(tmp_path),
     )
 
     await instrument.open()
@@ -616,23 +618,53 @@ async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
         assert instrument.feed.cursor.seq > initial.seq
 
         delivered: list[tuple[str, PreviewLayer, bytes]] = []
+        source_frames: list[tuple[str, PreviewLayer, bytes]] = []
         unsub = instrument.feed.frames.subscribe(delivered.append)
+        unsub_source = instrument.preview.subscribe(source_frames.append)
         status_cursor = instrument.feed.cursor
         delivery_stream_id = instrument.feed.delivery_stream_id.value
-        await instrument.feed.deliver_preview("488", PreviewLayer.OVERVIEW, b"VXPS")
+        source_packet = PreviewFrame.from_source(
+            np.zeros((8, 8), dtype=np.uint16),
+            camera_id="camera_1",
+            source_stream_id=instrument._preview_source_ids["camera_1"],
+            layer=PreviewLayer.OVERVIEW,
+            frame_idx=0,
+            viewport=PreviewViewport(),
+            target_width=8,
+            valid_bits=16,
+        ).pack()
+        await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
+        assert source_frames[-1] == ("gfp", PreviewLayer.OVERVIEW, source_packet)
         first = PreviewFramePacket.from_packed(delivered[-1][2])
+        assert first.header.channel_id == "gfp"
         assert first.header.delivery_cursor.stream_id == delivery_stream_id
         assert first.header.delivery_cursor.seq == 0
         assert first.header.state_cursor.stream_id == status_cursor.stream_id
         assert first.header.state_cursor.seq == status_cursor.seq
         assert first.header.stamped_at_unix_us > 0
 
-        await instrument.feed.reset_preview()
+        preview_revision = instrument.preview_revision.value
+        await instrument.set_active_profile("single_rfp")
+        assert instrument.preview_revision.value == preview_revision + 1
         assert instrument.feed.delivery_stream_id.value != delivery_stream_id
-        await instrument.feed.deliver_preview("488", PreviewLayer.OVERVIEW, b"VXPS")
+        await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
+        assert len(delivered) == 1
+        source_packet = PreviewFrame.from_source(
+            np.zeros((8, 8), dtype=np.uint16),
+            camera_id="camera_1",
+            source_stream_id=instrument._preview_source_ids["camera_1"],
+            layer=PreviewLayer.OVERVIEW,
+            frame_idx=0,
+            viewport=PreviewViewport(),
+            target_width=8,
+            valid_bits=16,
+        ).pack()
+        await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
         second = PreviewFramePacket.from_packed(delivered[-1][2])
+        assert second.header.channel_id == "rfp"
         assert second.header.delivery_cursor.seq == 0
         assert second.header.state_cursor.seq == instrument.feed.cursor.seq
+        unsub_source()
         unsub()
     finally:
         await instrument.close()
@@ -668,7 +700,7 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
     )
     instrument = Instrument.from_path(
         config.model_copy(update={"hal": hal, "default": default}).instantiate("split-routing", tmp_path),
-        catalog=_catalog(tmp_path),
+        records=_records(tmp_path),
     )
 
     async def wait_for_target(route: str) -> None:
@@ -686,15 +718,15 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
     async def wait_for_selector(route: str) -> None:
         arrived = asyncio.Event()
 
-        def observe_properties(update: tuple[str, PropResults]) -> None:
-            device_id, results = update
+        def observe_properties(update: tuple[str, DeviceProps]) -> None:
+            device_id, props = update
             if device_id != "illumination_side_selector":
                 return
-            label = results.results.get("label")
-            if label is not None and label.is_ok and label.unwrap().value == route:
+            label = props.get("label")
+            if label is not None and label.value == route:
                 arrived.set()
 
-        unsubscribe = instrument.device_property_updates.subscribe(observe_properties)
+        unsubscribe = instrument.device_props_updates.subscribe(observe_properties)
         try:
             if await _device_property(instrument, "illumination_side_selector", "label") == route:
                 arrived.set()

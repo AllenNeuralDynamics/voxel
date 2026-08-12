@@ -1,9 +1,9 @@
 import asyncio
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
-from rigup import DeviceHandle, Rig
+from rigup import DeviceHandle, DeviceInterface, Rig
 from vxl.axes import ContinuousAxisHandle
 from vxl.camera import CameraHandle
 from vxl.daq.clocked import SignalGeneratorHandle
@@ -41,6 +41,7 @@ class HAL:
         self.discrete_axes: dict[str, DeviceHandle] = {}
         self.fws: dict[str, DeviceHandle] = {}
         self.signal_generators: dict[str, SignalGeneratorHandle] = {}
+        self._device_interfaces: dict[str, DeviceInterface] = {}
         self._stage: Stage | None = None
 
     @property
@@ -56,6 +57,11 @@ class HAL:
         return self.rig.devices
 
     @property
+    def device_interfaces(self) -> Mapping[str, DeviceInterface]:
+        """Interfaces retained from the successful startup inspection."""
+        return dict(self._device_interfaces)
+
+    @property
     def stage(self) -> Stage:
         if self._stage is None:
             raise RuntimeError("HAL is not open — stage is unavailable")
@@ -66,7 +72,7 @@ class HAL:
         try:
             await self._rig.open()
             violations.extend(self._build_violations())
-            interface_violations, interface_unavailable = await self._inspect_devices()
+            interface_violations, interface_unavailable = await self._inspect_and_classify_devices()
             violations.extend(interface_violations)
             unavailable = set(self.rig.build_errors) | interface_unavailable
             violations.extend(self._compatibility_violations(unavailable))
@@ -82,6 +88,7 @@ class HAL:
 
     async def close(self) -> None:
         self._stage = None
+        self._device_interfaces = {}
         await asyncio.gather(*(camera.close_preview_updates() for camera in self.cameras.values()))
         self.cameras.clear()
         self.lasers.clear()
@@ -102,7 +109,7 @@ class HAL:
             for uid, error in self.rig.build_errors.items()
         ]
 
-    async def _inspect_devices(self) -> tuple[list[Violation], set[str]]:
+    async def _inspect_and_classify_devices(self) -> tuple[list[Violation], set[str]]:
         """Inspect and classify every built device, collecting independent interface failures."""
         devices = list(self.rig.devices.items())
         interfaces = await asyncio.gather(
@@ -124,6 +131,8 @@ class HAL:
                     )
                 )
                 continue
+
+            self._device_interfaces[uid] = interface
 
             match interface.type:
                 case "camera":

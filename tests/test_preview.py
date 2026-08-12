@@ -110,7 +110,7 @@ async def test_reset_stream_changes_capture_identity() -> None:
         await gen._overview_future
         await asyncio.sleep(0)  # allow the future's publish callback to run
         first = captured[-1]
-        gen.reset_stream()
+        source_stream_id = gen.reset_stream()
         gen.submit_frame(_frame(w=32, h=24), 0)
         assert gen._overview_future is not None
         await gen._overview_future
@@ -119,4 +119,4 @@ async def test_reset_stream_changes_capture_identity() -> None:
     finally:
         gen.close()
 
-    assert first.header.source_stream_id != second.header.source_stream_id
+    assert first.header.source_stream_id != second.header.source_stream_id == source_stream_id

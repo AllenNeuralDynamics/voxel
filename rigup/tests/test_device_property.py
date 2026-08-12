@@ -23,6 +23,12 @@ def _as_float(value: object) -> float:
     return float(value)
 
 
+class TypedMockHandle(DeviceHandle[MockDevice]):
+    def __init__(self, adapter) -> None:
+        super().__init__(adapter)
+        self.value = self.props.property("value", _as_float)
+
+
 async def _wait_for(predicate: Callable[[], bool], *, timeout_s: float = 2.0, interval: float = 0.01) -> None:
     """Poll ``predicate`` until true, failing after ``timeout_s`` seconds."""
     for _ in range(int(timeout_s / interval)):
@@ -95,3 +101,36 @@ async def test_no_notify_when_value_unchanged(handle: DeviceHandle) -> None:
 
     await asyncio.sleep(0.05)
     assert seen == []
+
+
+async def test_property_hub_emits_complete_latest_successful_cache(handle: DeviceHandle) -> None:
+    observed = []
+    handle.props.subscribe(observed.append)
+
+    await handle.props.get("enabled")
+    assert handle.props.cache["enabled"].value is False
+
+    await handle.props.set(value=3.0)
+    assert set(observed[-1].ok) == {"enabled", "value"}
+    assert handle.props.cache["value"].value == 3.0
+
+    emission_count = len(observed)
+    result = await handle.props.get("missing")
+    assert not result["missing"].is_ok
+    assert len(observed) == emission_count
+    assert "missing" not in handle.props.cache
+
+
+async def test_typed_handle_shares_property_cache_and_typed_views(handle: DeviceHandle) -> None:
+    await handle.props.get("value")
+    typed = TypedMockHandle.wrap(handle)
+
+    assert typed.props is handle.props
+    assert typed.value.value == 1.0
+
+    observed: list[float] = []
+    typed.value.subscribe(observed.append)
+    await handle.props.set(value=4.0)
+
+    assert typed.value.value == 4.0
+    assert observed == [4.0]

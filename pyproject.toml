@@ -21,6 +21,7 @@ dependencies = [
     "rigup",
     "vxlib",
     "vxl-catalog",
+    "vxl-records",
     "msgpack>=1.1.0",
     "numpy>=2.3.4",
     "numcodecs>=0.16.5",
@@ -55,6 +56,7 @@ members = [
     "omezarr",
     "bench",
     "catalog",
+    "records",
 ]
 
 [tool.uv.sources]
@@ -62,6 +64,7 @@ ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
 vxlib = { workspace = true }
 vxl-catalog = { workspace = true }
+vxl-records = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -82,6 +85,7 @@ testpaths = [
     "cli/tests",
     "drivers/tests",
     "omezarr/tests",
+    "records/tests",
     "rigup/tests",
     "web/tests",
 ]

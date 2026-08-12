@@ -9,12 +9,9 @@ Runs as a single uvicorn process: it owns the open hardware, the bus, and one ev
 exactly one process per microscope (never multiple workers — they would each open the hardware).
 """
 
-import asyncio
 import logging
-from collections import deque
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,12 +29,10 @@ from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.system import load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
-from .adapter import LogMessage, VoxelWebAdapter
+from .adapter import VoxelWebAdapter
 from .router import api_router
 
 log = logging.getLogger(__name__)
-
-LOG_BUFFER_SIZE = 1000  # recent records retained for client backlog on (re)connect
 
 
 class SPAStaticFiles(StaticFiles):
@@ -78,49 +73,18 @@ def _register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=422, content={"detail": details(exc)})
 
 
-class _LogHandler(logging.Handler):
-    """Root-logger handler that buffers records for replay and streams them to the bus. ``emit`` runs on
-    whatever thread logged, so it only captures fields — sequencing, buffering, and delivery are marshalled
-    onto the loop (the seq counter, buffer, and bus may only be touched from its loop)."""
-
-    def __init__(self, loop: asyncio.AbstractEventLoop, vxl: VoxelWebAdapter, buffer: deque[LogMessage]) -> None:
-        super().__init__()
-        self._loop = loop
-        self._vxl = vxl
-        self._buffer = buffer
-        self._seq = 0
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            fields = (record.levelname.lower(), record.getMessage(), record.name, datetime.now(UTC).isoformat())
-        except Exception:
-            self.handleError(record)
-            return
-        self._loop.call_soon_threadsafe(self._deliver, *fields)
-
-    def _deliver(self, level: str, message: str, logger: str, timestamp: str) -> None:
-        """On the loop: assign the next seq, buffer the record for backlog, then broadcast it live."""
-        self._seq += 1
-        msg = LogMessage(seq=self._seq, level=level, message=message, logger=logger, timestamp=timestamp)
-        self._buffer.append(msg)
-        self._vxl.publish_log(msg)
-
-
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    log.info("Starting Voxel web backend")
     vxl = app.state.vxl
-    handler = _LogHandler(asyncio.get_running_loop(), vxl, app.state.log_buffer)
-    handler.setLevel(logging.DEBUG)  # stream everything to the UI; the client filters by level
-    logging.getLogger().addHandler(handler)
-    vxl.attach()
-    try:
-        yield
-    finally:
-        await vxl.close()
-        logging.getLogger().removeHandler(handler)  # stop streaming logs to clients
-        await app.state.voxel_app.close()  # parks hardware on shutdown (closes the active instrument, if any)
-        log.info("Voxel web backend stopped")
+    async with app.state.voxel_app.records.logs.capture():
+        log.info("Starting Voxel web backend")
+        vxl.attach()
+        try:
+            yield
+        finally:
+            await vxl.close()
+            await app.state.voxel_app.close()  # parks hardware on shutdown (closes the active instrument, if any)
+            log.info("Voxel web backend stopped")
 
 
 def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) -> FastAPI:
@@ -136,7 +100,6 @@ def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) 
     )
     app.state.voxel_app = voxel_app or VoxelApp()
     app.state.vxl = VoxelWebAdapter(app.state.voxel_app)
-    app.state.log_buffer = deque(maxlen=LOG_BUFFER_SIZE)
     _register_error_handlers(app)
     app.include_router(api_router, prefix="/api")
     if serve_static and (static_dir := Path(__file__).parent / "static").is_dir():

@@ -56,6 +56,7 @@ class TransportAdapter[D: Device](Adapter[D]):
     """
 
     def __init__(self, uid: str, transport: TransportClient) -> None:
+        super().__init__()
         self._uid = uid
         self._transport = transport
         self._log = logging.getLogger(f"{uid}.TransportAdapter")

@@ -19,7 +19,7 @@ from ome_zarr_writer import (
 from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
 from pydantic import BaseModel, ConfigDict
-from vxl_catalog import DatasetLocation, StorageSpec
+from vxl_records import DatasetLocation, StorageSpec
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
@@ -213,8 +213,9 @@ class CameraController(DeviceController["Camera"]):
         await task if task is not None else None
 
     @describe(label="Reset Preview Stream")
-    async def reset_preview_stream(self) -> None:
-        self._previewer.reset_stream()
+    async def reset_preview_stream(self) -> str:
+        """Discard pending preview work and return the new source-stream identity."""
+        return self._previewer.reset_stream()
 
     @describe(label="Start Preview")
     async def start_preview(
@@ -298,7 +299,7 @@ class CameraController(DeviceController["Camera"]):
         subpath: PurePosixPath,
         settings: WriterSettings,
     ) -> DatasetLocation:
-        """Prepare the camera + writer for a stack and return its catalog location.
+        """Prepare the camera + writer for a stack and return its durable dataset location.
 
         ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
         under it (e.g. ``task/profile/channel``); the node resolves it with :func:`resolve_storage` and

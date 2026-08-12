@@ -162,11 +162,12 @@ class PreviewGenerator:
         else:
             self.health.record_overview_drop()  # Gate 1 drop: prior overview still generating
 
-    def reset_stream(self) -> None:
-        """Start a new camera capture identity before resetting frame indices."""
+    def reset_stream(self) -> str:
+        """Start and return a new camera capture identity."""
         self.cancel_pending()
         self._current_frame = None
         self._source_stream_id = uuid4().hex
+        return self._source_stream_id
 
     def cancel_pending(self) -> None:
         """Cancel preview work without shutting down the reusable worker executors."""

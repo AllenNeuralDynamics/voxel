@@ -2,9 +2,7 @@ from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
-from vxl_catalog import AcquisitionManifest
-
-from rigup import DeviceInterface
+from vxl_records import AcquisitionManifest
 
 from .traversal import Tile
 
@@ -19,7 +17,7 @@ class VolumeProgress(BaseModel, frozen=True):
     """Transient frame progress for one task/profile volume.
 
     A profile's channels capture in synchronized batches, so the captured-frame count is shared across
-    them. This state is retained by the instrument for live clients but is not written to the catalog.
+    them. This state is retained by the instrument for live clients but is not written to durable records.
     """
 
     task: str = Field(min_length=1)
@@ -49,15 +47,6 @@ class ActiveAcquisitionState(BaseModel, frozen=True):
         if key not in {(volume.task, volume.profile) for volume in self.manifest.volumes}:
             raise ValueError("progress must identify a volume in the manifest")
         return self
-
-
-class DeviceSnapshot(BaseModel, frozen=True):
-    """One device's identity and introspected interface, or the error that prevented introspection."""
-
-    id: str
-    connected: bool
-    interface: DeviceInterface | None = None
-    error: str | None = None
 
 
 class TaskTile(Tile):

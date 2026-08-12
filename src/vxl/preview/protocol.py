@@ -22,6 +22,8 @@ MAX_SOURCE_HEADER_BYTES = 64 * 1024
 DELIVERY_MAGIC = b"VXPD"
 DELIVERY_FRAMING_VERSION = 1
 DELIVERY_SCHEMA_VERSION = 1
+STATION_DELIVERY_FRAMING_VERSION = 2
+STATION_DELIVERY_SCHEMA_VERSION = 2
 DELIVERY_PREFIX = Struct(">4sBI")
 MAX_DELIVERY_HEADER_BYTES = 64 * 1024
 
@@ -128,6 +130,7 @@ class PreviewLayer(StrEnum):
 
 
 type PreviewKey = tuple[str, PreviewLayer]
+type PreviewSourceEmission = tuple[str, PreviewLayer, bytes]
 type PreviewEmission = tuple[str, PreviewLayer, bytes]
 
 
@@ -171,6 +174,37 @@ class PreviewSourceHeader(SchemaModel):
         return self
 
 
+def _parse_preview_source(
+    packed: bytes | bytearray | memoryview,
+) -> tuple[memoryview, PreviewSourceHeader, int]:
+    packet = memoryview(packed)
+    if len(packet) < SOURCE_PREFIX.size:
+        raise ValueError("preview source packet is truncated before its prefix")
+    magic, framing_version, header_length = SOURCE_PREFIX.unpack_from(packet)
+    if magic != SOURCE_MAGIC:
+        raise ValueError("invalid preview source magic")
+    if framing_version != SOURCE_FRAMING_VERSION:
+        raise ValueError(f"unsupported preview source framing version: {framing_version}")
+    if not 0 < header_length <= MAX_SOURCE_HEADER_BYTES:
+        raise ValueError(f"invalid preview source header length: {header_length}")
+
+    payload_offset = SOURCE_PREFIX.size + header_length
+    if len(packet) <= payload_offset:
+        raise ValueError("preview source packet is truncated before its payload")
+    try:
+        unpacked = msgpack.unpackb(packet[SOURCE_PREFIX.size : payload_offset], raw=False)
+    except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
+        raise ValueError("invalid preview source MessagePack header") from exc
+    if not isinstance(unpacked, dict):
+        raise ValueError("preview source header must be a MessagePack map")
+    return packet, PreviewSourceHeader.model_validate(unpacked), payload_offset
+
+
+def preview_source_header(packed: bytes | bytearray | memoryview) -> PreviewSourceHeader:
+    """Parse and validate only the VXPS header without copying its compressed payload."""
+    return _parse_preview_source(packed)[1]
+
+
 class StreamCursor(SchemaModel):
     """Position in one identified ordered stream."""
 
@@ -184,6 +218,17 @@ class PreviewDeliveryHeader(SchemaModel):
     delivery_schema_version: Literal[1] = DELIVERY_SCHEMA_VERSION
     channel_id: str = Field(min_length=1)
     delivery_cursor: StreamCursor
+    state_cursor: StreamCursor
+    stamped_at_unix_us: int = Field(ge=0)
+    frame_byte_length: int = Field(gt=0)
+
+
+class StationPreviewDeliveryHeader(SchemaModel):
+    """Station frame ordering and authoritative station-state association."""
+
+    delivery_schema_version: Literal[2] = STATION_DELIVERY_SCHEMA_VERSION
+    channel_id: str = Field(min_length=1)
+    seq: int = Field(ge=0)
     state_cursor: StreamCursor
     stamped_at_unix_us: int = Field(ge=0)
     frame_byte_length: int = Field(gt=0)
@@ -253,27 +298,7 @@ class PreviewFrame:
     @classmethod
     def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
         """Parse and validate framing and source metadata without decoding pixels."""
-        packet = memoryview(packed)
-        if len(packet) < SOURCE_PREFIX.size:
-            raise ValueError("preview source packet is truncated before its prefix")
-        magic, framing_version, header_length = SOURCE_PREFIX.unpack_from(packet)
-        if magic != SOURCE_MAGIC:
-            raise ValueError("invalid preview source magic")
-        if framing_version != SOURCE_FRAMING_VERSION:
-            raise ValueError(f"unsupported preview source framing version: {framing_version}")
-        if not 0 < header_length <= MAX_SOURCE_HEADER_BYTES:
-            raise ValueError(f"invalid preview source header length: {header_length}")
-
-        payload_offset = SOURCE_PREFIX.size + header_length
-        if len(packet) <= payload_offset:
-            raise ValueError("preview source packet is truncated before its payload")
-        try:
-            unpacked = msgpack.unpackb(packet[SOURCE_PREFIX.size : payload_offset], raw=False)
-        except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
-            raise ValueError("invalid preview source MessagePack header") from exc
-        if not isinstance(unpacked, dict):
-            raise ValueError("preview source header must be a MessagePack map")
-        header = PreviewSourceHeader.model_validate(unpacked)
+        packet, header, payload_offset = _parse_preview_source(packed)
         return cls(header=header, payload=bytes(packet[payload_offset:]))
 
     def pack(self) -> bytes:
@@ -364,3 +389,73 @@ class PreviewFramePacket:
         if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
             raise ValueError(f"preview delivery header is too large: {len(header)} bytes")
         return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, DELIVERY_FRAMING_VERSION, len(header)) + header + self.frame
+
+
+@dataclass(frozen=True)
+class StationPreviewFramePacket:
+    """Station-owned delivery header plus an opaque packed VXPS frame."""
+
+    header: StationPreviewDeliveryHeader
+    frame: bytes
+
+    def __post_init__(self) -> None:
+        if len(self.frame) != self.header.frame_byte_length:
+            raise ValueError(f"frame is {len(self.frame)} bytes; expected {self.header.frame_byte_length}")
+
+    @classmethod
+    def wrap(
+        cls,
+        frame: bytes | bytearray | memoryview,
+        *,
+        channel_id: str,
+        seq: int,
+        state_cursor: StreamCursor,
+        stamped_at_unix_us: int,
+    ) -> Self:
+        """Wrap an already-packed VXPS frame without parsing or copying its payload twice."""
+        packed_frame = bytes(frame)
+        return cls(
+            header=StationPreviewDeliveryHeader(
+                channel_id=channel_id,
+                seq=seq,
+                state_cursor=state_cursor,
+                stamped_at_unix_us=stamped_at_unix_us,
+                frame_byte_length=len(packed_frame),
+            ),
+            frame=packed_frame,
+        )
+
+    @classmethod
+    def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
+        """Parse station delivery framing while leaving the VXPS frame opaque."""
+        packet = memoryview(packed)
+        if len(packet) < DELIVERY_PREFIX.size:
+            raise ValueError("station preview packet is truncated before its prefix")
+        magic, framing_version, header_length = DELIVERY_PREFIX.unpack_from(packet)
+        if magic != DELIVERY_MAGIC:
+            raise ValueError("invalid station preview magic")
+        if framing_version != STATION_DELIVERY_FRAMING_VERSION:
+            raise ValueError(f"unsupported station preview framing version: {framing_version}")
+        if not 0 < header_length <= MAX_DELIVERY_HEADER_BYTES:
+            raise ValueError(f"invalid station preview header length: {header_length}")
+
+        frame_offset = DELIVERY_PREFIX.size + header_length
+        if len(packet) <= frame_offset:
+            raise ValueError("station preview packet is truncated before its frame")
+        try:
+            unpacked = msgpack.unpackb(packet[DELIVERY_PREFIX.size : frame_offset], raw=False)
+        except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
+            raise ValueError("invalid station preview MessagePack header") from exc
+        if not isinstance(unpacked, dict):
+            raise ValueError("station preview header must be a MessagePack map")
+        return cls(
+            header=StationPreviewDeliveryHeader.model_validate(unpacked),
+            frame=bytes(packet[frame_offset:]),
+        )
+
+    def pack(self) -> bytes:
+        """Serialize the station delivery header and unchanged VXPS frame."""
+        header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
+        if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
+            raise ValueError(f"station preview header is too large: {len(header)} bytes")
+        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, STATION_DELIVERY_FRAMING_VERSION, len(header)) + header + self.frame

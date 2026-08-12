@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from vxl_catalog import Catalog, FileCatalogBackend
+from vxl_records import SQLiteRecords
 
 from vxl.app import VoxelApp
 from vxl.camera import SensorROI
@@ -241,8 +241,8 @@ def test_instrument_constructs_from_the_validated_snapshot_without_rereading(tmp
 
     instrument = Instrument(
         bench,
-        catalog=Catalog(
-            FileCatalogBackend(tmp_path / "catalog"),
+        records=SQLiteRecords(
+            tmp_path / "records.sqlite3",
             resolve_root=lambda _spec: tmp_path / "acquisitions",
         ),
     )
@@ -382,8 +382,8 @@ async def test_launch_rejects_static_violations_before_constructing_instrument(
     monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
     app = object.__new__(VoxelApp)
     app._active = Cell(None)
-    app._catalog = Catalog(
-        FileCatalogBackend(tmp_path / "catalog"),
+    app._records = SQLiteRecords(
+        tmp_path / "records.sqlite3",
         resolve_root=lambda _spec: tmp_path / "acquisition",
     )
     directory = tmp_path / "broken.voxel"

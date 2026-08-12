@@ -1,10 +1,10 @@
-"""Machine-local resolution and description of portable catalog storage."""
+"""Machine-local resolution and description of portable acquisition storage."""
 
 from pathlib import Path, PurePosixPath
 
 from cloudpathlib import S3Path
 from ome_zarr_writer import DirectS3, Local, StagedS3, Storage
-from vxl_catalog import (
+from vxl_records import (
     DatasetLocation,
     LocalLocation,
     LocationRole,
@@ -19,7 +19,7 @@ from vxl.system import System
 def resolve_storage(spec: StorageSpec, subpath: PurePosixPath | None = None) -> Storage:
     """Resolve ``spec`` to a concrete writer storage on the machine executing this function.
 
-    The catalog model remains portable: local roots, scratch paths, object-store connections, and
+    The records model remains portable: local roots, scratch paths, object-store connections, and
     credentials are supplied only here from this machine's :class:`~vxl.system.System`.
     """
     relpath = spec.path / (subpath or PurePosixPath())
@@ -37,7 +37,7 @@ def resolve_storage(spec: StorageSpec, subpath: PurePosixPath | None = None) -> 
 
 
 def describe_dataset_location(spec: StorageSpec, target: Path | S3Path) -> DatasetLocation:
-    """Describe a writer's concrete dataset target as a catalog location."""
+    """Describe a writer's concrete dataset target as an acquisition-record location."""
     host = System.hostname()
     if spec.remote is None:
         if not isinstance(target, Path):

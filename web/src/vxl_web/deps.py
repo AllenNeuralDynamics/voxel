@@ -1,6 +1,5 @@
-"""FastAPI dependencies for the app, log buffer, and active instrument."""
+"""FastAPI dependencies for the app and active instrument."""
 
-from collections import deque
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -8,15 +7,9 @@ from fastapi import Depends, HTTPException, Request
 from vxl.app import VoxelApp
 from vxl.instrument import Instrument
 
-from .adapter import LogMessage
-
 
 def get_app(request: Request) -> VoxelApp:
     return request.app.state.voxel_app
-
-
-def get_log_buffer(request: Request) -> deque[LogMessage]:
-    return request.app.state.log_buffer
 
 
 def get_instrument(request: Request) -> Instrument:
@@ -28,5 +21,4 @@ def get_instrument(request: Request) -> Instrument:
 
 
 AppDep = Annotated[VoxelApp, Depends(get_app)]
-LogBufferDep = Annotated[deque[LogMessage], Depends(get_log_buffer)]
 InstrumentDep = Annotated[Instrument, Depends(get_instrument)]

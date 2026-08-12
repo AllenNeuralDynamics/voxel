@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 from pydantic import BaseModel
@@ -31,6 +32,7 @@ class _Instrument:
 class _App:
     def __init__(self) -> None:
         self.active = Cell[Any | None](None)
+        self.records = SimpleNamespace(logs=Emitter[Any]())
 
 
 async def test_adapter_follows_only_the_active_instrument(monkeypatch: Any) -> None:

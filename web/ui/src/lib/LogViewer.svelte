@@ -1,11 +1,12 @@
 <script module lang="ts">
-  import type { LogMessage } from '$lib/model';
+  import type { LogEntry } from '$lib/model';
   import { pref } from '$lib/utils';
 
-  type Level = LogMessage['level'];
+  type Level = 'debug' | 'info' | 'warning' | 'error';
   // Ordered by severity; the filter shows the chosen level and everything above it.
   const LEVELS: Level[] = ['debug', 'info', 'warning', 'error'];
   const LEVEL_OPTIONS = LEVELS.map((l) => ({ value: l, label: l[0].toUpperCase() + l.slice(1) }));
+  const LEVEL_VALUES: Record<Level, number> = { debug: 10, info: 20, warning: 30, error: 40 };
 
   const minLevel = pref<Level>('log:min-level', 'info');
   const wrap = pref('log:wrap', false);
@@ -28,7 +29,7 @@
   import { cn } from '$lib/utils';
 
   interface Props {
-    logs: LogMessage[];
+    logs: LogEntry[];
     expanded?: boolean;
     ontoggle?: () => void;
     class?: string;
@@ -36,9 +37,9 @@
 
   const { logs, expanded = true, ontoggle, class: className }: Props = $props();
 
-  const filtered = $derived(logs.filter((log) => LEVELS.indexOf(log.level) >= LEVELS.indexOf(minLevel.get())));
-  const warnings = $derived(logs.filter((log) => log.level === 'warning').length);
-  const errors = $derived(logs.filter((log) => log.level === 'error').length);
+  const filtered = $derived(logs.filter((log) => log.level >= LEVEL_VALUES[minLevel.get()]));
+  const warnings = $derived(logs.filter((log) => log.level >= 30 && log.level < 40).length);
+  const errors = $derived(logs.filter((log) => log.level >= 40).length);
 
   let container = $state<HTMLDivElement>();
 
@@ -49,8 +50,15 @@
     }
   });
 
-  function getLevelColor(level: LogMessage['level']): string {
-    switch (level) {
+  function levelName(level: number): Level {
+    if (level >= 40) return 'error';
+    if (level >= 30) return 'warning';
+    if (level >= 20) return 'info';
+    return 'debug';
+  }
+
+  function getLevelColor(level: number): string {
+    switch (levelName(level)) {
       case 'debug':
         return 'text-fg-muted';
       case 'info':
@@ -111,17 +119,19 @@
           </div>
         {:else}
           <div class="space-y-0.5 p-2">
-            {#each filtered as log, i (i)}
-              {@const LevelIcon = levelIcons[log.level] ?? CircleSmall}
+            {#each filtered as log (log.seq)}
+              {@const name = levelName(log.level)}
+              {@const LevelIcon = levelIcons[name] ?? CircleSmall}
               <div class="flex gap-2 {wrap.get() ? 'items-start' : 'items-center'}">
-                <span class="w-[8ch] shrink-0 text-fg-muted">{formatTime(log.timestamp)}</span>
+                <span class="w-[8ch] shrink-0 text-fg-muted">{formatTime(log.emitted_at)}</span>
                 <span class="min-w-0 flex-1 {wrap.get() ? 'wrap-break-word' : 'truncate'}">
                   <span class="mr-2 {getLevelColor(log.level)}" title={log.logger}>
                     {truncateMiddle(log.logger, 42)}
                   </span>
                   <span class="text-fg">{log.message}</span>
+                  {#if log.node_id}<span class="ml-2 text-fg-muted">[{log.node_id}]</span>{/if}
                 </span>
-                <span class="shrink-0 {getLevelColor(log.level)}" title={log.level}>
+                <span class="shrink-0 {getLevelColor(log.level)}" title={name}>
                   <LevelIcon width="14" height="14" />
                 </span>
               </div>

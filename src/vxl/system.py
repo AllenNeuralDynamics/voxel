@@ -210,12 +210,13 @@ class _SystemFieldsEnvSource(EnvSettingsSource):
         return {key: value for key, value in super().__call__().items() if key in System.model_fields}
 
 
-class Station(System):
-    """A control station: stable identity plus the complete local :class:`System` config.
+class StationConfig(System):
+    """Persisted control-station identity plus the complete local :class:`System` config.
 
-    Unlike :class:`System`, a station never falls back to ``system.yaml``. Control entrypoints use
-    :meth:`load` so a missing station is reported clearly; remote nodes continue to construct
-    ``System`` and therefore need no station identity.
+    Unlike :class:`System`, this configuration never falls back to ``system.yaml``. Control
+    entrypoints use :meth:`load` so a missing station is reported clearly; remote nodes continue
+    to construct ``System`` and therefore need no station identity. The live station authority is
+    intentionally a separate concept from this settings model.
     """
 
     schema_version: Literal[1] = 1
@@ -262,7 +263,7 @@ class Station(System):
             raise FileExistsError(f"A control station is already configured at {path}")
 
         system = System()
-        station = cls(
+        station_config = cls(
             schema_version=1,
             id=station_id or uuid4(),
             name=name,
@@ -272,8 +273,8 @@ class Station(System):
             remotes=system.remotes,
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        save_yaml(path, station)
-        return station
+        save_yaml(path, station_config)
+        return station_config
 
     @property
     def info(self) -> StationInfo:
@@ -281,4 +282,4 @@ class Station(System):
         return StationInfo(id=self.id, name=self.name)
 
 
-__all__ = ["Remote", "Station", "StationInfo", "StationNotConfiguredError", "System", "load_voxel_env"]
+__all__ = ["Remote", "StationConfig", "StationInfo", "StationNotConfiguredError", "System", "load_voxel_env"]

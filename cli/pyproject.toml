@@ -10,6 +10,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "vxl",
+    "vxl-records",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +24,7 @@ voxel = "vxl_cli:main"
 
 [tool.uv.sources]
 vxl = { workspace = true }
+vxl-records = { workspace = true }
 vxl-web = { workspace = true }
 vxl-qt = { workspace = true }
 

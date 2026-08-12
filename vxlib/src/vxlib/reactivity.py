@@ -192,7 +192,7 @@ class Computed[T](Subscribable[T]):
         mode.subscribe(lambda m: print(f"mode → {m}"))
     """
 
-    def __init__(self, *triggers: Subscribable[Any], fn: Callable[[], T]) -> None:
+    def __init__(self, *triggers: Subscribable[Any] | Readable[Any], fn: Callable[[], T]) -> None:
         super().__init__()
         self._fn = fn
         self._value: T = fn()

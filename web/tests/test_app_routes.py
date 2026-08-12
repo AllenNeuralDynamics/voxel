@@ -5,25 +5,25 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request
-from vxl_catalog import Catalog, FileCatalogBackend
+from vxl_records import AcquisitionCatalog, SQLiteRecords
 from vxl_web.app import create_app
 from vxl_web.router import get_acquisition, get_discovery
 
 from vxl.app import Discovered
 
 
-def _catalog(tmp_path: Path) -> Catalog:
-    return Catalog(
-        FileCatalogBackend(tmp_path / "catalog"),
+def _catalog(tmp_path: Path) -> AcquisitionCatalog:
+    return SQLiteRecords(
+        tmp_path / "records.sqlite3",
         resolve_root=lambda spec: tmp_path / "data" / spec.path.as_posix(),
-    )
+    ).acquisitions
 
 
-def _web_app(catalog: Catalog) -> Any:
+def _web_app(catalog: AcquisitionCatalog) -> Any:
     return SimpleNamespace(
-        catalog=catalog,
+        records=SimpleNamespace(acquisitions=catalog),
         remotes={},
-        station=SimpleNamespace(info={"id": UUID("12345678-1234-5678-1234-567812345678"), "name": "scope"}),
+        station_config=SimpleNamespace(info={"id": UUID("12345678-1234-5678-1234-567812345678"), "name": "scope"}),
         discover=lambda: Discovered(instruments={}, templates={}),
     )
 

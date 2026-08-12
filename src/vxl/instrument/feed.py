@@ -7,31 +7,46 @@ same status timeline.
 The :class:`~vxl.instrument.core.Instrument` owns the feed and its lifecycle.
 """
 
-import asyncio
-import logging
 import time
 import uuid
-from collections.abc import Collection
+from collections.abc import Mapping
 from typing import Any, ClassVar, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from rigup import PropResults
-from vxl.preview.protocol import PreviewEmission, PreviewFramePacket, PreviewLayer, StreamCursor
+from rigup import DeviceInterface, DeviceProps, PropResults, Result
+from vxl.preview.protocol import (
+    PreviewEmission,
+    PreviewFramePacket,
+    PreviewLayer,
+    PreviewSourceEmission,
+    StreamCursor,
+)
 from vxlib import Cell, Emitter, ReactiveQuery, Readable, Subscribable, Teardown
 
-from .models import AcquisitionMode, ActiveAcquisitionState, DeviceSnapshot, TaskTile
+from .models import AcquisitionMode, ActiveAcquisitionState, TaskTile
 from .state import InstrumentDefaults, InstrumentState
 from .topology import HALConfig
 
-log = logging.getLogger(__name__)
-
-type DevicePropertyUpdate = tuple[str, PropResults]
+type DevicePropsUpdate = tuple[str, DeviceProps]
 type UnixMicroseconds = int
 
 
 def _unix_time_us() -> UnixMicroseconds:
     return time.time_ns() // 1_000
+
+
+def _prop_results(props: DeviceProps) -> PropResults:
+    return PropResults(results={name: Result.ok(model) for name, model in props.items()})
+
+
+class DeviceSnapshot(BaseModel, frozen=True):
+    """Legacy feed representation of one successfully inspected device."""
+
+    id: str
+    connected: bool
+    interface: DeviceInterface | None = None
+    error: str | None = None
 
 
 class InstrumentCursor(BaseModel, frozen=True):
@@ -133,7 +148,19 @@ class InstrumentSource(Protocol):
     def routing_targets(self) -> Readable[dict[str, str]]: ...
 
     @property
-    def device_property_updates(self) -> Subscribable[DevicePropertyUpdate]: ...
+    def device_props(self) -> dict[str, DeviceProps]: ...
+
+    @property
+    def device_props_updates(self) -> Subscribable[DevicePropsUpdate]: ...
+
+    @property
+    def device_interfaces(self) -> Mapping[str, DeviceInterface]: ...
+
+    @property
+    def preview(self) -> Subscribable[PreviewSourceEmission]: ...
+
+    @property
+    def preview_revision(self) -> Readable[int]: ...
 
     @property
     def hardware_config(self) -> HALConfig: ...
@@ -144,18 +171,15 @@ class InstrumentSource(Protocol):
     @property
     def task_tiles(self) -> Readable[list[TaskTile]]: ...
 
-    async def inspect_devices(self) -> dict[str, DeviceSnapshot]: ...
-
-    async def get_device_properties(self, device_id: str, names: Collection[str] | None = None) -> PropResults: ...
-
 
 class InstrumentFeed:
     """Materialized status and preview frame feed owned by one :class:`Instrument`.
 
-    Construction is inert. :meth:`open` attaches subscriptions and primes the
-    property cache once; consumer connections subsequently use :meth:`view`
-    without querying hardware. Preview frames use a separate delivery cursor
-    while carrying the current status cursor in each VXPD packet.
+    Construction is inert. :meth:`open` attaches subscriptions and snapshots
+    the properties already materialized by the instrument; consumer connections
+    subsequently use :meth:`view` without querying hardware. Preview frames use
+    a separate delivery cursor while carrying the current status cursor in each
+    VXPD packet.
     """
 
     def __init__(self, source: InstrumentSource) -> None:
@@ -169,7 +193,6 @@ class InstrumentFeed:
         self._delivery_seq = 0
         self._device_props: dict[str, PropResults] = {}
         self._devices: dict[str, DeviceSnapshot] = {}
-        self._prop_versions: dict[tuple[str, str], int] = {}
         self._ready = False
 
     @property
@@ -198,7 +221,7 @@ class InstrumentFeed:
         return InstrumentCursor(stream_id=self._require_stream_id(), seq=self._seq)
 
     async def open(self) -> None:
-        """Start a new feed lifetime and prime every connected device once."""
+        """Start a new feed lifetime from the instrument's materialized state."""
         if self._stream_id is not None:
             raise RuntimeError("instrument feed is already open")
 
@@ -206,12 +229,17 @@ class InstrumentFeed:
         self._seq = 0
         self._device_props = {}
         self._devices = {}
-        self._prop_versions = {}
         self._ready = False
         self._attach()
 
         try:
-            await self._prime_devices()
+            self._devices = {
+                device_id: DeviceSnapshot(id=device_id, connected=True, interface=interface)
+                for device_id, interface in self._source.device_interfaces.items()
+            }
+            self._device_props = {
+                device_id: _prop_results(props) for device_id, props in self._source.device_props.items()
+            }
         except BaseException:
             self.close()
             raise
@@ -226,7 +254,6 @@ class InstrumentFeed:
         self._seq = 0
         self._device_props = {}
         self._devices = {}
-        self._prop_versions = {}
         self._ready = False
 
     def view(self) -> InstrumentView:
@@ -276,25 +303,10 @@ class InstrumentFeed:
             source.routing_targets.subscribe(self._on_status),
             source.acquisition.subscribe(self._on_acquisition),
             source.default.subscribe(self._on_defaults),
-            source.device_property_updates.subscribe(self._on_device_props),
+            source.device_props_updates.subscribe(self._on_device_props),
+            source.preview.subscribe(self._on_preview),
+            source.preview_revision.subscribe(self._on_preview_revision),
         ]
-
-    async def _prime_devices(self) -> None:
-        self._devices = await self._source.inspect_devices()
-        connected = [device_id for device_id, snapshot in self._devices.items() if snapshot.connected]
-        starts = dict.fromkeys(connected, self._seq)
-        results = await asyncio.gather(
-            *(self._source.get_device_properties(device_id) for device_id in connected),
-            return_exceptions=True,
-        )
-
-        for device_id, result in zip(connected, results, strict=True):
-            if isinstance(result, BaseException):
-                if not isinstance(result, Exception):
-                    raise result
-                log.warning("Could not prime properties for device %s: %s", device_id, result)
-                continue
-            self._merge_device_props(device_id, result, unless_newer_than=starts[device_id])
 
     async def _on_status(self, _value: object) -> None:
         if self._stream_id is None:
@@ -311,20 +323,32 @@ class InstrumentFeed:
             return
         await self._emit(defaults=defaults)
 
-    async def _on_device_props(self, update: DevicePropertyUpdate) -> None:
+    async def _on_device_props(self, update: DevicePropsUpdate) -> None:
         if self._stream_id is None:
             return
         device_id, properties = update
         seq = self._next_seq()
-        self._merge_device_props(device_id, properties, version=seq)
+        prop_results = _prop_results(properties)
+        self._device_props[device_id] = prop_results
         await self._updates.emit(
             InstrumentUpdate(
                 stream_id=self._stream_id,
                 seq=seq,
                 observed_at_unix_us=_unix_time_us(),
-                device_props={device_id: properties},
+                device_props={device_id: prop_results},
             )
         )
+
+    async def _on_preview(self, emission: PreviewSourceEmission) -> None:
+        if self._stream_id is None:
+            return
+        channel_id, layer, frame = emission
+        await self.deliver_preview(channel_id, layer, frame)
+
+    async def _on_preview_revision(self, _revision: int) -> None:
+        if self._stream_id is None:
+            return
+        await self.reset_preview()
 
     async def _emit(self, **sections: Any) -> None:
         stream_id = self._require_stream_id()
@@ -349,25 +373,6 @@ class InstrumentFeed:
             state=source.state.value,
             task_tiles=source.task_tiles.value,
         )
-
-    def _merge_device_props(
-        self,
-        device_id: str,
-        properties: PropResults,
-        *,
-        version: int | None = None,
-        unless_newer_than: int | None = None,
-    ) -> None:
-        current = self._device_props.get(device_id)
-        merged = dict(current.results) if current is not None else {}
-        for name, result in properties.results.items():
-            key = (device_id, name)
-            if unless_newer_than is not None and self._prop_versions.get(key, -1) > unless_newer_than:
-                continue
-            merged[name] = result
-            if version is not None:
-                self._prop_versions[key] = version
-        self._device_props[device_id] = PropResults(results=merged)
 
     def _next_seq(self) -> int:
         self._seq += 1

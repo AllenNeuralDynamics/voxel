@@ -11,30 +11,30 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Self
 
 from pydantic import BaseModel, ValidationError
-from vxl_catalog import (
+from vxl_records import (
     AcquisitionManifest,
     AcquisitionOrigin,
     AcquisitionVolume,
-    Catalog,
     DatasetLocation,
     DatasetStatus,
     LocationStatus,
+    VoxelRecords,
 )
 
-from rigup import DeviceHandle, DeviceInterface, PropResults, Result
+from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.camera import CameraHandle, CaptureState, StorageSpec, resolve_storage
 from vxl.daq.clocked import Signals
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
-from vxl.preview import PreviewLayer, PreviewViewport
+from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.system import System
 from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
 from .bench import PROMOTABLE_FIELDS, InstrumentBench
 from .feed import InstrumentFeed
 from .hal import HAL
-from .models import AcquisitionMode, ActiveAcquisitionState, DeviceSnapshot, TaskTile, VolumeProgress
+from .models import AcquisitionMode, ActiveAcquisitionState, TaskTile, VolumeProgress
 from .state import (
     AcquisitionTask,
     ChannelConfig,
@@ -98,20 +98,24 @@ class Instrument:
     """An opened instrument: hardware, persisted acquisition state, and active-profile orchestration."""
 
     @classmethod
-    def from_path(cls, home: Path | str, *, catalog: Catalog) -> Self:
+    def from_path(cls, home: Path | str, *, records: VoxelRecords) -> Self:
         """Load a validated bench from ``home`` and construct its instrument."""
-        return cls(InstrumentBench.load(home), catalog=catalog)
+        return cls(InstrumentBench.load(home), records=records)
 
-    def __init__(self, bench: InstrumentBench, *, catalog: Catalog) -> None:
+    def __init__(self, bench: InstrumentBench, *, records: VoxelRecords) -> None:
         self._hal = HAL(bench.config.hal, name=bench.home.name)
         self._bench = bench
-        self._catalog = catalog
+        self._records = records
         self._active_profile_id = Cell[str](next(iter(self._bench.value.imaging.profiles)))
         self._channels: dict[str, Channel] = {}
         self._preview_channels: list[Channel] = []
         self._preview_unsubs: list[Teardown] = []
         self._device_unsubs: list[Teardown] = []
-        self._device_property_updates = Emitter[tuple[str, PropResults]]()
+        self._device_props_updates = Emitter[tuple[str, DeviceProps]]()
+        self._preview = Emitter[PreviewSourceEmission]()
+        self._preview_revision = Cell(0)
+        self._accept_preview = False
+        self._preview_source_ids: dict[str, str] = {}
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
         self._acquisition = Cell[ActiveAcquisitionState | None](None)
@@ -149,9 +153,29 @@ class Instrument:
         return self._feed
 
     @property
-    def device_property_updates(self) -> Subscribable[tuple[str, PropResults]]:
-        """Property updates from every runtime device, tagged with its device id."""
-        return self._device_property_updates
+    def preview(self) -> Subscribable[PreviewSourceEmission]:
+        """Mapped packed VXPS source frames before feed-specific delivery framing."""
+        return self._preview
+
+    @property
+    def preview_revision(self) -> Readable[int]:
+        """Session-local revision incremented whenever displayed preview frames become stale."""
+        return self._preview_revision
+
+    @property
+    def device_props(self) -> dict[str, DeviceProps]:
+        """Latest successful property observations for every open device."""
+        return {device_id: handle.props.cache for device_id, handle in self._hal.devices.items()}
+
+    @property
+    def device_interfaces(self) -> Mapping[str, DeviceInterface]:
+        """Interfaces retained from the successful HAL startup inspection."""
+        return self._hal.device_interfaces
+
+    @property
+    def device_props_updates(self) -> Subscribable[tuple[str, DeviceProps]]:
+        """Complete property-cache replacements tagged with their device id."""
+        return self._device_props_updates
 
     @property
     def state(self) -> Readable[InstrumentState]:
@@ -210,10 +234,11 @@ class Instrument:
                 await self._hal.open()
                 self._device_unsubs = [
                     handle.props.subscribe(
-                        lambda props, device_id=device_id: self._device_property_updates.emit((device_id, props))
+                        lambda props, device_id=device_id: self._device_props_updates.emit((device_id, props))
                     )
                     for device_id, handle in self._hal.devices.items()
                 ]
+                await self._refresh_device_props()
                 await self._validate_startup()
                 self._channels = self._build_channels()
                 for camera in self._hal.cameras.values():
@@ -533,6 +558,7 @@ class Instrument:
 
     async def close(self) -> None:
         """Stop preview, drop the feed, close hardware, and keep the logical active profile id."""
+        self._accept_preview = False
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
@@ -548,26 +574,31 @@ class Instrument:
         self.fov.clear_triggers()
         await self._hal.close()
         self._channels = {}
+        self._preview_source_ids = {}
 
-    async def inspect_devices(self) -> dict[str, DeviceSnapshot]:
-        """Introspect every device independently so one unavailable device does not hide the others."""
+    async def _refresh_device_props(self) -> None:
+        """Best-effort hydration of every device's latest-successful property cache."""
         devices = list(self._hal.devices.items())
-        interfaces = await asyncio.gather(*(handle.interface() for _, handle in devices), return_exceptions=True)
-        snapshots: dict[str, DeviceSnapshot] = {}
-        for (device_id, _handle), interface in zip(devices, interfaces, strict=True):
-            if isinstance(interface, BaseException):
-                if not isinstance(interface, Exception):
-                    raise interface
-                snapshots[device_id] = DeviceSnapshot(id=device_id, connected=False, error=str(interface))
-            else:
-                snapshots[device_id] = DeviceSnapshot(id=device_id, connected=True, interface=interface)
-        return snapshots
+        results = await asyncio.gather(
+            *(handle.props.refresh() for _, handle in devices),
+            return_exceptions=True,
+        )
+        for (device_id, _), result in zip(devices, results, strict=True):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                logger.warning("Could not refresh properties for device %s: %s", device_id, result)
+                continue
+            failed = [name for name, prop_result in result.results.items() if not prop_result.is_ok]
+            if failed:
+                logger.warning("Could not refresh properties %s for device %s", failed, device_id)
 
     async def get_device_properties(self, device_id: str, names: Collection[str] | None = None) -> PropResults:
         """Read named device properties, or every introspected property when ``names`` is omitted."""
         handle = self._device(device_id)
-        selected = list(names) if names is not None else list((await handle.interface()).properties)
-        return await handle.props.get(*selected)
+        if names is None:
+            return await handle.props.refresh()
+        return await handle.props.get(*names)
 
     async def set_device_properties(self, device_id: str, properties: Mapping[str, Any]) -> PropResults:
         """Set device properties through the instrument's serialized manual-control boundary."""
@@ -661,7 +692,7 @@ class Instrument:
         previous_id = self._active_profile_id.value
         await self._active_profile_id.set(profile_id)
         try:
-            await self._reset_preview_delivery()
+            await self._reset_preview()
             await self._apply_filters()
             await self._apply_settings()
             await self._run_setup_commands()
@@ -671,10 +702,14 @@ class Instrument:
             await self._active_profile_id.set(previous_id)
             raise
 
-    async def _reset_preview_delivery(self) -> None:
-        """Start a new delivery stream before previously displayed preview frames become stale."""
-        await self._feed.reset_preview()
-        await asyncio.gather(*(ch.camera.reset_preview_stream() for ch in self.active_channels.values()))
+    async def _reset_preview(self) -> None:
+        """Invalidate preview, establish every new camera source identity, then resume delivery."""
+        self._accept_preview = False
+        await self._preview_revision.set(self._preview_revision.value + 1)
+        cameras = {channel.camera.uid: channel.camera for channel in self.active_channels.values()}
+        source_ids = await asyncio.gather(*(camera.reset_preview_stream() for camera in cameras.values()))
+        self._preview_source_ids = dict(zip(cameras, source_ids, strict=True))
+        self._accept_preview = True
 
     async def _start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
         """Start preview for the active profile. Caller holds ``self._lock``."""
@@ -686,6 +721,7 @@ class Instrument:
         chans = list(all_chans if channel_ids is None else [channels[ch] for ch in channel_ids if ch in channels])
         if not chans:
             raise OperationRejectedError("No channels to preview")
+        self._accept_preview = False
         self._preview_channels = chans
 
         results = await asyncio.gather(*(ch.start_preview() for ch in chans), return_exceptions=True)
@@ -699,6 +735,8 @@ class Instrument:
         if started == 0:
             self._preview_channels = []
             raise RuntimeError("Preview failed to start on every channel")
+
+        await self._reset_preview()
 
         with suppress(NotImplementedError, RuntimeError):
             await self._hal.stage.scanning_axis.reset_ttl_stepper()
@@ -716,6 +754,7 @@ class Instrument:
         """
         if not self._preview_channels:
             return
+        self._accept_preview = False
         chans, self._preview_channels = self._preview_channels, []
 
         results = await asyncio.gather(*(ch.stop_preview() for ch in chans), return_exceptions=True)
@@ -1006,7 +1045,7 @@ class Instrument:
 
         ``storage`` is the run's logical destination (root + relative base; the node resolves it).
         ``task_ids`` selects a subset of planned tasks (``None`` → all), always captured in traversal
-        order. The preflight proves every participating camera can write ``storage`` before the catalog
+        order. The preflight proves every participating camera can write ``storage`` before acquisition records
         creates ``manifest.json`` and transitions it to ``running``. Capture then continues in the
         background, updating :attr:`acquisition`; stop it early with :meth:`stop_acquisition`, or await
         it with :meth:`wait_acquisition`.
@@ -1050,8 +1089,12 @@ class Instrument:
                 hardware_snapshot=self._hal.config.model_dump(mode="json"),
                 volumes=plan,
             )
-            await self._catalog.create(manifest)
-            manifest = await self._catalog.start_acquisition(manifest.id)
+            await self._records.acquisitions.create(manifest)
+            try:
+                await self._records.logs.open_acquisition_window(manifest.id)
+            except Exception:
+                logger.exception("Failed to open the log window for acquisition %s", manifest.id)
+            manifest = await self._records.acquisitions.start_acquisition(manifest.id)
         except BaseException:
             await self._mode.set(AcquisitionMode.IDLE)
             raise
@@ -1078,7 +1121,7 @@ class Instrument:
         """Capture each planned (task, profile) volume in order. Runs as the background ``_acq_task``.
 
         Reads the bench live — it's frozen for the whole run (CAPTURE blocks edits) — and delegates each
-        volume to :meth:`_capture_volume`, updating the catalog around every lifecycle boundary. A volume
+        volume to :meth:`_capture_volume`, updating acquisition records around every lifecycle boundary. A volume
         failure aborts the run and skips remaining volumes; cancellation marks unfinished volumes
         cancelled. ``mode`` returns to IDLE when the run completes, fails, or is cancelled.
         """
@@ -1089,7 +1132,7 @@ class Instrument:
         try:
             for v in plan:
                 progress = self._volume_progress(self._bench.value, v)
-                manifest = await self._catalog.start_volume(acq_id, task=v.task, profile=v.profile)
+                manifest = await self._records.acquisitions.start_volume(acq_id, task=v.task, profile=v.profile)
                 await self._update_acquisition(manifest=manifest, progress=progress)
                 await self._apply_profile(v.profile)
                 subpath = PurePosixPath("tasks", f"{task_ordinals[v.task]:04d}", v.profile)
@@ -1102,21 +1145,21 @@ class Instrument:
                     profile=v.profile,
                     progress=progress,
                 )
-                manifest = await self._catalog.complete_volume(acq_id, task=v.task, profile=v.profile)
+                manifest = await self._records.acquisitions.complete_volume(acq_id, task=v.task, profile=v.profile)
                 await self._update_acquisition(manifest=manifest)
-            manifest = await self._catalog.complete_acquisition(acq_id)
+            manifest = await self._records.acquisitions.complete_acquisition(acq_id)
             await self._update_acquisition(manifest=manifest)
             logger.info("Acquisition complete: %d volumes → %s", len(plan), resolve_storage(storage).target)
         except asyncio.CancelledError:
             try:
-                manifest = await self._catalog.cancel_acquisition(acq_id)
+                manifest = await self._records.acquisitions.cancel_acquisition(acq_id)
                 await self._update_acquisition(manifest=manifest)
             except Exception:
                 logger.exception("Failed to persist cancellation for acquisition %s", acq_id)
             raise
         except Exception as error:
             try:
-                manifest = await self._catalog.fail_acquisition(acq_id, error)
+                manifest = await self._records.acquisitions.fail_acquisition(acq_id, error)
                 await self._update_acquisition(manifest=manifest)
             except Exception:
                 logger.exception("Failed to persist failure for acquisition %s", acq_id)
@@ -1134,6 +1177,10 @@ class Instrument:
                     logger.warning("release_writer failed for %s: %r", cam_id, result)
             await self._mode.set(AcquisitionMode.IDLE)
             await self._acquisition.set(None)
+            try:
+                await self._records.logs.close_acquisition_window(acq_id)
+            except Exception:
+                logger.exception("Failed to close the log window for acquisition %s", acq_id)
 
     async def _capture_volume(
         self,
@@ -1192,7 +1239,8 @@ class Instrument:
                 )
             opened = await asyncio.gather(*init_coros)
             locations = dict(zip(channels, opened, strict=True))
-            manifest = await self._catalog.register_datasets(
+            await self._reset_preview()
+            manifest = await self._records.acquisitions.register_datasets(
                 acq_id,
                 task=task,
                 profile=profile,
@@ -1230,9 +1278,9 @@ class Instrument:
         dataset_status = DatasetStatus.PARTIAL if frames_done else DatasetStatus.FAILED
         try:
             terminalize = (
-                self._catalog.cancel_volume
+                self._records.acquisitions.cancel_volume
                 if isinstance(capture_error, asyncio.CancelledError)
-                else self._catalog.fail_volume
+                else self._records.acquisitions.fail_volume
             )
             manifest = await terminalize(
                 acq_id,
@@ -1307,10 +1355,19 @@ class Instrument:
         self._preview_unsubs.append(camera.subscribe("preview_viewport", forward_viewport))
 
     async def _emit_preview_frame(self, camera_id: str, layer: PreviewLayer, frame: bytes) -> None:
-        """Map and wrap one opaque camera frame for control-owned delivery."""
+        """Reject stale camera streams, then map one packed source frame onto its active channel."""
+        if not self._accept_preview:
+            return
+        try:
+            source = preview_source_header(frame)
+        except ValueError:
+            logger.warning("Dropping invalid preview source packet from %s", camera_id, exc_info=True)
+            return
+        if source.camera_id != camera_id or source.source_stream_id != self._preview_source_ids.get(camera_id):
+            return
         if (channel_id := self._channel_for_camera(camera_id)) is None:
             return
-        await self._feed.deliver_preview(channel_id, layer, frame)
+        await self._preview.emit((channel_id, layer, frame))
 
     async def _apply_filters(self) -> None:
         desired: dict[str, str] = {}

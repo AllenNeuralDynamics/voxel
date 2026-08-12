@@ -31,7 +31,7 @@ import type {
   InstrumentUpdate,
   InstrumentView,
   JsonSchema,
-  LogMessage,
+  LogEntry,
   OpticalRoutingPolicy,
   ProfilePatch,
   Remote,
@@ -746,7 +746,7 @@ export class VoxelApp {
   /** Persisted acquisition manifests from the catalog, newest first. */
   acquisitions = $state.raw<AcquisitionManifest[]>([]);
   instrument = $state<Instrument | null>(null);
-  logs = $state<LogMessage[]>([]);
+  logs = $state<LogEntry[]>([]);
   error = $state<string | null>(null);
   busy = $state(false);
   /** App-lifetime, IndexedDB-backed collection of captured preview snapshots. */
@@ -802,25 +802,25 @@ export class VoxelApp {
     void this.#pruneSnapshots(); // GC snapshots whose instrument no longer exists
   }
 
-  #pushLog(msg: LogMessage): void {
+  #pushLog(msg: LogEntry): void {
     this.logs.push(msg);
     if (this.logs.length > MAX_LOGS) this.logs.splice(0, this.logs.length - MAX_LOGS);
   }
 
   /**
    * Hydrate the log backlog on (re)connect and merge it with whatever the live `app.logs` stream has already
-   * delivered. Keyed by the server's monotonic `seq`, so the overlap dedupes and nothing is missed —
+   * delivered. Keyed by the journal's durable `seq`, so the overlap dedupes and nothing is missed —
    * the live subscription covers connect-onward, this fills in the history from before connect.
    */
   async #hydrateLogs(): Promise<void> {
-    let backlog: LogMessage[];
+    let backlog: LogEntry[];
     try {
-      backlog = await this.#client.get<LogMessage[]>('/logs');
+      backlog = await this.#client.get<LogEntry[]>('/logs');
     } catch {
       return; // logs are diagnostic; the live stream still works without the backlog
     }
     const sorted = [...this.logs, ...backlog].sort((a, b) => a.seq - b.seq);
-    const merged: LogMessage[] = [];
+    const merged: LogEntry[] = [];
     for (const m of sorted) {
       if (merged.length === 0 || merged[merged.length - 1].seq !== m.seq) merged.push(m);
     }
