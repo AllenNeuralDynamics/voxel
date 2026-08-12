@@ -20,7 +20,6 @@ classifiers = [
 dependencies = [
     "rigup",
     "vxlib",
-    "vxl-catalog",
     "vxl-records",
     "msgpack>=1.1.0",
     "numpy>=2.3.4",
@@ -55,7 +54,6 @@ members = [
     "vxlib",
     "omezarr",
     "bench",
-    "catalog",
     "records",
 ]
 
@@ -63,7 +61,6 @@ members = [
 ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
 vxlib = { workspace = true }
-vxl-catalog = { workspace = true }
 vxl-records = { workspace = true }
 
 [dependency-groups]
@@ -81,7 +78,6 @@ addopts = "--strict-markers"
 norecursedirs = ["notes"]
 testpaths = [
     "tests",
-    "catalog/tests",
     "cli/tests",
     "drivers/tests",
     "omezarr/tests",

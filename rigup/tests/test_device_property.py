@@ -111,7 +111,7 @@ async def test_property_hub_emits_complete_latest_successful_cache(handle: Devic
     assert handle.props.cache["enabled"].value is False
 
     await handle.props.set(value=3.0)
-    assert set(observed[-1].ok) == {"enabled", "value"}
+    assert set(observed[-1]) == {"enabled", "value"}
     assert handle.props.cache["value"].value == 3.0
 
     emission_count = len(observed)
