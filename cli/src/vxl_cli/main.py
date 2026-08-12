@@ -87,7 +87,7 @@ def run(
     if args.command in {"serve", "web"}:
         if not _require("vxl_web", "web", errors):
             return 2
-        web_app = import_module("vxl_web.station")
+        web_app = import_module("vxl_web")
         web_app.serve(host=args.host, port=args.port, debug=args.debug)
         return 0
 

@@ -102,7 +102,7 @@ class _LogClient:
                 return
 
 
-class StationRealtime:
+class Realtime:
     """Serve complete StationFeed views and latest-only preview packets."""
 
     def __init__(self, station: Station) -> None:
@@ -242,4 +242,4 @@ class StationRealtime:
         return state.session.info.id, state.session.info.preview_revision
 
 
-__all__ = ["PreviewViewportUpdate", "StationRealtime"]
+__all__ = ["PreviewViewportUpdate", "Realtime"]

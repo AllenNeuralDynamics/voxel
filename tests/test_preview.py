@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
+from vxl.preview import LatestFrameQueue, PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
 from vxl.preview.generator import RENDER_CAP
 
 
@@ -71,6 +71,22 @@ async def test_no_viewport_frame_at_full_viewport() -> None:
         gen.close()
 
     assert captured == []
+
+
+async def test_latest_frame_queue_replaces_only_the_matching_pending_stream() -> None:
+    queue = LatestFrameQueue()
+    overview = ("488", PreviewLayer.OVERVIEW)
+    viewport = ("488", PreviewLayer.VIEWPORT)
+
+    queue.put(overview, b"sending")
+    assert await queue.get() == (overview, b"sending")
+
+    queue.put(overview, b"stale")
+    queue.put(overview, b"latest")
+    queue.put(viewport, b"viewport")
+
+    assert await queue.get() == (overview, b"latest")
+    assert await queue.get() == (viewport, b"viewport")
 
 
 async def test_overview_and_viewport_share_capture_identity_and_resize_exactly() -> None:

@@ -1,18 +1,11 @@
-"""API routers for the rebuilt backend, in one module.
+"""Station-scoped REST and WebSocket routes."""
 
-- ``app_router``: the ``VoxelApp`` surface — discovery / launch / close, acquisition history, and the WS.
-- ``instrument_router`` (``/instrument`` prefix): the active ``Instrument`` surface — profile /
-  settings / tasks / plan / metadata / devices / preview / acquisition (wired in later increments).
-
-``api_router`` aggregates both. Endpoints map near-1:1 to ``VoxelApp`` / ``Instrument`` methods
-(``OperationRejectedError`` → 422, ``InstrumentBusyError`` → 409).
-"""
-
-import uuid
+from collections.abc import AsyncIterator
 from typing import Annotated, Any
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, WebSocket
-from pydantic import AnyWebsocketUrl, BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
+from pydantic import AnyWebsocketUrl, BaseModel, Field
 from vxl_records import AcquisitionManifest, LogEntry, ManifestNotFoundError
 
 from rigup import PropResults, Result
@@ -20,200 +13,88 @@ from vxl.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRequest,
     ActiveAcquisitionState,
-    DeviceSnapshot,
+    Instrument,
     InstrumentConfig,
     InstrumentInspection,
 )
-from vxl.instrument.feed import InstrumentView
 from vxl.instrument.state import (
     ChannelPatch,
-    InstrumentDefaults,
     OpticalRoutingPolicy,
     ProfilePatch,
     StencilPatch,
     TaskPatch,
     WriterPatch,
 )
-from vxl.instrument.topology import HALConfig
 from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
-from vxl.preview.protocol import DELIVERY_FRAMING_VERSION
+from vxl.preview.protocol import STATION_DELIVERY_FRAMING_VERSION
+from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
 from vxl.system import Remote, StationInfo
 from vxlib import ColormapGroup, get_colormap_catalog
 
-from .adapter import AppStatus
-from .deps import AppDep, InstrumentDep
-
-app_router = APIRouter(tags=["app"])
-instrument_router = APIRouter(prefix="/instrument", tags=["instrument"])
-
-
-# ---- discovery / launch / close (the VoxelApp surface) ----
+station_router = APIRouter(prefix="/stations", tags=["station"])
+instrument_router = APIRouter(
+    prefix="/stations/{station_id}/sessions/{session_id}/instrument",
+    tags=["instrument"],
+)
 
 
-class PreviewDiscovery(BaseModel):
-    """Resolved preview connection."""
-
-    websocket_url: AnyWebsocketUrl
-    protocol_version: int
+def _get_station(request: Request) -> Station:
+    return request.app.state.station
 
 
-class AppDiscovery(BaseModel):
-    """Bounded resources a client needs to discover and configure this Voxel application."""
+def _get_templates(request: Request) -> InstrumentTemplates:
+    return request.app.state.instrument_templates
 
+
+StationDep = Annotated[Station, Depends(_get_station)]
+TemplatesDep = Annotated[InstrumentTemplates, Depends(_get_templates)]
+
+
+def _get_scoped_station(station_id: UUID, station: StationDep) -> Station:
+    if station.config.id != station_id:
+        raise HTTPException(status_code=404, detail=f"No station '{station_id}'")
+    return station
+
+
+ScopedStationDep = Annotated[Station, Depends(_get_scoped_station)]
+
+
+async def _get_instrument(session_id: UUID, station: ScopedStationDep) -> AsyncIterator[Instrument]:
+    try:
+        async with station.instrument(session_id) as instrument:
+            yield instrument
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+InstrumentDep = Annotated[Instrument, Depends(_get_instrument)]
+
+
+class RealtimeDiscovery(BaseModel):
+    state_websocket_url: AnyWebsocketUrl
+    preview_websocket_url: AnyWebsocketUrl
+    log_websocket_url: AnyWebsocketUrl
+    preview_protocol_version: int = Field(ge=1)
+
+
+class StationDiscovery(BaseModel):
     station: StationInfo
     instruments: dict[str, InstrumentInspection]
     templates: dict[str, InstrumentConfig]
     remotes: dict[str, Remote]
     colormaps: list[ColormapGroup]
     metadata_schemas: dict[str, str]
-    preview: PreviewDiscovery
+    realtime: RealtimeDiscovery
 
 
-@app_router.get("/app")
-async def get_app_status(app: AppDep) -> AppStatus:
-    """App-level presence (active instrument name, or null) — the REST counterpart of the ``app.status`` stream."""
-    active = app.active.value
-    return AppStatus(active=active.path.stem if active is not None else None)
+class OpenSessionRequest(BaseModel):
+    instrument_name: str = Field(min_length=1)
 
 
-@app_router.get("/discovery")
-async def get_discovery(request: Request, app: AppDep) -> AppDiscovery:
-    """Return the bounded application resources needed to initialize a client."""
-    found = app.discover()
-    return AppDiscovery(
-        station=app.station_config.info,
-        instruments=found.instruments,
-        templates=found.templates,
-        remotes=app.remotes,
-        colormaps=get_colormap_catalog(),
-        metadata_schemas=discover_metadata_schema(),
-        preview=PreviewDiscovery(
-            websocket_url=AnyWebsocketUrl(str(request.url_for("preview_websocket"))),
-            protocol_version=DELIVERY_FRAMING_VERSION,
-        ),
-    )
-
-
-@app_router.post("/instruments/{name}/launch")
-async def launch(name: str, app: AppDep) -> dict[str, str]:
-    """Open ``<name>.voxel`` and make it active. 404 if missing, 409 if one is already active.
-
-    The web adapter follows ``VoxelApp.active`` and attaches to the instrument feed — no feed work here.
-    """
-    try:
-        instrument = await app.launch(name)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    return {"launched": instrument.path.stem}
-
-
-@app_router.post("/instruments/{name}/archive-bench")
-async def archive_bench(name: str, app: AppDep) -> dict[str, str]:
-    """Archive ``bench.json`` under the next available backup name.
-
-    404 if the instrument or its bench is missing; 409 if the instrument is active.
-    """
-    try:
-        archive = app.archive_bench(name)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    return {"archived": archive.name}
-
-
-@app_router.post("/templates/{template}/launch")
-async def launch_template(template: str, app: AppDep, name: str | None = None) -> dict[str, str]:
-    """Instantiate ``template`` (``name`` defaults to the template's) into a new instrument, then launch it."""
-    try:
-        instrument = await app.launch_template(template, name)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except (FileExistsError, RuntimeError) as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    return {"launched": instrument.path.stem}
-
-
-@app_router.post("/close")
-async def close(app: AppDep) -> dict[str, bool]:
-    """Close the active instrument (no-op if none); its feed detaches via ``VoxelApp.active``."""
-    await app.close()
-    return {"closed": True}
-
-
-# ---- resource details and acquisition history (no active instrument required) ----
-
-
-@app_router.get("/metadata/schema")
-async def get_metadata_schema(target: str) -> dict[str, Any]:
-    try:
-        return resolve_metadata_class(target).model_json_schema()
-    except (ImportError, AttributeError, TypeError) as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app_router.get("/acquisitions")
-async def list_acquisitions(app: AppDep) -> list[AcquisitionManifest]:
-    """Return acquisition manifests from newest to oldest."""
-    return await app.records.acquisitions.list_manifests()
-
-
-@app_router.get("/acquisitions/{acquisition_id}")
-async def get_acquisition(acquisition_id: uuid.UUID, app: AppDep) -> AcquisitionManifest:
-    """Return one durable acquisition manifest."""
-    try:
-        return await app.records.acquisitions.get(acquisition_id)
-    except ManifestNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-@app_router.get("/acquisitions/{acquisition_id}/logs")
-async def get_acquisition_logs(
-    acquisition_id: uuid.UUID,
-    app: AppDep,
-    after_seq: Annotated[int, Query(ge=0)] = 0,
-    minimum_level: Annotated[int | None, Query(ge=0)] = None,
-    node_id: str | None = None,
-    limit: Annotated[int, Query(ge=1, le=10_000)] = 500,
-) -> list[LogEntry]:
-    """Return committed logs within one acquisition's recorded journal window."""
-    try:
-        return await app.records.logs.for_acquisition(
-            acquisition_id,
-            after_seq=after_seq,
-            minimum_level=minimum_level,
-            node_id=node_id,
-            limit=limit,
-        )
-    except ManifestNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-
-
-# ---- WebSocket (msgpack [topic, body] over MsgBus) ----
-
-
-@app_router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket) -> None:
-    """Register the peer on the bus and relay broadcasts until disconnect. Clients hydrate via REST, not here."""
-    await websocket.app.state.vxl.serve(websocket)
-
-
-@app_router.websocket("/preview/ws", name="preview_websocket")
-async def preview_websocket_endpoint(websocket: WebSocket) -> None:
-    """Deliver complete opaque VXPD packets over a dedicated latest-only connection."""
-    await websocket.app.state.vxl.serve_preview(websocket)
-
-
-@app_router.get("/logs")
-async def get_logs(app: AppDep, limit: Annotated[int, Query(ge=1, le=10_000)] = 500) -> list[LogEntry]:
-    """Return the newest committed log entries in ascending journal order."""
-    return await app.records.logs.tail(limit=limit)
-
-
-# ---- active-instrument read + edit (the Instrument surface) ----
+class CreateInstrumentRequest(BaseModel):
+    template: str = Field(min_length=1)
+    name: str = Field(min_length=1)
 
 
 class _ActivateProfile(BaseModel):
@@ -234,11 +115,11 @@ class _Traversal(BaseModel):
 
 
 class _MetadataSchema(BaseModel):
-    target: str  # dotted path or registered schema name
+    target: str
 
 
 class _DefaultScope(BaseModel):
-    include: set[str] | None = None  # None → all promotable baseline fields
+    include: set[str] | None = None
 
 
 class _SetProps(BaseModel):
@@ -246,217 +127,364 @@ class _SetProps(BaseModel):
 
 
 class _ExecuteCommand(BaseModel):
-    args: list[Any] = []
-    kwargs: dict[str, Any] = {}
+    args: list[Any] = Field(default_factory=list)
+    kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
 class _OpticalRouteOverride(BaseModel):
     route: str
 
 
-@instrument_router.get("")
-async def get_status(inst: InstrumentDep) -> InstrumentView:
-    """Complete cached instrument view and cursor for continuing on ``instrument.feed.updates``."""
-    return inst.feed.view()
+@station_router.get("")
+async def list_stations(station: StationDep) -> list[StationInfo]:
+    """Return the one Station served by this local web application."""
+    return [station.config.info]
 
 
-@instrument_router.get("/hardware")
-async def get_hardware(inst: InstrumentDep) -> HALConfig:
-    """The immutable hardware blueprint (rig + stage + detection/illumination paths).
+@station_router.get("/{station_id}/discovery")
+async def get_discovery(
+    station_id: UUID,
+    request: Request,
+    station: StationDep,
+    templates: TemplatesDep,
+) -> StationDiscovery:
+    station = _get_scoped_station(station_id, station)
+    return StationDiscovery(
+        station=station.config.info,
+        instruments=station.discover_instruments(),
+        templates=templates.discover(),
+        remotes=station.config.remotes,
+        colormaps=get_colormap_catalog(),
+        metadata_schemas=discover_metadata_schema(),
+        realtime=RealtimeDiscovery(
+            state_websocket_url=AnyWebsocketUrl(
+                str(request.url_for("station_state_websocket", station_id=str(station_id)))
+            ),
+            preview_websocket_url=AnyWebsocketUrl(
+                str(request.url_for("station_preview_websocket", station_id=str(station_id)))
+            ),
+            log_websocket_url=AnyWebsocketUrl(
+                str(request.url_for("station_logs_websocket", station_id=str(station_id)))
+            ),
+            preview_protocol_version=STATION_DELIVERY_FRAMING_VERSION,
+        ),
+    )
 
-    Separate from the editable bench in ``GET /instrument`` (``InstrumentState``): the UI needs the HAL
-    config for preview frame rotation (``detection[*].rotation_deg``), device→role mapping, and stage axes.
-    """
-    return inst.hardware_config
+
+@station_router.get("/{station_id}/snapshot")
+async def get_snapshot(station_id: UUID, station: StationDep) -> StationFeedView:
+    station = _get_scoped_station(station_id, station)
+    return await station.feed.snapshot()
 
 
-@instrument_router.get("/default")
-async def get_default(inst: InstrumentDep) -> InstrumentDefaults:
-    """The on-disk baseline (``config.yaml`` ``default``); retained as a compatibility endpoint."""
-    return inst.default.value
+@station_router.post("/{station_id}/instruments", status_code=201)
+async def create_instrument(
+    station_id: UUID,
+    body: CreateInstrumentRequest,
+    station: StationDep,
+    templates: TemplatesDep,
+) -> InstrumentInspection:
+    station = _get_scoped_station(station_id, station)
+    try:
+        config = templates.get(body.template)
+        return await station.create_instrument(body.name, config)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (FileExistsError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@station_router.post("/{station_id}/instruments/{instrument_name}/archive-bench")
+async def archive_bench(station_id: UUID, instrument_name: str, station: StationDep) -> dict[str, str]:
+    station = _get_scoped_station(station_id, station)
+    try:
+        archive = await station.archive_bench(instrument_name)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"archived": archive.name}
+
+
+@station_router.post("/{station_id}/sessions", status_code=201)
+async def open_session(station_id: UUID, body: OpenSessionRequest, station: StationDep) -> SessionInfo:
+    station = _get_scoped_station(station_id, station)
+    try:
+        return await station.open_session(body.instrument_name)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@station_router.delete("/{station_id}/sessions/{session_id}", status_code=204)
+async def close_session(station_id: UUID, session_id: UUID, station: StationDep) -> None:
+    station = _get_scoped_station(station_id, station)
+    try:
+        await station.close_session(session_id)
+    except (RuntimeError, TimeoutError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@station_router.get("/{station_id}/metadata/schema")
+async def get_metadata_schema(station_id: UUID, target: str, station: StationDep) -> dict[str, Any]:
+    _get_scoped_station(station_id, station)
+    try:
+        return resolve_metadata_class(target).model_json_schema()
+    except (ImportError, AttributeError, TypeError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@station_router.get("/{station_id}/acquisitions")
+async def list_acquisitions(station_id: UUID, station: StationDep) -> list[AcquisitionManifest]:
+    station = _get_scoped_station(station_id, station)
+    return await station.records.acquisitions.list_manifests()
+
+
+@station_router.get("/{station_id}/acquisitions/{acquisition_id}")
+async def get_acquisition(station_id: UUID, acquisition_id: UUID, station: StationDep) -> AcquisitionManifest:
+    station = _get_scoped_station(station_id, station)
+    try:
+        return await station.records.acquisitions.get(acquisition_id)
+    except ManifestNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@station_router.get("/{station_id}/logs")
+async def get_logs(
+    station_id: UUID,
+    station: StationDep,
+    after_seq: Annotated[int | None, Query(ge=0)] = None,
+    minimum_level: Annotated[int | None, Query(ge=0)] = None,
+    node_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 500,
+) -> list[LogEntry]:
+    station = _get_scoped_station(station_id, station)
+    if after_seq is None and minimum_level is None and node_id is None:
+        return await station.records.logs.tail(limit=limit)
+    return await station.records.logs.query(
+        after_seq=after_seq or 0,
+        minimum_level=minimum_level,
+        node_id=node_id,
+        limit=limit,
+    )
+
+
+@station_router.get("/{station_id}/acquisitions/{acquisition_id}/logs")
+async def get_acquisition_logs(
+    station_id: UUID,
+    acquisition_id: UUID,
+    station: StationDep,
+    after_seq: Annotated[int, Query(ge=0)] = 0,
+    minimum_level: Annotated[int | None, Query(ge=0)] = None,
+    node_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 500,
+) -> list[LogEntry]:
+    station = _get_scoped_station(station_id, station)
+    try:
+        return await station.records.logs.for_acquisition(
+            acquisition_id,
+            after_seq=after_seq,
+            minimum_level=minimum_level,
+            node_id=node_id,
+            limit=limit,
+        )
+    except ManifestNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@station_router.websocket("/{station_id}/ws", name="station_state_websocket")
+async def station_state_websocket(websocket: WebSocket, station_id: UUID) -> None:
+    if websocket.app.state.station.config.id != station_id:
+        await websocket.close(code=1008)
+        return
+    await websocket.app.state.realtime.serve_state(websocket)
+
+
+@station_router.websocket("/{station_id}/preview/ws", name="station_preview_websocket")
+async def station_preview_websocket(websocket: WebSocket, station_id: UUID) -> None:
+    if websocket.app.state.station.config.id != station_id:
+        await websocket.close(code=1008)
+        return
+    await websocket.app.state.realtime.serve_preview(websocket)
+
+
+@station_router.websocket("/{station_id}/logs/ws", name="station_logs_websocket")
+async def station_logs_websocket(websocket: WebSocket, station_id: UUID) -> None:
+    if websocket.app.state.station.config.id != station_id:
+        await websocket.close(code=1008)
+        return
+    await websocket.app.state.realtime.serve_logs(websocket)
 
 
 @instrument_router.post("/profile/active")
-async def activate_profile(body: _ActivateProfile, inst: InstrumentDep) -> dict[str, str]:
-    return {"active": await inst.set_active_profile(body.profile_id)}
+async def activate_profile(body: _ActivateProfile, instrument: InstrumentDep) -> dict[str, str]:
+    return {"active": await instrument.set_active_profile(body.profile_id)}
 
 
 @instrument_router.patch("/profile", status_code=204)
-async def update_profile(patch: ProfilePatch, inst: InstrumentDep) -> None:
-    await inst.update_profile(patch)
+async def update_profile(patch: ProfilePatch, instrument: InstrumentDep) -> None:
+    await instrument.update_profile(patch)
 
 
 @instrument_router.patch("/profile/sync/{generator_uid}", status_code=204)
-async def update_signals(generator_uid: str, signals: Signals, inst: InstrumentDep) -> None:
-    await inst.update_signals(generator_uid, signals)
+async def update_signals(generator_uid: str, signals: Signals, instrument: InstrumentDep) -> None:
+    await instrument.update_signals(generator_uid, signals)
 
 
 @instrument_router.post("/settings/apply", status_code=204)
-async def apply_settings(inst: InstrumentDep) -> None:
-    await inst.apply_settings()
+async def apply_settings(instrument: InstrumentDep) -> None:
+    await instrument.apply_settings()
 
 
 @instrument_router.post("/settings/save", status_code=204)
-async def save_settings(inst: InstrumentDep) -> None:
-    await inst.save_settings()
+async def save_settings(instrument: InstrumentDep) -> None:
+    await instrument.save_settings()
 
 
 @instrument_router.post("/optical-routing/apply", status_code=204)
-async def apply_optical_routing(inst: InstrumentDep) -> None:
-    await inst.apply_optical_routing()
+async def apply_optical_routing(instrument: InstrumentDep) -> None:
+    await instrument.apply_optical_routing()
 
 
 @instrument_router.put("/optical-routing/{dimension}/policy", status_code=204)
 async def update_optical_routing_policy(
     dimension: str,
     policy: OpticalRoutingPolicy,
-    inst: InstrumentDep,
+    instrument: InstrumentDep,
 ) -> None:
-    await inst.update_optical_routing_policy(dimension, policy)
+    await instrument.update_optical_routing_policy(dimension, policy)
 
 
 @instrument_router.post("/optical-routing/{dimension}/override", status_code=204)
-async def override_optical_route(dimension: str, body: _OpticalRouteOverride, inst: InstrumentDep) -> None:
-    await inst.override_optical_route(dimension, body.route)
+async def override_optical_route(
+    dimension: str,
+    body: _OpticalRouteOverride,
+    instrument: InstrumentDep,
+) -> None:
+    await instrument.override_optical_route(dimension, body.route)
 
 
 @instrument_router.post("/default/save", status_code=204)
-async def save_as_default(body: _DefaultScope, inst: InstrumentDep) -> None:
-    """Persist the live bench's baseline fields into ``config.yaml``'s ``default`` (all, or ``include``)."""
+async def save_as_default(body: _DefaultScope, instrument: InstrumentDep) -> None:
     if body.include is None:
-        await inst.save_as_default()
+        await instrument.save_as_default()
     else:
-        await inst.save_as_default(body.include)
+        await instrument.save_as_default(body.include)
 
 
 @instrument_router.post("/default/restore", status_code=204)
-async def restore_default(body: _DefaultScope, inst: InstrumentDep) -> None:
-    """Reset the live bench's baseline fields from ``config.yaml``'s ``default`` (all, or ``include``)."""
+async def restore_default(body: _DefaultScope, instrument: InstrumentDep) -> None:
     if body.include is None:
-        await inst.restore_default()
+        await instrument.restore_default()
     else:
-        await inst.restore_default(body.include)
+        await instrument.restore_default(body.include)
 
 
 @instrument_router.patch("/channels/{channel_id}", status_code=204)
-async def update_channel(channel_id: str, patch: ChannelPatch, inst: InstrumentDep) -> None:
-    await inst.update_channel(channel_id, patch)
+async def update_channel(channel_id: str, patch: ChannelPatch, instrument: InstrumentDep) -> None:
+    await instrument.update_channel(channel_id, patch)
 
 
 @instrument_router.patch("/output", status_code=204)
-async def update_output(patch: WriterPatch, inst: InstrumentDep) -> None:
-    await inst.update_output(patch)
+async def update_output(patch: WriterPatch, instrument: InstrumentDep) -> None:
+    await instrument.update_output(patch)
 
 
 @instrument_router.patch("/stencil", status_code=204)
-async def update_stencil(patch: StencilPatch, inst: InstrumentDep) -> None:
-    await inst.update_stencil(patch)
+async def update_stencil(patch: StencilPatch, instrument: InstrumentDep) -> None:
+    await instrument.update_stencil(patch)
 
 
 @instrument_router.patch("/metadata", status_code=204)
-async def update_metadata(fields: dict[str, Any], inst: InstrumentDep) -> None:
-    await inst.update_metadata(**fields)
+async def update_metadata(fields: dict[str, Any], instrument: InstrumentDep) -> None:
+    await instrument.update_metadata(**fields)
 
 
 @instrument_router.put("/metadata/schema", status_code=204)
-async def set_metadata_schema(body: _MetadataSchema, inst: InstrumentDep) -> None:
-    await inst.set_metadata_schema(body.target)
+async def set_metadata_schema(body: _MetadataSchema, instrument: InstrumentDep) -> None:
+    await instrument.set_metadata_schema(body.target)
 
 
 @instrument_router.put("/traversal", status_code=204)
-async def set_traversal(body: _Traversal, inst: InstrumentDep) -> None:
-    await inst.set_traversal(body.order)
+async def set_traversal(body: _Traversal, instrument: InstrumentDep) -> None:
+    await instrument.set_traversal(body.order)
 
 
 @instrument_router.post("/tasks", status_code=204)
-async def add_tasks(body: _AddTasks, inst: InstrumentDep) -> None:
-    await inst.add_tasks(body.xy, profile_ids=body.profile_ids)
+async def add_tasks(body: _AddTasks, instrument: InstrumentDep) -> None:
+    await instrument.add_tasks(body.xy, profile_ids=body.profile_ids)
 
 
 @instrument_router.patch("/tasks", status_code=204)
-async def update_tasks(body: _UpdateTasks, inst: InstrumentDep) -> None:
-    await inst.update_tasks(body.patches)
+async def update_tasks(body: _UpdateTasks, instrument: InstrumentDep) -> None:
+    await instrument.update_tasks(body.patches)
 
 
 @instrument_router.delete("/tasks", status_code=204)
-async def remove_tasks(inst: InstrumentDep, ids: Annotated[list[str], Query()]) -> None:
-
-    await inst.remove_tasks(ids)
+async def remove_tasks(instrument: InstrumentDep, ids: Annotated[list[str], Query()]) -> None:
+    await instrument.remove_tasks(ids)
 
 
 @instrument_router.post("/preview/start", status_code=204)
-async def start_preview(inst: InstrumentDep) -> None:
-    await inst.start_preview()
+async def start_preview(instrument: InstrumentDep) -> None:
+    await instrument.start_preview()
 
 
 @instrument_router.post("/preview/stop", status_code=204)
-async def stop_preview(inst: InstrumentDep) -> None:
-    await inst.stop_preview()
-
-
-# Viewport and levels use the bidirectional `instrument.preview` topic, not REST — they need sender-excluded
-# Multi-client preview state uses the web adapter. Start/stop remain REST controls.
-
-
-@instrument_router.get("/devices")
-async def list_devices(inst: InstrumentDep) -> dict[str, DeviceSnapshot]:
-    """Each device interface in the legacy snapshot representation."""
-    return {
-        device_id: DeviceSnapshot(id=device_id, connected=True, interface=interface)
-        for device_id, interface in inst.device_interfaces.items()
-    }
+async def stop_preview(instrument: InstrumentDep) -> None:
+    await instrument.stop_preview()
 
 
 @instrument_router.get("/devices/{device_id}/properties")
-async def get_device_properties(device_id: str, inst: InstrumentDep, props: list[str] | None = None) -> PropResults:
-    """Read ``props`` (all of the device's properties if omitted)."""
+async def get_device_properties(
+    device_id: str,
+    instrument: InstrumentDep,
+    props: list[str] | None = None,
+) -> PropResults:
     try:
-        return await inst.get_device_properties(device_id, props)
+        return await instrument.get_device_properties(device_id, props)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error.args[0])) from error
 
 
 @instrument_router.patch("/devices/{device_id}/properties")
-async def set_device_properties(device_id: str, body: _SetProps, inst: InstrumentDep) -> PropResults:
-    """Set properties and return per-property accept/reject results; the feed publishes the accepted update."""
+async def set_device_properties(device_id: str, body: _SetProps, instrument: InstrumentDep) -> PropResults:
     try:
-        return await inst.set_device_properties(device_id, body.properties)
+        return await instrument.set_device_properties(device_id, body.properties)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error.args[0])) from error
 
 
-@instrument_router.post("/devices/{device_id}/commands/{cmd_name}")
-async def execute_device_command(device_id: str, cmd_name: str, body: _ExecuteCommand, inst: InstrumentDep) -> Result:
+@instrument_router.post("/devices/{device_id}/commands/{command_name}")
+async def execute_device_command(
+    device_id: str,
+    command_name: str,
+    body: _ExecuteCommand,
+    instrument: InstrumentDep,
+) -> Result:
     try:
-        return await inst.execute_device_command(device_id, cmd_name, body.args, body.kwargs)
+        return await instrument.execute_device_command(device_id, command_name, body.args, body.kwargs)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error.args[0])) from error
-
-
-@instrument_router.get("/acquisition")
-async def get_active_acquisition(inst: InstrumentDep) -> ActiveAcquisitionState | None:
-    """Return the retained state for the current run, or ``None`` while the instrument is idle."""
-    return inst.acquisition.value
 
 
 @instrument_router.post("/acquisition")
-async def start_acquisition(body: AcquisitionRequest, inst: InstrumentDep) -> ActiveAcquisitionState:
-    """Launch the requested acquisition and return its retained state once the run has started.
-
-    The synchronous preflight writes a marker to the destination; an unwritable target raises ``OSError``
-    here (mapped to 422) before any capture. State streams through ``instrument.feed.updates``.
-    """
+async def start_acquisition(body: AcquisitionRequest, instrument: InstrumentDep) -> ActiveAcquisitionState:
     try:
-        return await inst.start_acquisition(body)
-    except OSError as e:
-        raise HTTPException(status_code=422, detail=f"destination not writable: {e}") from e
+        return await instrument.start_acquisition(body)
+    except OSError as error:
+        raise HTTPException(status_code=422, detail=f"destination not writable: {error}") from error
 
 
 @instrument_router.post("/acquisition/stop", status_code=204)
-async def stop_acquisition(inst: InstrumentDep) -> None:
-    await inst.stop_acquisition()
+async def stop_acquisition(instrument: InstrumentDep) -> None:
+    await instrument.stop_acquisition()
 
 
 api_router = APIRouter()
-api_router.include_router(app_router)
+api_router.include_router(station_router)
 api_router.include_router(instrument_router)
+
+
+__all__ = ["api_router"]

@@ -1,13 +1,4 @@
-"""FastAPI factory + launcher for the Voxel web backend, on the ``vxl.Instrument`` API.
-
-Lean by design: two routers (the ``VoxelApp`` surface — discovery/launch/close/history — and the active
-``Instrument`` surface), the web adapter (:mod:`vxl_web.adapter`), and the primary/preview
-WebSocket transports (:mod:`vxl_web.websocket`). No manager/service layer — routers call the ``Instrument``'s
-flat method surface directly.
-
-Runs as a single uvicorn process: it owns the open hardware, the bus, and one event loop, so there is
-exactly one process per microscope (never multiple workers — they would each open the hardware).
-"""
+"""FastAPI composition for the Voxel web application."""
 
 import logging
 from collections.abc import AsyncGenerator
@@ -24,20 +15,19 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
-from vxl.app import VoxelApp
 from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
-from vxl.system import load_voxel_env
+from vxl.station import InstrumentTemplates, Station
+from vxl.system import StationConfig, load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
 
-from .adapter import VoxelWebAdapter
+from .realtime import Realtime
 from .router import api_router
 
 log = logging.getLogger(__name__)
 
 
-class SPAStaticFiles(StaticFiles):
-    """StaticFiles with SPA fallback: serve index.html for unknown HTTP paths, and close stray
-    WebSocket scopes with 1008 rather than tripping the HTTP-only assertion."""
+class _SPAStaticFiles(StaticFiles):
+    """Serve the built SPA and reject unmatched WebSocket paths cleanly."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "websocket":
@@ -48,48 +38,50 @@ class SPAStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             return await super().get_response(path, scope)
-        except HTTPException as e:
-            if e.status_code == 404:
+        except HTTPException as error:
+            if error.status_code == 404:
                 return await super().get_response(".", scope)
             raise
 
 
 def _register_error_handlers(app: FastAPI) -> None:
-    """Map expected instrument failures to HTTP while leaving unexpected errors as 500s."""
-
-    def details(exc: StartupError) -> list[dict[str, Any]]:
-        return [violation.model_dump(mode="json", exclude_none=True) for violation in exc.violations]
+    """Map expected instrument failures while leaving unexpected failures as 500s."""
 
     @app.exception_handler(OperationRejectedError)
-    async def _on_operation_rejected(_request: Request, exc: OperationRejectedError) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+    async def _on_operation_rejected(_request: Request, error: OperationRejectedError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(error)})
 
     @app.exception_handler(InstrumentBusyError)
-    async def _on_instrument_busy(_request: Request, exc: InstrumentBusyError) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+    async def _on_instrument_busy(_request: Request, error: InstrumentBusyError) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(StartupError)
-    async def _on_startup_error(_request: Request, exc: StartupError) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": details(exc)})
+    async def _on_startup_error(_request: Request, error: StartupError) -> JSONResponse:
+        details: list[dict[str, Any]] = [
+            violation.model_dump(mode="json", exclude_none=True) for violation in error.violations
+        ]
+        return JSONResponse(status_code=422, content={"detail": details})
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    vxl = app.state.vxl
-    async with app.state.voxel_app.records.logs.capture():
-        log.info("Starting Voxel web backend")
-        vxl.attach()
+    async with app.state.station.records.logs.capture():
+        log.info("Starting Voxel web application")
         try:
             yield
         finally:
-            await vxl.close()
-            await app.state.voxel_app.close()  # parks hardware on shutdown (closes the active instrument, if any)
-            log.info("Voxel web backend stopped")
+            await app.state.realtime.close()
+            await app.state.station.close()
+            log.info("Voxel web application stopped")
 
 
-def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) -> FastAPI:
-    """Build the FastAPI app. ``voxel_app`` defaults to a fresh ``VoxelApp``; ``serve_static`` mounts the
-    built UI at ``/`` (pass ``False`` for API-only test clients)."""
+def create_app(
+    station: Station,
+    templates: InstrumentTemplates | None = None,
+    *,
+    serve_static: bool = True,
+) -> FastAPI:
+    """Build the FastAPI application from injected runtime resources."""
     app = FastAPI(title="Voxel API", version="0.1.0", lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
@@ -98,24 +90,23 @@ def create_app(voxel_app: VoxelApp | None = None, *, serve_static: bool = True) 
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.state.voxel_app = voxel_app or VoxelApp()
-    app.state.vxl = VoxelWebAdapter(app.state.voxel_app)
+    app.state.station = station
+    app.state.instrument_templates = templates if templates is not None else InstrumentTemplates()
+    app.state.realtime = Realtime(station)
     _register_error_handlers(app)
     app.include_router(api_router, prefix="/api")
-    if serve_static and (static_dir := Path(__file__).parent / "static").is_dir():
-        app.mount("/", SPAStaticFiles(directory=static_dir, html=True), name="static")
+
+    static_dir = Path(__file__).parents[1] / "static"
+    if serve_static and static_dir.is_dir():
+        app.mount("/", _SPAStaticFiles(directory=static_dir, html=True), name="static")
     return app
 
 
 def serve(*, host: str, port: int = 8000, debug: bool = False) -> None:
-    """Run the Voxel web application."""
-    load_voxel_env()  # ambient env from ~/.voxel/.env before anything reads it (System, S3 clients)
+    """Run the Voxel web application as the sole hardware owner."""
+    load_voxel_env()
     console_level = logging.DEBUG if debug else logging.INFO
     configure_logging(level=console_level, fmt="%(message)s", datefmt="[%X]")
-    # The WS log feed streams DEBUG to the UI while the console keeps the user-facing threshold. Per-handler
-    # levels split the two: the bus handler (added in the lifespan) is DEBUG; the console handler is
-    # console_level. Without --debug, only the Voxel packages emit DEBUG (root stays INFO) so the feed isn't
-    # flooded with third-party library noise; --debug opens everything, including third-party loggers.
     root_logger = logging.getLogger()
     if debug:
         root_logger.setLevel(logging.DEBUG)
@@ -125,15 +116,19 @@ def serve(*, host: str, port: int = 8000, debug: bool = False) -> None:
             logging.getLogger(name).setLevel(logging.DEBUG)
     for handler in root_logger.handlers:
         handler.setLevel(console_level)
+
     log.info("Starting Voxel...")
     log.info("Web UI: http://localhost:%d", port)
     if (local_ip := get_local_ip()) != "127.0.0.1":
         log.info("      or http://%s:%d", local_ip, port)
     uvicorn.run(
-        create_app(),
+        create_app(Station(StationConfig.load())),
         host=host,
         port=port,
         log_config=get_uvicorn_log_config(),
         loop="auto",
-        ws_ping_interval=None,  # disable keepalive pings — prevents a race with manual send_bytes
+        ws_ping_interval=None,
     )
+
+
+__all__ = ["create_app", "serve"]
