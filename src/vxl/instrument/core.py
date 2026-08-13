@@ -27,7 +27,7 @@ from vxl.camera import CameraHandle, CaptureState, StorageSpec, resolve_storage
 from vxl.daq.clocked import Signals
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
-from vxl.system import System
+from vxl.system import Remote, System, remote_store_fingerprint
 from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
 from .bench import PROMOTABLE_FIELDS, InstrumentBench
@@ -106,6 +106,7 @@ class Instrument:
         self._hal = HAL(bench.config.hal, name=bench.home.name)
         self._bench = bench
         self._records = records
+        self._remote_stores: dict[str, Remote] = {}
         self._active_profile_id = Cell[str](next(iter(self._bench.value.imaging.profiles)))
         self._channels: dict[str, Channel] = {}
         self._preview_channels: list[Channel] = []
@@ -171,6 +172,11 @@ class Instrument:
         return self._device_props_updates
 
     @property
+    def remote_stores(self) -> Mapping[str, Remote]:
+        """Object stores configured identically on this process and every open camera host."""
+        return dict(self._remote_stores)
+
+    @property
     def state(self) -> Readable[InstrumentState]:
         """Committed acquisition state as a read-only reactive view."""
         return self._bench
@@ -234,6 +240,7 @@ class Instrument:
                 await self._refresh_device_props()
                 await self._validate_startup()
                 self._channels = self._build_channels()
+                await self._discover_remote_stores()
                 for camera in self._hal.cameras.values():
                     self.fov.add_triggers(camera.frame_area_um)
                 await self._apply_profile(self._active_profile_id.value)
@@ -247,6 +254,27 @@ class Instrument:
             except Exception:
                 logger.exception("Failed to clean up instrument after startup error")
             raise
+
+    async def _discover_remote_stores(self) -> None:
+        """Materialize the conservative object-store intersection across all camera hosts."""
+        local = System().remotes
+        reported = await asyncio.gather(
+            *(camera.remote_stores() for camera in self._hal.cameras.values()),
+            return_exceptions=True,
+        )
+        available = {
+            name
+            for name, remote in local.items()
+            if all(
+                not isinstance(camera_stores, BaseException)
+                and camera_stores.get(name) == remote_store_fingerprint(remote.connection)
+                for camera_stores in reported
+            )
+        }
+        self._remote_stores = {name: local[name] for name in sorted(available)}
+        for camera_id, camera_stores in zip(self._hal.cameras, reported, strict=True):
+            if isinstance(camera_stores, BaseException):
+                logger.warning("Could not discover remote stores for camera %s: %s", camera_id, camera_stores)
 
     async def _validate_startup(self) -> None:
         if violations := await self._startup_violations():
@@ -565,6 +593,7 @@ class Instrument:
         self.fov.clear_triggers()
         await self._hal.close()
         self._channels = {}
+        self._remote_stores = {}
         self._preview_source_ids = {}
 
     async def _refresh_device_props(self) -> None:

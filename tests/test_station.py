@@ -49,6 +49,7 @@ class FakeInstrument:
         self.routing_targets = Cell[dict[str, str]]({})
         self.device_interfaces: dict[str, DeviceInterface] = {}
         self.device_props: dict[str, DeviceProps] = {}
+        self.remote_stores = {}
         self.device_props_updates = Emitter[tuple[str, DeviceProps]]()
         self.preview = Emitter[PreviewSourceEmission]()
         self.preview_revision = Cell(0)

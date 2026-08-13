@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 _DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
+_REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
 
 
 class CameraHandle(DeviceHandle[Camera]):
@@ -91,6 +92,10 @@ class CameraHandle(DeviceHandle[Camera]):
         node's storage status (host, resolved root, free bytes)."""
         result = await self.call("check_writable", storage=storage)
         return StorageStatus.model_validate(result)
+
+    async def remote_stores(self) -> dict[str, str]:
+        """Return this camera host's configured object stores as name-to-fingerprint mappings."""
+        return _REMOTE_STORES_ADAPTER.validate_python(await self.call("remote_stores"))
 
     async def open_stack(
         self,

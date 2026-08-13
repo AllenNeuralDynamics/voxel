@@ -12,6 +12,7 @@ when present; nodes and other non-control processes can use ``system.yaml`` or d
 import logging
 import socket
 import sys
+from hashlib import sha256
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 from uuid import UUID, uuid4
@@ -64,6 +65,16 @@ class Remote(BaseModel):
 
     connection: S3Store = S3Store()
     roots: dict[str, str] = Field(default_factory=dict, description="display label -> bucket or bucket/prefix")
+
+
+def remote_store_fingerprint(store: S3Store) -> str:
+    """Return a non-secret identity for matching one object store across machines.
+
+    Roots and credential strategies are deliberately excluded: machines may expose different selectable roots and
+    use different credentials while addressing the same S3-compatible service.
+    """
+    identity = f"{store.endpoint or ''}\0{store.region or ''}".encode()
+    return f"s3:{sha256(identity).hexdigest()}"
 
 
 class System(BaseSettings):
@@ -281,4 +292,4 @@ class StationConfig(System):
         return StationInfo(id=self.id, name=self.name)
 
 
-__all__ = ["Remote", "StationConfig", "StationInfo", "System", "load_voxel_env"]
+__all__ = ["Remote", "StationConfig", "StationInfo", "System", "load_voxel_env", "remote_store_fingerprint"]

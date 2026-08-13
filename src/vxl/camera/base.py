@@ -26,7 +26,7 @@ from rigup import Device, DeviceController, describe, enumerated, enumerated_int
 from vxl.camera.storage import describe_dataset_location, resolve_storage
 from vxl.device import DeviceType
 from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
-from vxl.system import System
+from vxl.system import System, remote_store_fingerprint
 from vxlib import Dtype, SchemaModel
 
 log = logging.getLogger(__name__)
@@ -287,6 +287,11 @@ class CameraController(DeviceController["Camera"]):
             return StorageStatus(host=System.hostname(), root=str(root), free_bytes=free)
 
         return await self._run_sync(_check)
+
+    @describe(label="Remote Stores")
+    def remote_stores(self) -> dict[str, str]:
+        """Return configured object-store names and non-secret connection fingerprints for this camera's host."""
+        return {name: remote_store_fingerprint(remote.connection) for name, remote in System().remotes.items()}
 
     @describe(label="Open Stack")
     async def open_stack(

@@ -33,7 +33,6 @@ import type {
   OpticalRoutingPolicy,
   PresetRecord,
   ProfilePatch,
-  Remote,
   SensorROI,
   SessionState,
   Signals,
@@ -435,6 +434,7 @@ export class Instrument {
 
   /** Resolved JSON schema for the active `metadata_cls`; re-fetched from the backend when it changes. */
   metadataSchema = $state.raw<JsonSchema | null>(null);
+  remoteStores = $state.raw<Record<string, import('./types').Remote>>({});
 
   readonly #client: Client;
   readonly #base: string;
@@ -459,6 +459,7 @@ export class Instrument {
     this.acquisition = session.acquisition;
     this.hal = session.hardware;
     this.default = session.defaults;
+    this.remoteStores = session.remote_stores;
     for (const [deviceId, device] of Object.entries(session.devices)) {
       const base = `${this.#base}/devices/${encodeURIComponent(deviceId)}`;
       this.devices.set(
@@ -482,6 +483,7 @@ export class Instrument {
     this.acquisition = session.acquisition;
     this.hal = session.hardware;
     this.default = session.defaults;
+    this.remoteStores = session.remote_stores;
     for (const id of this.devices.keys()) if (!Object.hasOwn(session.devices, id)) this.devices.delete(id);
     for (const [id, state] of Object.entries(session.devices)) {
       const device = this.devices.get(id);
@@ -676,7 +678,6 @@ export class VoxelApp {
     station: { id: '', name: '' },
     instruments: {},
     templates: {},
-    remotes: {},
     colormaps: [],
     metadata_schemas: {},
     realtime: {
@@ -800,11 +801,6 @@ export class VoxelApp {
   async retryConnection(): Promise<void> {
     this.#client.resetReconnectState();
     await this.#client.connect(this.discovery.realtime.state_websocket_url);
-  }
-
-  /** Configured object stores (name → connection + selectable roots); empty when only local storage. */
-  fetchRemotes(): Promise<Record<string, Remote>> {
-    return Promise.resolve(this.discovery.remotes);
   }
 
   /** Load the bounded resources used to initialize the application. */

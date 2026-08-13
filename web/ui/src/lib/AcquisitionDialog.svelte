@@ -5,7 +5,7 @@
   import { InformationOutline } from '$lib/icons';
   import { Button, Dialog, Field, Label, Select, Switch, TextInput } from '$lib/kit';
   import MetadataPanel from '$lib/MetadataPanel.svelte';
-  import type { Remote, VoxelApp } from '$lib/model';
+  import type { VoxelApp } from '$lib/model';
   import OutputControls from '$lib/OutputControls.svelte';
 
   interface Props {
@@ -25,7 +25,7 @@
   let path = $state('');
   let stage = $state(false);
   let operator = $state('');
-  let remotes = $state<Record<string, Remote>>({});
+  const remotes = $derived(instrument?.remoteStores ?? {});
   let busy = $state(false);
 
   const isLocal = $derived(store === LOCAL);
@@ -49,16 +49,12 @@
     return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
   }
 
-  // On open: regenerate the default path and (re)load remotes.
+  // On open: regenerate the default path.
   watch(
     () => open,
     (isOpen) => {
       if (!isOpen) return;
       path = `${app.activeName ?? 'acquisition'}/${timestamp()}`;
-      app
-        .fetchRemotes()
-        .then((r) => (remotes = r))
-        .catch(() => (remotes = {}));
     }
   );
 

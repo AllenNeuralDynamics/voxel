@@ -29,6 +29,7 @@ SESSION = SessionState(
     acquisition=None,
     defaults=CONFIG.default,
     hardware=CONFIG.hal,
+    remote_stores={},
 )
 
 

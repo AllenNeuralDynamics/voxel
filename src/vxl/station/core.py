@@ -413,6 +413,7 @@ class Station:
             acquisition=instrument.acquisition.value,
             defaults=instrument.default.value,
             hardware=instrument.hardware_config,
+            remote_stores=dict(instrument.remote_stores),
         )
 
 

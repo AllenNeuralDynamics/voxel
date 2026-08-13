@@ -355,9 +355,8 @@ export interface S3Store {
   credentials: S3Credentials;
 }
 
-/** A configured object store: connection plus selectable roots (label → a write root: a bucket,
- * optionally narrowed to `bucket/prefix`).
- * Mirrors `vxl.system.Remote`; provided by `GET /discovery` keyed by store name. */
+/** An object store usable by every camera in the active instrument: connection plus selectable roots
+ * (label → bucket or bucket/prefix). Mirrors `vxl.system.Remote`. */
 export interface Remote {
   connection: S3Store;
   roots: Record<string, string>;
@@ -536,7 +535,6 @@ export interface StationDiscovery {
   station: StationInfo;
   instruments: Record<string, InstrumentInspection>;
   templates: Record<string, InstrumentConfig>;
-  remotes: Record<string, Remote>;
   colormaps: ColormapCatalog;
   metadata_schemas: Record<string, string>;
   realtime: RealtimeDiscovery;
@@ -649,6 +647,7 @@ export interface SessionState {
   acquisition: ActiveAcquisitionState | null;
   defaults: InstrumentDefaults;
   hardware: HALConfig;
+  remote_stores: Record<string, Remote>;
 }
 
 export type StationStatus = 'idle' | 'opening' | 'active' | 'closing' | 'faulted' | 'closed';

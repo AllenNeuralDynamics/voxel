@@ -12,7 +12,7 @@ from vxl.instrument.models import TaskTile
 from vxl.instrument.state import InstrumentDefaults
 from vxl.instrument.topology import HALConfig
 from vxl.preview import StreamCursor
-from vxl.system import StationInfo
+from vxl.system import Remote, StationInfo
 from vxlib import SchemaModel
 
 
@@ -56,6 +56,7 @@ class SessionState(SchemaModel):
     acquisition: ActiveAcquisitionState | None
     defaults: InstrumentDefaults
     hardware: HALConfig
+    remote_stores: dict[str, Remote]
 
 
 class StationState(SchemaModel):
