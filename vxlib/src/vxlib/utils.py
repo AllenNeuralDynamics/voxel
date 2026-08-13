@@ -7,6 +7,7 @@ import re
 import socket
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Coroutine
 from datetime import datetime
 from functools import wraps
@@ -180,6 +181,32 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
+_REPLACE_ATTEMPTS = 5
+_REPLACE_BASE_DELAY_S = 0.05
+
+
+def _replace_with_retry(source: Path, target: Path) -> None:
+    """Replace ``target`` with ``source``, retrying transient sharing violations.
+
+    Windows refuses a replace while any process holds ``target`` open without
+    ``FILE_SHARE_DELETE``. Antivirus, the search indexer, and backup agents all
+    do so for a few milliseconds after a file is written, which makes a
+    single-attempt replace unreliable there. POSIX renames never fail this way,
+    so the first attempt always succeeds and this costs nothing.
+
+    ``ERROR_ACCESS_DENIED`` (5) and ``ERROR_SHARING_VIOLATION`` (32) both surface
+    as ``PermissionError``. Delays double, giving up after ~750 ms.
+    """
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            source.replace(target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_BASE_DELAY_S * 2**attempt)
+
+
 def atomic_write(path: Path, text: str) -> None:
     """Write ``text`` to ``path`` atomically and durably.
 
@@ -188,6 +215,9 @@ def atomic_write(path: Path, text: str) -> None:
     never a partial write. The parent directory is fsynced afterward so the
     rename itself survives power loss (POSIX only). The temp file is removed
     if anything fails before the replace.
+
+    Blocks briefly if the replace hits a transient sharing violation, so call it
+    off the event loop (e.g. via ``asyncio.to_thread``).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
@@ -198,7 +228,7 @@ def atomic_write(path: Path, text: str) -> None:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        tmp_path.replace(path)
+        _replace_with_retry(tmp_path, path)
         try:
             dir_fd = os.open(path.parent, os.O_RDONLY)
             try:

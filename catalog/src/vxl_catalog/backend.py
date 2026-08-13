@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
+from ._fs import replace_with_retry
 from .models import AcquisitionManifest
 
 
@@ -136,6 +137,6 @@ class FileCatalogBackend:
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
-            temporary.replace(path)
+            replace_with_retry(temporary, path)
         finally:
             temporary.unlink(missing_ok=True)

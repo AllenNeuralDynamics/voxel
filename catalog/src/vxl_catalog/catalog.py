@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import logging
 import os
 import threading
 import uuid
@@ -11,6 +12,7 @@ from uuid import UUID
 
 from cloudpathlib import S3Path
 
+from ._fs import replace_with_retry
 from .backend import CatalogBackend
 from .errors import (
     InvalidTransitionError,
@@ -31,6 +33,8 @@ from .models import (
     StorageSpec,
     VolumeStatus,
 )
+
+log = logging.getLogger(__name__)
 
 type StorageRootResolver = Callable[[StorageSpec], Path | S3Path]
 type ManifestTransform = Callable[[AcquisitionManifest], AcquisitionManifest]
@@ -64,7 +68,7 @@ class _ManifestStore:
                 stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
-            temporary.replace(local_path)
+            replace_with_retry(temporary, local_path)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -363,7 +367,7 @@ class Catalog:
 
                 updated = AcquisitionManifest.model_validate({**updated.model_dump(), "revision": current.revision + 1})
                 if await self._backend.compare_and_swap(updated, expected_revision=current.revision):
-                    await self._write_manifest(updated)
+                    await self._refresh_manifest_sidecar(updated)
                     return updated
 
         raise RevisionConflictError(f"acquisition changed repeatedly while updating: {acquisition_id}")
@@ -380,6 +384,29 @@ class Catalog:
                 f"catalog revision {manifest.revision} was indexed, but its acquisition-root manifest "
                 f"could not be written: {manifest.id}"
             ) from error
+
+    async def _refresh_manifest_sidecar(self, manifest: AcquisitionManifest) -> None:
+        """Refresh the acquisition-root manifest mid-run, best-effort.
+
+        The catalog's own copy is committed before this runs, and nothing reads the sidecar during an
+        acquisition — it exists beside the data for downstream tools. Aborting a run that may be hours in
+        over an advisory file is the wrong trade, so a failure here (most often a transient sharing
+        violation on Windows) is logged and the run continues; :meth:`sync_manifest` rewrites it from the
+        authoritative revision once the contention clears.
+
+        Creation and explicit syncs still raise: an unreachable destination should surface before a run
+        starts, not be discovered after it finishes.
+        """
+        try:
+            await self._write_manifest(manifest)
+        except ManifestSyncError:
+            log.warning(
+                "Acquisition-root manifest could not be refreshed for %s at revision %d; the catalog "
+                "copy is authoritative and the run continues. Call sync_manifest() to reconcile.",
+                manifest.id,
+                manifest.revision,
+                exc_info=True,
+            )
 
     async def _terminalize_volume(
         self,
