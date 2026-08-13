@@ -344,7 +344,8 @@ export interface S3Store {
 /** A configured object store: connection plus selectable roots (label → a write root: a bucket,
  * optionally narrowed to `bucket/prefix`).
  * Mirrors `vxl.system.Remote`; provided by `GET /discovery` keyed by store name. */
-export interface Remote extends S3Store {
+export interface Remote {
+  connection: S3Store;
   roots: Record<string, string>;
 }
 

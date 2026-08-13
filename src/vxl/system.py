@@ -48,12 +48,21 @@ def load_voxel_env() -> None:
     load_dotenv(_voxel_home() / ".env", override=False)
 
 
-class Remote(S3Store):
-    """A configured object store in the registry: the :class:`~vxlib.S3Store` connection plus the
+class Remote(BaseModel):
+    """A configured object store in the registry: the :class:`~vxlib.S3Store` ``connection`` plus the
     ``roots`` (display label -> write root) an operator may select. A root is a bucket, optionally
-    narrowed by a key prefix (``bucket`` or ``bucket/prefix``). Extends the shared connection model
-    with the UI catalog; still holds no secrets -- credentials come from the AWS chain."""
+    narrowed by a key prefix (``bucket`` or ``bucket/prefix``). Holds no secrets -- credentials come
+    from the AWS chain.
 
+    The connection is held, not inherited: ``roots`` is operator-facing catalog data, while a
+    :class:`~vxlib.S3Store` is a frozen *value* that writers hash to key their S3 client per
+    connection. Subclassing would make a ``Remote`` an unhashable ``S3Store`` -- accepted by every
+    ``store:`` field, then failing inside a cache lookup layers away. Pass ``.connection``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    connection: S3Store = S3Store()
     roots: dict[str, str] = Field(default_factory=dict, description="display label -> bucket or bucket/prefix")
 
 

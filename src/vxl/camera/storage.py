@@ -29,7 +29,7 @@ def resolve_storage(spec: StorageSpec, subpath: PurePosixPath | None = None) -> 
     remotes = System().remotes
     if spec.remote.store not in remotes:
         raise KeyError(f"unknown remote store '{spec.remote.store}'; configured: {sorted(remotes)}")
-    store = remotes[spec.remote.store]
+    store = remotes[spec.remote.store].connection
     target = S3Path(f"s3://{spec.remote.root}") / relpath.as_posix()
     if spec.remote.stage:
         return StagedS3(scratch=System().scratch / relpath, target=target, store=store)
