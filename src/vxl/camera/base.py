@@ -16,6 +16,7 @@ from ome_zarr_writer import (
     WriterConfig,
     WriterSettings,
 )
+from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
 from pydantic import BaseModel, ConfigDict
 from vxl_catalog import DatasetLocation, StorageSpec
@@ -146,12 +147,6 @@ class CameraMode(StrEnum):
     IDLE = "IDLE"
     PREVIEW = "PREVIEW"
     ACQUISITION = "ACQUISITION"
-
-
-# Ring depth: at least 2 (so collect overlaps downsample/flush) up to this cap (coordination +
-# cache pressure outweigh gains beyond it). Sized within these bounds from the camera's RAM share.
-MIN_WRITER_SLOTS = 2
-MAX_WRITER_SLOTS = 4
 
 
 class CameraController(DeviceController["Camera"]):
@@ -341,45 +336,56 @@ class CameraController(DeviceController["Camera"]):
             dtype=self.device.pixel_type,
         )
 
-        # Size the ring from this camera's RAM share. `cfg.batch_z` is policy-derived (matches the
-        # engine's batch_z), so a slot holds one batch + its pyramid tail (~1/7 overhead). Refuse if
-        # not even the minimum slot count fits — one slot would serialize collect against flush.
-        frame_bytes = frame.y * frame.x * self.device.pixel_type.itemsize
-        per_slot_bytes = int(cfg.batch_z * frame_bytes * 8 / 7)
-        budget = self.ram_budget_bytes
-        max_slots = budget // per_slot_bytes if per_slot_bytes else 0
-        if max_slots < MIN_WRITER_SLOTS:
-            raise RuntimeError(
-                f"{self.device.uid}: cannot fit {MIN_WRITER_SLOTS} batch slots "
-                f"({per_slot_bytes:,} B/slot, {budget:,} B RAM share). Reduce batch_z_shards, "
-                f"shard_z_chunks, max_level, target_shard_gb, or ROI; or raise max_ram_fraction."
-            )
-        slots = min(max_slots, MAX_WRITER_SLOTS)
-        if self._writer is None:  # the coordinator persists across volumes so its ring is reused
-            self._writer = OMEZarrWriter(slots=slots)
+        # The coordinator persists across volumes so its ring is reused. Ring sizing happens inside
+        # begin_stack via `_size_ring`, and only when it actually (re)allocates — reusing a ring
+        # allocates nothing, so there is no RAM budget to check.
+        if self._writer is None:
+            self._writer = OMEZarrWriter()
         _t = time.perf_counter()
-        self._writer.begin_stack(cfg, dest)  # (re)allocates the ring on the first volume; reused after
+        self._writer.begin_stack(cfg, dest, sizer=self._size_ring)
         log.info(
-            "OMEZarrWriter begin_stack for %s took %.1fs (%d slots, %.2f GB ring)",
+            "OMEZarrWriter begin_stack for %s took %.1fs",
             self.device.uid,
             time.perf_counter() - _t,
-            slots,
-            slots * per_slot_bytes / 1e9,
         )
 
         log.info(
-            "Stack init for %s → %s: batch_z=%d slots=%d (%.2f GB/slot, %.2f GB share)",
+            "Stack init for %s → %s: batch_z=%d",
             self.device.uid,
             self._writer.target,
             cfg.batch_z,
-            slots,
-            per_slot_bytes / 1e9,
-            budget / 1e9,
         )
         target = self._writer.target
         if target is None:
             raise RuntimeError("writer did not expose a dataset target")
         return describe_dataset_location(storage, target)
+
+    def _size_ring(self, config: WriterConfig) -> int:
+        """Choose the depth of a ring the writer is about to allocate.
+
+        Called by ``begin_stack`` only on the allocating path, and only after the previous ring has been
+        released — so the RAM share read here is not depressed by memory this camera is giving back.
+        Refuses below ``MIN_SLOTS``: a single slot would serialize collect against flush.
+        """
+        budget = self.ram_budget_bytes
+        available = System.Ram.available_bytes()
+        slots = slots_for_budget(
+            config.batch_shape,
+            config.max_level,
+            config.dtype,
+            budget_bytes=budget,
+            available_bytes=available,
+            label=self.device.uid,
+        )
+        log.info(
+            "Sizing ring for %s: %d slots (%.2f GB/slot peak, %.2f GB share, %.2f GB free)",
+            self.device.uid,
+            slots,
+            per_slot_bytes(config.batch_shape, config.max_level, config.dtype) / 1e9,
+            budget / 1e9,
+            available / 1e9,
+        )
+        return slots
 
     @describe(label="Close Stack")
     async def close_stack(self) -> None:

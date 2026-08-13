@@ -73,7 +73,16 @@ class System(BaseSettings):
 
     store: Path = Field(default_factory=lambda: _voxel_home() / "store", description="VOXEL_STORE")
     scratch: Path = Field(default_factory=lambda: _voxel_home() / "scratch", description="VOXEL_SCRATCH")
-    max_ram_fraction: float = Field(default=0.75, gt=0.0, le=1.0)
+    max_ram_fraction: float = Field(
+        default=0.75,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "VOXEL_MAX_RAM_FRACTION — fraction of *available* (not total) RAM that registered consumers "
+            "divide between them by weight. Because the denominator excludes the OS and other processes, "
+            "this is a share of what is free at the moment it is read, not a fixed provision."
+        ),
+    )
     remotes: dict[str, Remote] = Field(
         default_factory=dict, description="object-store name -> connection (from the selected machine config)"
     )

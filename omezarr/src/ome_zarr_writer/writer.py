@@ -24,7 +24,7 @@ import json
 import logging
 import math
 import threading
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -49,6 +49,7 @@ from ome_zarr_writer.dataset import (
     Zarr3ArrayMeta,
     Zarr3GroupMeta,
 )
+from ome_zarr_writer.sizing import MIN_SLOTS, RingSizingError
 from ome_zarr_writer.slot import BatchResult, BatchSlot, OutputSetup, SlotStage
 from ome_zarr_writer.storage import Local, S3Store, StagedS3, StagingConfig, Storage
 from ome_zarr_writer.transfer import TransferJob, run_s5cmd
@@ -623,19 +624,32 @@ class OMEZarrWriter:
         """The location of the open dataset, or None when none is open."""
         return self._active.target if self._active is not None else None
 
-    def begin_stack(self, config: WriterConfig, storage: Storage) -> DatasetWriter:
+    def begin_stack(
+        self,
+        config: WriterConfig,
+        storage: Storage,
+        *,
+        sizer: Callable[[WriterConfig], int] | None = None,
+    ) -> DatasetWriter:
         """Open a dataset for one volume and return its writer. Reuses the retained ring when its
-        geometry matches `config`; otherwise releases it and allocates a ring for the new geometry."""
+        geometry matches `config`; otherwise releases it and allocates a ring for the new geometry.
+
+        `sizer` chooses the depth of a ring about to be allocated, overriding the constructor's `slots`;
+        :func:`~ome_zarr_writer.sizing.slots_for_budget` is the usual implementation. It is called only on
+        the allocating path, and only *after* the previous ring has been released — so a caller sizing
+        against free memory reads a figure that is not depressed by the memory this writer is in the
+        middle of giving back. On the reuse path nothing is allocated, so `sizer` is not called and no
+        budget applies. Note the previous ring is already gone if `sizer` raises.
+        """
         if self._active is not None:
             raise RuntimeError("stack already open; call end_stack() first")
-        if (
-            self._ring is None
-            or len(self._ring) != self._slots
-            or not self._ring.matches(config.batch_shape, config.max_level, config.dtype)
-        ):
+        if self._ring is None or not self._ring.matches(config.batch_shape, config.max_level, config.dtype):
             self._drop_ring()
+            slots = sizer(config) if sizer is not None else self._slots
+            if slots < MIN_SLOTS:  # a ring this shallow cannot overlap collect with flush
+                raise RingSizingError(f"ring depth must be at least {MIN_SLOTS}, got {slots}")
             self._ring = Ring.allocate(
-                slots=self._slots,
+                slots=slots,
                 prefix=f"ozw_{id(self):x}",  # stable across reuses so retained segments keep their names
                 batch_shape=config.batch_shape,
                 max_level=config.max_level,
