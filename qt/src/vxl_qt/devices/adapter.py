@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Any
 from PySide6.QtCore import QObject, QTimer, Signal
 
 if TYPE_CHECKING:
-    from rigup import DeviceInterface, PropertyModel, PropResults
+    from collections.abc import Mapping
+
+    from rigup import DeviceInterface, PropertyModel
     from vxl.instrument import Instrument
-    from vxl.instrument.feed import InstrumentUpdate
-    from vxlib import Teardown
+    from vxl.station import SessionState
 
 log = logging.getLogger(__name__)
 
@@ -19,15 +20,13 @@ log = logging.getLogger(__name__)
 class DeviceHandleQt(QObject):
     """Bridges one instrument-owned device to Qt signals.
 
-    This adapter:
-    - Subscribes to device-property sections in the instrument feed
-    - Emits signals when properties change
-    - Provides a clean interface for widgets to call device commands
+    Complete property state is supplied by the window's StationFeed adapter.
+    Commands continue to use the leased Instrument directly.
 
     Usage:
         adapter = DeviceHandleQt(instrument, interface)
         adapter.properties_changed.connect(self._on_props)
-        await adapter.start()
+        adapter.start(props)
 
         # In a slot:
         run_async(adapter.call("enable"))
@@ -43,7 +42,6 @@ class DeviceHandleQt(QObject):
         self._instrument = instrument
         self._interface = interface
         self._uid = interface.uid
-        self._unsubscribe: Teardown | None = None
         self._started = False
         self._models: dict[str, PropertyModel] = {}  # latest full model per property (value + options/bounds)
         self.log = logging.getLogger(f"{self.__class__.__name__}[{self._uid}]")
@@ -58,27 +56,14 @@ class DeviceHandleQt(QObject):
         """Device interface type."""
         return self._interface.type
 
-    async def start(self) -> None:
-        """Start the adapter and subscribe to the instrument feed."""
+    def start(self, props: Mapping[str, PropertyModel]) -> None:
+        """Start the adapter from one complete StationFeed device view."""
         if self._started:
             return
-
-        try:
-            feed = self._instrument.feed
-            self._unsubscribe = feed.updates.subscribe(self._on_feed_update)
-            initial = feed.view().device_props.get(self._uid)
-            if initial is not None:
-                await self._on_properties(initial)
-            self._started = True
-            self.connected.emit(True)
-            self.log.info("Adapter started")
-
-        except Exception as e:
-            if self._unsubscribe is not None:
-                self._unsubscribe()
-                self._unsubscribe = None
-            self.log.exception("Error starting adapter")
-            self.fault.emit(f"Start error: {e!r}")
+        self._started = True
+        self.apply_properties(props)
+        self.connected.emit(True)
+        self.log.info("Adapter started")
 
     def replay_cached_properties(self) -> None:
         """Re-emit cached property values after connecting to ``properties_changed``."""
@@ -92,32 +77,27 @@ class DeviceHandleQt(QObject):
         if self._models:
             self.properties_changed.emit({name: model.value for name, model in self._models.items()})
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """Stop the adapter and cleanup."""
         if not self._started:
             return
+        self._started = False
+        self.connected.emit(False)
+        self.log.info("Adapter stopped")
 
-        try:
-            if self._unsubscribe is not None:
-                self._unsubscribe()
-                self._unsubscribe = None
-            self._started = False
-            self.connected.emit(False)
-            self.log.info("Adapter stopped")
+    def apply_properties(self, props: Mapping[str, PropertyModel]) -> None:
+        """Replace cached models and emit only values that changed."""
+        changed = {name: model.value for name, model in props.items() if self._models.get(name) != model}
+        self._models = {name: model.model_copy(deep=True) for name, model in props.items()}
+        if changed:
+            self.properties_changed.emit(changed)
 
-        except Exception as e:
-            self.log.exception("Error stopping adapter")
-            self.fault.emit(f"Stop error: {e!r}")
-
-    async def _on_properties(self, props: PropResults) -> None:
-        """Cache the full property models (value + options/bounds), then emit bare values to widgets."""
-        self._models.update(props.ok)
-        self.properties_changed.emit({name: model.value for name, model in props.ok.items()})
-
-    async def _on_feed_update(self, update: InstrumentUpdate) -> None:
-        """Forward property updates for this adapter's device."""
-        if update.device_props is not None and (props := update.device_props.get(self._uid)) is not None:
-            await self._on_properties(props)
+    def merge_properties(self, props: Mapping[str, PropertyModel]) -> None:
+        """Merge an operation-specific property result into the complete cache."""
+        changed = {name: model.value for name, model in props.items() if self._models.get(name) != model}
+        self._models.update({name: model.model_copy(deep=True) for name, model in props.items()})
+        if changed:
+            self.properties_changed.emit(changed)
 
     def model(self, name: str) -> PropertyModel | None:
         """Latest full model for ``name`` — its value plus any enumerated options / numeric bounds."""
@@ -155,7 +135,7 @@ class DeviceHandleQt(QObject):
             Property value
         """
         props = await self._instrument.get_device_properties(self._uid, [property_name])
-        await self._on_properties(props)
+        self.merge_properties(props.ok)
         return props[property_name].unwrap().value
 
     async def set(self, property_name: str, value: Any) -> None:
@@ -217,25 +197,21 @@ class DevicesStore(QObject):
         """All device adapters by device ID."""
         return self._adapters
 
-    async def start(self, instrument: Instrument) -> None:
-        """Create adapters from the instrument feed's materialized device view."""
+    def start(self, instrument: Instrument, session: SessionState) -> None:
+        """Create adapters from one complete StationFeed session view."""
         if self._started:
             log.warning("DevicesStore already started")
             return
 
         self._instrument = instrument
-        snapshots = instrument.feed.view().devices
-        log.info("Starting DevicesStore with %d devices", len(snapshots))
+        log.info("Starting DevicesStore with %d devices", len(session.devices))
 
-        for uid, snapshot in snapshots.items():
-            if snapshot.interface is None:
-                log.warning("Skipping unavailable device %s: %s", uid, snapshot.error)
-                continue
-            adapter = DeviceHandleQt(instrument, snapshot.interface, parent=self)
+        for uid, state in session.devices.items():
+            adapter = DeviceHandleQt(instrument, state.interface, parent=self)
             adapter.properties_changed.connect(lambda props, uid=uid: self._on_properties(uid, props))
 
             self._property_cache[uid] = {}
-            await adapter.start()
+            adapter.start(state.props)
             self._adapters[uid] = adapter
             self.device_added.emit(uid)
 
@@ -243,7 +219,13 @@ class DevicesStore(QObject):
         self.ready.emit()
         log.info("DevicesStore ready with %d adapters", len(self._adapters))
 
-    async def stop(self) -> None:
+    def apply_session(self, session: SessionState) -> None:
+        """Apply a later complete StationFeed session view."""
+        for uid, state in session.devices.items():
+            if adapter := self._adapters.get(uid):
+                adapter.apply_properties(state.props)
+
+    def stop(self) -> None:
         """Stop all adapters."""
         if not self._started:
             return
@@ -251,7 +233,7 @@ class DevicesStore(QObject):
         log.info("Stopping DevicesStore")
 
         for uid, adapter in self._adapters.items():
-            await adapter.stop()
+            adapter.stop()
             self.device_removed.emit(uid)
 
         self._adapters.clear()

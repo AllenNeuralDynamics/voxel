@@ -8,9 +8,9 @@ from vxlib.quantity import Frequency, Time
 
 from vxl.camera import StorageSpec
 from vxl.daq.clocked import Signals
-from vxl.errors import InstrumentBusyError, OperationRejectedError
 from vxl.instrument import AcquisitionMode, Instrument
 from vxl.instrument.core import AcquisitionRequest
+from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
 from vxl.instrument.state import WriterPatch
 from vxlib import Cell
 

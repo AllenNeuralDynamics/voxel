@@ -256,10 +256,24 @@ export interface InstrumentDefaults {
   traversal: TileOrder;
 }
 
-/** The instrument's editable bench: the baseline fields plus per-run/managed state (metadata, tasks). */
-export interface InstrumentState extends InstrumentDefaults {
-  metadata: Record<string, unknown>;
+/** Reusable instrument configuration, including its acquisition plan but excluding specimen metadata. */
+export interface InstrumentPreset extends InstrumentDefaults {
   tasks: Record<string, AcquisitionTask>;
+}
+
+/** One immutable, named preset stored for an installed instrument. */
+export interface PresetRecord {
+  schema_version: '1.0';
+  id: string;
+  instrument: string;
+  name: string;
+  created_at: string;
+  value: InstrumentPreset;
+}
+
+/** The instrument's editable bench: a reusable preset plus per-run specimen state. */
+export interface InstrumentState extends InstrumentPreset {
+  metadata: Record<string, unknown>;
   last_modified: string;
 }
 

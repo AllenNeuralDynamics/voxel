@@ -15,7 +15,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
-from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError
+from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.station import InstrumentTemplates, Station
 from vxl.system import StationConfig, load_voxel_env
 from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
@@ -96,7 +96,7 @@ def create_app(
     _register_error_handlers(app)
     app.include_router(api_router, prefix="/api")
 
-    static_dir = Path(__file__).parents[1] / "static"
+    static_dir = Path(__file__).parent / "static"
     if serve_static and static_dir.is_dir():
         app.mount("/", _SPAStaticFiles(directory=static_dir, html=True), name="static")
     return app

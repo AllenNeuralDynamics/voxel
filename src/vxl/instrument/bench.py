@@ -7,7 +7,9 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from vxl.errors import (
+from vxlib import Cell, Readable, Subscribable, atomic_write, load_yaml, save_yaml
+
+from .errors import (
     Inspected,
     Invalid,
     Loaded,
@@ -17,9 +19,7 @@ from vxl.errors import (
     Violation,
     inspect_model,
 )
-from vxlib import Cell, Readable, Subscribable, atomic_write, load_yaml, save_yaml
-
-from .state import InstrumentDefaults, InstrumentState
+from .state import InstrumentDefaults, InstrumentPreset, InstrumentState
 from .topology import HALConfig
 
 PROMOTABLE_FIELDS = frozenset(InstrumentDefaults.model_fields)
@@ -227,6 +227,19 @@ class InstrumentBench(Subscribable[InstrumentState]):
         async with self._lock:
             default = self._default.value
             await self._commit(self._value.model_copy(update={field: getattr(default, field) for field in fields}))
+
+    async def apply_preset(self, preset: InstrumentPreset) -> None:
+        """Atomically replace reusable bench fields while preserving compatible specimen metadata."""
+        async with self._lock:
+            metadata = self._value.metadata if preset.metadata_cls == self._value.metadata_cls else {}
+            candidate = InstrumentState.model_validate(
+                {
+                    **preset.model_dump(),
+                    "metadata": metadata,
+                    "last_modified": self._value.last_modified,
+                }
+            )
+            await self._commit(candidate)
 
     async def _commit(self, candidate: InstrumentState) -> None:
         """Validate, drop no-ops, check HAL compatibility, persist, adopt, and notify."""

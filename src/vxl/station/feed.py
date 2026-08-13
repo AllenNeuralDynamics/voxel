@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, StationPreviewFramePacket
+from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, VoxelPreviewPacket
 from vxlib import Emitter
 
 if TYPE_CHECKING:
@@ -22,15 +22,12 @@ if TYPE_CHECKING:
     from vxl.system import StationInfo
     from vxlib import Readable, Subscribable
 
+from .errors import StationFeedLaggedError
 from .models import StationFeedView, StationState, StationStatus, StreamCursor
 
 
 def _unix_time_us() -> int:
     return time.time_ns() // 1_000
-
-
-class StationFeedLaggedError(RuntimeError):
-    """Raised in a connection whose bounded update buffer overflowed."""
 
 
 @dataclass(frozen=True)
@@ -149,7 +146,7 @@ class StationFeed:
                 return
             frame_seq = self._frame_seq
             self._frame_seq += 1
-            packet = StationPreviewFramePacket.wrap(
+            packet = VoxelPreviewPacket.wrap(
                 frame,
                 channel_id=channel_id,
                 seq=frame_seq,

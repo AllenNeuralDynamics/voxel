@@ -1,25 +1,38 @@
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 from vxl_records import SQLiteRecords
 
-from vxl.app import VoxelApp
+from vxl import system as system_module
 from vxl.camera import SensorROI
 from vxl.daq.clocked import Signals
 from vxl.daq.clocked.waveform import validate_waveform
-from vxl.errors import Invalid, Loaded, Missing, OperationRejectedError, StartupError
 from vxl.instrument import Instrument
 from vxl.instrument.bench import InstrumentBench, InstrumentConfig, InstrumentInspection
+from vxl.instrument.errors import Invalid, Loaded, Missing, OperationRejectedError, StartupError
 from vxl.instrument.state import AcquisitionTask, InstrumentState
 from vxl.instrument.topology import HALConfig
-from vxlib import Cell, load_yaml
+from vxl.station import Station, StationStatus
+from vxl.system import StationConfig
+from vxlib import load_yaml
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel.yaml"
 
 
 def _config() -> InstrumentConfig:
     return load_yaml(TEMPLATE, InstrumentConfig)
+
+
+def _station(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Station:
+    monkeypatch.setattr(system_module, "_voxel_home", lambda: tmp_path / ".voxel")
+    return Station(
+        StationConfig(
+            id=UUID("12345678-1234-5678-1234-567812345678"),
+            name="scope",
+        )
+    )
 
 
 def _incompatible_state(config: InstrumentConfig) -> InstrumentState:
@@ -111,11 +124,11 @@ def test_discovery_keeps_file_errors_distinct_from_model_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    directory = tmp_path / "missing-config.voxel"
+    station = _station(tmp_path, monkeypatch)
+    directory = station.instruments_dir / "missing-config.voxel"
     directory.mkdir()
-    monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
 
-    info = object.__new__(VoxelApp).discover().instruments["missing-config"]
+    info = station.discover_instruments()["missing-config"]
 
     assert isinstance(info.config, Missing)
     assert isinstance(info.state, Missing)
@@ -129,13 +142,13 @@ def test_discovery_keeps_file_errors_distinct_from_model_errors(
 
 
 def test_discovery_reports_an_unknown_stage_device(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    directory = tmp_path / "broken-stage.voxel"
+    station = _station(tmp_path, monkeypatch)
+    directory = station.instruments_dir / "broken-stage.voxel"
     directory.mkdir()
     config = TEMPLATE.read_text(encoding="utf-8").replace("    x: x_axis\n", "    x: missing_axis\n", 1)
     (directory / "config.yaml").write_text(config, encoding="utf-8")
-    monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
 
-    info = object.__new__(VoxelApp).discover().instruments["broken-stage"]
+    info = station.discover_instruments()["broken-stage"]
 
     assert isinstance(info.config, Loaded)
     assert isinstance(info.state, Missing)
@@ -277,18 +290,19 @@ def test_bench_rejects_an_incompatible_existing_file(tmp_path: Path) -> None:
     assert "missing_camera" in str(raised.value)
 
 
-def test_archive_bench_uses_the_next_available_backup_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
-    app = object.__new__(VoxelApp)
-    app._active = Cell(None)
-    directory = tmp_path / "scope.voxel"
+async def test_archive_bench_uses_the_next_available_backup_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    station = _station(tmp_path, monkeypatch)
+    directory = station.instruments_dir / "scope.voxel"
     directory.mkdir()
     bench = directory / "bench.json"
 
     bench.write_text("first", encoding="utf-8")
-    first = app.archive_bench("scope")
+    first = await station.archive_bench("scope")
     bench.write_text("second", encoding="utf-8")
-    second = app.archive_bench("scope")
+    second = await station.archive_bench("scope")
 
     assert first.name == "bench.bak.json"
     assert first.read_text(encoding="utf-8") == "first"
@@ -352,15 +366,15 @@ def test_discovery_preserves_static_bench_violations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    station = _station(tmp_path, monkeypatch)
     config = _config()
-    directory = config.instantiate("incompatible", tmp_path)
+    directory = config.instantiate("incompatible", station.instruments_dir)
     (directory / "bench.json").write_text(
         _incompatible_state(config).model_dump_json(),
         encoding="utf-8",
     )
-    monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
 
-    info = object.__new__(VoxelApp).discover().instruments["incompatible"]
+    info = station.discover_instruments()["incompatible"]
 
     assert isinstance(info.config, Loaded)
     assert isinstance(info.config.value, InstrumentConfig)
@@ -379,25 +393,20 @@ async def test_launch_rejects_static_violations_before_constructing_instrument(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(VoxelApp, "instruments_dir", property(lambda _app: tmp_path))
-    app = object.__new__(VoxelApp)
-    app._active = Cell(None)
-    app._records = SQLiteRecords(
-        tmp_path / "records.sqlite3",
-        resolve_root=lambda _spec: tmp_path / "acquisition",
-    )
-    directory = tmp_path / "broken.voxel"
+    station = _station(tmp_path, monkeypatch)
+    directory = station.instruments_dir / "broken.voxel"
     directory.mkdir()
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")
     (directory / "bench.json").write_text("{", encoding="utf-8")
 
-    def unexpected_instrument(_instrument: Instrument, _bench: object) -> None:
+    def unexpected_instrument(_instrument: Instrument, *_args: object, **_kwargs: object) -> None:
         raise AssertionError("Instrument construction must not run after static validation fails")
 
     monkeypatch.setattr(Instrument, "__init__", unexpected_instrument)
 
     with pytest.raises(StartupError) as raised:
-        await app.launch("broken")
+        await station.open_session("broken")
 
     assert {violation.loc[0] for violation in raised.value.violations} == {"config", "bench"}
-    assert app.active.value is None
+    assert station.state.value.status is StationStatus.IDLE
+    assert station.state.value.session is None

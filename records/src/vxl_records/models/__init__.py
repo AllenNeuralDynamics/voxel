@@ -11,6 +11,7 @@ from .acquisition import (
 from .dataset import Dataset, DatasetFormat, DatasetStatus
 from .location import DatasetLocation, LocalLocation, LocationRole, LocationStatus, ObjectLocation
 from .log import LogEntry, LogException
+from .preset import PresetRecord
 from .storage import RemoteTarget, StorageSpec
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "LogEntry",
     "LogException",
     "ObjectLocation",
+    "PresetRecord",
     "RemoteTarget",
     "StorageSpec",
     "VolumeStatus",

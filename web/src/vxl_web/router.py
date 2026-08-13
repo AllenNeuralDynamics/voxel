@@ -1,12 +1,20 @@
 """Station-scoped REST and WebSocket routes."""
 
+import datetime
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
-from pydantic import AnyWebsocketUrl, BaseModel, Field
-from vxl_records import AcquisitionManifest, LogEntry, ManifestNotFoundError
+from pydantic import AnyWebsocketUrl, BaseModel, Field, ValidationError
+from vxl_records import (
+    AcquisitionManifest,
+    LogEntry,
+    ManifestNotFoundError,
+    PresetExistsError,
+    PresetNotFoundError,
+    PresetRecord,
+)
 
 from rigup import PropResults, Result
 from vxl.daq.clocked import Signals
@@ -16,6 +24,7 @@ from vxl.instrument import (
     Instrument,
     InstrumentConfig,
     InstrumentInspection,
+    InstrumentPreset,
 )
 from vxl.instrument.state import (
     ChannelPatch,
@@ -27,7 +36,7 @@ from vxl.instrument.state import (
 )
 from vxl.instrument.traversal import TileOrder
 from vxl.metadata import discover_metadata_schema, resolve_metadata_class
-from vxl.preview.protocol import STATION_DELIVERY_FRAMING_VERSION
+from vxl.preview.protocol import VOXEL_PREVIEW_FRAMING_VERSION
 from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
 from vxl.system import Remote, StationInfo
 from vxlib import ColormapGroup, get_colormap_catalog
@@ -97,6 +106,10 @@ class CreateInstrumentRequest(BaseModel):
     name: str = Field(min_length=1)
 
 
+class CreatePresetRequest(BaseModel):
+    name: str = Field(min_length=1)
+
+
 class _ActivateProfile(BaseModel):
     profile_id: str
 
@@ -135,6 +148,40 @@ class _OpticalRouteOverride(BaseModel):
     route: str
 
 
+async def _get_preset(station: Station, preset_id: UUID) -> PresetRecord:
+    try:
+        return await station.records.presets.get(preset_id)
+    except PresetNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+async def _create_preset(
+    station: Station,
+    *,
+    instrument_name: str,
+    name: str,
+    value: InstrumentPreset,
+) -> PresetRecord:
+    preset = PresetRecord(
+        id=uuid4(),
+        instrument=instrument_name,
+        name=name,
+        created_at=datetime.datetime.now(tz=datetime.UTC),
+        value=value.model_dump(mode="json"),
+    )
+    try:
+        return await station.records.presets.create(preset)
+    except PresetExistsError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+def _parse_preset(value: dict[str, Any]) -> InstrumentPreset:
+    try:
+        return InstrumentPreset.model_validate(value)
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @station_router.get("")
 async def list_stations(station: StationDep) -> list[StationInfo]:
     """Return the one Station served by this local web application."""
@@ -166,7 +213,7 @@ async def get_discovery(
             log_websocket_url=AnyWebsocketUrl(
                 str(request.url_for("station_logs_websocket", station_id=str(station_id)))
             ),
-            preview_protocol_version=STATION_DELIVERY_FRAMING_VERSION,
+            preview_protocol_version=VOXEL_PREVIEW_FRAMING_VERSION,
         ),
     )
 
@@ -204,6 +251,43 @@ async def archive_bench(station_id: UUID, instrument_name: str, station: Station
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {"archived": archive.name}
+
+
+@station_router.get("/{station_id}/instruments/{instrument_name}/presets")
+async def list_presets(station_id: UUID, instrument_name: str, station: StationDep) -> list[PresetRecord]:
+    station = _get_scoped_station(station_id, station)
+    return await station.records.presets.list(instrument_name)
+
+
+@station_router.get("/{station_id}/instruments/{instrument_name}/presets/{preset_id}")
+async def get_preset(
+    station_id: UUID,
+    instrument_name: str,
+    preset_id: UUID,
+    station: StationDep,
+) -> PresetRecord:
+    station = _get_scoped_station(station_id, station)
+    preset = await _get_preset(station, preset_id)
+    if preset.instrument != instrument_name:
+        raise HTTPException(status_code=404, detail=f"preset not found: {preset_id}")
+    return preset
+
+
+@station_router.delete("/{station_id}/instruments/{instrument_name}/presets/{preset_id}", status_code=204)
+async def delete_preset(
+    station_id: UUID,
+    instrument_name: str,
+    preset_id: UUID,
+    station: StationDep,
+) -> None:
+    station = _get_scoped_station(station_id, station)
+    preset = await _get_preset(station, preset_id)
+    if preset.instrument != instrument_name:
+        raise HTTPException(status_code=404, detail=f"preset not found: {preset_id}")
+    try:
+        await station.records.presets.delete(preset_id)
+    except PresetNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @station_router.post("/{station_id}/sessions", status_code=201)
@@ -248,6 +332,27 @@ async def get_acquisition(station_id: UUID, acquisition_id: UUID, station: Stati
         return await station.records.acquisitions.get(acquisition_id)
     except ManifestNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@station_router.post("/{station_id}/acquisitions/{acquisition_id}/presets", status_code=201)
+async def create_preset_from_acquisition(
+    station_id: UUID,
+    acquisition_id: UUID,
+    body: CreatePresetRequest,
+    station: StationDep,
+) -> PresetRecord:
+    station = _get_scoped_station(station_id, station)
+    try:
+        acquisition = await station.records.acquisitions.get(acquisition_id)
+    except ManifestNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    preset = _parse_preset(acquisition.bench_snapshot)
+    return await _create_preset(
+        station,
+        instrument_name=acquisition.instrument,
+        name=body.name,
+        value=preset,
+    )
 
 
 @station_router.get("/{station_id}/logs")
@@ -320,6 +425,36 @@ async def station_logs_websocket(websocket: WebSocket, station_id: UUID) -> None
 @instrument_router.post("/profile/active")
 async def activate_profile(body: _ActivateProfile, instrument: InstrumentDep) -> dict[str, str]:
     return {"active": await instrument.set_active_profile(body.profile_id)}
+
+
+@instrument_router.post("/presets", status_code=201)
+async def create_preset_from_bench(
+    body: CreatePresetRequest,
+    station: ScopedStationDep,
+    instrument: InstrumentDep,
+) -> PresetRecord:
+    return await _create_preset(
+        station,
+        instrument_name=instrument.path.stem,
+        name=body.name,
+        value=InstrumentPreset.from_state(instrument.state.value),
+    )
+
+
+@instrument_router.post("/presets/{preset_id}/apply", status_code=204)
+async def apply_preset(
+    preset_id: UUID,
+    station: ScopedStationDep,
+    instrument: InstrumentDep,
+) -> None:
+    preset = await _get_preset(station, preset_id)
+    instrument_name = instrument.path.stem
+    if preset.instrument != instrument_name:
+        raise HTTPException(
+            status_code=409,
+            detail=f"preset '{preset_id}' belongs to '{preset.instrument}', not '{instrument_name}'",
+        )
+    await instrument.apply_preset(_parse_preset(preset.value))
 
 
 @instrument_router.patch("/profile", status_code=204)

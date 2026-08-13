@@ -1,3 +1,5 @@
+"""Structured validation results and expected instrument failures."""
+
 from collections.abc import Collection
 from pathlib import Path
 from typing import Annotated, Literal
@@ -118,3 +120,19 @@ class OperationRejectedError(InstrumentError):
 
 class InstrumentBusyError(InstrumentError):
     """Raised when an operation is unavailable in the instrument's current mode."""
+
+
+__all__ = [
+    "Inspected",
+    "InstrumentBusyError",
+    "InstrumentError",
+    "Invalid",
+    "Loaded",
+    "Missing",
+    "OperationRejectedError",
+    "StartupError",
+    "Violation",
+    "ViolationLoc",
+    "assignment_violations",
+    "inspect_model",
+]

@@ -6,6 +6,7 @@ from typing import Protocol
 from ._sqlite import SQLiteDatabase
 from .acquisitions import AcquisitionCatalog, StorageRootResolver
 from .logs import LogJournal
+from .presets import PresetCatalog
 
 
 class VoxelRecords(Protocol):
@@ -13,6 +14,7 @@ class VoxelRecords(Protocol):
 
     acquisitions: AcquisitionCatalog
     logs: LogJournal
+    presets: PresetCatalog
 
 
 class SQLiteRecords:
@@ -29,6 +31,7 @@ class SQLiteRecords:
         self._database = SQLiteDatabase(path, timeout_s=timeout_s)
         self.acquisitions = AcquisitionCatalog(self._database, resolve_root=resolve_root)
         self.logs = LogJournal(self._database, capture_queue_size=log_queue_size)
+        self.presets = PresetCatalog(self._database)
 
     @property
     def path(self) -> Path:

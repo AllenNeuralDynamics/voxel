@@ -12,8 +12,8 @@ from uuid import UUID, uuid4
 from vxl_records import SQLiteRecords, VoxelRecords
 
 from vxl.camera import resolve_storage
-from vxl.errors import Loaded
 from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection
+from vxl.instrument.errors import Loaded
 from vxlib import Cell, Computed, Readable, Teardown
 
 from .feed import StationFeed

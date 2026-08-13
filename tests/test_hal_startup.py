@@ -17,9 +17,9 @@ from rigup import (
     PropResults,
     Result,
 )
-from vxl.errors import StartupError, Violation
 from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState
 from vxl.instrument.core import Channel
+from vxl.instrument.errors import StartupError, Violation
 from vxl.instrument.hal import HAL
 from vxl.instrument.state import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.topology import (
@@ -30,7 +30,7 @@ from vxl.instrument.topology import (
     OpticalRoutingConfig,
     StageConfig,
 )
-from vxl.preview import PreviewFrame, PreviewFramePacket, PreviewLayer, PreviewViewport
+from vxl.preview import PreviewFrame, PreviewLayer, PreviewViewport
 from vxlib import Cell
 
 
@@ -599,7 +599,7 @@ async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None
     assert not remaining
 
 
-async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
+async def test_instrument_preview_rejects_stale_source_generation(tmp_path: Path) -> None:
     config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("feed-lifecycle", tmp_path),
@@ -607,22 +607,9 @@ async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
     )
 
     await instrument.open()
+    source_frames: list[tuple[str, PreviewLayer, bytes]] = []
+    unsub = instrument.preview.subscribe(source_frames.append)
     try:
-        initial = instrument.feed.view()
-        assert instrument.feed.is_open
-        assert initial.cursor == instrument.feed.cursor
-        assert initial.status.state == instrument.state.value
-        assert "position" in initial.device_props["x_axis"].results
-
-        await instrument.move_stage(x=1, wait=True)
-        assert instrument.feed.cursor.seq > initial.seq
-
-        delivered: list[tuple[str, PreviewLayer, bytes]] = []
-        source_frames: list[tuple[str, PreviewLayer, bytes]] = []
-        unsub = instrument.feed.frames.subscribe(delivered.append)
-        unsub_source = instrument.preview.subscribe(source_frames.append)
-        status_cursor = instrument.feed.cursor
-        delivery_stream_id = instrument.feed.delivery_stream_id.value
         source_packet = PreviewFrame.from_source(
             np.zeros((8, 8), dtype=np.uint16),
             camera_id="camera_1",
@@ -635,20 +622,12 @@ async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
         ).pack()
         await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
         assert source_frames[-1] == ("gfp", PreviewLayer.OVERVIEW, source_packet)
-        first = PreviewFramePacket.from_packed(delivered[-1][2])
-        assert first.header.channel_id == "gfp"
-        assert first.header.delivery_cursor.stream_id == delivery_stream_id
-        assert first.header.delivery_cursor.seq == 0
-        assert first.header.state_cursor.stream_id == status_cursor.stream_id
-        assert first.header.state_cursor.seq == status_cursor.seq
-        assert first.header.stamped_at_unix_us > 0
 
         preview_revision = instrument.preview_revision.value
         await instrument.set_active_profile("single_rfp")
         assert instrument.preview_revision.value == preview_revision + 1
-        assert instrument.feed.delivery_stream_id.value != delivery_stream_id
         await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
-        assert len(delivered) == 1
+        assert len(source_frames) == 1
         source_packet = PreviewFrame.from_source(
             np.zeros((8, 8), dtype=np.uint16),
             camera_id="camera_1",
@@ -660,18 +639,10 @@ async def test_instrument_owns_feed_lifecycle(tmp_path: Path) -> None:
             valid_bits=16,
         ).pack()
         await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
-        second = PreviewFramePacket.from_packed(delivered[-1][2])
-        assert second.header.channel_id == "rfp"
-        assert second.header.delivery_cursor.seq == 0
-        assert second.header.state_cursor.seq == instrument.feed.cursor.seq
-        unsub_source()
-        unsub()
+        assert source_frames[-1] == ("rfp", PreviewLayer.OVERVIEW, source_packet)
     finally:
+        unsub()
         await instrument.close()
-
-    assert not instrument.feed.is_open
-    with pytest.raises(RuntimeError, match="instrument feed is not open"):
-        instrument.feed.view()
 
 
 async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:

@@ -2,9 +2,8 @@
 
 Two top-level windows, IDE-style:
 
-- :class:`LaunchWindow` — the home: owns the core :class:`vxl.app.VoxelApp` (and thus the instrument
-  lifecycle), lists the instruments, and on launch spawns the control window and hides itself,
-  reappearing when that window closes.
+- :class:`LaunchWindow` — the home: owns the live :class:`vxl.station.Station` and template source,
+  lists instruments, and holds one scoped Instrument lease for the control window's lifetime.
 - :class:`MainWindow` — the control workspace for one launched instrument (the app's main window):
   owns the instrument-scoped hardware stores + panels, built per launch and torn down on close.
 
@@ -17,7 +16,8 @@ the :class:`LaunchWindow`.
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -26,10 +26,10 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QEnterEvent, QIcon, QMouseEvent, QPalette
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 
-from vxl.app import VoxelApp
 from vxl.instrument import Instrument
 from vxl.instrument.bench import InstrumentInspection
-from vxl.system import load_voxel_env
+from vxl.station import InstrumentTemplates, SessionInfo, SessionState, Station, StationFeedConnection, StationFeedView
+from vxl.system import StationConfig, load_voxel_env
 from vxl_qt.devices import DevicesStore
 from vxl_qt.devices.stage import StageStore
 from vxl_qt.preview import PreviewPanel
@@ -212,11 +212,15 @@ class MainWindow(QMainWindow):
     def __init__(
         self,
         instrument: Instrument,
-        on_closed: Callable[[], Awaitable[None]],
+        station: Station,
+        session: SessionInfo,
+        on_closed: Callable[[], None],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._instrument = instrument
+        self._station = station
+        self._session = session
         self._on_closed = on_closed
         self._devices = DevicesStore(parent=self)
         self._preview = PreviewStore(parent=self)
@@ -225,7 +229,10 @@ class MainWindow(QMainWindow):
         self._tasks: TasksTable | None = None
         self._grid_canvas: GridCanvas | None = None
         self._stage_controls: StageControls | None = None
+        self._logs: LogPanel | None = None
         self._unsubs: list[Teardown] = []
+        self._feed_task: asyncio.Task[None] | None = None
+        self._shutdown_task: asyncio.Task[None] | None = None
 
         self.setWindowTitle(f"Voxel — {instrument.path.stem}")
         self.setMinimumSize(1280, 800)
@@ -270,7 +277,8 @@ class MainWindow(QMainWindow):
         self._tasks = TasksTable(self._instrument)
         tabs.add_tab(self._tasks, "Tasks")
         tabs.add_tab(WaveformsPanel(), "Waveforms")
-        tabs.add_tab(LogPanel(), "Logs")
+        self._logs = LogPanel()
+        tabs.add_tab(self._logs, "Logs")
         tabs.set_status_widget(Footer(self._devices, self._stage))
         center.addWidget(tabs)
         center.setSizes([600, 400])
@@ -279,51 +287,102 @@ class MainWindow(QMainWindow):
         content.setSizes([320, 1080])
         return content
 
-    async def start(self) -> None:
-        """Bring the hardware stores up against the instrument (adapters start here)."""
-        await self._devices.start(self._instrument)
+    async def start(self, connection: StationFeedConnection) -> None:
+        """Hydrate the window from the atomic StationFeed view and follow later complete views."""
+        initial = connection.initial
+        session = self._active_session(initial)
+        self._devices.start(self._instrument, session)
         cfg = self._instrument.hardware_config.stage
         x, y, z = self._devices.get_adapter(cfg.x), self._devices.get_adapter(cfg.y), self._devices.get_adapter(cfg.z)
         if x and y and z:
             self._stage.bind(x, y, z)
-        self._unsubs.append(self._preview.start_feed(self._instrument))
+        self._unsubs.append(self._preview.start_feed(self._instrument, self._station.feed, initial))
+        self._feed_task = asyncio.create_task(self._follow_feed(connection), name="qt-station-feed")
+
+    def _active_session(self, view: StationFeedView) -> SessionState:
+        session = view.session
+        if session is None or session.info.id != self._session.id:
+            raise RuntimeError(f"station feed does not contain session '{self._session.id}'")
+        return session
+
+    async def _follow_feed(self, connection: StationFeedConnection) -> None:
+        async for view in connection:
+            if view.session is None or view.session.info.id != self._session.id:
+                continue
+            self._devices.apply_session(view.session)
+            self._preview.apply_view(view)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         # Let the window close now; tear down stores and hand control back to the launcher async.
-        fire_and_forget(self._shutdown(), log=log)
+        self._ensure_shutdown()
         event.accept()
 
+    def _ensure_shutdown(self) -> asyncio.Task[None]:
+        if self._shutdown_task is None:
+            self._shutdown_task = fire_and_forget(self._shutdown(), name="qt-control-shutdown", log=log)
+        return self._shutdown_task
+
+    async def shutdown(self) -> None:
+        """Tear down the control window once and wait until its session can be released."""
+        try:
+            await self._ensure_shutdown()
+        except Exception:
+            log.exception("Control-window teardown failed")
+
     async def _shutdown(self) -> None:
-        for unsub in self._unsubs:
-            unsub()
-        self._unsubs = []
-        if self._channels is not None:
-            self._channels.teardown()
-            self._channels = None
-        if self._tasks is not None:
-            self._tasks.teardown()
-            self._tasks = None
-        if self._grid_canvas is not None:
-            self._grid_canvas.teardown()
-            self._grid_canvas = None
-        if self._stage_controls is not None:
-            self._stage_controls.teardown()
-            self._stage_controls = None
-        await self._devices.stop()
-        self._preview.reset()
-        self._stage.unbind()
-        await self._on_closed()
+        try:
+            if self._feed_task is not None:
+                self._feed_task.cancel()
+                try:
+                    await self._feed_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    log.exception("StationFeed follower failed")
+                self._feed_task = None
+            for unsub in self._unsubs:
+                unsub()
+            self._unsubs = []
+            if self._channels is not None:
+                self._channels.teardown()
+                self._channels = None
+            if self._tasks is not None:
+                self._tasks.teardown()
+                self._tasks = None
+            if self._grid_canvas is not None:
+                self._grid_canvas.teardown()
+                self._grid_canvas = None
+            if self._stage_controls is not None:
+                self._stage_controls.teardown()
+                self._stage_controls = None
+            if self._logs is not None:
+                self._logs.teardown()
+                self._logs = None
+            self._devices.stop()
+            self._preview.reset()
+            self._stage.unbind()
+        finally:
+            self._on_closed()
 
 
 class LaunchWindow(QWidget):
     """The home window: lists instruments and launches one (spawning the control window and hiding
     itself; reappears when that window closes), and scaffolds new instruments from the shipped
-    templates. Owns the core app + the instrument lifecycle."""
+    templates. Owns the Station and instrument-session lifecycle."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        station: Station,
+        templates: InstrumentTemplates,
+        request_quit: Callable[[], None],
+    ) -> None:
         super().__init__()
-        self._core = VoxelApp()
+        self._station = station
+        self._templates_source = templates
+        self._request_quit = request_quit
         self._control: MainWindow | None = None
+        self._session_task: asyncio.Task[None] | None = None
+        self._control_closed: asyncio.Event | None = None
 
         self.setWindowTitle("Voxel — Instruments")
         self.resize(480, 560)
@@ -343,19 +402,20 @@ class LaunchWindow(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        discovered = self._core.discover()
+        instruments = self._station.discover_instruments()
+        templates = self._templates_source.discover()
         self._list.clear()
-        if not discovered.instruments:
+        if not instruments:
             self._list.add(Text.muted("No instruments yet — launch one from a template below."))
         else:
-            for name, info in discovered.instruments.items():
+            for name, info in instruments.items():
                 self._list.add(self._row(name, info))
 
         self._templates.clear()
-        if not discovered.templates:
+        if not templates:
             self._templates.add(Text.muted("No templates available."))
         else:
-            for name in discovered.templates:
+            for name in templates:
                 self._templates.add(self._template_row(name))
 
     def _row(self, name: str, info: InstrumentInspection) -> QWidget:
@@ -371,52 +431,84 @@ class LaunchWindow(QWidget):
         return Flex.hstack(Text.default(template), Stretch(), launch, spacing=Spacing.MD)
 
     def _launch(self, name: str) -> None:
-        fire_and_forget(self._open(self._core.launch(name), name), log=log)
+        self._start_session(name)
 
     def _launch_template(self, template: str) -> None:
         """Create an instrument from the template (named after it), then open it."""
-        fire_and_forget(self._open(self._core.launch_template(template), template), log=log)
+        self._start_session(template, template=template)
 
-    async def _open(self, opening: Awaitable[Instrument], label: str) -> None:
-        """Await `opening` (a launch or create+launch), spawn the control window, and hide home."""
+    def _start_session(self, name: str, *, template: str | None = None) -> None:
+        if self._session_task is not None and not self._session_task.done():
+            return
+        self._session_task = fire_and_forget(
+            self._run_session(name, template=template),
+            name="qt-instrument-session",
+            log=log,
+        )
+
+    async def _run_session(self, name: str, *, template: str | None = None) -> None:
+        """Own one complete Station session and lease for the control window lifetime."""
+        label = template or name
         self._set_launching(True, label)
+        session: SessionInfo | None = None
         try:
-            instrument = await opening
-            self._control = MainWindow(instrument, on_closed=self._on_control_closed)
-            await self._control.start()
-            self._control.showMaximized()
-            self.hide()
+            if template is not None:
+                await self._station.create_instrument(name, self._templates_source.get(template))
+            session = await self._station.open_session(name)
+            async with (
+                self._station.instrument(session.id) as instrument,
+                self._station.feed.connect() as connection,
+            ):
+                self._control_closed = asyncio.Event()
+                self._control = MainWindow(
+                    instrument,
+                    self._station,
+                    session,
+                    on_closed=self._control_closed.set,
+                )
+                await self._control.start(connection)
+                self._control.showMaximized()
+                self.hide()
+                await self._control_closed.wait()
         except FileExistsError:
             self._status.setText(f"An instrument named '{label}' already exists.")
             self._refresh()
         except Exception:
             log.exception("Failed to launch '%s'", label)
             self._status.setText(f"Failed to launch '{label}'.")
-            if self._core.active.value is not None:
-                await self._core.close()
-            self._control = None
-            self._refresh()
         finally:
+            if self._control is not None:
+                await self._control.shutdown()
+            self._control = None
+            self._control_closed = None
+            if session is not None:
+                try:
+                    await self._station.close_session(session.id)
+                except Exception:
+                    log.exception("Failed to close instrument session '%s'", session.id)
+            self._refresh()
+            self.show()
             self._set_launching(False)
-
-    async def _on_control_closed(self) -> None:
-        """The control window closed (its stores already torn down): close the instrument, refresh,
-        and come back home."""
-        if self._core.active.value is not None:
-            await self._core.close()
-        self._control = None
-        self._refresh()
-        self.show()
 
     def _set_launching(self, launching: bool, name: str = "") -> None:
         self._status.setText(f"Launching {name}…" if launching else "")
         self.setEnabled(not launching)
 
+    async def shutdown(self) -> None:
+        """Release any control-window lease and close the Station before process exit."""
+        if self._control is not None:
+            await self._control.shutdown()
+        if self._session_task is not None and self._session_task is not asyncio.current_task():
+            with suppress(asyncio.CancelledError):
+                await self._session_task
+        await self._station.close()
+
     def closeEvent(self, event: QCloseEvent) -> None:
-        # Closing the home window quits the app (the control window, when open, returns here instead).
-        if (app := QApplication.instance()) is not None:
-            app.quit()
-        event.accept()
+        # The root coroutine closes Station before allowing qasync to stop Qt.
+        self.setEnabled(False)
+        self.hide()
+        self._request_quit()
+        event.ignore()
 
 
 # ============================== Entry point ==============================
@@ -451,6 +543,20 @@ def create_qapp() -> QApplication:
     return qapp
 
 
+async def _run_station_app(station: Station, templates: InstrumentTemplates) -> None:
+    """Run the Qt composition under durable log capture and close Station on exit."""
+    async with station.records.logs.capture():
+        stopped = asyncio.Event()
+        window = LaunchWindow(station, templates, stopped.set)
+        window.show()
+        log.info("Voxel application started")
+        try:
+            await stopped.wait()
+        finally:
+            await window.shutdown()
+            log.info("Voxel application stopped")
+
+
 def run_app(_config_path: Path | None = None, *, log_level: int = logging.INFO) -> int:
     """Run the Voxel application with the qasync event loop. Returns the process exit code."""
     configure_logging(log_level)
@@ -459,10 +565,12 @@ def run_app(_config_path: Path | None = None, *, log_level: int = logging.INFO) 
     asyncio.set_event_loop(loop)
     try:
         with loop:
-            window = LaunchWindow()  # kept in scope so it isn't garbage-collected during run_forever
-            window.show()
-            log.info("Voxel application started")
-            loop.run_forever()
+            loop.run_until_complete(
+                _run_station_app(
+                    Station(StationConfig.load()),
+                    InstrumentTemplates(),
+                )
+            )
     except KeyboardInterrupt:
         log.info("Application interrupted")
     except Exception:

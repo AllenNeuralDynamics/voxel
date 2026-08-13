@@ -8,10 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from rigup import CommandRequest
 from vxl.camera import SensorROI
 from vxl.daq.clocked import Signals
-from vxl.errors import Violation, ViolationLoc, assignment_violations
 from vxl.metadata import ExperimentMetadata, MetadataCls
 from vxlib import Color, SchemaModel
 
+from .errors import Violation, ViolationLoc, assignment_violations
 from .topology import DiscreteAxisPositions, HALConfig
 from .traversal import TileOrder
 
@@ -474,17 +474,18 @@ class InstrumentDefaults(SchemaModel):  # everything that can live in config.def
         return violations
 
 
-class InstrumentState(InstrumentDefaults):
-    """The instrument's editable acquisition state: the imaging protocol (channels + profiles)
-    plus planning defaults, traversal, writer options, acquisition tasks, and metadata."""
+class InstrumentPreset(InstrumentDefaults):
+    """Reusable instrument configuration and acquisition tasks, excluding specimen metadata."""
 
-    metadata: dict[str, Any] = Field(default_factory=dict)
     tasks: dict[str, AcquisitionTask] = Field(default_factory=dict)
 
-    last_modified: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
+    @classmethod
+    def from_state(cls, state: "InstrumentState") -> Self:
+        """Extract the reusable preset fields from a complete bench state."""
+        return cls.model_validate(state.model_dump(include=set(cls.model_fields)))
 
     def semantic_violations(self, hal: HALConfig, *, loc: ViolationLoc = ("bench",)) -> list[Violation]:
-        """Return all cross-section violations in the editable state."""
+        """Return all cross-section violations in the reusable preset."""
         violations = super().semantic_violations(hal, loc=loc)
         for task_id, task in self.tasks.items():
             for index, profile_id in enumerate(task.profile_ids):
@@ -497,3 +498,10 @@ class InstrumentState(InstrumentDefaults):
                         )
                     )
         return violations
+
+
+class InstrumentState(InstrumentPreset):
+    """The editable bench: a reusable preset plus specimen metadata and modification time."""
+
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    last_modified: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))

@@ -4,6 +4,7 @@ import {
   type DecodedPreviewFrame,
   type ParsedPreviewPacket,
   parsePreviewPacket,
+  PREVIEW_PROTOCOL_VERSION,
   type PreviewWorkerCommand,
   type PreviewWorkerEvent
 } from './protocol';
@@ -72,7 +73,7 @@ function scheduleReconnect(): void {
 
 function connect(): void {
   if (closed || !visible || !websocketUrl || socket) return;
-  if (protocolVersion !== 2) {
+  if (protocolVersion !== PREVIEW_PROTOCOL_VERSION) {
     post({ type: 'error', message: `Unsupported preview protocol version ${protocolVersion}.` });
     return;
   }

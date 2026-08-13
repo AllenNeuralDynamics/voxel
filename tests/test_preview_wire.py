@@ -7,20 +7,20 @@ import numpy as np
 import pytest
 
 from vxl.preview.protocol import (
-    DELIVERY_FRAMING_VERSION,
     DELIVERY_MAGIC,
     DELIVERY_PREFIX,
     SOURCE_FRAMING_VERSION,
     SOURCE_MAGIC,
     SOURCE_PREFIX,
+    VOXEL_PREVIEW_FRAMING_VERSION,
     PreviewFrame,
-    PreviewFramePacket,
     PreviewLayer,
     PreviewSourceHeader,
     PreviewViewport,
     SourceRectPx,
     StreamCursor,
     ValidBits,
+    VoxelPreviewPacket,
     byte_shuffle_u16,
     byte_unshuffle_u16,
 )
@@ -94,21 +94,21 @@ def test_packet_header_contains_only_source_owned_metadata() -> None:
 
 def test_delivery_packet_wraps_frame_without_modifying_it() -> None:
     frame = _source_frame(np.arange(12, dtype=np.uint16).reshape(3, 4)).pack()
-    delivery = PreviewFramePacket.wrap(
+    delivery = VoxelPreviewPacket.wrap(
         frame,
         channel_id="channel-1",
-        delivery_cursor=StreamCursor(stream_id="delivery-1", seq=9),
+        seq=9,
         state_cursor=StreamCursor(stream_id="state-1", seq=17),
         stamped_at_unix_us=1_234_567,
     )
 
     packed = delivery.pack()
     magic, version, _header_length = DELIVERY_PREFIX.unpack_from(packed)
-    parsed = PreviewFramePacket.from_packed(packed)
+    parsed = VoxelPreviewPacket.from_packed(packed)
 
-    assert (magic, version) == (DELIVERY_MAGIC, DELIVERY_FRAMING_VERSION)
+    assert (magic, version) == (DELIVERY_MAGIC, VOXEL_PREVIEW_FRAMING_VERSION)
     assert parsed.header.channel_id == "channel-1"
-    assert parsed.header.delivery_cursor == StreamCursor(stream_id="delivery-1", seq=9)
+    assert parsed.header.seq == 9
     assert parsed.header.state_cursor == StreamCursor(stream_id="state-1", seq=17)
     assert parsed.header.stamped_at_unix_us == 1_234_567
     assert parsed.frame == frame

@@ -9,6 +9,8 @@ from .errors import (
     ManifestExistsError,
     ManifestNotFoundError,
     ManifestSyncError,
+    PresetExistsError,
+    PresetNotFoundError,
     RecordsError,
     RevisionConflictError,
 )
@@ -29,10 +31,12 @@ from .models import (
     LogEntry,
     LogException,
     ObjectLocation,
+    PresetRecord,
     RemoteTarget,
     StorageSpec,
     VolumeStatus,
 )
+from .presets import PresetCatalog
 from .records import SQLiteRecords, VoxelRecords
 
 __all__ = [
@@ -61,6 +65,10 @@ __all__ = [
     "ManifestNotFoundError",
     "ManifestSyncError",
     "ObjectLocation",
+    "PresetCatalog",
+    "PresetExistsError",
+    "PresetNotFoundError",
+    "PresetRecord",
     "RecordsError",
     "RemoteTarget",
     "RevisionConflictError",

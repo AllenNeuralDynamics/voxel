@@ -2,7 +2,7 @@
 
 The web interface for Voxel: a FastAPI backend that owns the open instrument and a SvelteKit frontend that talks to it over HTTP and WebSocket. The backend runs as a single process per microscope — it holds the hardware, the message bus, and one event loop.
 
-- **Backend** (`src/vxl_web/`) — FastAPI. `app.py` (factory + entrypoint), `router.py` (the `VoxelApp` and active-`Instrument` routes), `live.py` (per-instrument WebSocket feed), `wire.py` (msgpack message bus).
+- **Backend** (`src/vxl_web/`) — FastAPI composed around `vxl.station.Station`. `app.py` owns process setup, `router.py` exposes station/session/instrument operations, and `realtime.py` delivers station state, preview frames, and logs over WebSockets.
 - **Frontend** (`ui/`) — SvelteKit, Svelte 5, Tailwind CSS v4. The built assets are served by the backend from `src/vxl_web/static/`.
 
 ## Development

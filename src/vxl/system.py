@@ -190,10 +190,6 @@ class System(BaseSettings):
             return int(cls.max_bytes() * cls._consumers[consumer_id] / total_weight)
 
 
-class StationNotConfiguredError(FileNotFoundError):
-    """Raised when a control application is started without ``station.yaml``."""
-
-
 class StationInfo(BaseModel):
     """Stable public identity of a Voxel control station."""
 
@@ -248,6 +244,9 @@ class StationConfig(System):
     @classmethod
     def load(cls) -> Self:
         """Load the control station or explain how to initialize one."""
+        # Import lazily because ``vxl.station`` models depend on ``StationInfo`` from this module.
+        from vxl.station.errors import StationNotConfiguredError  # noqa: PLC0415
+
         path = cls.config_path()
         if not path.is_file():
             raise StationNotConfiguredError(
@@ -282,4 +281,4 @@ class StationConfig(System):
         return StationInfo(id=self.id, name=self.name)
 
 
-__all__ = ["Remote", "StationConfig", "StationInfo", "StationNotConfiguredError", "System", "load_voxel_env"]
+__all__ = ["Remote", "StationConfig", "StationInfo", "System", "load_voxel_env"]

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from vxl.errors import Violation
 from vxl.instrument.bench import InstrumentBench, InstrumentInspection
+from vxl.instrument.errors import Violation
 from vxl.system import System, load_voxel_env
 
 

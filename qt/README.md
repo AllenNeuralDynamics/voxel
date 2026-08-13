@@ -4,7 +4,7 @@ The desktop interface for Voxel: a PySide6 application integrated with asyncio t
 
 The app is IDE-style, with two top-level windows:
 
-- **LaunchWindow** — the home. Owns the `vxl.app.VoxelApp` (and thus the instrument lifecycle), lists instruments, and launches one.
+- **LaunchWindow** — the home. Owns the live `vxl.station.Station` (and thus the instrument lifecycle), lists instruments and templates, and opens one instrument session at a time.
 - **MainWindow** — the control workspace for a launched instrument. Owns the instrument-scoped device stores and panels (`preview/`, `devices/`, `waveforms.py`, `grid.py`, `channels.py`, `logs.py`), rebuilt per launch.
 
 ## Development

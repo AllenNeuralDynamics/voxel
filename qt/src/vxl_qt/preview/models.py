@@ -14,13 +14,14 @@ from PySide6.QtGui import QImage
 
 from vxl.instrument import Instrument
 from vxl.preview import (
-    PreviewDeliveryHeader,
     PreviewFrame,
-    PreviewFramePacket,
     PreviewLayer,
     PreviewSourceHeader,
     PreviewViewport,
+    VoxelPreviewHeader,
+    VoxelPreviewPacket,
 )
+from vxl.station import StationFeed, StationFeedView, StreamCursor
 from vxlib import Teardown
 
 log = logging.getLogger(__name__)
@@ -29,9 +30,9 @@ type _FrameKey = tuple[str, PreviewLayer]
 type _QueuedFrame = tuple[bytes, int, int]
 
 
-def _decode_image(data: bytes) -> tuple[PreviewDeliveryHeader, PreviewSourceHeader, QImage]:
+def _decode_image(data: bytes) -> tuple[VoxelPreviewHeader, PreviewSourceHeader, QImage]:
     """Decode a delivered raw frame to a display-scaled grayscale image."""
-    delivery = PreviewFramePacket.from_packed(data)
+    delivery = VoxelPreviewPacket.from_packed(data)
     source = PreviewFrame.from_packed(delivery.frame)
     pixels = source.decode()
     if source.header.valid_bits < 16:
@@ -76,7 +77,9 @@ class PreviewStore(QObject):
         self._viewport = PreviewViewport()
         self._is_interacting = False
         self._instrument: Instrument | None = None
-        self._delivery_stream_id = ""
+        self._session_identity: tuple[object, int] | None = None
+        self._state_cursor: StreamCursor | None = None
+        self._preview_state_cursor: StreamCursor | None = None
         self._delivery_generation = 0
         self._next_frame_token = 0
         self._latest_frame_tokens: dict[_FrameKey, int] = {}
@@ -140,36 +143,40 @@ class PreviewStore(QObject):
         data.viewport_frame_idx = header.frame_idx
         self.composite_updated.emit()
 
-    def start_feed(self, instrument: Instrument) -> Teardown:
-        """Consume delivered overview and viewport frames without blocking the instrument emitter."""
+    def start_feed(self, instrument: Instrument, feed: StationFeed, initial: StationFeedView) -> Teardown:
+        """Consume Station preview frames and correlate them with complete feed views."""
         self._instrument = instrument
-        self._delivery_stream_id = instrument.feed.delivery_stream_id.value
-        unsubs = [
-            instrument.feed.frames.subscribe(self._on_preview_frame),
-            instrument.feed.delivery_stream_id.subscribe(self._on_delivery_stream),
-        ]
+        self.apply_view(initial)
+        unsubscribe = feed.frames.subscribe(self._on_preview_frame)
 
         def teardown() -> None:
-            for unsub in unsubs:
-                unsub()
-            self._delivery_generation += 1
-            self._pending_frames.clear()
-            self._latest_frame_tokens.clear()
-            self._last_delivery_sequences.clear()
-            for task in self._decode_tasks.values():
-                task.cancel()
-            self._decode_tasks.clear()
-            self._delivery_stream_id = ""
+            unsubscribe()
+            self._invalidate_frames()
+            self._session_identity = None
+            self._state_cursor = None
+            self._preview_state_cursor = None
             self._instrument = None
 
         return teardown
 
-    def _on_delivery_stream(self, delivery_stream_id: str) -> None:
-        self._delivery_stream_id = delivery_stream_id
+    def apply_view(self, view: StationFeedView) -> None:
+        """Advance the reliable Station state used to accept and invalidate preview frames."""
+        session = view.session
+        identity = None if session is None else (session.info.id, session.info.preview_revision)
+        if identity != self._session_identity:
+            self._session_identity = identity
+            self._invalidate_frames()
+            self._preview_state_cursor = view.cursor
+        self._state_cursor = view.cursor
+
+    def _invalidate_frames(self) -> None:
         self._delivery_generation += 1
         self._pending_frames.clear()
         self._latest_frame_tokens.clear()
         self._last_delivery_sequences.clear()
+        for task in self._decode_tasks.values():
+            task.cancel()
+        self._decode_tasks.clear()
         self.clear_frames()
 
     def _on_preview_frame(self, update: tuple[str, PreviewLayer, bytes]) -> None:
@@ -202,7 +209,12 @@ class PreviewStore(QObject):
                 if (
                     generation != self._delivery_generation
                     or token != self._latest_frame_tokens.get(key)
-                    or delivery.delivery_cursor.stream_id != self._delivery_stream_id
+                    or self._session_identity is None
+                    or self._state_cursor is None
+                    or self._preview_state_cursor is None
+                    or delivery.state_cursor.stream_id != self._state_cursor.stream_id
+                    or delivery.state_cursor.seq > self._state_cursor.seq
+                    or delivery.state_cursor.seq < self._preview_state_cursor.seq
                 ):
                     continue
                 if delivery.channel_id != channel or header.layer != layer:
@@ -215,9 +227,9 @@ class PreviewStore(QObject):
                     )
                     continue
                 previous_sequence = self._last_delivery_sequences.get(key, -1)
-                if delivery.delivery_cursor.seq <= previous_sequence:
+                if delivery.seq <= previous_sequence:
                     continue
-                self._last_delivery_sequences[key] = delivery.delivery_cursor.seq
+                self._last_delivery_sequences[key] = delivery.seq
                 if layer is PreviewLayer.OVERVIEW:
                     self.set_frame(channel, image, header, self._rotation_for(channel))
                 else:

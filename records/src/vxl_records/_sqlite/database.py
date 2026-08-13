@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 _APPLICATION_ID = 0x56584C52  # ASCII "VXLR"
-_LATEST_SCHEMA_VERSION = 1
+_LATEST_SCHEMA_VERSION = 2
 _MIGRATIONS_PACKAGE = "vxl_records._sqlite.migrations"
 
 

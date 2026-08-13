@@ -7,7 +7,7 @@
   import { page } from '$app/state';
   import { AlertCircleOutline } from '$lib/icons';
   import { Button, Dialog } from '$lib/kit';
-  import { ApiError, getVoxelApp, type Violation } from '$lib/model';
+  import { ApiError, getVoxelApp, type PresetRecord, type Violation } from '$lib/model';
   import { sanitizeString } from '$lib/utils';
 
   import InstrumentTabs from '../InstrumentTabs.svelte';
@@ -35,13 +35,26 @@
 
   let launchFailure = $state<Violation[] | null>(null);
   let archiveBenchDialogOpen = $state(false);
+  let presets = $state.raw<PresetRecord[]>([]);
 
   watch(
     () => id,
-    () => {
+    (instrumentName) => {
       launchFailure = null;
+      presets = [];
+      if (instrumentName) void refreshPresets(instrumentName);
     }
   );
+
+  async function refreshPresets(instrumentName = id): Promise<void> {
+    if (!instrumentName) return;
+    try {
+      const loaded = await app.fetchPresets(instrumentName);
+      if (id === instrumentName) presets = loaded;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   const action = $derived.by((): HeaderAction | null => {
     if (!selected?.config || selected.errorSource || isActive) return null;
@@ -202,6 +215,10 @@
                   : null}
               configurationInvalid={selected?.errorSource === 'config'}
               {acquisitions}
+              instrumentName={id}
+              {presets}
+              {activeInstrument}
+              onpresetschanged={refreshPresets}
             />
           {/key}
         </div>

@@ -90,6 +90,10 @@ class LogPanel(QWidget):
         """Set the minimum log level to display."""
         self._handler.setLevel(level)
 
+    def teardown(self) -> None:
+        """Detach this panel from the process logger before its Qt object is destroyed."""
+        logging.getLogger().removeHandler(self._handler)
+
 
 class _LogEntry(QWidget):
     """Single log entry widget with time, logger, message, and level icon."""

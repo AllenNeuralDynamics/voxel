@@ -4,7 +4,8 @@ from uuid import UUID
 import pytest
 
 from vxl import system as system_module
-from vxl.system import StationConfig, StationNotConfiguredError, System
+from vxl.station.errors import StationNotConfiguredError
+from vxl.system import StationConfig, System
 
 
 @pytest.fixture(autouse=True)

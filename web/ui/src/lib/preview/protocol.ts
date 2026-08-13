@@ -3,7 +3,7 @@ import { decodeMsgpack } from '$lib/utils/msgpack';
 const PREFIX_BYTES = 9;
 const MAX_HEADER_BYTES = 64 * 1024;
 
-export const PREVIEW_PROTOCOL_VERSION = 2;
+export const PREVIEW_PROTOCOL_VERSION = 1;
 const SOURCE_PROTOCOL_VERSION = 1;
 export const PREVIEW_ENCODING = 'u16-zstd-byte-shuffle-v1' as const;
 
@@ -34,11 +34,11 @@ export interface PreviewSourceHeader {
   uncompressed_byte_length: number;
 }
 
-export interface PreviewDeliveryHeader {
-  delivery_schema_version: 2;
+export interface VoxelPreviewHeader {
+  delivery_schema_version: 1;
   channel_id: string;
   seq: number;
-  /** Normalized locally for the renderer; Station wire packets carry `seq` directly. */
+  /** Normalized locally for the renderer; Voxel wire packets carry `seq` directly. */
   delivery_cursor: StreamCursor;
   state_cursor: StreamCursor;
   stamped_at_unix_us: number;
@@ -51,13 +51,13 @@ export interface StreamCursor {
 }
 
 export interface ParsedPreviewPacket {
-  delivery: PreviewDeliveryHeader;
+  delivery: VoxelPreviewHeader;
   source: PreviewSourceHeader;
   payload: Uint8Array;
 }
 
 export interface DecodedPreviewFrame {
-  delivery: PreviewDeliveryHeader;
+  delivery: VoxelPreviewHeader;
   source: PreviewSourceHeader;
   shuffled: ArrayBuffer;
   histogram: number[] | null;
@@ -116,8 +116,8 @@ function validateCursor(cursor: StreamCursor | undefined, field: string): void {
   nonnegativeInteger(cursor.seq, `${field}.seq`);
 }
 
-function validateDelivery(header: PreviewDeliveryHeader, actualFrameLength: number): void {
-  if (header.delivery_schema_version !== 2) throw new Error('unsupported preview delivery schema version');
+function validateDelivery(header: VoxelPreviewHeader, actualFrameLength: number): void {
+  if (header.delivery_schema_version !== 1) throw new Error('unsupported preview delivery schema version');
   if (!header.channel_id) throw new Error('preview delivery channel must not be empty');
   nonnegativeInteger(header.seq, 'seq');
   validateCursor(header.state_cursor, 'state_cursor');
@@ -160,13 +160,13 @@ function validateSource(header: PreviewSourceHeader): void {
 export function parsePreviewPacket(data: ArrayBuffer): ParsedPreviewPacket {
   const packet = new Uint8Array(data);
   const deliveryPrefix = parsePrefix(packet, 'VXPD', 'preview delivery', PREVIEW_PROTOCOL_VERSION);
-  const wireDelivery = decodeHeader<Omit<PreviewDeliveryHeader, 'delivery_cursor'>>(
+  const wireDelivery = decodeHeader<Omit<VoxelPreviewHeader, 'delivery_cursor'>>(
     packet,
     deliveryPrefix.headerStart,
     deliveryPrefix.bodyStart,
     'preview delivery'
   );
-  const delivery: PreviewDeliveryHeader = {
+  const delivery: VoxelPreviewHeader = {
     ...wireDelivery,
     delivery_cursor: { stream_id: wireDelivery.state_cursor.stream_id, seq: wireDelivery.seq }
   };

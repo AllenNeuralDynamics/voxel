@@ -20,10 +20,8 @@ SOURCE_PREFIX = Struct(">4sBI")
 MAX_SOURCE_HEADER_BYTES = 64 * 1024
 
 DELIVERY_MAGIC = b"VXPD"
-DELIVERY_FRAMING_VERSION = 1
-DELIVERY_SCHEMA_VERSION = 1
-STATION_DELIVERY_FRAMING_VERSION = 2
-STATION_DELIVERY_SCHEMA_VERSION = 2
+VOXEL_PREVIEW_FRAMING_VERSION = 1
+VOXEL_PREVIEW_SCHEMA_VERSION = 1
 DELIVERY_PREFIX = Struct(">4sBI")
 MAX_DELIVERY_HEADER_BYTES = 64 * 1024
 
@@ -212,21 +210,10 @@ class StreamCursor(SchemaModel):
     seq: int = Field(ge=0)
 
 
-class PreviewDeliveryHeader(SchemaModel):
-    """Delivery sequencing and instrument-state association supplied by the control computer."""
+class VoxelPreviewHeader(SchemaModel):
+    """Voxel delivery ordering and authoritative application-state association."""
 
-    delivery_schema_version: Literal[1] = DELIVERY_SCHEMA_VERSION
-    channel_id: str = Field(min_length=1)
-    delivery_cursor: StreamCursor
-    state_cursor: StreamCursor
-    stamped_at_unix_us: int = Field(ge=0)
-    frame_byte_length: int = Field(gt=0)
-
-
-class StationPreviewDeliveryHeader(SchemaModel):
-    """Station frame ordering and authoritative station-state association."""
-
-    delivery_schema_version: Literal[2] = STATION_DELIVERY_SCHEMA_VERSION
+    delivery_schema_version: Literal[1] = VOXEL_PREVIEW_SCHEMA_VERSION
     channel_id: str = Field(min_length=1)
     seq: int = Field(ge=0)
     state_cursor: StreamCursor
@@ -322,80 +309,10 @@ class PreviewFrame:
 
 
 @dataclass(frozen=True)
-class PreviewFramePacket:
-    """Control-owned delivery header plus an opaque packed preview frame."""
+class VoxelPreviewPacket:
+    """Voxel delivery header plus an opaque packed VXPS frame."""
 
-    header: PreviewDeliveryHeader
-    frame: bytes
-
-    def __post_init__(self) -> None:
-        if len(self.frame) != self.header.frame_byte_length:
-            raise ValueError(f"frame is {len(self.frame)} bytes; expected {self.header.frame_byte_length}")
-
-    @classmethod
-    def wrap(
-        cls,
-        frame: bytes | bytearray | memoryview,
-        *,
-        channel_id: str,
-        delivery_cursor: StreamCursor,
-        state_cursor: StreamCursor,
-        stamped_at_unix_us: int,
-    ) -> Self:
-        """Wrap an already-packed preview frame without parsing its contents."""
-        packed_frame = bytes(frame)
-        return cls(
-            header=PreviewDeliveryHeader(
-                channel_id=channel_id,
-                delivery_cursor=delivery_cursor,
-                state_cursor=state_cursor,
-                stamped_at_unix_us=stamped_at_unix_us,
-                frame_byte_length=len(packed_frame),
-            ),
-            frame=packed_frame,
-        )
-
-    @classmethod
-    def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
-        """Parse and validate delivery framing while leaving the preview frame opaque."""
-        packet = memoryview(packed)
-        if len(packet) < DELIVERY_PREFIX.size:
-            raise ValueError("preview delivery packet is truncated before its prefix")
-        magic, framing_version, header_length = DELIVERY_PREFIX.unpack_from(packet)
-        if magic != DELIVERY_MAGIC:
-            raise ValueError("invalid preview delivery magic")
-        if framing_version != DELIVERY_FRAMING_VERSION:
-            raise ValueError(f"unsupported preview delivery framing version: {framing_version}")
-        if not 0 < header_length <= MAX_DELIVERY_HEADER_BYTES:
-            raise ValueError(f"invalid preview delivery header length: {header_length}")
-
-        frame_offset = DELIVERY_PREFIX.size + header_length
-        if len(packet) <= frame_offset:
-            raise ValueError("preview delivery packet is truncated before its frame")
-        try:
-            unpacked = msgpack.unpackb(packet[DELIVERY_PREFIX.size : frame_offset], raw=False)
-        except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
-            raise ValueError("invalid preview delivery MessagePack header") from exc
-        if not isinstance(unpacked, dict):
-            raise ValueError("preview delivery header must be a MessagePack map")
-        return cls(
-            header=PreviewDeliveryHeader.model_validate(unpacked),
-            frame=bytes(packet[frame_offset:]),
-        )
-
-    def pack(self) -> bytes:
-        """Serialize the delivery prefix, header, and unchanged preview frame."""
-        header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
-        if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
-            raise ValueError(f"preview delivery header is too large: {len(header)} bytes")
-        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, DELIVERY_FRAMING_VERSION, len(header)) + header + self.frame
-
-
-@dataclass(frozen=True)
-class StationPreviewFramePacket:
-    """Station-owned delivery header plus an opaque packed VXPS frame."""
-
-    header: StationPreviewDeliveryHeader
+    header: VoxelPreviewHeader
     frame: bytes
 
     def __post_init__(self) -> None:
@@ -415,7 +332,7 @@ class StationPreviewFramePacket:
         """Wrap an already-packed VXPS frame without parsing or copying its payload twice."""
         packed_frame = bytes(frame)
         return cls(
-            header=StationPreviewDeliveryHeader(
+            header=VoxelPreviewHeader(
                 channel_id=channel_id,
                 seq=seq,
                 state_cursor=state_cursor,
@@ -427,35 +344,35 @@ class StationPreviewFramePacket:
 
     @classmethod
     def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
-        """Parse station delivery framing while leaving the VXPS frame opaque."""
+        """Parse Voxel delivery framing while leaving the VXPS frame opaque."""
         packet = memoryview(packed)
         if len(packet) < DELIVERY_PREFIX.size:
-            raise ValueError("station preview packet is truncated before its prefix")
+            raise ValueError("Voxel preview packet is truncated before its prefix")
         magic, framing_version, header_length = DELIVERY_PREFIX.unpack_from(packet)
         if magic != DELIVERY_MAGIC:
-            raise ValueError("invalid station preview magic")
-        if framing_version != STATION_DELIVERY_FRAMING_VERSION:
-            raise ValueError(f"unsupported station preview framing version: {framing_version}")
+            raise ValueError("invalid Voxel preview magic")
+        if framing_version != VOXEL_PREVIEW_FRAMING_VERSION:
+            raise ValueError(f"unsupported Voxel preview framing version: {framing_version}")
         if not 0 < header_length <= MAX_DELIVERY_HEADER_BYTES:
             raise ValueError(f"invalid station preview header length: {header_length}")
 
         frame_offset = DELIVERY_PREFIX.size + header_length
         if len(packet) <= frame_offset:
-            raise ValueError("station preview packet is truncated before its frame")
+            raise ValueError("Voxel preview packet is truncated before its frame")
         try:
             unpacked = msgpack.unpackb(packet[DELIVERY_PREFIX.size : frame_offset], raw=False)
         except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
-            raise ValueError("invalid station preview MessagePack header") from exc
+            raise ValueError("invalid Voxel preview MessagePack header") from exc
         if not isinstance(unpacked, dict):
-            raise ValueError("station preview header must be a MessagePack map")
+            raise ValueError("Voxel preview header must be a MessagePack map")
         return cls(
-            header=StationPreviewDeliveryHeader.model_validate(unpacked),
+            header=VoxelPreviewHeader.model_validate(unpacked),
             frame=bytes(packet[frame_offset:]),
         )
 
     def pack(self) -> bytes:
-        """Serialize the station delivery header and unchanged VXPS frame."""
+        """Serialize the Voxel delivery header and unchanged VXPS frame."""
         header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
         if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
-            raise ValueError(f"station preview header is too large: {len(header)} bytes")
-        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, STATION_DELIVERY_FRAMING_VERSION, len(header)) + header + self.frame
+            raise ValueError(f"Voxel preview header is too large: {len(header)} bytes")
+        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, VOXEL_PREVIEW_FRAMING_VERSION, len(header)) + header + self.frame

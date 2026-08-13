@@ -1,5 +1,5 @@
 <script module lang="ts">
-  type InstrumentTab = 'overview' | 'state' | 'hardware' | 'acquisitions';
+  type InstrumentTab = 'overview' | 'state' | 'hardware' | 'presets' | 'acquisitions';
 
   let rememberedTab: InstrumentTab = 'overview';
 </script>
@@ -10,9 +10,10 @@
   import { defaultDialog } from '$lib/DefaultConfigDialog.svelte';
   import { AlertCircleOutline, AlertOutline, Check, DotsSpinner, Minus, Record } from '$lib/icons';
   import { Button, JsonView } from '$lib/kit';
-  import type { AcquisitionManifest, HALConfig, InstrumentDefaults } from '$lib/model';
+  import type { AcquisitionManifest, HALConfig, Instrument, InstrumentDefaults, PresetRecord } from '$lib/model';
   import { cn, sanitizeString } from '$lib/utils';
 
+  import InstrumentPresets from './InstrumentPresets.svelte';
   import { deviceCount } from './view';
 
   type InstrumentTabState =
@@ -31,9 +32,22 @@
     instrumentState: InstrumentTabState | null;
     configurationInvalid?: boolean;
     acquisitions?: AcquisitionManifest[];
+    instrumentName?: string;
+    presets?: PresetRecord[];
+    activeInstrument?: Instrument | null;
+    onpresetschanged?: () => Promise<void>;
   }
 
-  const { hal, instrumentState, configurationInvalid = false, acquisitions }: Props = $props();
+  const {
+    hal,
+    instrumentState,
+    configurationInvalid = false,
+    acquisitions,
+    instrumentName,
+    presets,
+    activeInstrument = null,
+    onpresetschanged
+  }: Props = $props();
 
   const tabs = $derived<{ id: InstrumentTab; label: string }[]>([
     ...(hal || instrumentState
@@ -42,6 +56,9 @@
           { id: 'state' as const, label: instrumentState?.kind === 'default' ? 'Default' : 'Bench' },
           { id: 'hardware' as const, label: 'Hardware' }
         ]
+      : []),
+    ...(instrumentName && presets !== undefined
+      ? [{ id: 'presets' as const, label: `Presets${presets.length ? ` ${presets.length}` : ''}` }]
       : []),
     ...(acquisitions !== undefined
       ? [{ id: 'acquisitions' as const, label: `Acquisitions${acquisitions.length ? ` ${acquisitions.length}` : ''}` }]
@@ -229,6 +246,10 @@
           <p class="text-fg-muted">The configuration could not be parsed.</p>
         {/if}
       </div>
+    {:else if activeTab === 'presets'}
+      {#if instrumentName && presets && onpresetschanged}
+        <InstrumentPresets {instrumentName} {presets} {activeInstrument} onchanged={onpresetschanged} />
+      {/if}
     {:else}
       <div class="py-4">
         {#if sortedAcquisitions.length > 0}

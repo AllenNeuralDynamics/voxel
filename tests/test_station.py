@@ -16,7 +16,7 @@ from vxl.instrument import (
     InstrumentState,
 )
 from vxl.instrument.models import TaskTile
-from vxl.preview import PreviewLayer, PreviewSourceEmission, StationPreviewFramePacket
+from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
 from vxlib import Cell, Emitter, ReactiveQuery, load_yaml
@@ -212,7 +212,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(station
     state_view = await station.feed.snapshot()
     await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"VXPS"))
     await asyncio.sleep(0)
-    frame = StationPreviewFramePacket.from_packed(delivered[-1][2])
+    frame = VoxelPreviewPacket.from_packed(delivered[-1][2])
     assert frame.header.seq == 0
     assert frame.header.state_cursor == state_view.cursor
     instrument.close_error = OSError("close failed")

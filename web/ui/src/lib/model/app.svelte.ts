@@ -31,6 +31,7 @@ import type {
   JsonSchema,
   LogEntry,
   OpticalRoutingPolicy,
+  PresetRecord,
   ProfilePatch,
   Remote,
   SensorROI,
@@ -577,6 +578,14 @@ export class Instrument {
     return this.#client.post(`${this.#base}/default/restore`, {});
   }
 
+  savePreset(name: string): Promise<PresetRecord> {
+    return this.#client.post<PresetRecord>(`${this.#base}/presets`, { name });
+  }
+
+  applyPreset(presetId: string): Promise<void> {
+    return this.#client.post(`${this.#base}/presets/${encodeURIComponent(presetId)}/apply`);
+  }
+
   updateChannel(channelId: string, patch: ChannelPatch): Promise<void> {
     return this.#client.patch(`${this.#base}/channels/${encodeURIComponent(channelId)}`, patch);
   }
@@ -674,7 +683,7 @@ export class VoxelApp {
       state_websocket_url: '',
       preview_websocket_url: '',
       log_websocket_url: '',
-      preview_protocol_version: 2
+      preview_protocol_version: 1
     }
   });
   /** Persisted acquisition manifests from the catalog, newest first. */
@@ -827,6 +836,25 @@ export class VoxelApp {
       this.#client.post(`${this.#stationBase}/instruments/${encodeURIComponent(name)}/archive-bench`)
     );
     await this.refresh();
+  }
+
+  fetchPresets(instrumentName: string): Promise<PresetRecord[]> {
+    return this.#client.get<PresetRecord[]>(
+      `${this.#stationBase}/instruments/${encodeURIComponent(instrumentName)}/presets`
+    );
+  }
+
+  createPresetFromAcquisition(acquisitionId: string, name: string): Promise<PresetRecord> {
+    return this.#client.post<PresetRecord>(
+      `${this.#stationBase}/acquisitions/${encodeURIComponent(acquisitionId)}/presets`,
+      { name }
+    );
+  }
+
+  deletePreset(instrumentName: string, presetId: string): Promise<void> {
+    return this.#client.del(
+      `${this.#stationBase}/instruments/${encodeURIComponent(instrumentName)}/presets/${encodeURIComponent(presetId)}`
+    );
   }
 
   /** Close the active instrument. */

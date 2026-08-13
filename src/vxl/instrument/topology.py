@@ -5,8 +5,9 @@ from typing import Annotated, Self
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
 
 from rigup import DeviceConfig, RigConfig
-from vxl.errors import Violation, ViolationLoc, assignment_violations
 from vxlib import SchemaModel
+
+from .errors import Violation, ViolationLoc, assignment_violations
 
 logger = logging.getLogger(__name__)
 

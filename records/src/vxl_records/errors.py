@@ -35,3 +35,11 @@ class ManifestSyncError(RecordsError):
 
 class LegacyImportError(RecordsError):
     """Raised when a legacy file catalog cannot be imported safely."""
+
+
+class PresetExistsError(RecordsError):
+    """Raised when a preset ID or instrument-scoped name already exists."""
+
+
+class PresetNotFoundError(RecordsError):
+    """Raised when a requested preset does not exist."""

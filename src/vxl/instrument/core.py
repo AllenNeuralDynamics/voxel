@@ -25,14 +25,13 @@ from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Resul
 from vxl.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.camera import CameraHandle, CaptureState, StorageSpec, resolve_storage
 from vxl.daq.clocked import Signals
-from vxl.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.system import System
 from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
 from .bench import PROMOTABLE_FIELDS, InstrumentBench
-from .feed import InstrumentFeed
+from .errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from .hal import HAL
 from .models import AcquisitionMode, ActiveAcquisitionState, TaskTile, VolumeProgress
 from .state import (
@@ -40,6 +39,7 @@ from .state import (
     ChannelConfig,
     ChannelPatch,
     InstrumentDefaults,
+    InstrumentPreset,
     InstrumentState,
     OpticalRoutingPolicy,
     ProfileConfig,
@@ -130,8 +130,6 @@ class Instrument:
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._bench, fn=self._compute_task_tiles)
 
-        self._feed = InstrumentFeed(self)
-
     @property
     def path(self) -> Path:
         """The instrument's on-disk home (``<name>.voxel/``)."""
@@ -146,11 +144,6 @@ class Instrument:
     def hardware_config(self) -> HALConfig:
         """The immutable hardware topology without access to runtime device handles."""
         return self._hal.config
-
-    @property
-    def feed(self) -> InstrumentFeed:
-        """Materialized status and state-associated preview frame feed."""
-        return self._feed
 
     @property
     def preview(self) -> Subscribable[PreviewSourceEmission]:
@@ -248,7 +241,6 @@ class Instrument:
                 for cam_id, camera in self._hal.cameras.items():
                     await self._subscribe_camera(cam_id, camera)
                 await self.task_tiles.refresh()
-                await self._feed.open()
         except BaseException:
             try:
                 await self.close()
@@ -570,7 +562,6 @@ class Instrument:
         for unsub in self._preview_unsubs:
             unsub()
         self._preview_unsubs = []
-        self._feed.close()
         self.fov.clear_triggers()
         await self._hal.close()
         self._channels = {}
@@ -854,6 +845,19 @@ class Instrument:
                 AcquisitionMode.PREVIEW,
             )
             await self._bench.restore_default(include)
+
+    async def apply_preset(self, preset: InstrumentPreset) -> None:
+        """Apply reusable bench state while idle, leaving specimen metadata compatible or cleared."""
+        async with self._lock:
+            self._ensure_mode("apply an instrument preset", AcquisitionMode.IDLE)
+            active_profile_id = self._active_profile_id.value
+            next_profile_id = (
+                active_profile_id
+                if active_profile_id in preset.imaging.profiles
+                else next(iter(preset.imaging.profiles))
+            )
+            await self._bench.apply_preset(preset)
+            await self._active_profile_id.set(next_profile_id)
 
     async def update_signals(self, generator_uid: str, signals: Signals) -> None:
         """Apply one clocked signal config, then persist it into the active profile."""
