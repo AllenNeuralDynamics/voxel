@@ -165,7 +165,7 @@ Joystick inputs are selected from the `JoystickInput` enum (`NONE=0`, `DEFAULT=1
 ## Parser — [`../protocol/parser.py`](../protocol/parser.py)
 
 ```python
-def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Reply, ASIMode]
+def asi_parse(raw: bytes, requested_axes: list[str] | None = None) -> tuple[Reply, ASIMode | None]
 ```
 
 - Detects framing automatically: `:N` → MS2000 error, `:A` → MS2000 ack/data, empty → Tiger ack, bare text → Tiger data.

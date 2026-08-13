@@ -3,9 +3,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
-from vxl_drivers.tigerhub.model import Reply
+from vxl_drivers.tigerhub.model import Reply, Request
 from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
 from vxl_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from vxl_drivers.tigerhub.protocol.replies import ack, one
 
 
 class RingBufferMode(Enum):
@@ -121,13 +122,13 @@ class TTLConfig:
 
 class SetRingBufferModeOp:  # "RM" / RBMODE
     @staticmethod
-    def encode(
+    def request(
         addr: int | None,
         *,
         clear_buffer: bool | None = None,  # X=0 when True
         enabled_mask: int | None = None,  # Y
         mode: RingBufferMode | int | None = None,  # F
-    ) -> bytes:
+    ) -> Request[None]:
         kv: dict[str, int] = {}
         if clear_buffer:
             kv["X"] = 0
@@ -135,44 +136,51 @@ class SetRingBufferModeOp:  # "RM" / RBMODE
             kv["Y"] = int(enabled_mask) & 0xFFFF
         if mode is not None:
             kv["F"] = int(mode.value if isinstance(mode, RingBufferMode) else mode)
-        return _line("RM", _fmt_kv(kv), addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("RM", r)
+        # Clearing and setting the mask/mode are both absolute, so repeating one is harmless.
+        return Request(payload=_line("RM", _fmt_kv(kv), addr), decode=ack("RM"))
 
 
 class LoadBufferedMoveOp:  # "LD"
     @staticmethod
-    def encode(addr: int | None, mapping: Mapping[str, float]) -> bytes:
-        return _line("LD", _fmt_kv(mapping), addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("LD", r)
+    def request(addr: int | None, mapping: Mapping[str, float]) -> Request[None]:
+        # LD appends to the ring buffer. Re-sending after a lost reply would queue the same move
+        # twice and shift every subsequent step of the stack — never retry this one.
+        return Request(payload=_line("LD", _fmt_kv(mapping), addr), decode=ack("LD"), retry_safe=False)
 
 
 class SetTTLModesOp:  # "TTL"
     @staticmethod
-    def encode(addr: int | None, cfg: TTLConfig) -> bytes:
-        return _line("TTL", _fmt_kv(cfg.to_kv()), addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("TTL SET", r)
+    def request(addr: int | None, cfg: TTLConfig) -> Request[None]:
+        return Request(payload=_line("TTL", _fmt_kv(cfg.to_kv()), addr), decode=ack("TTL SET"))
 
 
 class GetTTLModesOp:
-    @staticmethod
-    def encode(addr: int) -> bytes:
-        return _line("TTL", "X? Y? Z? F? R? T?", addr)
+    OP = "TTL GET"
 
     @staticmethod
-    def decode(r: Reply) -> TTLConfig:
-        return TTLConfig.from_reply(r)
+    def _decode(frames: Sequence[Reply]) -> TTLConfig:
+        return TTLConfig.from_reply(one(frames, GetTTLModesOp.OP))
+
+    @staticmethod
+    def request(addr: int) -> Request[TTLConfig]:
+        # The reply's X/Y/Z/F/R/T keys are TTL parameter slots rather than axis labels. That used to
+        # be a hazard when the parser filtered kv against a requested-axis list; it no longer does.
+        return Request(payload=_line("TTL", "X? Y? Z? F? R? T?", addr), decode=GetTTLModesOp._decode)
+
+
+def _out_level(r: Reply, operation: str) -> bool:
+    """Read an OUT level from bare '0'/'1' text or an 'O='/'OUT=' pair."""
+    s = (r.text or "").strip()
+    if s in ("0", "1"):
+        return s == "1"
+    if r.kv:
+        for key in ("O", "OUT"):
+            if key in r.kv:
+                try:
+                    return int(str(r.kv[key])) != 0
+                except ValueError:
+                    pass
+    raise ASIDecodeError(operation, r)
 
 
 class ProbeTTLOutOp:
@@ -180,24 +188,15 @@ class ProbeTTLOutOp:
     Returns True for high (1), False for low (0).
     """
 
-    @staticmethod
-    def encode(addr: int) -> bytes:
-        return _line("TTL", "O?", addr)
+    OP = "TTL READ OUT"
 
     @staticmethod
-    def decode(r: Reply) -> bool:
-        # Accept 0/1 text, or key-value like "O=1" / "OUT=0"
-        s = (r.text or "").strip()
-        if s in ("0", "1"):
-            return s == "1"
-        if r.kv:
-            for key in ("O", "OUT"):
-                if key in r.kv:
-                    try:
-                        return int(str(r.kv[key])) != 0
-                    except ValueError:
-                        pass
-        raise ASIDecodeError("TTL READ OUT", r)
+    def _decode(frames: Sequence[Reply]) -> bool:
+        return _out_level(one(frames, ProbeTTLOutOp.OP), ProbeTTLOutOp.OP)
+
+    @staticmethod
+    def request(addr: int) -> Request[bool]:
+        return Request(payload=_line("TTL", "O?", addr), decode=ProbeTTLOutOp._decode)
 
 
 class ProbeTTLOutOp2:
@@ -205,22 +204,13 @@ class ProbeTTLOutOp2:
     Kept as a fallback if ReadOut doesn't work on a given box.
     """
 
-    @staticmethod
-    def encode(addr: int | None) -> bytes:
-        return _line("TTL", None, addr)
+    OP = "TTL OUT STATE"
 
     @staticmethod
-    def decode(r: Reply) -> bool:
-        s = (r.text or "").strip()
-        if s in ("0", "1"):
-            return s == "1"
-        if r.kv:
-            # handle possible kv forms even if bare TTL returns kv
-            for key in ("O", "OUT"):
-                if key in r.kv:
-                    try:
-                        return int(str(r.kv[key])) != 0
-                    except ValueError:
-                        pass
-        # If it's just ACK, there's nothing to parse
-        raise ASIDecodeError("TTL OUT STATE", r)
+    def _decode(frames: Sequence[Reply]) -> bool:
+        # If the box merely ACKs there is nothing to parse, and _out_level raises.
+        return _out_level(one(frames, ProbeTTLOutOp2.OP), ProbeTTLOutOp2.OP)
+
+    @staticmethod
+    def request(addr: int | None) -> Request[bool]:
+        return Request(payload=_line("TTL", None, addr), decode=ProbeTTLOutOp2._decode)

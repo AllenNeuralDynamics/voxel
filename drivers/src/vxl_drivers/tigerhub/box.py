@@ -1,13 +1,12 @@
-import contextlib
 import logging
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from vxl_drivers.serial import SerialTransport
-from vxl_drivers.tigerhub.model import ASIMode, AxisState, BoxInfo, Reply
+from vxl_drivers.tigerhub.model import ASIMode, AxisState, BoxInfo
 from vxl_drivers.tigerhub.model.box_info import infer_comm_addr_from_who
-from vxl_drivers.tigerhub.model.card_info import CardInfo
+from vxl_drivers.tigerhub.model.card_info import CardInfo, WhoReportItem
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.joystick import (
     JoystickEnableOp,
@@ -65,8 +64,8 @@ from vxl_drivers.tigerhub.ops.step_shoot import (
     TTLConfig,
     TTLIn0Mode,
 )
-from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
-from vxl_drivers.tigerhub.protocol.parser import asi_parse
+from vxl_drivers.tigerhub.protocol.errors import ASIProtocolError
+from vxl_drivers.tigerhub.protocol.parser import REPLY_TIMEOUT_S, frames, transact
 
 
 @dataclass(frozen=True)
@@ -104,55 +103,36 @@ logger = logging.getLogger("tiger_box")
 
 
 class TigerBox:
-    TIMEOUT_S: float = 180.0  # needs to be super long so it doesn't time out when moving long distances
+    # Budget for a *move* to finish, not for a reply to arrive. Replies are always prompt; long
+    # travels are what take time, hence the size of this.
+    MOTION_TIMEOUT_S: float = 180.0
 
     def __init__(self, port: str):
-        self.t = SerialTransport(port)
+        """Open the box and negotiate MS2000 reply syntax.
+
+        Always MS2000 (VB F=0, the controller's own default). The ':A' / ':N' prefix is the
+        protocol's only frame-start marker and the framing here depends on it: Tiger syntax
+        (VB F=1) strips it, which leaves a corrupted read indistinguishable from valid data.
+        """
+        self.t = SerialTransport(port, timeout=REPLY_TIMEOUT_S)
         self._info: BoxInfo | None = None
-        self._last_mode: ASIMode | None = None
         self._scan_session: ScanSession | None = None
         self._step_shoot_session: StepShootState | None = None
         self._array_scan_card_addr = None
-        if not self._enable_tiger_mode():
-            raise RuntimeError("Failed to enable Tiger mode")
+        self._mode = self._negotiate_mode(ASIMode.MS2000)
+        if self._mode is None:
+            err = f"No reply from the Tiger box on {port}"
+            raise RuntimeError(err)
         self._cached_joystick_mapping = self._fetch_joystick_mapping()
 
     def close(self) -> None:
         self.t.close()
 
-    # ---------- helpers ----------
-
-    def _t_once(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
-        """Send a command and read+parse the reply.
-
-        Stale input is dropped before writing. The transport lock means no transaction is in flight
-        here, so anything still queued belongs to a transaction that already returned — reading it as
-        this command's reply would offset every subsequent transaction by one.
-        """
-        with self.t.transaction() as port:
-            if stale := port.in_waiting:
-                logger.warning("Discarding %d stale byte(s) before %r", stale, payload)
-                port.reset_input_buffer()
-            port.write(payload)
-            raw = port.readline() or b""
-        logger.debug("%r -> %r", payload, raw)
-        reply, mode = asi_parse(raw, requested_axes=requested_axes)
-        self._last_mode = mode
-        return reply
-
-    def _transact(self, payload: bytes, *, requested_axes: list[str] | None = None) -> Reply:
-        for attempt in (1, 2):
-            try:
-                return self._t_once(payload, requested_axes=requested_axes)
-            except Exception:
-                if attempt == 2:
-                    raise
-        raise RuntimeError("Error while transmitting payload and receiving reply.")
-
     # ---------- public API ----------
 
     def current_mode(self) -> ASIMode | None:
-        return self._last_mode
+        """The reply syntax observed at connect time, or None if the box never answered."""
+        return self._mode
 
     # ---- Info / Status ----
 
@@ -161,14 +141,11 @@ class TigerBox:
         if self._info is not None and not refresh:
             return self._info
 
-        rr = self._transact(GetBuildOp.encode(None))
-        build_report = GetBuildOp.decode(rr)
+        build_report = transact(self.t, GetBuildOp.request(None))
         card_hex_to_mods: Mapping[int, set[str]] = {}
         for addr in build_report.hex_addr:
-            rr = self._transact(GetCardMods.encode(addr))
-            card_hex_to_mods[addr] = GetCardMods.decode(rr)
-        r = self._transact(GetWhoOp.encode())
-        who_items = GetWhoOp.decode(r)
+            card_hex_to_mods[addr] = transact(self.t, GetCardMods.request(addr))
+        who_items = transact(self.t, GetWhoOp.request())
         card_infos: list[CardInfo] = []
         for item in who_items:
             mods = card_hex_to_mods.get(item.addr, set())
@@ -191,28 +168,32 @@ class TigerBox:
         version: str | None = None
         if comm_addr is not None:
             try:
-                vr = self._transact(GetVersionOp.encode(comm_addr))
-                version = GetVersionOp.decode(vr).strip() or None
-            except ASIDecodeError:
+                version = transact(self.t, GetVersionOp.request(comm_addr)).strip() or None
+            except ASIProtocolError:
                 version = None
 
         # PZINFO (addressed only; optional)
         pzinfo: str | None = None
         if comm_addr is not None:
             try:
-                pzr = self._transact(GetPiezoInfoOp.encode(comm_addr))
-                pzinfo = GetPiezoInfoOp.decode(pzr).strip() or None
-            except ASIDecodeError:
+                pzinfo = transact(self.t, GetPiezoInfoOp.request(comm_addr)).strip() or None
+            except ASIProtocolError:
                 pzinfo = None
 
         axis_ids: Mapping[str, int] = {}
         enc_cnts: Mapping[str, float] = {}
         axes = sorted({ax for c in card_infos for ax in c.axes})
         if axes:
-            with contextlib.suppress(ASIDecodeError):
+            # Both are optional, but an empty axis_ids silently disables setup_scanrv later,
+            # so a failure here is logged rather than suppressed.
+            try:
                 axis_ids = self.get_param(TigerParams.AXIS_ID, axes)  # {'X': 0, ...}
-            with contextlib.suppress(ASIDecodeError):
+            except ASIProtocolError:
+                logger.warning("Could not read axis IDs; SCANR/SCANV setup will be unavailable")
+            try:
                 enc_cnts = self.get_param(TigerParams.ENCODER_CNTS, axes)  # {'X': 10240.0, ...}
+            except ASIProtocolError:
+                logger.warning("Could not read encoder counts")
 
         # Aggregate & cache
         self._info = BoxInfo(
@@ -225,85 +206,87 @@ class TigerBox:
         )
         if issues := self._info.issues:
             for issue in issues:
-                print(f"BoxInfo warning: {issue}")
+                logger.debug(f"BoxInfo warning: {issue}")
         return self._info
 
     def get_axis_state(self, axis: str) -> AxisState:
         if axis not in self.info().axes:
             err = f"Invalid axis: {axis}"
             raise ValueError(err)
-        r = self._transact(GetAxisStateOp.encode(axis.upper()))
-        return GetAxisStateOp.decode(r)
+        return transact(self.t, GetAxisStateOp.request(axis))
 
     def is_busy(self) -> bool | None:
-        r = self._transact(IsBoxBusyOp.encode())
         try:
-            return IsBoxBusyOp.decode(r)
-        except ASIDecodeError:
+            return transact(self.t, IsBoxBusyOp.request())
+        except ASIProtocolError:
             return None
 
     # ---- Motion ----
 
-    def get_position(self, axes: Sequence[str]) -> dict[str, float]:
-        axes_u = [a.upper() for a in axes]
-        r = self._transact(
-            WhereOp.encode(axes_u),
-            requested_axes=axes_u,
-        )
-        return WhereOp.decode(r, axes_u)
+    def _in_hardware_order(self, axes: Iterable[str]) -> list[str]:
+        """Sort `axes` into the order the controller reports them in.
 
-    def move_abs(
-        self,
-        mapping: Mapping[str, float],
-        wait: bool = False,
-        timeout_s: float | None = None,
-    ) -> None:
-        r = self._transact(MoveAbsOp.encode(mapping))
-        MoveAbsOp.decode(r)
+        MS2000-syntax replies to positional queries carry no axis letters, and the controller always
+        answers in hardware order however the axes were asked for. Requesting them in that order
+        makes the positional mapping correct by construction.
+
+        The order is BU X's "Motor Axes" sequence. Sorting by (card_hex, card_index) does NOT work:
+        BU's "Axis Addr" is the card number repeated once per axis on that card (1 1 2 2 3 3 ...),
+        so every axis sharing a card ties and their relative order is lost. Verified against the
+        box: 'W A B X' and 'W M Z X' both answer in Motor-Axes order regardless of request order.
+        """
+        build = self.info().build
+        order = {label.upper(): i for i, label in enumerate(build.motor_axes)} if build else {}
+        # dict.fromkeys dedupes while preserving first-seen order, so unplaced axes stay deterministic.
+        return sorted(dict.fromkeys(a.upper() for a in axes), key=lambda a: order.get(a, 1 << 30))
+
+    def get_position(self, axes: Sequence[str]) -> dict[str, float]:
+        return transact(self.t, WhereOp.request(self._in_hardware_order(axes)))
+
+    def move_abs(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
+        transact(self.t, MoveAbsOp.request(mapping))
         if wait:
             self.wait_until_idle(list(mapping.keys()), timeout_s=timeout_s)
 
-    def move_rel(
-        self,
-        mapping: Mapping[str, float],
-        wait: bool = False,
-        timeout_s: float | None = None,
-    ) -> None:
-        r = self._transact(MoveRelOp.encode(mapping))
-        MoveRelOp.decode(r)
+    def move_rel(self, mapping: Mapping[str, float], wait: bool = False, timeout_s: float | None = None) -> None:
+        transact(self.t, MoveRelOp.request(mapping))
         if wait:
             self.wait_until_idle(list(mapping.keys()), timeout_s=timeout_s)
 
     def set_logical_position(self, mapping: Mapping[str, float]) -> None:
-        r = self._transact(HereOp.encode(mapping))
-        HereOp.decode(r)
+        transact(self.t, HereOp.request(mapping))
+
+    def _commandable_axes(self) -> list[str]:
+        """Axes that may be commanded directly, i.e. excluding slaves that follow a master.
+
+        Only the defaults of *commanding* operations use this. Queries deliberately do not filter:
+        a slave really does move when its master does, so leaving it out of `wait_until_idle` would
+        let a wait return early.
+        """
+        return [label for label, ax in self.info().axes.items() if ax.device_type.commandable]
 
     def zero_axes(self, axes: Iterable[str] | None = None) -> None:
         if axes is None:
-            axes = list(self.info().axes.keys())
+            axes = self._commandable_axes()
         kv = {a.upper(): 0.0 for a in axes}
         self.set_logical_position(kv)
 
-    def home_axes(
-        self,
-        axes: Iterable[str] | None = None,
-        wait: bool = False,
-        timeout_s: float | None = None,
-    ) -> None:
-        if axes is None:
-            axes = list(self.info().axes.keys())
-        r = self._transact(HomeOp.encode([a.upper() for a in axes]))
-        HomeOp.decode(r)
+    def home_axes(self, axes: Iterable[str] | None = None, wait: bool = False, timeout_s: float | None = None) -> None:
+        # Materialise once: `axes` may be any iterable and is used twice below, so consuming it in
+        # the request would leave nothing for the wait.
+        targets = self._commandable_axes() if axes is None else list(axes)
+        transact(self.t, HomeOp.request(targets))
         if wait:
-            self.wait_until_idle(list(axes), timeout_s=timeout_s)
+            self.wait_until_idle(targets, timeout_s=timeout_s)
 
     def halt(self) -> None:
-        r = self._transact(HaltOp.encode())
-        HaltOp.decode(r)
+        transact(self.t, HaltOp.request())
 
     def is_axis_moving(self, axes: Sequence[str]) -> dict[str, bool]:
-        r = self._transact(IsAxisBusyOp.encode(axes))
-        return IsAxisBusyOp.decode(r, axes)
+        # Asked in hardware order so the frame-to-axis mapping holds whether the controller answers
+        # in the order queried or in its own order — the two coincide.
+        axes_u = self._in_hardware_order(axes)
+        return transact(self.t, IsAxisBusyOp.request(axes_u))
 
     def wait_until_idle(
         self,
@@ -313,8 +296,8 @@ class TigerBox:
         timeout_s: float | None = None,
     ) -> None:
         axes = list(axes or self.info().axes.keys())
-        # Resolve timeout at call-time so changes to TIMEOUT_S take effect
-        effective_timeout = self.TIMEOUT_S if timeout_s is None else float(timeout_s)
+        # Resolve timeout at call-time so changes to MOTION_TIMEOUT_S take effect
+        effective_timeout = self.MOTION_TIMEOUT_S if timeout_s is None else float(timeout_s)
         t0 = time.monotonic()
         while True:
             busy = self.is_axis_moving(axes)
@@ -329,36 +312,29 @@ class TigerBox:
     # ---- Params (typed) ----
 
     def get_param[T: int | float | str | bool](self, param: TigerParam[T], axes: Iterable[str]) -> Mapping[str, T]:
-        axes_u = [a.upper() for a in axes]
-        r = self._transact(GetParamOp.encode(param, axes_u), requested_axes=axes_u)
-        return GetParamOp.decode(r, param, axes_u)
+        return transact(self.t, GetParamOp.request(param, list(axes)))
 
-    def set_param[T: int | float | str | bool](self, param: TigerParam, mapping: Mapping[str, T]) -> None:
-        r = self._transact(SetParamOp.encode(param, dict(mapping)))
-        SetParamOp.decode(r, param)
+    def set_param[T: int | float | str | bool](self, param: TigerParam[T], mapping: Mapping[str, T]) -> None:
+        transact(self.t, SetParamOp.request(param, mapping))
 
     # ---- TTL Modes _______
     def set_ttl_config(self, card_addr: int, cfg: TTLConfig) -> None:
         """Set TTL modes on a card. Ex: ttl_set(31, X=12, Y=2, F=1, R=0, T=0)."""
-        r = self._transact(SetTTLModesOp.encode(addr=card_addr, cfg=cfg))
-        SetTTLModesOp.decode(r)
+        transact(self.t, SetTTLModesOp.request(addr=card_addr, cfg=cfg))
 
     def get_ttl_config(self, card_addr: int) -> TTLConfig:
         """Return raw TTL mode string: 'X=... Y=... Z=... F=... R=... T=...'."""
-        r = self._transact(GetTTLModesOp.encode(card_addr))
-        return GetTTLModesOp.decode(r)
+        return transact(self.t, GetTTLModesOp.request(card_addr))
 
     def ttl_out_state(self, card_addr: int) -> bool | None:
         # Not really working. Needs to be fixed or removed.
-        r = self._transact(ProbeTTLOutOp.encode(card_addr))
         try:
-            return ProbeTTLOutOp.decode(r)
-        except ASIDecodeError:
+            return transact(self.t, ProbeTTLOutOp.request(card_addr))
+        except ASIProtocolError:
             # try legacy
-            r = self._transact(ProbeTTLOutOp2.encode(card_addr))
             try:
-                return ProbeTTLOutOp2.decode(r)
-            except ASIDecodeError:
+                return transact(self.t, ProbeTTLOutOp2.request(card_addr))
+            except ASIProtocolError:
                 return None
 
     # -- Step and Shoot ---
@@ -441,13 +417,11 @@ class TigerBox:
 
         # 1) Clear RB (optional)
         if cfg.clear_buffer_first:
-            r = self._transact(SetRingBufferModeOp.encode(card, clear_buffer=True))
-            SetRingBufferModeOp.decode(r)
+            transact(self.t, SetRingBufferModeOp.request(card, clear_buffer=True))
 
         # 2) Enable RB for axes and set mode
         mask = self._build_axis_mask_for_card(card, axes)
-        r = self._transact(SetRingBufferModeOp.encode(card, enabled_mask=mask, mode=cfg.ring_mode))
-        SetRingBufferModeOp.decode(r)
+        transact(self.t, SetRingBufferModeOp.request(card, enabled_mask=mask, mode=cfg.ring_mode))
 
         # 3) TTL config
         self.set_ttl_config(
@@ -502,19 +476,18 @@ class TigerBox:
         # NOTE: We can't tell absolute vs relative from the numbers; that is determined by TTL mode.
         # Here we just enforce that the call matches the configured axes and pass the values through.
 
-        r = self._transact(
-            LoadBufferedMoveOp.encode(
+        transact(
+            self.t,
+            LoadBufferedMoveOp.request(
                 addr=self._step_shoot_session.card,
                 mapping={k.upper(): float(v) for k, v in mapping.items()},
             ),
         )
-        LoadBufferedMoveOp.decode(r)
 
     def reset_step_shoot(self) -> None:
         if self._step_shoot_session is None:
             return
-        r = self._transact(SetRingBufferModeOp.encode(self._step_shoot_session.card, clear_buffer=True))
-        SetRingBufferModeOp.decode(r)
+        transact(self.t, SetRingBufferModeOp.request(self._step_shoot_session.card, clear_buffer=True))
         self._step_shoot_session = None
 
     # --------------------------------------------------- Scan ------------------------------------------------------- #
@@ -533,15 +506,15 @@ class TigerBox:
             raise ValueError(err)
         self._scan_session = ScanSession(fast_axis=fa, slow_axis=sa, pattern=pattern)
         try:
-            r = self._transact(
-                ScanBindAxesOp.encode(
+            transact(
+                self.t,
+                ScanBindAxesOp.request(
                     card_hex=self._scan_session.card_addr,
                     fast_axis_id=fa.axis_id,
                     slow_axis_id=sa.axis_id,
                     pattern=pattern,
                 ),
             )
-            ScanBindAxesOp.decode(r)
         except Exception as e:
             raise RuntimeError("Failed to bind scan axes.") from e
 
@@ -561,8 +534,7 @@ class TigerBox:
             fa = session.fast_axis
             card_addr = session.card_addr
             kv, actual_um = cfg.to_kv(self.info(), fast_axis_uid=fa.label)
-            r = self._transact(ScanROp.encode(card_hex=card_addr, kv=kv))
-            ScanROp.decode(r)
+            transact(self.t, ScanROp.request(card_hex=card_addr, kv=kv))
         except Exception as e:
             raise RuntimeError("Failed to configure SCANR.") from e
         else:
@@ -573,8 +545,7 @@ class TigerBox:
         try:
             session = self._check_scanrv_is_setup()
             card_addr = session.card_addr
-            r = self._transact(ScanVOp.encode(card_hex=card_addr, kv=cfg.to_kv()))
-            ScanVOp.decode(r)
+            transact(self.t, ScanVOp.request(card_hex=card_addr, kv=cfg.to_kv()))
         except Exception as e:
             raise RuntimeError("Failed to configure SCANV.") from e
 
@@ -582,8 +553,7 @@ class TigerBox:
         try:
             session = self._check_scanrv_is_setup()
             card_addr = session.card_addr
-            r = self._transact(ScanRunOp.encode(card_addr, "S"))
-            ScanRunOp.decode(r)
+            transact(self.t, ScanRunOp.request(card_addr, "S"))
         except Exception as e:
             raise RuntimeError("Failed to start scan.") from e
 
@@ -593,8 +563,7 @@ class TigerBox:
         try:
             session = self._check_scanrv_is_setup()
             card_addr = session.card_addr
-            r = self._transact(ScanRunOp.encode(card_addr, "P"))
-            ScanRunOp.decode(r)
+            transact(self.t, ScanRunOp.request(card_addr, "P"))
         except Exception as e:
             raise RuntimeError("Failed to stop scan.") from e
 
@@ -613,8 +582,9 @@ class TigerBox:
 
         self._array_scan_card_addr = card
         # pattern (via SCAN F=...)
-        self._transact(
-            payload=ScanBindAxesOp.encode(
+        transact(
+            self.t,
+            ScanBindAxesOp.request(
                 card_hex=card,
                 fast_axis_id=None,
                 slow_axis_id=None,
@@ -622,13 +592,13 @@ class TigerBox:
             ),
         )
         if auto_home_cfg is not None:
-            self._transact(AutoHomeOp.encode(addr=card, cfg=auto_home_cfg))
-        self._transact(ArrayOp.encode(addr=card, cfg=arr_scan_cfg))
+            transact(self.t, AutoHomeOp.request(addr=card, cfg=auto_home_cfg))
+        transact(self.t, ArrayOp.request(addr=card, cfg=arr_scan_cfg))
 
     def start_array_scan(self) -> None:
         if self._array_scan_card_addr is None:
             raise RuntimeError("Array scan card address not set.")
-        self._transact(ArrayOp.encode(self._array_scan_card_addr, cfg=None))  # start
+        transact(self.t, ArrayOp.request(self._array_scan_card_addr, cfg=None))  # start
         self._array_scan_card_addr = None
 
     # Might use later to validate that card has specified module e.g. ARRAY and SCAN
@@ -652,8 +622,7 @@ class TigerBox:
         out: dict[str, JoystickInput] = {}
         for card, axlist in self.info().axes_by_card.items():
             axes = [a.label for a in axlist]
-            r = self._transact(JoystickGetMappingOp.encode(card, axes))
-            out |= JoystickGetMappingOp.decode(r, axes)
+            out |= transact(self.t, JoystickGetMappingOp.request(card, axes))
         return out
 
     def set_joystick_mapping(self, mapping: dict[str, JoystickInput]) -> dict[str, JoystickInput]:
@@ -664,8 +633,7 @@ class TigerBox:
             if a and a.card_hex is not None:
                 by_card.setdefault(a.card_hex, {})[a.label] = code
         for card, mp in by_card.items():
-            r = self._transact(JoystickSetMappingOp.encode(card, mapping=mp))
-            JoystickSetMappingOp.decode(r)
+            transact(self.t, JoystickSetMappingOp.request(card, mapping=mp))
         return self.get_joystick_mapping(refresh=True)
 
     def _build_axis_uids_by_card(self, axes: Sequence[str]) -> dict[int, list[str]]:
@@ -684,8 +652,7 @@ class TigerBox:
             axes = list(self.info().axes.keys())
         by_card = self._build_axis_uids_by_card(axes)
         for card, axlist in by_card.items():
-            r = self._transact(JoystickEnableOp.encode(card, enable_axes=axlist, disable_axes=[]))
-            JoystickEnableOp.decode(r)
+            transact(self.t, JoystickEnableOp.request(card, enable_axes=axlist, disable_axes=[]))
         if self._cached_joystick_mapping:
             subset = {
                 ax: self._cached_joystick_mapping[ax.upper()]
@@ -703,44 +670,77 @@ class TigerBox:
         self._cached_joystick_mapping = self.get_joystick_mapping(refresh=True)
         by_card = self._build_axis_uids_by_card(axes or list(self.info().axes.keys()))
         for card, axlist in by_card.items():
-            r = self._transact(JoystickEnableOp.encode(card, enable_axes=[], disable_axes=axlist))
-            JoystickEnableOp.decode(r)
+            transact(self.t, JoystickEnableOp.request(card, enable_axes=[], disable_axes=axlist))
         return self._cached_joystick_mapping
 
     def set_joystick_polarity(self, axis: str, inverted: bool) -> None:
         a = self.info().axes.get(axis.upper())
         if a and a.card_hex is not None and a.card_index is not None:
-            r = self._transact(JoystickPolarityOp.encode(a.card_hex, axis_index=a.card_index, inverted=inverted))
-            JoystickPolarityOp.decode(r)
+            transact(self.t, JoystickPolarityOp.request(a.card_hex, axis_index=a.card_index, inverted=inverted))
         else:
             print(f"Cannot set joystick polarity for axis {axis}: missing card info")
 
-    # --- Helpers for setting box to tiger mode ---
+    # --- Helpers for negotiating the reply format ---
 
-    def _probe_mode(self, desired_mode: ASIMode = ASIMode.TIGER, probe_axis: str = "X") -> bool | None:
-        try:
-            _ = self._transact(WhereOp.encode([probe_axis]), requested_axes=[probe_axis])
-            if self._last_mode == desired_mode:
-                return True
-        except ASIDecodeError:
-            pass
+    def _who(self) -> list[WhoReportItem]:
+        """Read WHO without decoding a mode from it."""
+        req = GetWhoOp.request()
+        replies, _ = frames(self.t, req.payload)
+        return req.decode(replies)
 
-    def _enable_tiger_mode(self, probe_axis: str = "X") -> bool:
-        """Try unaddressed VB first (most firmwares), then addressed if we can
-        infer a COMM addr from WHO.
+    def _observed_mode(self, who: list[WhoReportItem]) -> ASIMode | None:
+        """Detect the reply syntax from a data reply, returning None if the box says nothing.
+
+        Informational dumps (WHO, BU, INFO) are not ':A'-prefixed even in MS2000 syntax, so they
+        cannot be used for this — reading a mode from WHO always reports Tiger. WHERE can: it
+        answers with a single acknowledged data frame. The axis is taken from WHO so nothing has to
+        be assumed about which axes this box has.
         """
-        # Unaddressed first
-        _ = self._transact(SetModeOp.encode(ASIMode.TIGER))
-        is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
-        if is_tiger is True:
-            return True
-        # Addressed fallback (some firmwares expect a card prefix)
-        comm = self.info(refresh=True).comm_addr
+        axis = next((a for c in who for a in c.axes), None)
+        if axis is None:
+            return None
+        _, mode = frames(self.t, WhereOp.request([axis]).payload)
+        return mode
+
+    def _negotiate_mode(self, mode: ASIMode) -> ASIMode | None:
+        """Ask the box for `mode`'s reply syntax; return the syntax it actually replies in.
+
+        VB does not acknowledge, so the only proof it took effect is the syntax of a *later* reply.
+        WHO is read first because the addressed fallback needs a COMM address, and because it names
+        a real axis for the syntax probe — but WHO's own frames cannot report the syntax, since
+        informational dumps carry no ':A' prefix in either mode.
+
+        Returns None only if the box said nothing at all. Replying in the wrong syntax is logged
+        rather than fatal — both parse, so the box stays usable.
+        """
+        try:
+            transact(self.t, SetModeOp.request(mode))
+        except ASIProtocolError:
+            logger.debug("Unaddressed VB rejected; trying the addressed form")
+
+        who = self._who()
+        observed = self._observed_mode(who)
+        if observed is mode:
+            return observed
+
+        # Addressed fallback: some firmwares only accept a card-prefixed VB.
+        comm = infer_comm_addr_from_who(
+            CardInfo(addr=i.addr, axes=i.axes, fw=i.fw, board=i.board, date=i.date, flags=i.flags) for i in who
+        )
         if comm is not None:
-            r = self._transact(SetModeOp.encode(ASIMode.TIGER, comm))
-            SetModeOp.decode(r)
-        is_tiger = self._probe_mode(ASIMode.TIGER, probe_axis)
-        return is_tiger is True
+            try:
+                transact(self.t, SetModeOp.request(mode, comm))
+            except ASIProtocolError:
+                logger.debug("Addressed VB rejected")
+            observed = self._observed_mode(who)
+
+        if observed is not None and observed is not mode:
+            logger.warning(
+                "Box is replying in %s syntax, not %s: frames carry no ':A' marker to validate against",
+                observed.value,
+                mode.value,
+            )
+        return observed
 
 
 if __name__ == "__main__":

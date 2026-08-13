@@ -1,28 +1,32 @@
-"""TigerBox Safe TUI (read-only).
+"""Interactive checkup TUI for a Tiger box.
 
-Axis view blends:
-  • Overview (card/slot/id/enc, pos, busy, joystick)
-  • Motion & limits (speed, accel, backlash, home, limits, control, counts/mm)
-  • PID + home speed
-  • Status bits from AxisState (limit hits, homed, loop enabled, errors…)
+Drives everything through `TigerHub` so what gets exercised is the public driver API — reservation,
+the pollers, and the whole ops/protocol stack beneath them.
 
-Plus:
-  • Cards & Modules (on demand)
+Operations are grouped into tiers by how much they can disturb the instrument:
 
-Commands:
-  list              - list detected axes
-  show X            - show details for axis X (e.g., show A)
-  next / prev       - cycle through axes
-  refresh           - refresh info/positions/busy/joystick
-  cards             - show Cards & Modules compact table
-  help              - show help
-  quit / q          - exit
+    read       queries only. Always safe, and where nearly every parsing bug has been found.
+    params     writes a parameter back to the value it already had, then re-reads it. Round-trips
+               the write path without changing the machine's configuration.
+    joystick   disables and re-enables joystick input, restoring the original mapping.
+    motion     a small relative move and back. Needs an explicit axis and delta.
+    stepshoot  configures the ring buffer, queues one move, then resets. Nothing moves without TTL.
 
-Safe: performs no moves / homes / writes.
+`home`, `zero` and the scan starts are deliberately absent: homing can drive an objective into a
+sample, zeroing silently destroys calibration, and a scan start begins continuous motion. Those want
+a person deciding, not a menu entry.
+
+Usage:
+    python -m vxl_drivers.tigerhub.tui --port COM3
+    python -m vxl_drivers.tigerhub.tui --port COM3 --check          # run the read tier and exit
+    python -m vxl_drivers.tigerhub.tui --port COM3 --check --debug   # ... with raw frame logging
 """
 
 import argparse
-from collections.abc import Mapping
+import logging
+import time
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from rich import box
@@ -32,380 +36,505 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from vxl_drivers.tigerhub.box import TigerBox
+from vxl_drivers.tigerhub.hub import TigerHub
 from vxl_drivers.tigerhub.model.box_info import BoxInfo
-from vxl_drivers.tigerhub.ops.joystick import JoystickInput
-from vxl_drivers.tigerhub.ops.params import TigerParams
+from vxl_drivers.tigerhub.ops.params import TigerParam, TigerParams
+from vxl_drivers.tigerhub.ops.step_shoot import RingBufferMode, StepShootConfig, TTLIn0Mode, TTLOut0Mode
 
-# ---------------- UI bits ---------------- #
+# Parameters shown in the axis table, in display order. Each is read for *all* axes in one command,
+# which is both far quicker than per-axis reads and the shape that exposed the reply-layout bugs.
+TABLE_PARAMS: tuple[tuple[str, TigerParam[Any]], ...] = (
+    ("speed", TigerParams.SPEED),
+    ("accel", TigerParams.ACCEL),
+    ("bklash", TigerParams.BACKLASH),
+    ("home", TigerParams.HOME_POS),
+    ("lim lo", TigerParams.LIMIT_LOW),
+    ("lim hi", TigerParams.LIMIT_HIGH),
+    ("cnts", TigerParams.ENCODER_CNTS),
+    ("ctrl", TigerParams.CONTROL_MODE),
+    ("Kp", TigerParams.PID_P),
+    ("Ki", TigerParams.PID_I),
+    ("Kd", TigerParams.PID_D),
+    ("hspd", TigerParams.HOME_SPEED),
+)
+
+TIERS = ("read", "params", "joystick", "motion", "stepshoot")
 
 
-def _dot_busy(is_moving: bool) -> Text:
-    return Text("●", style="green") if is_moving else Text("·", style="dim")
+# ------------------------------------------------------------------------------- checkup machinery
 
 
-def _kv_grid() -> Table:
-    g = Table.grid(padding=(0, 1))
-    g.add_column(justify="left", style="bold")
-    g.add_column(justify="right", style="cyan")
-    return g
+@dataclass
+class Result:
+    """One operation's outcome. `detail` is a short human summary, not the raw value."""
+
+    name: str
+    tier: str
+    ok: bool
+    detail: str
 
 
-def header_panel(*, port: str, version: str | None, mode: str | None) -> Panel:
-    g = _kv_grid()
+@dataclass
+class Checkup:
+    hub: TigerHub
+    results: list[Result] = field(default_factory=list)
+
+    def step(self, name: str, tier: str, fn: Callable[[], Any]) -> Any:
+        """Run one operation, record whether it worked, and return its value (None on failure).
+
+        Failures are recorded rather than raised so a single unsupported command doesn't end the
+        run — the point is to find out which operations work, not to stop at the first that doesn't.
+        """
+        try:
+            value = fn()
+        except Exception as exc:
+            self.results.append(Result(name, tier, ok=False, detail=f"{type(exc).__name__}: {exc}"))
+            return None
+        self.results.append(Result(name, tier, ok=True, detail=_summarise(value)))
+        return value
+
+    # -- read ------------------------------------------------------------------------------------
+
+    def run_read(self) -> None:
+        box_ = self.hub.box
+        info: BoxInfo | None = self.step("info(refresh=True)", "read", lambda: box_.info(refresh=True))
+        self.step("current_mode", "read", box_.current_mode)
+        self.step("is_busy", "read", box_.is_busy)
+        self.step("available_axes", "read", self.hub.available_axes)
+        self.step("available_axes(all)", "read", lambda: self.hub.available_axes(commandable_only=False))
+
+        axes = sorted(info.axes) if info else []
+        if not axes:
+            return
+
+        self.step("get_position(all)", "read", lambda: box_.get_position(axes))
+        self.step("is_axis_moving(all)", "read", lambda: box_.is_axis_moving(axes))
+        for label, param in TABLE_PARAMS:
+            self.step(f"get_param {param.verb} ({label})", "read", lambda p=param: box_.get_param(p, axes))
+        for axis in axes:
+            self.step(f"get_axis_state {axis}", "read", lambda a=axis: box_.get_axis_state(a))
+        self.step("get_joystick_mapping", "read", lambda: box_.get_joystick_mapping(refresh=True))
+
+        if info:
+            for card in info.cards:
+                self.step(f"get_ttl_config 0x{card.addr:X}", "read", lambda a=card.addr: box_.get_ttl_config(a))
+                self.step(f"ttl_out_state 0x{card.addr:X}", "read", lambda a=card.addr: box_.ttl_out_state(a))
+
+        # Reservation and the pollers: reserve, let a fast tick land, then read the cache back.
+        reserved: list[str] = []
+        for a in self.hub.available_axes():
+            if self.step(f"reserve_axis {a}", "read", lambda x=a: self.hub.reserve_axis(x)):
+                reserved.append(a)
+        if reserved:
+            time.sleep(0.5)
+            self.step(
+                "poller cache populated",
+                "read",
+                lambda: _require(
+                    {a: self.hub.get_axis_state_cached(a) for a in reserved},
+                    lambda got: all("position_steps" in v for v in got.values()),
+                    "some axes have no cached position",
+                ),
+            )
+            for a in reserved:
+                self.step(f"release_axis {a}", "read", lambda x=a: self.hub.release_axis(x))
+
+    # -- params ----------------------------------------------------------------------------------
+
+    def run_params(self, axis: str) -> None:
+        """Write a parameter back to the value it already holds, then confirm the read agrees."""
+        box_ = self.hub.box
+        for param in (TigerParams.SPEED, TigerParams.BACKLASH, TigerParams.ACCEL):
+
+            def round_trip(p: TigerParam[Any] = param) -> Any:
+                before = box_.get_param(p, [axis])
+                if axis not in before:
+                    msg = f"{p.verb} not readable on {axis}; nothing to write back"
+                    raise RuntimeError(msg)
+                box_.set_param(p, {axis: before[axis]})
+                after = box_.get_param(p, [axis])
+                if after.get(axis) != before[axis]:
+                    msg = f"{p.verb} read back as {after.get(axis)!r}, wrote {before[axis]!r}"
+                    raise RuntimeError(msg)
+                return after[axis]
+
+            self.step(f"set_param {param.verb} round-trip on {axis}", "params", round_trip)
+
+    # -- joystick --------------------------------------------------------------------------------
+
+    def run_joystick(self) -> None:
+        box_ = self.hub.box
+        before = self.step("get_joystick_mapping", "joystick", lambda: box_.get_joystick_mapping(refresh=True))
+        if before is None:
+            return
+        self.step("disable_joystick_inputs", "joystick", box_.disable_joystick_inputs)
+        self.step("enable_joystick_inputs", "joystick", box_.enable_joystick_inputs)
+        self.step(
+            "joystick mapping restored",
+            "joystick",
+            lambda: _require(
+                box_.get_joystick_mapping(refresh=True),
+                lambda after: after == before,
+                "mapping was not restored to its original value",
+            ),
+        )
+
+    # -- motion ----------------------------------------------------------------------------------
+
+    def run_motion(self, axis: str, delta: float) -> None:
+        """Move `delta` controller units and come back, checking the position each way."""
+        box_ = self.hub.box
+        start = self.step(f"get_position {axis} (start)", "motion", lambda: box_.get_position([axis]))
+        if not start:
+            return
+        origin = start[axis]
+
+        def out_and_back() -> str:
+            box_.move_rel({axis: delta}, wait=True)
+            moved = box_.get_position([axis])[axis]
+            if abs(moved - (origin + delta)) > max(2.0, abs(delta) * 0.02):
+                msg = f"expected ~{origin + delta}, got {moved}"
+                raise RuntimeError(msg)
+            box_.move_rel({axis: -delta}, wait=True)
+            back = box_.get_position([axis])[axis]
+            if abs(back - origin) > 2.0:
+                msg = f"did not return: started {origin}, ended {back}"
+                raise RuntimeError(msg)
+            return f"{origin} -> {moved} -> {back}"
+
+        self.step(f"move_rel {axis} +/-{delta} (wait)", "motion", out_and_back)
+
+    # -- stepshoot -------------------------------------------------------------------------------
+
+    def run_stepshoot(self, axis: str, delta: float) -> None:
+        """Configure the ring buffer and queue one move. Nothing moves without a TTL pulse."""
+        box_ = self.hub.box
+        cfg = StepShootConfig(
+            axes=[axis],
+            in0_mode=TTLIn0Mode.MOVE_TO_NEXT_REL_POSITION,
+            out0_mode=TTLOut0Mode.PULSE_AFTER_MOVING,
+            ring_mode=RingBufferMode.TTL_TRIGGERED,
+        )
+        configured = self.step(
+            f"configure_step_shoot {axis}",
+            "stepshoot",
+            lambda: box_.configure_step_shoot(cfg) or True,
+        )
+        try:
+            if configured:
+                self.step("queue_step_shoot_rel", "stepshoot", lambda: box_.queue_step_shoot_rel({axis: delta}) or True)
+        finally:
+            # Always reset: leaving the card in TTL_TRIGGERED with a queued move means the next
+            # stray pulse moves the stage.
+            self.step("reset_step_shoot", "stepshoot", lambda: box_.reset_step_shoot() or True)
+
+
+def _require(value: Any, predicate: Callable[[Any], bool], message: str) -> Any:
+    """Return `value`, or raise if it fails `predicate`. Lets a check assert from inside `step`."""
+    if not predicate(value):
+        raise RuntimeError(message)
+    return value
+
+
+def _summarise(value: Any) -> str:
+    """One-line summary of a returned value, short enough for a table cell."""
+    if value is None:
+        return "—"
+    if isinstance(value, Mapping):
+        items = list(value.items())[:4]
+        body = ", ".join(f"{k}={_fmt(v)}" for k, v in items)
+        return f"{body}{', …' if len(value) > 4 else ''}" if items else "{}"
+    if isinstance(value, str):
+        return value if len(value) <= 60 else value[:57] + "…"
+    if isinstance(value, Sequence):
+        return f"{len(value)} item(s): {', '.join(str(v) for v in value[:6])}" if value else "empty"
+    text = str(value).replace("\n", " ")
+    return text if len(text) <= 60 else text[:57] + "…"
+
+
+def _fmt(v: Any) -> str:
+    return f"{v:g}" if isinstance(v, float) else str(v)
+
+
+# --------------------------------------------------------------------------------------- rendering
+
+
+def header_panel(port: str, info: BoxInfo | None, mode: Any) -> Panel:
+    g = Table.grid(padding=(0, 2))
+    g.add_column(style="bold")
+    g.add_column(style="cyan")
     g.add_row("Port", port)
-    g.add_row("Version", version or "—")
-    g.add_row("Mode", mode or "—")
-    return Panel(g, title="[bold]TigerBox Safe TUI[/bold]", border_style="yellow", padding=(0, 1), expand=False)
+    g.add_row("Version", (info.version if info else None) or "—")
+    g.add_row("Mode", str(mode) if mode else "—")
+    g.add_row("Cards", str(len(info.cards)) if info else "—")
+    g.add_row("Axes", ", ".join(sorted(info.axes)) if info else "—")
+    return Panel(g, title="[bold]Tiger checkup[/bold]", border_style="yellow", expand=False)
+
+
+def axes_table(hub: TigerHub, info: BoxInfo) -> Table:
+    """Axes as rows, properties as columns, every parameter fetched in one command per parameter."""
+    axes = sorted(info.axes)
+    box_ = hub.box
+    pos = _safe(lambda: box_.get_position(axes), {})
+    busy = _safe(lambda: box_.is_axis_moving(axes), {})
+    jmap = _safe(box_.get_joystick_mapping, {})
+    values = {label: _safe(lambda p=param: box_.get_param(p, axes), {}) for label, param in TABLE_PARAMS}
+
+    t = Table(box=box.SIMPLE_HEAD, expand=True, pad_edge=False)
+    t.add_column("Ax", style="bold")
+    t.add_column("type")
+    t.add_column("card")
+    t.add_column("pos", justify="right", style="cyan")
+    t.add_column("", justify="center")  # busy dot
+    for label, _ in TABLE_PARAMS:
+        t.add_column(label, justify="right")
+    t.add_column("joy")
+
+    for a in axes:
+        ax = info.axes[a]
+        cells = [
+            a,
+            ax.device_type.name.lower() + ("" if ax.device_type.commandable else " !"),
+            f"0x{ax.card_hex:X}" if ax.card_hex is not None else "—",
+            _fmt(pos[a]) if a in pos else "—",
+            Text("●", style="green") if busy.get(a) else Text("·", style="dim"),
+        ]
+        cells += [_fmt(values[label][a]) if a in values[label] else "—" for label, _ in TABLE_PARAMS]
+        cells.append(str(jmap.get(a, "—")))
+        t.add_row(*cells)
+    return t
 
 
 def cards_table(info: BoxInfo) -> Table:
-    t = Table(box=box.SIMPLE, show_lines=False, expand=True, pad_edge=False)
-    t.add_column("Card", justify="right", style="bold")
-    t.add_column("Board")
-    t.add_column("FW", style="cyan")
-    t.add_column("Date", style="cyan")
-    t.add_column("Flags", style="cyan")
-    t.add_column("Modules", style="green")
+    t = Table(box=box.SIMPLE, expand=True, pad_edge=False)
+    for name in ("Card", "Board", "Axes", "FW", "Date", "Modules"):
+        t.add_column(name, style="green" if name == "Modules" else None)
     for c in info.cards:
         t.add_row(
             f"0x{c.addr:X}",
             str(c.board),
+            ", ".join(c.axes) or "—",
             str(c.fw),
             str(c.date),
-            str(c.flags) if c.flags else "—",
             ", ".join(sorted(c.mods)) or "—",
         )
     return t
 
 
-# ---------------- Axis detail ---------------- #
+def axis_panel(hub: TigerHub, info: BoxInfo, axis: str) -> Panel:
+    """Everything about one axis, including the INFO dump's own unit."""
+    ax = info.axes[axis]
+    state = _safe(lambda: hub.box.get_axis_state(axis), None)
+    g = Table.grid(padding=(0, 2))
+    g.add_column(style="bold")
+    g.add_column(style="cyan", justify="right")
+    g.add_row("type", f"{ax.device_type.name} ({ax.device_type.value})")
+    g.add_row("commandable", str(ax.device_type.commandable))
+    g.add_row("card / slot", f"0x{ax.card_hex:X} / {ax.card_index}" if ax.card_hex is not None else "—")
+    g.add_row("axis id", str(ax.axis_id))
+    g.add_row("enc cnts", str(ax.enc_cnts_per_mm))
+    if state is not None:
+        g.add_row("unit", state.unit or "—")
+        g.add_row("position", f"{state.pos_current_mm} {state.unit or ''}")
+        g.add_row("limits", f"{state.limit_min} … {state.limit_max} {state.unit or ''}")
+        g.add_row("run speed", str(state.run_speed_mm_s))
+        g.add_row("profile", str(state.axis_profile))
+        g.add_row("input dev", str(state.input_device))
+        g.add_row("cmd / move", f"{state.cmd_stat} / {state.move_stat}")
+        g.add_row("motor / loop", f"{state.motor_enable} / {state.axis_enable}")
+    return Panel(g, title=f"[bold]Axis {axis}[/bold]", border_style="cyan", expand=False)
 
 
-def _axis_state_bits(axis_state_obj: Any) -> dict[str, Any]:
-    """Extract useful status bits from AxisState safely.
-    We keep names short and only add rows that exist.
-    """
-    # try a bunch of common names, fallback to None if missing
-    g = {}
-
-    def grab(out_key: str, *candidates: str):
-        for name in candidates:
-            if hasattr(axis_state_obj, name):
-                g[out_key] = getattr(axis_state_obj, name)
-                return
-        g[out_key] = None
-
-    grab("Limit Min Hit", "limit_min_hit", "at_min", "min_limit_hit", "limit_low_hit")
-    grab("Limit Max Hit", "limit_max_hit", "at_max", "max_limit_hit", "limit_high_hit")
-    grab("Homed", "homed", "is_homed")
-    grab("Closed Loop", "closed_loop", "servo_on", "servo_enabled", "in_closed_loop")
-    grab("Motor On", "motor_on", "motor_enabled")
-    grab("Error", "error", "fault", "error_code")
-
-    # prune Nones so we don't add junk rows
-    return {k: v for k, v in g.items() if v is not None}
+def results_table(results: Sequence[Result]) -> Table:
+    t = Table(box=box.SIMPLE_HEAD, expand=True, pad_edge=False)
+    t.add_column("", justify="center", width=3)
+    t.add_column("tier", style="dim")
+    t.add_column("operation", style="bold")
+    t.add_column("result")
+    for r in results:
+        t.add_row(
+            Text("ok" if r.ok else "FAIL", style="green" if r.ok else "red"),
+            r.tier,
+            r.name,
+            Text(r.detail, style="" if r.ok else "red"),
+        )
+    return t
 
 
-def axis_detail_panel(
-    uid: str,
-    info: BoxInfo,
-    pos: Mapping[str, float],
-    busy: Mapping[str, bool],
-    jmap: Mapping[str, JoystickInput],
-    speed: Mapping[str, float],
-    accel: Mapping[str, float],
-    bkl: Mapping[str, float],
-    home: Mapping[str, float],
-    llo: Mapping[str, float],
-    lhi: Mapping[str, float],
-    ctrl: Mapping[str, int],
-    cnts: Mapping[str, float],
-    pid_p: Mapping[str, float],
-    pid_i: Mapping[str, float],
-    pid_d: Mapping[str, float],
-    hspd: Mapping[str, float],
-    axis_state_obj: Any,
-) -> Panel:
-    """Single, compact panel that merges AxisState status bits into the axis card.
-    (We avoid duplicating pos/limits/backlash which already appear via params/where.).
-    """
-    ax = info.axes[uid]
-
-    left = _kv_grid()
-    # Overview
-    left.add_row("Card", f"0x{ax.card_hex:X}" if ax.card_hex is not None else "—")
-    left.add_row("Slot", str(ax.card_index) if ax.card_index is not None else "—")
-    left.add_row("Axis ID", str(ax.axis_id) if ax.axis_id is not None else "—")
-    left.add_row("Enc/mm", f"{ax.enc_cnts_per_mm:.3f}" if ax.enc_cnts_per_mm is not None else "—")
-    left.add_row("Pos", f"{pos.get(uid, '—')}")
-    left.add_row("Busy", _dot_busy(busy.get(uid, False)))
-    left.add_row("Joy", str(jmap.get(uid, "—")))
-
-    # Motion & limits (typed params)
-    left.add_row("Speed", f"{speed.get(uid, '—')}")
-    left.add_row("Accel", f"{accel.get(uid, '—')}")
-    left.add_row("Backlash", f"{bkl.get(uid, '—')}")
-    left.add_row("Home", f"{home.get(uid, '—')}")
-    left.add_row("Limit Low", f"{llo.get(uid, '—')}")
-    left.add_row("Limit High", f"{lhi.get(uid, '—')}")
-    left.add_row("Control", f"{ctrl.get(uid, '—')}")
-    left.add_row("Counts/mm", f"{cnts.get(uid, '—')}")
-
-    # PID
-    left.add_row("PID P", f"{pid_p.get(uid, '—')}")
-    left.add_row("PID I", f"{pid_i.get(uid, '—')}")
-    left.add_row("PID D", f"{pid_d.get(uid, '—')}")
-    left.add_row("Home Spd", f"{hspd.get(uid, '—')}")
-
-    # AxisState status bits (non-overlapping, compact)
-    bits = _axis_state_bits(axis_state_obj)
-    if bits:
-        left.add_row("—", "—")  # thin separator
-        for k, v in bits.items():
-            left.add_row(k, str(v))
-
-    return Panel(left, title=f"[bold white]Axis {uid}[/bold white]", border_style="cyan", padding=(0, 1), expand=True)
+def _safe(fn: Callable[[], Any], fallback: Any) -> Any:
+    """Call `fn`, returning `fallback` on any failure — display code must not crash the TUI."""
+    try:
+        return fn()
+    except Exception:
+        return fallback
 
 
-# -------------- data helpers -------------- #
+HELP = """[bold]Views[/bold]
+  table                 all axes x all parameters (one command per parameter)
+  axes                  detected axes with type and card
+  show X [Y ...]        per-axis detail, including the unit INFO reports
+  cards                 cards, boards and firmware modules
+  poll                  the hub's cached state for reserved axes
+
+[bold]Checks[/bold]  [dim](results are tabulated; a failure never stops the run)[/dim]
+  check                 read tier only — queries, always safe
+  check params [AXIS]   + write each parameter back to its current value and re-read
+  check joystick        + disable / enable / restore joystick input
+  check motion AXIS D   + move AXIS by D controller units and back
+  check stepshoot AX D  + configure ring buffer, queue one move, reset
+
+[bold]Session[/bold]
+  debug on|off          raw frame logging (shows retries, i.e. the live corruption rate)
+  refresh               re-read BoxInfo
+  help / quit"""
 
 
-def refresh_snapshot(
-    drv: TigerBox,
-) -> tuple[BoxInfo, list[str], dict[str, float], dict[str, bool], dict[str, JoystickInput]]:
-    info = drv.info(refresh=True)
-    axes = sorted(info.axes.keys())
-    pos = drv.get_position(axes) if axes else {}
-    busy = drv.is_axis_moving(axes) if axes else {}
-    jmap = drv.get_joystick_mapping(refresh=True)
-    return info, axes, pos, busy, jmap
+# ------------------------------------------------------------------------------------- main loop
 
 
-def fetch_axis_params(drv: TigerBox, uid: str) -> Mapping[str, Mapping[str, Any]]:
-    axlist = [uid]
-    return {
-        "speed": drv.get_param(TigerParams.SPEED, axlist),
-        "accel": drv.get_param(TigerParams.ACCEL, axlist),
-        "bkl": drv.get_param(TigerParams.BACKLASH, axlist),
-        "home": drv.get_param(TigerParams.HOME_POS, axlist),
-        "llo": drv.get_param(TigerParams.LIMIT_LOW, axlist),
-        "lhi": drv.get_param(TigerParams.LIMIT_HIGH, axlist),
-        "ctrl": drv.get_param(TigerParams.CONTROL_MODE, axlist),
-        "cnts": drv.get_param(TigerParams.ENCODER_CNTS, axlist),
-        "pid_p": drv.get_param(TigerParams.PID_P, axlist),
-        "pid_i": drv.get_param(TigerParams.PID_I, axlist),
-        "pid_d": drv.get_param(TigerParams.PID_D, axlist),
-        "hspd": drv.get_param(TigerParams.HOME_SPEED, axlist),
-    }
+def _resolve_axis(console: Console, info: BoxInfo, name: str | None) -> str | None:
+    if not name:
+        console.print("[red]This command needs an axis.[/red]")
+        return None
+    axis = name.upper()
+    if axis not in info.axes:
+        console.print(f"[red]Unknown axis {axis!r}.[/red] Known: {', '.join(sorted(info.axes))}")
+        return None
+    return axis
 
 
-def build_axis_panel(
-    drv: TigerBox,
-    info: BoxInfo,
-    pos: Mapping[str, float],
-    busy: Mapping[str, bool],
-    jmap: Mapping[str, JoystickInput],
-    uid: str,
-) -> Panel:
-    """Fetch read-only params/state for one axis and return a Panel (no printing)."""
-    uid = uid.upper()
-    axis_state = drv.get_axis_state(uid)
-    params = fetch_axis_params(drv, uid)
-    return axis_detail_panel(
-        uid,
-        info,
-        pos,
-        busy,
-        jmap,
-        params["speed"],
-        params["accel"],
-        params["bkl"],
-        params["home"],
-        params["llo"],
-        params["lhi"],
-        params["ctrl"],
-        params["cnts"],
-        params["pid_p"],
-        params["pid_i"],
-        params["pid_d"],
-        params["hspd"],
-        axis_state_obj=axis_state,
+def _run_checks(console: Console, hub: TigerHub, tier: str, args: list[str], info: BoxInfo) -> None:
+    checkup = Checkup(hub)
+    checkup.run_read()
+    if tier == "params":
+        axis = _resolve_axis(console, info, args[0] if args else next(iter(sorted(info.axes)), None))
+        if axis:
+            checkup.run_params(axis)
+    elif tier == "joystick":
+        checkup.run_joystick()
+    elif tier in ("motion", "stepshoot"):
+        axis = _resolve_axis(console, info, args[0] if args else None)
+        if axis is None:
+            return
+        try:
+            delta = float(args[1]) if len(args) > 1 else 100.0
+        except ValueError:
+            console.print(f"[red]Bad delta {args[1]!r}.[/red]")
+            return
+        console.print(f"[yellow]{tier} tier on {axis} with delta {delta:g} controller units.[/yellow]")
+        if tier == "motion":
+            checkup.run_motion(axis, delta)
+        else:
+            checkup.run_stepshoot(axis, delta)
+
+    failed = [r for r in checkup.results if not r.ok]
+    console.print(results_table(checkup.results))
+    style = "red" if failed else "green"
+    console.print(
+        Panel(
+            f"{len(checkup.results) - len(failed)} ok, {len(failed)} failed",
+            border_style=style,
+            expand=False,
+        ),
     )
 
 
-def render_axis_view(
-    console: Console,
-    drv: TigerBox,
-    info: BoxInfo,
-    axes: list[str],
-    pos: Mapping[str, float],
-    busy: Mapping[str, bool],
-    jmap: Mapping[str, JoystickInput],
-    uid: str,
-) -> None:
-    del axes  # not needed here
-    uid = uid.upper()
-    if uid not in info.axes:
-        console.print(f"[red]Unknown axis:[/red] {uid}")
-        return
-    console.print(build_axis_panel(drv, info, pos, busy, jmap, uid))
+def _set_debug(console: Console, on: bool) -> None:
+    logging.getLogger("tiger_protocol").setLevel(logging.DEBUG if on else logging.WARNING)
+    if on and not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.DEBUG)
+    console.print(f"[cyan]Frame logging {'on' if on else 'off'}.[/cyan]")
 
 
-def print_help(console: Console) -> None:
-    help_str = (
-        "[bold]Commands[/bold]\n"
-        "  list             List detected axes\n"
-        "  show X           Show details for axis X (e.g., show A)\n"
-        "  next / prev      Cycle to next/previous axis\n"
-        "  refresh          Refresh info/positions/busy/joystick\n"
-        "  cards            Show Cards & Modules\n"
-        "  help             This help\n"
-        "  quit / q         Exit"
-    )
-    console.print(Panel(help_str, title="[bold]Help[/bold]", border_style="grey50", expand=False))
+def _poll_table(hub: TigerHub, info: BoxInfo) -> Table | str:
+    """The hub's cached state for whatever is currently reserved."""
+    rows = [(a, hub.get_axis_state_cached(a)) for a in sorted(info.axes)]
+    rows = [(a, v) for a, v in rows if v]
+    if not rows:
+        return "No axes are reserved, so the pollers have nothing to read."
+    keys = sorted({k for _, v in rows for k in v})
+    t = Table(box=box.SIMPLE_HEAD, expand=False, pad_edge=False)
+    t.add_column("Ax", style="bold")
+    for k in keys:
+        t.add_column(k, justify="right")
+    for axis, cached in rows:
+        t.add_row(axis, *[_fmt(cached[k]) if k in cached else "—" for k in keys])
+    return t
 
 
-# ---------------- main loop ---------------- #
+def _handle(console: Console, hub: TigerHub, info: BoxInfo, port: str, cmd: str, rest: list[str]) -> BoxInfo:
+    """Run one command, returning the BoxInfo to use from here on (refresh replaces it)."""
+    if cmd == "help":
+        console.print(Panel(HELP, border_style="grey50", expand=False))
+    elif cmd == "refresh":
+        info = hub.box.info(refresh=True)
+        console.print(header_panel(port, info, hub.box.current_mode()))
+    elif cmd == "table":
+        console.print(axes_table(hub, info))
+    elif cmd == "axes":
+        listing = ", ".join(f"{a}[dim]:{info.axes[a].device_type.name.lower()}[/dim]" for a in sorted(info.axes))
+        console.print(Panel(listing, title="Detected axes", border_style="cyan", expand=False))
+    elif cmd == "cards":
+        console.print(cards_table(info))
+    elif cmd == "poll":
+        console.print(Panel(_poll_table(hub, info), title="Hub cache", border_style="cyan", expand=False))
+    elif cmd == "show":
+        targets = [t.upper() for t in rest] or sorted(info.axes)
+        panels = [axis_panel(hub, info, a) for a in targets if a in info.axes]
+        if panels:
+            console.print(Columns(panels, padding=(0, 1)))
+        else:
+            console.print("[red]No known axes in that list.[/red]")
+    elif cmd == "check":
+        tier = rest[0].lower() if rest else "read"
+        if tier not in TIERS:
+            console.print(f"[red]Unknown tier {tier!r}.[/red] One of: {', '.join(TIERS)}")
+        else:
+            _run_checks(console, hub, tier, rest[1:], info)
+    elif cmd == "debug":
+        _set_debug(console, on=(rest[:1] or ["on"])[0].lower() != "off")
+    else:
+        console.print(f"[red]Unknown command {cmd!r}.[/red] Type 'help'.")
+    return info
 
 
-def main() -> None:  # noqa: C901, PLR0915 - TUI main loop
-    ap = argparse.ArgumentParser()
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Interactive checkup for a Tiger controller.")
     ap.add_argument("--port", default="COM3", help="Serial port (default: COM3)")
+    ap.add_argument("--check", action="store_true", help="Run the read tier and exit")
+    ap.add_argument("--debug", action="store_true", help="Log raw frames, which shows retries")
     args = ap.parse_args()
 
     console = Console()
+    if args.debug:
+        _set_debug(console, on=True)
 
-    def print_all_multiple_axes(axes: list[str]):
-        panels = [build_axis_panel(drv, info, pos, busy, jmap, axis) for axis in axes]
-        console.print(Columns(panels, expand=False, equal=True, padding=(0, 1)))
-
-    drv = TigerBox(port=args.port)
+    hub = TigerHub(args.port)
     try:
-        info, axes, pos, busy, jmap = refresh_snapshot(drv)
+        info = hub.box.info()
+        console.print(header_panel(args.port, info, hub.box.current_mode()))
 
-        console.print(
-            header_panel(
-                port=args.port,
-                version=info.version,
-                mode=str(drv.current_mode()) if drv.current_mode() is not None else None,
-            ),
-        )
+        if args.check:
+            _run_checks(console, hub, "read", [], info)
+            return
 
-        if axes:
-            console.print(Panel(f"Detected axes: [bold]{', '.join(axes)}[/bold]", border_style="cyan", expand=False))
-        else:
-            console.print(Panel("No axes detected.", border_style="cyan", expand=False))
-
-        print_help(console)
-
-        idx = 0 if axes else -1
-        if idx >= 0:
-            print_all_multiple_axes(axes)
+        console.print(axes_table(hub, info))
+        console.print(Panel(HELP, border_style="grey50", expand=False))
 
         while True:
-            axes_hint = f"  [dim]Axes: {', '.join(axes)}[/dim]" if axes else ""
-            console.print(f"\nType a command (help for options).{axes_hint}")
-            cmd = input("> ").strip()
-
-            if not cmd:
-                continue
-            cl = cmd.lower()
-
-            if cl in ("quit", "q"):
+            console.print()
+            try:
+                raw = input("> ").strip()
+            except (EOFError, KeyboardInterrupt):
                 break
-
-            if cl == "help":
-                print_help(console)
+            if not raw:
                 continue
-
-            if cl == "list":
-                info = drv.info(refresh=False)
-                axes = sorted(info.axes.keys())
-                console.print(
-                    Panel(
-                        f"Detected axes: [bold]{', '.join(axes) if axes else '—'}[/bold]",
-                        border_style="cyan",
-                        expand=False,
-                    ),
-                )
-                if axes and idx == -1:
-                    idx = 0
-                continue
-
-            if cl in ("next", "prev"):
-                if not axes:
-                    console.print("[red]No axes to cycle.[/red]")
-                    continue
-                idx = (idx + (1 if cl == "next" else -1)) % len(axes)
-                render_axis_view(console, drv, info, axes, pos, busy, jmap, axes[idx])
-                continue
-
-            if cl == "refresh":
-                info, axes, pos, busy, jmap = refresh_snapshot(drv)
-                console.print(Panel("Refreshed.", border_style="green", expand=True))
-                if axes:
-                    if idx == -1:
-                        idx = 0
-                    else:
-                        idx %= len(axes)
-                    render_axis_view(console, drv, info, axes, pos, busy, jmap, axes[idx])
-                else:
-                    idx = -1
-                continue
-
-            if cl == "cards":
-                console.print(
-                    Panel(
-                        cards_table(info),
-                        title="[bold yellow]Cards & Modules[/bold yellow]",
-                        border_style="yellow",
-                        padding=(0, 1),
-                    ),
-                )
-                continue
-
-            if cl.startswith("show"):
-                parts = cmd.split()
-                # No args: show all axes (horizontally)
-                if len(parts) == 1:
-                    if not axes:
-                        console.print("[red]No axes detected.[/red]")
-                        continue
-                    print_all_multiple_axes(axes)
-                    continue
-
-                # One or more axes requested: validate, ignore invalid, horizontal layout
-                req_axes = [p.upper() for p in parts[1:]]
-                valid_axes = [a for a in req_axes if a in info.axes]
-                invalid_axes = [a for a in req_axes if a not in info.axes]
-
-                if invalid_axes:
-                    console.print(f"[yellow]Ignoring unknown axes:[/yellow] {', '.join(invalid_axes)}")
-
-                if not valid_axes:
-                    console.print("[red]No valid axes to show.[/red]")
-                    continue
-
-                # Build panels for valid axes and display side-by-side
-                panels = [build_axis_panel(drv, info, pos, busy, jmap, axis) for axis in valid_axes]
-                console.print(Columns(panels, equal=True, expand=True, padding=(0, 1), align="left"))
-
-                # Update cursor to last requested valid axis so next/prev feel natural
-                if axes:
-                    try:
-                        idx = axes.index(valid_axes[-1])
-                    except ValueError:
-                        # If axes list changed, refresh snapshot and try again silently
-                        info, axes, pos, busy, jmap = refresh_snapshot(drv)
-                        if valid_axes[-1] in axes:
-                            idx = axes.index(valid_axes[-1])
-                continue
-
-            console.print("[red]Unknown command.[/red] Type 'help' for options.")
-
+            cmd, *rest = raw.split()
+            if cmd.lower() in ("quit", "q", "exit"):
+                break
+            info = _handle(console, hub, info, args.port, cmd.lower(), rest)
     finally:
-        drv.close()
+        hub.close()
 
 
 if __name__ == "__main__":

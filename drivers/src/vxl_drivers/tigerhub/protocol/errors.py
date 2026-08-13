@@ -1,18 +1,28 @@
 from vxl_drivers.tigerhub.model import Reply
 
 
-class ASIDecodeError(RuntimeError):
+class ASIProtocolError(RuntimeError):
+    """A reply could not be turned into a usable result.
+
+    Base for both "the controller said nothing" and "the controller said something unusable".
+    Catch this where any bad reply should be tolerated; catch a subclass to distinguish them.
+    """
+
     def __init__(self, operation: str, reply: Reply, msg: str | None = None):
         self.operation = operation
         self.reply = reply
         super().__init__(msg or f"Error decoding {operation}: {reply}")
 
 
-class ASINoReplyError(ASIDecodeError):
+class ASIDecodeError(ASIProtocolError):
+    """The controller replied, but the reply was malformed or carried an error code."""
+
+
+class ASINoReplyError(ASIProtocolError):
     """The controller sent nothing back — the serial read returned empty before its timeout.
 
-    Subclasses `ASIDecodeError` so existing handlers keep catching it. Only ops that require data to
-    produce a result raise this; ops that just acknowledge still treat an empty reply as success.
+    A sibling of `ASIDecodeError` rather than a subclass: handlers that mean "tolerate a malformed
+    reply" should not silently absorb a dead link as well. Use `ASIProtocolError` to catch both.
     """
 
     def __init__(self, operation: str, reply: Reply):

@@ -1,9 +1,9 @@
 from collections.abc import Mapping, Sequence
 from enum import Enum
 
-from vxl_drivers.tigerhub.model import Reply
-from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
-from vxl_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from vxl_drivers.tigerhub.model import Reply, Request
+from vxl_drivers.tigerhub.protocol.linefmt import _ax, _fmt_kv, _line
+from vxl_drivers.tigerhub.protocol.replies import ack, one
 
 
 class JoystickInput(Enum):
@@ -25,64 +25,52 @@ class JoystickInput(Enum):
 
 class JoystickSetMappingOp:
     @staticmethod
-    def encode(addr: int, mapping: Mapping[str, JoystickInput]) -> bytes:
-        kv = {k.upper(): int(v.value) for k, v in mapping.items()}
-        return _line("J", _fmt_kv(kv), addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("J SET MAP", r)
+    def request(addr: int, mapping: Mapping[str, JoystickInput]) -> Request[None]:
+        kv = {_ax(k): int(v.value) for k, v in mapping.items()}
+        return Request(payload=_line("J", _fmt_kv(kv), addr), decode=ack("J SET MAP"))
 
 
 class JoystickGetMappingOp:
-    @staticmethod
-    def encode(addr: int, axes: Sequence[str]) -> bytes:
-        q = " ".join(f"{a.upper()}?" for a in axes)
-        return _line("J", q, addr)
+    OP = "J GET MAP"
 
     @staticmethod
-    def decode(r: Reply, axes: Sequence[str]) -> dict[str, JoystickInput]:
+    def _decode(frames: Sequence[Reply], axes: Sequence[str]) -> dict[str, JoystickInput]:
+        """`axes` is already normalised — `request` guarantees it."""
+        r = one(frames, JoystickGetMappingOp.OP)
         out: dict[str, JoystickInput] = {}
         # kv form preferred
         if r.kv:
             for a in axes:
-                v = r.kv.get(a.upper())
+                v = r.kv.get(a)
                 if v is not None:
-                    out[a.upper()] = JoystickInput(int(str(v)))
+                    out[a] = JoystickInput(int(str(v)))
             return out
         # fallback text parse
-        s = (r.text or "").strip()
-        for tok in s.split():
+        for tok in (r.text or "").strip().split():
             if "=" in tok:
                 k, v = tok.split("=", 1)
-                out[k.upper()] = JoystickInput(int(v))
+                out[_ax(k)] = JoystickInput(int(v))
         return out
+
+    @staticmethod
+    def request(addr: int, axes: Sequence[str]) -> Request[dict[str, JoystickInput]]:
+        q = tuple(_ax(a) for a in axes)
+        payload = _line("J", " ".join(f"{a}?" for a in q), addr)
+        return Request(payload=payload, decode=lambda frames: JoystickGetMappingOp._decode(frames, q))
 
 
 class JoystickEnableOp:
     @staticmethod
-    def encode(addr: int, *, enable_axes: Sequence[str], disable_axes: Sequence[str]) -> bytes:
-        toks = []
-        toks += [f"{a.upper()}+" for a in enable_axes]
-        toks += [f"{a.upper()}-" for a in disable_axes]
-        return _line("J", " ".join(toks) if toks else None, addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("J ENABLE", r)
+    def request(addr: int, *, enable_axes: Sequence[str], disable_axes: Sequence[str]) -> Request[None]:
+        toks = [f"{_ax(a)}+" for a in enable_axes] + [f"{_ax(a)}-" for a in disable_axes]
+        payload = _line("J", " ".join(toks) if toks else None, addr)
+        return Request(payload=payload, decode=ack("J ENABLE"))
 
 
 class JoystickPolarityOp:
     @staticmethod
-    def encode(addr: int, axis_index: int, inverted: bool) -> bytes:
+    def request(addr: int, axis_index: int, inverted: bool) -> Request[None]:
         base = 22 + axis_index * 2
         z = base + (0 if inverted else 1)
         # send "<addr> CCA Z=<z>"
-        return _line("CCA", f"Z={z}", addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("CCA Z", r)
+        return Request(payload=_line("CCA", f"Z={z}", addr), decode=ack("CCA Z"))

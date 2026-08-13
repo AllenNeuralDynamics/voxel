@@ -2,10 +2,6 @@ import contextlib
 import re
 from dataclasses import dataclass, field
 from itertools import zip_longest
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .models import Reply
 
 
 @dataclass(frozen=True)
@@ -19,8 +15,9 @@ class BuildReport:
     raw: str | None = None
 
     @staticmethod
-    def from_reply(reply: "Reply") -> "BuildReport":
-        text = (reply.text or "").strip()
+    def from_text(text: str) -> "BuildReport":
+        """Parse a 'BU X' dump. Takes the rejoined text because the reply spans several frames."""
+        text = text.strip()
         # Keep raw unchanged for debugging
         raw = text or None
 
@@ -34,14 +31,11 @@ class BuildReport:
                 label, val = ln.split(":", 1)
                 label = label.strip()
                 val = val.strip()
-                blocks[label] = val
                 # Infer controller from a preface token on the same line (e.g. "TIGER_COMM Motor Axes:")
                 # or from the previous line if it had no colon.
                 if i == 0:
-                    # e.g. "TIGER_COMM Motor Axes: X T ..."
-                    prefix = ln[: ln.index(":")].strip()
                     # If there's a space, try the first token
-                    first = prefix.split()[0] if " " in prefix else prefix
+                    first = label.split()[0] if " " in label else label
                     # Only set if it doesn't look like the label itself
                     if (
                         first
@@ -50,6 +44,11 @@ class BuildReport:
                         and first != label.replace(" ", "").upper()
                     ):
                         controller = first
+                        # The banner shares this line with the first label, so drop it from the key.
+                        # Otherwise the key is "TIGER_COMM Motor Axes" and no lookup ever matches,
+                        # leaving motor_axes empty while every later line parses fine.
+                        label = label[len(first) :].strip() or label
+                blocks[label] = val
             # A line with no colon before any labeled block could be a controller banner
             elif controller is None:
                 token = ln.split()[0]

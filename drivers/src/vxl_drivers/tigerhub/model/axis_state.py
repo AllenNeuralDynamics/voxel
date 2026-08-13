@@ -1,9 +1,5 @@
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .models import Reply
 
 _NUM = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"  # 12, 12.3, .5, 1e-3, -2.4E+5
 
@@ -13,6 +9,11 @@ class AxisState:
     """Subset of INFO output; fields are optional because firmware varies."""
 
     axis: str | None = None
+
+    # The unit the controller reports for this axis: "mm" for linear stages, "dg" for a theta
+    # stage. It varies by axis type, so every measurement below is in THIS unit regardless of the
+    # "_mm" in its field name.
+    unit: str | None = None
 
     # limits / motion
     limit_max: float | None = None  # [SU]
@@ -58,8 +59,9 @@ class AxisState:
     raw: str | None = field(repr=False, default=None)
 
     @staticmethod
-    def from_reply(reply: "Reply") -> "AxisState":
-        s = " ".join((reply.text or "").split())
+    def from_text(text: str) -> "AxisState":
+        """Parse an 'INFO <axis>' dump. Takes the rejoined text because the reply spans frames."""
+        s = " ".join(text.split())
 
         def _float(rx: str) -> float | None:
             m = re.search(rx, s)
@@ -83,19 +85,27 @@ class AxisState:
             m = re.search(rx, s)
             return m.group(1).strip() if m else None
 
+        def _group(rx: str, n: int) -> str | None:
+            m = re.search(rx, s)
+            return m.group(n).strip() if m else None
+
         axis = _text(r"Axis Name.*?:\s*([A-Z])") or _text(r"\bCh[.:]?\s*([A-Z])")
 
+        # 'Current pos' is the one measurement line with no [CODE] between value and unit.
+        unit = _group(rf"Current pos\s*:\s*{_NUM}\s+(\w+)", 2)
+
         return AxisState(
-            raw=reply.text or None,
+            raw=text or None,
             axis=axis,
+            unit=unit,
             # limits / motion
             limit_max=_float(rf"Max Lim\s*:\s*{_NUM}\s*\[SU\]"),
             limit_min=_float(rf"Min Lim\s*:\s*{_NUM}\s*\[SL\]"),
             ramp_time_ms=_float(rf"Ramp Time\s*:\s*{_NUM}\s*\[AC\]\s*ms"),
-            run_speed_mm_s=_float(rf"Run Speed\s*:\s*{_NUM}\s*\[S\]mm/s"),
+            run_speed_mm_s=_float(rf"Run Speed\s*:\s*{_NUM}\s*\[S\]\s*\w+/s"),
             ramp_len_enc=_int(rf"Ramp Length\s*:\s*{_NUM}"),
             # encoder / units
-            enc_cnts_per_mm=_float(rf"Enc Cnts/mm\s*:\s*{_NUM}\s*\[C\]"),
+            enc_cnts_per_mm=_float(rf"Enc Cnts/\w+\s*:\s*{_NUM}\s*\[C\]"),
             enc_polarity=_int(rf"Enc Polarity\s*:\s*{_NUM}\s*\[EP\]"),
             # controller state
             axis_enable=_int(rf"Axis Enable\s*:\s*{_NUM}\s*\[MC\]"),
@@ -107,14 +117,14 @@ class AxisState:
             Kd=_int(rf"Kd\s*:\s*{_NUM}\s*\[KD\]"),
             Ka=_int(rf"Ka\s*:\s*{_NUM}\s*\[KA\]"),
             # positions / errors
-            pos_current_mm=_float(rf"Current pos\s*:\s*{_NUM}\s*mm"),
-            pos_target_mm=_float(rf"Target pos\s*:\s*{_NUM}\s*mm"),
+            pos_current_mm=_float(rf"Current pos\s*:\s*{_NUM}\s*\w+"),
+            pos_target_mm=_float(rf"Target pos\s*:\s*{_NUM}\s*\w+"),
             enc_pos_error=_int(rf"enc pos error\s*:\s*{_NUM}"),
-            backlash_mm=_float(rf"Backlash\s*:\s*{_NUM}\s*\[B\]\s*mm"),
-            overshoot_mm=_float(rf"Overshoot\s*:\s*{_NUM}\s*\[OS\]\s*mm"),
-            drift_err_mm=_float(rf"Drift Error\s*:\s*{_NUM}\s*\[E\]\s*mm"),
-            finish_err_mm=_float(rf"Finish Error\s*:\s*{_NUM}\s*\[PC\]\s*mm"),
-            home_pos_mm=_float(rf"Home position\s*:\s*{_NUM}\s*mm"),
+            backlash_mm=_float(rf"Backlash\s*:\s*{_NUM}\s*\[B\]\s*\w+"),
+            overshoot_mm=_float(rf"Overshoot\s*:\s*{_NUM}\s*\[OS\]\s*\w+"),
+            drift_err_mm=_float(rf"Drift Error\s*:\s*{_NUM}\s*\[E\]\s*\w+"),
+            finish_err_mm=_float(rf"Finish Error\s*:\s*{_NUM}\s*\[PC\]\s*\w+"),
+            home_pos_mm=_float(rf"Home position\s*:\s*{_NUM}\s*\w+"),
             # misc
             axis_id=_int(rf"Axis ID\s*:\s*{_NUM}"),
             vmax_enc_64=_int(rf"vmax_enc\*64\s*:\s*{_NUM}"),

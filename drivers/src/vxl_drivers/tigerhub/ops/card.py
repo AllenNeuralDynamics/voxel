@@ -1,23 +1,21 @@
 from collections.abc import Mapping
 from typing import Any
 
-from vxl_drivers.tigerhub.model import Reply
-from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
+from vxl_drivers.tigerhub.model import Request
 from vxl_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from vxl_drivers.tigerhub.protocol.replies import ack
 
 KV = Mapping[str, Any]
 AddrKV = tuple[int | None, KV]
 
 
 class CardAssistOp:  # "CCA"
-    """Controller / card configuration assist (e.g., joystick polarity)."""
+    """Controller / card configuration assist (e.g., joystick polarity).
+
+    Every setting is an absolute assignment, so re-sending after a lost reply is harmless.
+    """
 
     @staticmethod
-    def encode(q: AddrKV) -> bytes:
+    def request(q: AddrKV) -> Request[None]:
         addr, kv = q
-        return _line("CCA", _fmt_kv(kv), addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("CCA", r)
+        return Request(payload=_line("CCA", _fmt_kv(kv), addr), decode=ack("CCA"))

@@ -11,6 +11,7 @@ from vxl_drivers.tigerhub.ops.step_shoot import (
     TTLIn0Mode,
     TTLOut0Mode,
 )
+from vxl_drivers.tigerhub.protocol.errors import ASIProtocolError
 
 from vxl.axes.continuous.base import (
     ContinuousAxis,
@@ -107,8 +108,14 @@ class TigerLinearAxis(ContinuousAxis):
         cached = self.hub.get_axis_state_cached(self._axis_label).get(cache_key)
         if cached is not None:
             return cached
-        # Fallback to direct query if not in cache yet
-        return self.hub.box.get_param(param, [self._axis_label]).get(self._axis_label)
+        # Fallback to a direct query if the poller has not populated the cache yet. These feed
+        # streamed display properties, so an unreachable box should read as "unknown" rather than
+        # raise on every stream tick.
+        try:
+            return self.hub.box.get_param(param, [self._axis_label]).get(self._axis_label)
+        except ASIProtocolError:
+            self.log.debug("Could not read %s for axis %s", param.name, self._axis_label)
+            return None
 
     # Unit specification _____________________________________________________________________________________________
 

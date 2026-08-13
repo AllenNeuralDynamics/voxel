@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from vxl_drivers.tigerhub.model import BoxInfo, Reply
-from vxl_drivers.tigerhub.protocol.errors import ASIDecodeError
+from vxl_drivers.tigerhub.model import BoxInfo, Request
 from vxl_drivers.tigerhub.protocol.linefmt import _fmt_kv, _line
+from vxl_drivers.tigerhub.protocol.replies import ack
 
 # --- Dataclasses ---
 
@@ -124,13 +124,13 @@ class ScanBindAxesOp:
     """
 
     @staticmethod
-    def encode(
+    def request(
         card_hex: int,
         *,
         fast_axis_id: int | None,
         slow_axis_id: int | None,
         pattern: ScanPattern | None,
-    ) -> bytes:
+    ) -> Request[None]:
         kv = {}
         if fast_axis_id is not None:
             kv["Y"] = int(fast_axis_id)
@@ -139,46 +139,27 @@ class ScanBindAxesOp:
         if pattern is not None:
             kv["F"] = int(pattern.value)
         payload = _fmt_kv(kv) if kv else None
-        return _line("SCAN", payload, card_hex)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("SCAN (bind axes)", r)
+        return Request(payload=_line("SCAN", payload, card_hex), decode=ack("SCAN (bind axes)"))
 
 
 class ScanROp:
     @staticmethod
-    def encode(card_hex: int, kv: dict[str, object]) -> bytes:
-        return _line("SCANR", _fmt_kv(kv), card_hex)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("SCANR", r)
+    def request(card_hex: int, kv: dict[str, object]) -> Request[None]:
+        return Request(payload=_line("SCANR", _fmt_kv(kv), card_hex), decode=ack("SCANR"))
 
 
 class ScanVOp:
     @staticmethod
-    def encode(card_hex: int, kv: dict[str, object]) -> bytes:
-        return _line("SCANV", _fmt_kv(kv), card_hex)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("SCANV", r)
+    def request(card_hex: int, kv: dict[str, object]) -> Request[None]:
+        return Request(payload=_line("SCANV", _fmt_kv(kv), card_hex), decode=ack("SCANV"))
 
 
 class ScanRunOp:
     @staticmethod
-    def encode(card_hex: int, action: str) -> bytes:
-        # action:: 'S' (start) or 'P' (stop)
-        return _line("SCAN", action, card_hex)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("SCAN run/stop", r)
+    def request(card_hex: int, action: str) -> Request[None]:
+        # action:: 'S' (start) or 'P' (stop). Not retry-safe: re-sending after a lost reply could
+        # restart a scan that is already running.
+        return Request(payload=_line("SCAN", action, card_hex), decode=ack("SCAN run/stop"), retry_safe=False)
 
 
 # --- Array Scan ---
@@ -207,14 +188,15 @@ class ArrayOp:  # "AR" (ARRAY)
     """Array / table-style configuration on a card."""
 
     @staticmethod
-    def encode(addr: int, cfg: ArrayScanConfig | None) -> bytes:
+    def request(addr: int, cfg: ArrayScanConfig | None) -> Request[None]:
         payload = _fmt_kv(cfg.to_kv()) if cfg is not None else "S"  # 'S' to start
-        return _line(verb="AR", payload=payload, addr=addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("AR", r)
+        return Request(
+            payload=_line(verb="AR", payload=payload, addr=addr),
+            decode=ack("AR"),
+            # Writing the config is an absolute assignment and safe to repeat; the bare 'S' start
+            # is not, since a retry could launch a scan that already began.
+            retry_safe=cfg is not None,
+        )
 
 
 @dataclass(frozen=True)
@@ -235,10 +217,5 @@ class AutoHomeOp:  # "AH" (AHOME)
     """Per-card auto-home helpers (different from axis '!' HOME)."""
 
     @staticmethod
-    def encode(addr: int, cfg: AutoHomeConfig) -> bytes:
-        return _line("AH", _fmt_kv(cfg.to_kv()), addr)
-
-    @staticmethod
-    def decode(r: Reply) -> None:
-        if r.kind == "ERR":
-            raise ASIDecodeError("AH", r)
+    def request(addr: int, cfg: AutoHomeConfig) -> Request[None]:
+        return Request(payload=_line("AH", _fmt_kv(cfg.to_kv()), addr), decode=ack("AH"))

@@ -1,3 +1,4 @@
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum, StrEnum
 from typing import TypedDict
@@ -14,6 +15,26 @@ class Reply:
     kv: dict[str, str] | None = None
     text: str | None = None
     err: str | None = None
+
+
+@dataclass(frozen=True)
+class Request[T]:
+    """A command plus everything needed to interpret its reply.
+
+    `decode` is bound to whatever context it needs at construction time, so a caller cannot pass
+    encode and decode disagreeing arguments, and the exchange layer can decode (and therefore retry)
+    without knowing anything about the command.
+
+    It takes the full frame list because one command does not imply one reply frame: RDSTAT answers
+    with one frame per queried axis, and BU/WHO/INFO answer with a multi-frame dump.
+    """
+
+    payload: bytes
+    decode: Callable[[Sequence[Reply]], T]
+    # Whether the command may be re-sent when its reply is unusable. False for anything that
+    # accumulates state on the controller: a retried MOVEREL travels twice, a retried LD queues
+    # the same ring-buffer move twice.
+    retry_safe: bool = True
 
 
 class ASIDeviceType(StrEnum):
@@ -33,7 +54,21 @@ class ASIDeviceType(StrEnum):
     MULTI_LED = "i"  # Multi LED Driver card
     LENS = "b"  # Tunable Lens
     DAC = "d"  # Digital to Analog converter(DAC)
-    UNKNOWN = "u"  # Unknown device
+    # Undocumented in ASI's BUILD axis-type table, but WHO names it: "At 37: V:ZMotor,W:Slave".
+    # A slave axis follows a master on the same card (that card also lists a SLAVE F TO Z module),
+    # so it should not be commanded independently.
+    SLAVE = "v"
+    UNKNOWN = "?"
+
+    @property
+    def commandable(self) -> bool:
+        """Whether this axis may be moved, homed or zeroed directly.
+
+        A SLAVE follows a master on the same card, so commanding it fights the card's own coupling.
+
+        Unknown types default to True
+        """
+        return self is not ASIDeviceType.SLAVE
 
 
 class ASIAxisInfoDict(TypedDict):
