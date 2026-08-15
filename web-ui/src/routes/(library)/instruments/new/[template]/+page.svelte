@@ -7,7 +7,7 @@
   import { AlertCircleOutline } from '$lib/icons';
   import { Button, Dialog, Field, TextInput } from '$lib/kit';
   import { ApiError, getVoxelApp, type Violation } from '$lib/model';
-  import { sanitizeString } from '$lib/utils';
+  import { displayName } from '$lib/utils';
 
   import InstrumentTabs from '../../InstrumentTabs.svelte';
   import { resolveInstrumentView, violationLocation } from '../../view';
@@ -69,7 +69,7 @@
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <h1 class="truncate text-2xl font-medium text-fg">
-            {selected ? sanitizeString(selected.name) : 'Template not found'}
+            {selected ? displayName(selected.name) : 'Template not found'}
           </h1>
           {#if selected}
             <span class="shrink-0 rounded-full bg-element-bg px-1.5 py-px text-sm text-fg-muted">Template</span>
@@ -93,7 +93,7 @@
               <div class="flex items-start gap-3 border-b border-danger/25 px-3 py-2.5">
                 <AlertCircleOutline width="18" height="18" class="mt-0.5 shrink-0 text-danger" />
                 <div class="min-w-0 flex-1">
-                  <h2 class="text-lg font-medium text-danger">Unable to create {sanitizeString(selected.name)}</h2>
+                  <h2 class="text-lg font-medium text-danger">Unable to create {displayName(selected.name)}</h2>
                   <p class="mt-0.5 text-fg-muted">Review the reported issues and retry.</p>
                 </div>
               </div>
@@ -142,7 +142,7 @@
 
     <div class="flex flex-col gap-4 py-2">
       <p class="text-lg text-fg-muted">
-        From template <span class="font-medium text-fg">{name ? sanitizeString(name) : ''}</span>.
+        From template <span class="font-medium text-fg">{name ? displayName(name) : ''}</span>.
       </p>
       <Field label="Instance Name" id="instance-name">
         <TextInput bind:value={instanceName} id="instance-name" align="left" placeholder={name} />

@@ -3,7 +3,7 @@
 
   import { Button, Select } from '$lib/kit';
   import { type Channel, DiscreteAxisHandle, type Instrument } from '$lib/model';
-  import { cn, sanitizeString, toastError } from '$lib/utils';
+  import { cn, displayName, toastError } from '$lib/utils';
 
   import { channelDot, deviceIdentity } from './snippets.svelte';
 
@@ -125,7 +125,7 @@
   <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
     <!-- row 1: wheel identity + live filter picker (channel dot marks profile-declared filters) -->
     <div class="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
-      {@render deviceIdentity(sanitizeString(wheel.id))}
+      {@render deviceIdentity(displayName(wheel.id))}
       <Select
         variant="ghost"
         size="xs"

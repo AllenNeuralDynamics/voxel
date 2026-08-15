@@ -2,7 +2,7 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getVoxelApp } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn, displayName } from '$lib/utils';
 
   const app = getVoxelApp();
 
@@ -12,7 +12,7 @@
 
   const currentPath = $derived(page.url.pathname);
   const activeDeviceId = $derived(page.params.deviceId);
-  const pageTitle = $derived(activeDeviceId ? sanitizeString(activeDeviceId) : 'Stage');
+  const pageTitle = $derived(activeDeviceId ? displayName(activeDeviceId) : 'Stage');
 
   const cameraIds = $derived(instrument ? [...instrument.cameras.keys()] : []);
   const laserIds = $derived(instrument ? [...instrument.lasers.keys()] : []);
@@ -44,7 +44,7 @@
 {#snippet deviceRow(id: string)}
   {@const device = instrument?.devices.get(id)}
   <a href={resolve(`/inspect/devices/${id}` as '/')} class={rowClass(activeDeviceId === id, !!device?.error)}>
-    <span class="min-w-0 flex-1 truncate" title={sanitizeString(id)}>{sanitizeString(id)}</span>
+    <span class="min-w-0 flex-1 truncate" title={displayName(id)}>{displayName(id)}</span>
     {#if device && (device.error || !device.connected)}
       <span
         class={cn('size-1.5 shrink-0 rounded-full', device.error ? 'bg-danger' : 'bg-fg-muted')}

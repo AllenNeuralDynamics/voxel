@@ -30,7 +30,10 @@ class Coalescer[T]:
     Optional ``reducer`` folds rapid puts together instead of overwriting,
     preserving partial-update information across keys::
 
-        coalescer = Coalescer[dict[str, Levels]](drain=send_levels, reducer=merge_dicts)
+        coalescer = Coalescer[dict[str, Levels]](
+            drain=send_levels,
+            reducer=lambda current, update: current | update,
+        )
         coalescer.update({"ch1": l1})  # stored
         coalescer.update({"ch2": l2})  # folded → {"ch1": l1, "ch2": l2}
 

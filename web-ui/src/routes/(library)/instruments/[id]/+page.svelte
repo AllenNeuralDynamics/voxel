@@ -8,7 +8,7 @@
   import { AlertCircleOutline } from '$lib/icons';
   import { Button, Dialog } from '$lib/kit';
   import { ApiError, getVoxelApp, type PresetRecord, type Violation } from '$lib/model';
-  import { sanitizeString } from '$lib/utils';
+  import { displayName } from '$lib/utils';
 
   import InstrumentTabs from '../InstrumentTabs.svelte';
   import { resolveInstrumentView, violationLocation } from '../view';
@@ -80,7 +80,7 @@
 
     if (launchFailure) {
       return {
-        title: `Unable to open ${id ? sanitizeString(id) : 'instrument'}`,
+        title: `Unable to open ${id ? displayName(id) : 'instrument'}`,
         description: 'Hardware startup did not complete. Review the reported issues and retry when they are resolved.',
         source: 'startup',
         violations: launchFailure
@@ -127,11 +127,7 @@
 <div class="flex h-full min-h-0 flex-col gap-1">
   <header class="flex shrink-0 items-center justify-between gap-3">
     <h1 class="truncate text-2xl font-medium text-fg">
-      {selected
-        ? sanitizeString(selected.name)
-        : id && acquisitions.length
-          ? sanitizeString(id)
-          : 'Instrument not found'}
+      {selected ? displayName(selected.name) : id && acquisitions.length ? displayName(id) : 'Instrument not found'}
     </h1>
     {#if isActive}
       <span
@@ -240,8 +236,8 @@
 
     <div class="flex flex-col gap-4 py-2">
       <p class="text-lg text-fg-muted">
-        Archive <span class="font-medium text-fg">{id ? sanitizeString(id) : ''}</span>'s current state so it reopens
-        with its configured defaults. The archived state is retained as
+        Archive <span class="font-medium text-fg">{id ? displayName(id) : ''}</span>'s current state so it reopens with
+        its configured defaults. The archived state is retained as
         <span class="font-mono text-fg">state.bak.json</span> or the next available numbered backup.
       </p>
     </div>

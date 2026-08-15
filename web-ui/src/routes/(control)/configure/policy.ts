@@ -1,14 +1,14 @@
 import type { FixedOpticalRoutingPolicy, OpticalRoutingPolicy, SplitOpticalRoutingPolicy } from '$lib/model';
-import { sanitizeString, trimFloat } from '$lib/utils';
+import { displayName, trimFloat } from '$lib/utils';
 
 export function clonePolicy(policy: OpticalRoutingPolicy): OpticalRoutingPolicy {
   return { ...policy };
 }
 
 export function formatPolicySummary(policy: OpticalRoutingPolicy): string {
-  if (policy.type === 'fixed') return `Fixed to ${sanitizeString(policy.route)}`;
+  if (policy.type === 'fixed') return `Fixed to ${displayName(policy.route)}`;
   const threshold = trimFloat(policy.threshold / 1000, 4);
-  return `${policy.axis.toUpperCase()} split at ${threshold} mm · ${sanitizeString(policy.lower)} → ${sanitizeString(policy.upper)}`;
+  return `${policy.axis.toUpperCase()} split at ${threshold} mm · ${displayName(policy.lower)} → ${displayName(policy.upper)}`;
 }
 
 export function asFixedPolicy(

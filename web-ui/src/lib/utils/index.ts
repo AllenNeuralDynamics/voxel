@@ -1,6 +1,6 @@
 export type { WithElementRef, WithoutChild, WithoutChildren, WithoutChildrenOrChild } from './cn';
 export { clampTopLeft, cn } from './cn';
-export { pref, sanitizeString, toastError, trimFloat } from './helpers';
+export { displayName as displayName, pref, toastError, trimFloat } from './helpers';
 export { IDBKeyVal } from './idb';
 export { createMultiSelect, type MultiSelect } from './multiselect.svelte';
 export { createPaneSize, type PaneSizeBounds } from './pane.svelte';

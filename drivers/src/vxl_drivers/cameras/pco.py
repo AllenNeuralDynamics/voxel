@@ -5,7 +5,7 @@ from enum import StrEnum
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
 from rigup.device.props import enumerated, enumerated_int, numeric
-from vxlib.vec import IVec2D, Vec2D
+from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
 from vxl.devices.camera.base import (

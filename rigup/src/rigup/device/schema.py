@@ -7,6 +7,7 @@ from functools import wraps
 from typing import Annotated, Any, Literal, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, create_model
+from vxlib.fmt import display_name
 
 from .props import PropertyModel
 
@@ -90,8 +91,7 @@ class AttributeInfo(BaseModel):
     @staticmethod
     def _get_name_label_desc_from_func(func: Callable) -> tuple[str, str, str | None]:
         name = func.__name__
-        label = str(getattr(func, LABEL_ATTR)) if hasattr(func, LABEL_ATTR) else name.replace("_", " ")
-        label = label.title()
+        label = str(getattr(func, LABEL_ATTR)).title() if hasattr(func, LABEL_ATTR) else display_name(name)
 
         desc: str | None = None
         if hasattr(func, DESC_ATTR):

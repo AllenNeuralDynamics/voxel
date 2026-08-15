@@ -5,6 +5,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 from vxl_records import SQLiteRecords
+from vxlib.reactivity import Cell
 
 from rigup import (
     BuildConfig,
@@ -17,6 +18,7 @@ from rigup import (
     PropResults,
     Result,
 )
+from vxl._utils.files import load_yaml
 from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.config import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.core import Channel
@@ -31,7 +33,6 @@ from vxl.instrument.topology import (
     StageConfig,
 )
 from vxl.preview import PreviewFrame, PreviewLayer, PreviewViewport
-from vxlib import Cell, load_yaml
 
 
 def _records(tmp_path: Path) -> SQLiteRecords:

@@ -20,18 +20,19 @@ from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
 from pydantic import BaseModel, ConfigDict
 from vxl_records import DatasetLocation, StorageSpec
-from vxlib.vec import IVec2D, Vec2D
+from vxlib.dtype import Dtype
+from vxlib.schema import FrozenModel
+from vxlib.vector import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
 from vxl.devices.base import DeviceType
 from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
 from vxl.system import System, remote_store_fingerprint
-from vxlib import Dtype, SchemaModel
 
 log = logging.getLogger(__name__)
 
 
-class StorageStatus(SchemaModel):
+class StorageStatus(FrozenModel):
     """A node's write-access result for a `Storage` root (preflight). ``free_bytes`` is -1 when
     capacity is unknown (e.g. an S3 root)."""
 
@@ -103,7 +104,7 @@ class TriggerPolarity(StrEnum):
     FALLING_EDGE = "falling"
 
 
-class StreamInfo(SchemaModel):
+class StreamInfo(FrozenModel):
     frame_index: int
     input_buffer_size: int
     output_buffer_size: int

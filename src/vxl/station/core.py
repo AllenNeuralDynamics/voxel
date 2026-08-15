@@ -9,15 +9,17 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from vxl_records import SQLiteRecords, VoxelRecords
+from vxlib.reactivity import Cell, Readable
 
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentInspection, InstrumentStore
-from vxlib import Cell, Readable, Teardown
 
 from .feed import StationFeed
 from .models import DeviceState, InstrumentView, SessionInfo, SessionView, StationState, StationStatus
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
+
+    from vxlib.lifecycle import Teardown
 
     from vxl.system import StationConfig
 

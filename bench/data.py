@@ -20,9 +20,9 @@ from botocore.config import Config as BotoConfig
 from cloudpathlib import S3Path
 from ome_zarr_writer.array.ts import TSArrayReader
 from rich.console import Console
+from vxlib.s3 import S3Store
 
 from vxl.devices.camera.base import ValidBits
-from vxlib import S3Store
 
 REGION = "us-west-2"  # aind-open-data (the real-data source) lives here
 LEVEL = "0"  # full-res level of the multiscale tile

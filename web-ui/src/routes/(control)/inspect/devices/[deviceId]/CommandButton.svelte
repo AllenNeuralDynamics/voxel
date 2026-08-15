@@ -3,7 +3,7 @@
   import type { CommandInfo, DeviceHandle, ParamInfo } from '$lib/model';
   import { isErrorMsg } from '$lib/prop';
   import { SpinBox } from '$lib/prop/numeric';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn, displayName } from '$lib/utils';
 
   interface Props {
     device: DeviceHandle;
@@ -67,7 +67,7 @@
   }
 
   const isError = $derived(lastResult != null && isErrorMsg(lastResult));
-  const label = $derived(commandInfo?.label || sanitizeString(commandName));
+  const label = $derived(commandInfo?.label || displayName(commandName));
 
   function formatResult(result: unknown): string {
     if (result == null) return 'null';
@@ -98,7 +98,7 @@
           {#each params as [name, param] (name)}
             <div class="grid gap-1">
               <span class="text-base font-medium text-fg-muted">
-                {sanitizeString(name)}
+                {displayName(name)}
               </span>
               {#if param.options && param.options.length > 0}
                 <Select

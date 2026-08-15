@@ -6,13 +6,13 @@ from typing import Any, cast
 import pytest
 from vxl_records import StorageSpec
 from vxlib.quantity import Frequency, Time
+from vxlib.reactivity import Cell
 
 from vxl.devices.daq.clocked import Signals
 from vxl.instrument import AcquisitionMode, Instrument
 from vxl.instrument.config import WriterPatch
 from vxl.instrument.core import AcquisitionRequest
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
-from vxlib import Cell
 
 
 def instrument_in_mode(mode: AcquisitionMode) -> Instrument:

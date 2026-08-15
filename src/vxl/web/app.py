@@ -15,10 +15,10 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
+from vxl._utils.logging import configure_logging, get_uvicorn_log_config
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.station import InstrumentTemplates, Station
-from vxl.system import StationConfig, load_voxel_env
-from vxlib import configure_logging, get_local_ip, get_uvicorn_log_config
+from vxl.system import StationConfig, System, load_voxel_env
 
 from .realtime import Realtime
 from .router import api_router
@@ -121,7 +121,7 @@ def serve(*, host: str, port: int = 8000, debug: bool = False) -> None:
 
     log.info("Starting Voxel...")
     log.info("Web UI: http://localhost:%d", port)
-    if (local_ip := get_local_ip()) != "127.0.0.1":
+    if (local_ip := System.local_ip()) != "127.0.0.1":
         log.info("      or http://%s:%d", local_ip, port)
     uvicorn.run(
         create_app(Station(StationConfig.load())),

@@ -9,9 +9,8 @@ it is shared between consumers. What it does own is the vocabulary — the cost 
 and the failures a ``sizer`` may signal back to :meth:`OMEZarrWriter.begin_stack`.
 """
 
-from vxlib.vec import UIVec3D
-
-from vxlib import Dtype
+from vxlib.dtype import Dtype
+from vxlib.vector import UIVec3D
 
 from .dataset import ScaleLevel
 

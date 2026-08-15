@@ -26,7 +26,7 @@
   import RunButton from '$lib/RunButton.svelte';
   import StageGizmo from '$lib/stage/StageGizmo.svelte';
   import { AppearanceSheet, themes } from '$lib/themes';
-  import { cn, createPaneSize, pref, sanitizeString, toastError } from '$lib/utils';
+  import { cn, createPaneSize, displayName, pref, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
@@ -346,8 +346,8 @@
         <Pane {...monitorsPane} class="flex flex-col bg-surface">
           <header class="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-elevated px-4">
             <Microscope width="14" height="14" class="shrink-0 text-fg-muted" />
-            <span class="min-w-0 flex-1 truncate text-lg" title={sanitizeString(app.activeName ?? '')}>
-              {sanitizeString(app.activeName ?? 'Active instrument')}
+            <span class="min-w-0 flex-1 truncate text-lg" title={displayName(app.activeName ?? '')}>
+              {displayName(app.activeName ?? 'Active instrument')}
             </span>
             <button
               type="button"
@@ -393,8 +393,8 @@
       </Dialog.Header>
       <p class="text-lg text-fg-muted">
         Are you sure you want to close
-        <span class="font-medium text-fg">{sanitizeString(app.activeName ?? 'the active instrument')}</span>? Its
-        hardware will be disconnected.
+        <span class="font-medium text-fg">{displayName(app.activeName ?? 'the active instrument')}</span>? Its hardware
+        will be disconnected.
       </p>
       <Dialog.Footer>
         <Button variant="ghost" onclick={() => (closeDialogOpen = false)}>Cancel</Button>

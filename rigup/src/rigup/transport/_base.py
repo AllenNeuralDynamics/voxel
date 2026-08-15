@@ -23,8 +23,7 @@ from enum import IntEnum
 from typing import Self
 
 from pydantic import BaseModel, Field
-
-from vxlib import Teardown
+from vxlib.lifecycle import Teardown
 
 
 class MessageKind(IntEnum):

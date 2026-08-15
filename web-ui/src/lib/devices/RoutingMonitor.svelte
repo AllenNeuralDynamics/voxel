@@ -3,7 +3,7 @@
 
   import { Button, Select } from '$lib/kit';
   import { type Instrument, type OpticalRoutingPolicy } from '$lib/model';
-  import { cn, sanitizeString, toastError, trimFloat } from '$lib/utils';
+  import { cn, displayName, toastError, trimFloat } from '$lib/utils';
 
   interface Props {
     instrument: Instrument;
@@ -48,10 +48,10 @@
     optimistic[dimension.id] ?? (dimension.moving ? dimension.target : dimension.current);
 
   function policySummary(policy: OpticalRoutingPolicy): string {
-    if (policy.type === 'fixed') return `Fixed to ${sanitizeString(policy.route)}`;
-    return `${policy.axis.toUpperCase()} split at ${trimFloat(policy.threshold / 1000, 4)} mm · ${sanitizeString(
+    if (policy.type === 'fixed') return `Fixed to ${displayName(policy.route)}`;
+    return `${policy.axis.toUpperCase()} split at ${trimFloat(policy.threshold / 1000, 4)} mm · ${displayName(
       policy.lower
-    )} → ${sanitizeString(policy.upper)}`;
+    )} → ${displayName(policy.upper)}`;
   }
 
   const canRevert = $derived(
@@ -112,11 +112,11 @@
 
   <div class="flex flex-col gap-2 px-3 py-2">
     {#each dimensions as dimension (dimension.id)}
-      {@const options = dimension.routes.map((route) => ({ value: route, label: sanitizeString(route) }))}
+      {@const options = dimension.routes.map((route) => ({ value: route, label: displayName(route) }))}
       <div class="flex flex-col gap-1 rounded-xs border border-border bg-card px-2.5 py-1.5">
         <div class="flex items-center gap-2">
           <span class="min-w-0 flex-1 truncate text-base font-medium text-fg">
-            {sanitizeString(dimension.id)}
+            {displayName(dimension.id)}
           </span>
           <Select
             variant="ghost"

@@ -5,7 +5,7 @@
   import { Button, JsonView } from '$lib/kit';
   import { getVoxelApp } from '$lib/model';
   import PresetNameDialog from '$lib/PresetNameDialog.svelte';
-  import { sanitizeString } from '$lib/utils';
+  import { displayName } from '$lib/utils';
 
   const app = getVoxelApp();
   const id = $derived(page.params.id);
@@ -22,7 +22,7 @@
 <div class="flex h-full min-h-0 flex-col gap-2">
   <header class="flex shrink-0 items-center justify-between gap-4">
     <h1 class="truncate text-2xl font-medium text-fg">
-      Acquisition {manifest && ' - ' + sanitizeString(manifest.instrument)}
+      Acquisition {manifest && ' - ' + displayName(manifest.instrument)}
     </h1>
     <div class="flex shrink-0 items-center gap-2">
       {#if manifest}

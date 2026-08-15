@@ -20,9 +20,8 @@ from ome_zarr_writer.sizing import (
     ring_shm_bytes,
     slots_for_budget,
 )
-from vxlib.vec import UIVec3D, UVec3D
-
-from vxlib import Dtype
+from vxlib.dtype import Dtype
+from vxlib.vector import UIVec3D, UVec3D
 
 
 def _cfg(y: int = 64, x: int = 64, z: int = 32, level: ScaleLevel = ScaleLevel.L2) -> WriterConfig:

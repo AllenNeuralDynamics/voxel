@@ -9,7 +9,7 @@
   import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
-  import { pref, sanitizeString, toastError } from '$lib/utils';
+  import { displayName, pref, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
   import { getStageScene, provideStageScene, type StageHit } from './scene.svelte';
@@ -62,7 +62,7 @@
   // Only hits whose layer actually contributes a section — separators and headings key off these.
   const menuSections = $derived(menuHits.filter((mh) => mh.layer.menu));
   const marqueeSections = $derived(menuHits.filter((mh) => mh.layer.marqueeMenu));
-  const sectionLabel = (mh: StageHit) => mh.layer.label ?? sanitizeString(mh.layer.id);
+  const sectionLabel = (mh: StageHit) => mh.layer.label ?? displayName(mh.layer.id);
   // Live cursor position in stage µm for the readout overlay; null when the pointer is off the canvas.
   let cursor = $state<[number, number] | null>(null);
   // Whether the cursor is within the reachable stage limits (unknown limits count as in-range).

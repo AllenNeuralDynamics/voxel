@@ -13,6 +13,7 @@ from contextlib import suppress
 from typing import Any, overload
 
 from pydantic import BaseModel
+from vxlib.lifecycle import Teardown
 
 from rigup.device import (
     Adapter,
@@ -39,7 +40,6 @@ from rigup.protocol import (
 )
 from rigup.transport import TransportClient
 from rigup.wire import TopicDispatcher
-from vxlib import Teardown
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 from ._logs import relay_logs

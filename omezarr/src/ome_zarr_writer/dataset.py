@@ -23,14 +23,13 @@ from cloudpathlib import S3Path
 from pydantic import (
     AfterValidator,
     BeforeValidator,
-    ConfigDict,
     Field,
     PlainSerializer,
     model_validator,
 )
-from vxlib.vec import UIVec3D, UVec3D
-
-from vxlib import Dtype, SchemaModel
+from vxlib.dtype import Dtype
+from vxlib.schema import SparseModel
+from vxlib.vector import UIVec3D, UVec3D
 
 
 class ScaleLevel(IntEnum):
@@ -76,34 +75,34 @@ class Compression(StrEnum):
     BLOSC_ZSTD = "blosc.zstd"
 
 
-class _ChunkConfig(SchemaModel):
+class _ChunkConfig(SparseModel):
     chunk_shape: list[int]
 
 
-class ChunkGrid(SchemaModel):
+class ChunkGrid(SparseModel):
     name: Literal["regular"] = "regular"
     configuration: _ChunkConfig
 
 
-class _ChunkKeyConfig(SchemaModel):
+class _ChunkKeyConfig(SparseModel):
     separator: Literal["/", "."] = "/"
 
 
-class ChunkKeyEncoding(SchemaModel):
+class ChunkKeyEncoding(SparseModel):
     name: Literal["default", "v2"] = "default"
     configuration: _ChunkKeyConfig = Field(default_factory=_ChunkKeyConfig)
 
 
-class _BytesConfig(SchemaModel):
+class _BytesConfig(SparseModel):
     endian: Literal["little", "big"] = "little"
 
 
-class BytesCodec(SchemaModel):
+class BytesCodec(SparseModel):
     name: Literal["bytes"] = "bytes"
     configuration: _BytesConfig = Field(default_factory=_BytesConfig)
 
 
-class _BloscConfig(SchemaModel):
+class _BloscConfig(SparseModel):
     cname: Literal["blosclz", "lz4", "lz4hc", "snappy", "zlib", "zstd"]
     clevel: int = 5
     shuffle: Literal["noshuffle", "shuffle", "bitshuffle"] = "shuffle"
@@ -111,31 +110,31 @@ class _BloscConfig(SchemaModel):
     blocksize: int = 0
 
 
-class BloscCodec(SchemaModel):
+class BloscCodec(SparseModel):
     name: Literal["blosc"] = "blosc"
     configuration: _BloscConfig
 
 
-class _GzipConfig(SchemaModel):
+class _GzipConfig(SparseModel):
     level: int = 5
 
 
-class GzipCodec(SchemaModel):
+class GzipCodec(SparseModel):
     name: Literal["gzip"] = "gzip"
     configuration: _GzipConfig = Field(default_factory=_GzipConfig)
 
 
-class _ZstdConfig(SchemaModel):
+class _ZstdConfig(SparseModel):
     level: int = 0
     checksum: bool = False
 
 
-class ZstdCodec(SchemaModel):
+class ZstdCodec(SparseModel):
     name: Literal["zstd"] = "zstd"
     configuration: _ZstdConfig = Field(default_factory=_ZstdConfig)
 
 
-class CRC32CCodec(SchemaModel):
+class CRC32CCodec(SparseModel):
     name: Literal["crc32c"] = "crc32c"
 
 
@@ -145,14 +144,14 @@ InnerCodec = Annotated[
 ]
 
 
-class _ShardingConfig(SchemaModel):
+class _ShardingConfig(SparseModel):
     chunk_shape: list[int]
     codecs: list[InnerCodec]
     index_codecs: list[InnerCodec] = Field(default_factory=lambda: [BytesCodec(), CRC32CCodec()])
     index_location: Literal["start", "end"] = "end"
 
 
-class ShardingIndexedCodec(SchemaModel):
+class ShardingIndexedCodec(SparseModel):
     name: Literal["sharding_indexed"] = "sharding_indexed"
     configuration: _ShardingConfig
 
@@ -163,7 +162,7 @@ Codec = Annotated[
 ]
 
 
-class Zarr3ArrayMeta(SchemaModel):
+class Zarr3ArrayMeta(SparseModel):
     """Mirrors `{root}/{level}/zarr.json` — Zarr v3 array metadata."""
 
     zarr_format: Literal[3] = 3
@@ -307,7 +306,7 @@ class DownscaleType(StrEnum):
     MAX = "max"
 
 
-class SpaceAxis(SchemaModel):
+class SpaceAxis(SparseModel):
     name: Literal[AxisName.X, AxisName.Y, AxisName.Z]
     type: Literal[AxisType.SPACE] = AxisType.SPACE
     unit: SpaceUnit
@@ -321,13 +320,13 @@ class SpaceAxis(SchemaModel):
         ]
 
 
-class TimeAxis(SchemaModel):
+class TimeAxis(SparseModel):
     name: Literal[AxisName.T] = AxisName.T
     type: Literal[AxisType.TIME] = AxisType.TIME
     unit: TimeUnit
 
 
-class ChannelAxis(SchemaModel):
+class ChannelAxis(SparseModel):
     name: Literal[AxisName.C] = AxisName.C
     type: Literal[AxisType.CHANNEL] = AxisType.CHANNEL
 
@@ -378,17 +377,17 @@ MultiscaleAxes = Annotated[
 ]
 
 
-class IdentityTransform(SchemaModel):
+class IdentityTransform(SparseModel):
     type: Literal[TransformType.IDENTITY] = TransformType.IDENTITY
 
 
-class TranslationTransform(SchemaModel):
+class TranslationTransform(SparseModel):
     type: Literal[TransformType.TRANSLATION] = TransformType.TRANSLATION
     translation: list[float] | None = None
     path: str | None = None
 
 
-class ScaleTransform(SchemaModel):
+class ScaleTransform(SparseModel):
     type: Literal[TransformType.SCALE] = TransformType.SCALE
     scale: list[float] | None = None
     path: str | None = None
@@ -422,7 +421,7 @@ CoordinateTransformations = Annotated[
 ]
 
 
-class Dataset(SchemaModel):
+class Dataset(SparseModel):
     """One resolution level inside a Multiscale.
 
     Per OME-NGFF v0.5: exactly one scale transform, optionally followed by one
@@ -441,7 +440,7 @@ class Dataset(SchemaModel):
         return tuple(scale)
 
 
-class Multiscale(SchemaModel):
+class Multiscale(SparseModel):
     """OME-NGFF multiscale: ordered datasets sharing a coordinate system.
 
     Datasets must be ordered highest-to-lowest resolution.
@@ -469,18 +468,18 @@ class Multiscale(SchemaModel):
         return self
 
 
-class OmeMeta(SchemaModel):
+class OmeMeta(SparseModel):
     """Top-level OME-Zarr v0.5 group attributes."""
 
     version: Literal["0.5"] = "0.5"
     multiscales: list[Multiscale] | None = None
 
 
-class ZarrGroupAttributes(SchemaModel):
+class ZarrGroupAttributes(SparseModel):
     ome: OmeMeta
 
 
-class Zarr3GroupMeta(SchemaModel):
+class Zarr3GroupMeta(SparseModel):
     """Zarr v3 group metadata — mirrors `{root}/zarr.json`."""
 
     zarr_format: Literal[3] = 3
@@ -528,7 +527,7 @@ class Zarr3GroupMeta(SchemaModel):
         )
 
 
-class OmeZarrDataset(SchemaModel):
+class OmeZarrDataset(SparseModel):
     """Full on-disk shape of an OME-Zarr v0.5 / Zarr v3 dataset.
 
     Bundles the OME-NGFF group metadata (`group`) with the per-array metadata
@@ -542,8 +541,6 @@ class OmeZarrDataset(SchemaModel):
 
     group: Zarr3GroupMeta
     arrays: dict[ScaleLevel, Zarr3ArrayMeta]
-
-    model_config = ConfigDict(frozen=True)
 
     @property
     def volume_shape(self) -> UIVec3D:

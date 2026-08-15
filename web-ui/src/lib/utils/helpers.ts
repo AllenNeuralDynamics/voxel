@@ -14,11 +14,11 @@ export function toastError(promise: Promise<unknown> | undefined): void {
  * @returns The sanitized string (e.g., "Camera 1", "Simulated Distributed")
  *
  * @example
- * sanitizeString("camera_1") // "Camera 1"
- * sanitizeString("laser_power") // "Laser Power"
- * sanitizeString("simulated-distributed") // "Simulated Distributed"
+ * displayName("camera_1") // "Camera 1"
+ * displayName("laser_power") // "Laser Power"
+ * displayName("simulated-distributed") // "Simulated Distributed"
  */
-export function sanitizeString(str: string): string {
+export function displayName(str: string): string {
   return str
     .split(/[_-]/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())

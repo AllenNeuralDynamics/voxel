@@ -9,18 +9,18 @@ from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect
 from rigup.wire import pack, unpack
 from vxl_records import LogEntry
+from vxlib.schema import FrozenModel
 
 from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewKey, PreviewViewport
 from vxl.station import Station, StationFeedConnection, StationFeedLaggedError, StationFeedView, StationState
-from vxlib import SchemaModel
 
 if TYPE_CHECKING:
-    from vxlib import Teardown
+    from vxlib.lifecycle import Teardown
 
 log = logging.getLogger(__name__)
 
 
-class PreviewViewportUpdate(SchemaModel):
+class PreviewViewportUpdate(FrozenModel):
     """Latest requested preview viewport for one expected instrument session."""
 
     action: Literal["preview.viewport.update"]

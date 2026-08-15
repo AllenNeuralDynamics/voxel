@@ -4,7 +4,8 @@ import time
 
 import numpy as np
 from rigup.device.props import enumerated, enumerated_int, numeric
-from vxlib.vec import IVec2D, Vec2D
+from vxl_drivers.utils import thread_safe_singleton
+from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
 from vxl.devices.camera.base import (
@@ -17,7 +18,6 @@ from vxl.devices.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from vxlib import thread_safe_singleton
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi
 from .sdk.dcamapi4 import DCAMCAP_TRANSFERINFO

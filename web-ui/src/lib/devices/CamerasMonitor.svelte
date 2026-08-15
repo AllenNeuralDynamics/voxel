@@ -1,6 +1,6 @@
 <script lang="ts">
   import { CameraHandle, type Instrument } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn, displayName } from '$lib/utils';
 
   import { deviceIdentity } from './snippets.svelte';
 
@@ -51,7 +51,7 @@
   <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
     <!-- row 1: identity + geometry -->
     <div class="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
-      {@render deviceIdentity(sanitizeString(cam.id), channel)}
+      {@render deviceIdentity(displayName(cam.id), channel)}
       <span class="ml-auto font-mono text-[10px] text-fg-muted tabular-nums">
         {frame ? `${frame.x}×${frame.y}` : '—'}{#if typeof sizeMb === 'number'}
           · {sizeMb.toFixed(1)} MB{/if}

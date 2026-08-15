@@ -7,7 +7,8 @@ from ome_zarr_writer import WriterSettings
 from pydantic import TypeAdapter
 from rigup.device.handle import Adapter, DeviceProperty
 from vxl_records import DatasetLocation, StorageSpec
-from vxlib.vec import IVec2D, Vec2D
+from vxlib.coalescer import Coalescer
+from vxlib.vector import IVec2D, Vec2D
 
 from rigup import DeviceHandle
 from vxl.devices.camera.base import (
@@ -19,7 +20,6 @@ from vxl.devices.camera.base import (
     TriggerPolarity,
 )
 from vxl.preview import PreviewViewport
-from vxlib import Coalescer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

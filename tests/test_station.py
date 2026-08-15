@@ -5,9 +5,11 @@ from uuid import UUID
 
 import pytest
 from vxl_records import VoxelRecords
+from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
 from rigup import DeviceInterface, DeviceProps
 from vxl import system as system_module
+from vxl._utils.files import load_yaml
 from vxl.instrument import (
     AcquisitionMode,
     ActiveAcquisitionState,
@@ -19,7 +21,6 @@ from vxl.instrument.models import TaskTile
 from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
-from vxlib import Cell, Emitter, ReactiveQuery, load_yaml
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 INSTRUMENT_CONFIG = load_yaml(TEMPLATE, InstrumentConfig)

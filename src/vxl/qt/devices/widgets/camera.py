@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from PySide6.QtWidgets import QVBoxLayout, QWidget
+from vxlib.asyncio import spawn
 
 from vxl.qt.devices.adapter import DeviceHandleQt
 from vxl.qt.devices.bind import bind_select, bind_slider_spinbox
@@ -21,7 +22,6 @@ from vxl.qt.ui.kit import (
     Stretch,
     Text,
 )
-from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -265,7 +265,7 @@ class CameraControl(QWidget):
 
     def _on_roi_changed(self) -> None:
         """Called when any ROI spinbox changes."""
-        fire_and_forget(
+        spawn(
             self._adapter.call(
                 "update_roi",
                 roi={

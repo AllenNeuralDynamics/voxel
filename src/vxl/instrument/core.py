@@ -21,6 +21,9 @@ from vxl_records import (
     StorageSpec,
     VoxelRecords,
 )
+from vxlib.coalescer import Coalescer
+from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
+from vxlib.reactivity import Cell, Computed, Emitter, ReactiveQuery, Readable, Subscribable
 
 from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
@@ -28,7 +31,6 @@ from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.system import Remote, System, remote_store_fingerprint
-from vxlib import Cell, Coalescer, Computed, Emitter, ReactiveQuery, Readable, Subscribable, Teardown, merge_dicts
 
 from .config import (
     AcquisitionTask,
@@ -55,6 +57,10 @@ from .topology import HALConfig
 from .traversal import TileOrder
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_route_updates(current: dict[str, str], update: dict[str, str]) -> dict[str, str]:
+    return current | update
 
 
 class AcquisitionRequest(BaseModel):
@@ -129,7 +135,7 @@ class Instrument:
         self._routing_unsubs: list[Teardown] = []
         self._routing_updates = Coalescer[dict[str, str]](
             drain=self._apply_automatic_routes,
-            reducer=merge_dicts,
+            reducer=_merge_route_updates,
         )
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._store, fn=self._compute_task_tiles)

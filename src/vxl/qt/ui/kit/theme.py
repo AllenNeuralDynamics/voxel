@@ -21,8 +21,8 @@ from functools import lru_cache
 import qtawesome as qta
 from PySide6.QtCore import QBuffer, QIODevice
 from PySide6.QtGui import QColor
-from vxlib.color import Color
 
+from vxl._utils.color import Color
 from vxl.qt.ui.assets import DEFAULT_FAMILY
 
 

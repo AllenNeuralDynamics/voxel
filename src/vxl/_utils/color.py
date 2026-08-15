@@ -5,7 +5,7 @@ colormaps for fluorescence microscopy channels. Used by the preview system
 to apply false-color LUTs to grayscale camera frames.
 
 Usage:
-    from vxlib.color import Color, resolve_colormap
+    from vxl._utils.color import Color, resolve_colormap
 
     c = Color("#00ff00")
     c.rgb           # (0, 255, 0)

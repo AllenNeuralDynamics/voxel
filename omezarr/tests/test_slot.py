@@ -17,7 +17,7 @@ from ome_zarr_writer import DirectS3, S3Store, ScaleLevel, WriterConfig
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.slot import BatchSlot, OutputSetup
-from vxlib.vec import UIVec3D, UVec3D
+from vxlib.vector import UIVec3D, UVec3D
 
 
 def _roundtrip(setup: OutputSetup) -> OutputSetup:

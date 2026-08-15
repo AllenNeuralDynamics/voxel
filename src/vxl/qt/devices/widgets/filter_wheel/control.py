@@ -11,9 +11,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from vxlib.asyncio import spawn
 
 from vxl.qt.ui.kit import Button
-from vxlib import fire_and_forget
 
 from .graphic import WheelGraphic
 
@@ -61,7 +61,7 @@ class FilterWheelControl(QWidget):
         self._connect_signals()
 
         # Trigger async initialization
-        fire_and_forget(self._initialize(), log=log)
+        spawn(self._initialize(), log=log)
 
     def _configure_layout(self) -> None:
         """Arrange widgets into layouts (initial placeholder state)."""
@@ -189,7 +189,7 @@ class FilterWheelControl(QWidget):
     def _on_slot_selected(self, slot: int) -> None:
         """Handle user selecting a slot in the graphic."""
         log.debug("User selected slot %s", slot)
-        fire_and_forget(self._move_to_slot(slot), log=log)
+        spawn(self._move_to_slot(slot), log=log)
 
     async def _move_to_slot(self, slot: int) -> None:
         """Send move command to the device."""

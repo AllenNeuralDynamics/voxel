@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from vxl_records import SQLiteRecords
 
 from vxl import system as system_module
+from vxl._utils.files import load_yaml
 from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
 from vxl.devices.daq.clocked.waveform import validate_waveform
@@ -16,7 +17,6 @@ from vxl.instrument.store import InstrumentInspection, InstrumentStore, Invalid,
 from vxl.instrument.topology import HALConfig
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
-from vxlib import load_yaml
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 

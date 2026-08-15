@@ -7,8 +7,8 @@ from types import MappingProxyType
 from typing import Any, Literal, Self, cast, overload
 
 from pydantic import BaseModel
-
-from vxlib import Subscribable, Teardown
+from vxlib.lifecycle import Teardown
+from vxlib.reactivity import Subscribable
 
 from .driver import Device, StreamCallback
 from .props import PropertyModel

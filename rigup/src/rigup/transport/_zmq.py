@@ -24,8 +24,7 @@ from itertools import count
 
 import zmq
 import zmq.asyncio
-
-from vxlib import Teardown
+from vxlib.lifecycle import Teardown
 
 from ._base import (
     MessageKind,

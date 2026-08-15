@@ -14,7 +14,11 @@ import logging
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QScrollArea, QWidget
+from vxlib.asyncio import spawn
+from vxlib.fmt import display_name
+from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
+from vxl._utils.color import Color
 from vxl.instrument import AcquisitionMode, Instrument
 from vxl.instrument.config import ChannelConfig
 from vxl.instrument.core import Channel
@@ -23,7 +27,6 @@ from vxl.qt.devices.widgets.camera import CameraControl
 from vxl.qt.devices.widgets.laser import LaserControl
 from vxl.qt.ui.kit import (
     Button,
-    Color,
     Colors,
     ControlSize,
     Flex,
@@ -35,7 +38,6 @@ from vxl.qt.ui.kit import (
     Text,
     vbox,
 )
-from vxlib import Teardown, display_name, fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -146,13 +148,13 @@ class ChannelsPanel(QWidget):
     def _on_profile_selected(self, profile_id: str) -> None:
         if profile_id == self._instrument.active_profile_id.value:
             return
-        fire_and_forget(self._instrument.set_active_profile(profile_id), log=log)
+        spawn(self._instrument.set_active_profile(profile_id), log=log)
 
     def _on_preview_clicked(self) -> None:
         if self._instrument.mode.value == AcquisitionMode.PREVIEW:
-            fire_and_forget(self._instrument.stop_preview(), log=log)
+            spawn(self._instrument.stop_preview(), log=log)
         else:
-            fire_and_forget(self._instrument.start_preview(), log=log)
+            spawn(self._instrument.start_preview(), log=log)
 
     def _sync_preview_button(self, mode: AcquisitionMode) -> None:
         previewing = mode == AcquisitionMode.PREVIEW

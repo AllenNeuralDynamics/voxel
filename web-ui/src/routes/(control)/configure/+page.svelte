@@ -10,7 +10,7 @@
   import { type AnyPropModel, BoolModel, EnumeratedModel, LinkGroup, NumericModel, Prop, RoiModel } from '$lib/model';
   import { formatPropValue, PropInput } from '$lib/prop';
   import { SpinBox } from '$lib/prop/numeric';
-  import { cn, pref, sanitizeString, toastError } from '$lib/utils';
+  import { cn, displayName, pref, toastError } from '$lib/utils';
 
   import RoutingPolicySection from './RoutingPolicySection.svelte';
 
@@ -82,7 +82,7 @@
         if (!prop) continue;
         const entry = candidates.get(name);
         if (!entry) {
-          candidates.set(name, { label: info.label || sanitizeString(name), models: [prop.model] });
+          candidates.set(name, { label: info.label || displayName(name), models: [prop.model] });
         } else if (entry.models[0].constructor === prop.model.constructor) {
           entry.models.push(prop.model);
         }
@@ -234,7 +234,7 @@
 
 {#snippet sectionHeader(name: string, type?: string)}
   <div class="flex items-baseline justify-between gap-2 pb-1.5">
-    <span class="text-base font-medium text-fg">{sanitizeString(name)}</span>
+    <span class="text-base font-medium text-fg">{displayName(name)}</span>
     {#if type}
       <span class="py-0.5 font-mono text-sm text-fg-faint">{type}</span>
     {/if}
@@ -435,7 +435,7 @@
   {@const wheel = setting.wheel}
   {@const declared = setting.filter}
   <div class="flex min-h-ui-xs items-center justify-between gap-2">
-    <span class="text-base text-fg-muted">{sanitizeString(wheel.id)}</span>
+    <span class="text-base text-fg-muted">{displayName(wheel.id)}</span>
     {#if declared}
       <span class="text-base text-fg tabular-nums">{declared}</span>
     {:else}
@@ -449,7 +449,7 @@
     <div class="min-h-0 flex-1 overflow-y-auto p-4">
       <header class="mb-4 flex flex-wrap items-center gap-4">
         <h2 class="text-xl font-medium text-fg">
-          {instrument.activeProfile?.label || sanitizeString(instrument.activeProfileId ?? '') || '—'}
+          {instrument.activeProfile?.label || displayName(instrument.activeProfileId ?? '') || '—'}
         </h2>
         <span class="text-fg-muted">
           {instrument.activeChannels.length} channel{instrument.activeChannels.length === 1 ? '' : 's'}
@@ -539,10 +539,10 @@
                       {#each waveformOutputGroups as group (group.generatorId)}
                         <div class="grid grid-cols-[10rem_minmax(0,1fr)] gap-2 text-base">
                           <span class="truncate text-fg-muted" title={group.generatorId}>
-                            {sanitizeString(group.generatorId)}
+                            {displayName(group.generatorId)}
                           </span>
                           <span class="text-fg">
-                            {group.outputs.map(sanitizeString).join(', ')}
+                            {group.outputs.map(displayName).join(', ')}
                           </span>
                         </div>
                       {/each}

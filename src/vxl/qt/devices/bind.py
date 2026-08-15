@@ -15,10 +15,10 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QSignalBlocker, SignalInstance
 from PySide6.QtWidgets import QApplication
+from vxlib.asyncio import spawn
 
 from vxl.qt.devices.adapter import DeviceHandleQt
 from vxl.qt.ui.kit import DoubleSpinBox, LockableSlider, Select, SliderSpinBox, SpinBox
-from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class _PropertyBinder(QObject):
         raise NotImplementedError
 
     def _push(self, value: Any) -> None:
-        fire_and_forget(self._adapter.set(self._prop, value), log=log)
+        spawn(self._adapter.set(self._prop, value), log=log)
 
 
 class _SelectBinder(_PropertyBinder):

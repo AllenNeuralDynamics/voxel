@@ -36,7 +36,7 @@ from typing import Any, Self, cast
 import numpy as np
 from cloudpathlib import S3Path
 from pydantic import BaseModel, ConfigDict, Field
-from vxlib.vec import UIVec3D, UVec3D
+from vxlib.vector import UIVec3D, UVec3D
 
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.dataset import (

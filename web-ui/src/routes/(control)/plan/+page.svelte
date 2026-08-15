@@ -11,7 +11,7 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { getVoxelApp, type TaskPatch, type TileOrder } from '$lib/model';
   import { Input, SpinBox } from '$lib/prop/numeric';
-  import { cn, pref, sanitizeString, toastError } from '$lib/utils';
+  import { cn, displayName, pref, toastError } from '$lib/utils';
 
   const app = getVoxelApp();
   const instrument = $derived(app.instrument);
@@ -90,7 +90,7 @@
   }
 
   function profileLabel(id: string): string {
-    return instrument?.imaging.profiles[id]?.label || sanitizeString(id);
+    return instrument?.imaging.profiles[id]?.label || displayName(id);
   }
 
   const allProfileIds = $derived(Object.keys(instrument?.imaging.profiles ?? {}));

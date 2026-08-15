@@ -4,7 +4,7 @@
   import { ChevronDown, ChevronRight } from '$lib/icons';
   import { Collapsible } from '$lib/kit';
   import type { Instrument } from '$lib/model';
-  import { cn, pref, sanitizeString } from '$lib/utils';
+  import { cn, displayName, pref } from '$lib/utils';
 
   import RoutingPolicyEditor from './RoutingPolicyEditor.svelte';
 
@@ -53,7 +53,7 @@
                 )}
                 onclick={() => (activeId = dimension.id)}
               >
-                {sanitizeString(dimension.id)}
+                {displayName(dimension.id)}
               </button>
             {/each}
           </div>

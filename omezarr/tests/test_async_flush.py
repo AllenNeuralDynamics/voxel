@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, WriterConfig
 from ome_zarr_writer.array.ts import TSArrayReader
-from vxlib.vec import UIVec3D, UVec3D
+from vxlib.vector import UIVec3D, UVec3D
 
 
 def _read_l0(base: Path, z: int) -> np.ndarray:

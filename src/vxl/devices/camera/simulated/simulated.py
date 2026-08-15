@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from typing import ClassVar, cast, final
 
 import numpy as np
-from vxlib.vec import IVec2D, Vec2D
+from vxlib.vector import IVec2D, Vec2D
 
 from rigup import enumerated, enumerated_int, numeric
 from vxl.devices.camera.base import (

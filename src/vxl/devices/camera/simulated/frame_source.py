@@ -11,11 +11,11 @@ from urllib.request import Request, urlopen
 import cv2
 import numpy as np
 from pydantic import Field, TypeAdapter, model_validator
-from vxlib.vec import IVec2D, Vec2D
+from vxlib.schema import FrozenModel, SparseModel
+from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera.base import SensorROI, ValidBits
 from vxl.system import System
-from vxlib import SchemaModel
 
 DEFAULT_REFERENCE_PATH = Path(__file__).with_name("default_reference.png")
 DEFAULT_SENSOR_SIZE_PX = IVec2D(y=10_640, x=14_192)
@@ -74,7 +74,7 @@ _ASSETS: dict[str, _Asset] = {
 }
 
 
-class FileFrameSourceConfig(SchemaModel):
+class FileFrameSourceConfig(FrozenModel):
     """A local or downloadable 2D image mapped onto a virtual camera sensor."""
 
     path: Path | None = None
@@ -91,7 +91,7 @@ class FileFrameSourceConfig(SchemaModel):
         return self
 
 
-class PatternFrameSourceConfig(SchemaModel):
+class PatternFrameSourceConfig(FrozenModel):
     """A deterministic mathematical pattern rendered in sensor coordinates."""
 
     pattern: PatternName
@@ -111,7 +111,7 @@ type FrameSourceConfig = FileFrameSourceConfig | PatternFrameSourceConfig
 _FRAME_SOURCE_CONFIG_ADAPTER = TypeAdapter(FrameSourceConfig)
 
 
-class FrameSampleManifest(SchemaModel):
+class FrameSampleManifest(SparseModel):
     """Provenance and encoding metadata accompanying one exported 2D frame."""
 
     schema_version: Literal[2] = 2

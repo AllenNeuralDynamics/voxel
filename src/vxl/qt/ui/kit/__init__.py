@@ -49,7 +49,7 @@ from .table import (
     TableToolbar,
 )
 from .text import Chip, FontSize, FontWeight, Text
-from .theme import APP_STYLESHEET, BorderRadius, Color, Colors, ControlSize, Size, Spacing, app_stylesheet
+from .theme import APP_STYLESHEET, BorderRadius, Colors, ControlSize, Size, Spacing, app_stylesheet
 
 __all__ = [
     "APP_STYLESHEET",
@@ -57,7 +57,6 @@ __all__ = [
     "BorderRadius",
     "Button",
     "Chip",
-    "Color",
     "Colors",
     "ColumnType",
     "ControlSize",

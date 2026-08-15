@@ -10,9 +10,9 @@ from vxl_records import (
     RemoteTarget,
     StorageSpec,
 )
+from vxlib.s3 import S3Store
 
 from vxl.system import Remote, System
-from vxlib import S3Store
 
 
 def test_resolve_local_storage(tmp_path) -> None:

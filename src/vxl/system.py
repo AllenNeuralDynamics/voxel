@@ -37,8 +37,9 @@ from vxl_records import (
     ObjectLocation,
     StorageSpec,
 )
+from vxlib.s3 import S3Store
 
-from vxlib import S3Store, save_yaml
+from vxl._utils.files import save_yaml
 
 log = logging.getLogger(__name__)
 
@@ -162,6 +163,17 @@ class System(BaseSettings):
     @staticmethod
     def hostname() -> str:
         return socket.gethostname()
+
+    @staticmethod
+    def local_ip() -> str:
+        """Return the best-effort outbound IPv4 address, falling back to loopback."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
+                connection.settimeout(0.1)
+                connection.connect(("8.8.8.8", 80))
+                return connection.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
 
     def resolve_storage(self, spec: StorageSpec, subpath: PurePosixPath | None = None) -> Storage:
         """Resolve portable storage against this machine's configuration."""

@@ -14,7 +14,7 @@
   } from '$lib/icons';
   import { DropdownMenu } from '$lib/kit';
   import { type AcquisitionManifest, getVoxelApp, type InstrumentInspection } from '$lib/model';
-  import { cn, pref, sanitizeString } from '$lib/utils';
+  import { cn, displayName, pref } from '$lib/utils';
 
   const app = getVoxelApp();
   const instrumentsOpen = pref('library:overview-instruments-open', true);
@@ -60,8 +60,8 @@
     class="group flex min-h-28 flex-col rounded-lg border bg-card p-4 shadow-sm transition-colors hover:border-accent hover:bg-element-hover"
   >
     <div class="flex items-start gap-3">
-      <h3 class="min-w-0 flex-1 truncate text-lg font-medium text-fg" title={sanitizeString(name)}>
-        {sanitizeString(name)}
+      <h3 class="min-w-0 flex-1 truncate text-lg font-medium text-fg" title={displayName(name)}>
+        {displayName(name)}
       </h3>
       {#if active}
         <Power width="14" height="14" class="mt-0.5 shrink-0 text-success" aria-label="Active" />
@@ -138,7 +138,7 @@
           <DropdownMenu.Content align="start" class="w-64">
             {#each templates as template (template)}
               <DropdownMenu.Item onclick={() => goto(resolve(`/instruments/new/${template}` as '/'))}>
-                <span class="truncate text-base">{sanitizeString(template)}</span>
+                <span class="truncate text-base">{displayName(template)}</span>
               </DropdownMenu.Item>
             {/each}
           </DropdownMenu.Content>
@@ -157,8 +157,8 @@
       <div class="space-y-6">
         {#each acquisitionGroups as group (group.instrument)}
           <section>
-            <h3 class="mb-2 truncate text-sm font-medium text-fg-muted" title={sanitizeString(group.instrument)}>
-              {sanitizeString(group.instrument)}
+            <h3 class="mb-2 truncate text-sm font-medium text-fg-muted" title={displayName(group.instrument)}>
+              {displayName(group.instrument)}
             </h3>
             <div class="overflow-hidden rounded-lg border border-border bg-card">
               {#each group.manifests as manifest, index (manifest.id)}

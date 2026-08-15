@@ -4,10 +4,11 @@ import logging
 from typing import Any
 
 from PySide6.QtWidgets import QVBoxLayout, QWidget
+from vxlib.asyncio import spawn
 
+from vxl._utils.color import Color
 from vxl.qt.devices.adapter import DeviceHandleQt
 from vxl.qt.ui.kit import (
-    Color,
     Colors,
     Flex,
     LockableSlider,
@@ -16,7 +17,6 @@ from vxl.qt.ui.kit import (
     Text,
     Toggle,
 )
-from vxlib import fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -108,12 +108,12 @@ class LaserControl(QWidget):
     def _on_toggle_changed(self, checked: bool) -> None:
         """Handle enable toggle change."""
         command = "enable" if checked else "disable"
-        fire_and_forget(self._adapter.call(command), log=log)
+        spawn(self._adapter.call(command), log=log)
         log.debug("Laser %s: %s", self._adapter.uid, command)
 
     def _on_power_changed(self, value: float) -> None:
         """Handle power setpoint change from slider."""
-        fire_and_forget(self._adapter.set("power_setpoint", value), log=log)
+        spawn(self._adapter.set("power_setpoint", value), log=log)
         log.debug("Laser %s: set power_setpoint = %.1f", self._adapter.uid, value)
 
     def update_power_range(self, min_val: float, max_val: float) -> None:

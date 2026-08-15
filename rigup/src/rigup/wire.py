@@ -17,8 +17,8 @@ from typing import Any, Literal, cast, overload
 
 import msgpack
 from pydantic import BaseModel
-
-from vxlib import Emitter, Teardown
+from vxlib.lifecycle import Teardown
+from vxlib.reactivity import Emitter
 
 log = logging.getLogger("rigup.wire")
 

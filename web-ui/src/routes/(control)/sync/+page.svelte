@@ -8,7 +8,7 @@
   import type { DerivedWaveform, Signals, Waveform } from '$lib/model';
   import { getVoxelApp } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
-  import { sanitizeString, toastError } from '$lib/utils';
+  import { displayName, toastError } from '$lib/utils';
 
   import WaveformPlot, { type PlotContext } from './WaveformPlot.svelte';
   import {
@@ -70,7 +70,7 @@
 
   const generatorUids = $derived<string[]>(profile ? Object.keys(profile.sync) : []);
   const generatorOptions = $derived<SelectOption[]>(
-    generatorUids.map((uid) => ({ value: uid, label: sanitizeString(uid) }))
+    generatorUids.map((uid) => ({ value: uid, label: displayName(uid) }))
   );
 
   watch(
@@ -454,7 +454,7 @@
   }
 
   const derivedSourceOptions = $derived<SelectOption[]>(
-    waveformIds.filter((id) => id !== selectedWaveformId).map((id) => ({ value: id, label: sanitizeString(id) }))
+    waveformIds.filter((id) => id !== selectedWaveformId).map((id) => ({ value: id, label: displayName(id) }))
   );
 
   const activeWindowSeconds = $derived(
@@ -570,7 +570,7 @@
           <section
             class="overflow-hidden rounded-xs border bg-canvas transition-colors
               {selectedInGroup ? 'border-focused/60' : 'border-border'}"
-            aria-label={group.label || group.waveformIds.map(sanitizeString).join(', ')}
+            aria-label={group.label || group.waveformIds.map(displayName).join(', ')}
           >
             <div class="flex min-h-10 flex-wrap items-center gap-1 border-b px-3 py-1.5">
               {#if group.label}
@@ -579,11 +579,7 @@
               {#each group.waveformIds as waveformId (waveformId)}
                 {@const color = waveformColors[waveformId] ?? '#888'}
                 {#if waveformId === selectedWaveformId && editingWaveform}
-                  <div
-                    class="flex shrink-0 items-stretch"
-                    role="group"
-                    aria-label={`${sanitizeString(waveformId)} type`}
-                  >
+                  <div class="flex shrink-0 items-stretch" role="group" aria-label={`${displayName(waveformId)} type`}>
                     <button
                       type="button"
                       onclick={() => selectWaveform(waveformId)}
@@ -592,7 +588,7 @@
                     >
                       <span class="size-2 shrink-0 rounded-full" style="background-color: {color}" aria-hidden="true"
                       ></span>
-                      {sanitizeString(waveformId)}
+                      {displayName(waveformId)}
                     </button>
                     <Select
                       prefix=" "
@@ -613,7 +609,7 @@
                   >
                     <span class="size-2 shrink-0 rounded-full" style="background-color: {color}" aria-hidden="true"
                     ></span>
-                    {sanitizeString(waveformId)}
+                    {displayName(waveformId)}
                   </button>
                 {/if}
               {/each}

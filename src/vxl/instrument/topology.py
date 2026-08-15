@@ -3,16 +3,16 @@ from collections.abc import Mapping
 from typing import Annotated, Self
 
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
+from vxlib.schema import FrozenModel
 
 from rigup import DeviceConfig, RigConfig
-from vxlib import SchemaModel
 
 from .errors import Violation, ViolationLoc, assignment_violations
 
 logger = logging.getLogger(__name__)
 
 
-class StageConfig(SchemaModel):
+class StageConfig(FrozenModel):
     x: str
     y: str
     z: str
@@ -21,7 +21,7 @@ class StageConfig(SchemaModel):
 type SupportedOpticalRoutes = Annotated[list[str], Field(min_length=1)]
 
 
-class OpticalAssemblyConfig(SchemaModel):
+class OpticalAssemblyConfig(FrozenModel):
     aux_devices: list[str] = Field(default_factory=list)
     routing: dict[str, SupportedOpticalRoutes] = Field(default_factory=dict)
 

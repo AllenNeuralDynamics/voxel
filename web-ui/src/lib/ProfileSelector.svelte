@@ -4,7 +4,7 @@
   import { Check, ChevronUpDown, DotsSpinner } from '$lib/icons';
   import { selectVariants } from '$lib/kit/Select.svelte';
   import type { Instrument } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn, displayName } from '$lib/utils';
 
   interface Props {
     instrument: Instrument;
@@ -29,7 +29,7 @@
   const profileList = $derived(
     Object.entries(instrument.imaging.profiles).map(([id, cfg]) => ({
       value: id,
-      label: cfg.label ?? sanitizeString(id),
+      label: cfg.label ?? displayName(id),
       description: cfg.desc
     }))
   );

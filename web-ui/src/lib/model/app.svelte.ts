@@ -4,7 +4,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { browser } from '$app/environment';
 import { type DeviceRole, type DeviceRoleKind, sortByRoleOrder } from '$lib/model/role';
-import { pref, sanitizeString } from '$lib/utils';
+import { displayName, pref } from '$lib/utils';
 import { decodeMsgpack } from '$lib/utils/msgpack';
 
 import { Client, type ClientOptions, errorMessage, resolveWebSocketUrl, type Unsub } from './client.svelte';
@@ -347,7 +347,7 @@ export class Instrument {
       return [
         {
           id,
-          label: ch.label || sanitizeString(id),
+          label: ch.label || displayName(id),
           emission: ch.emission ?? undefined,
           camera,
           laser,

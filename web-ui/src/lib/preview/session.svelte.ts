@@ -11,7 +11,7 @@ import {
   type PreviewViewport,
   type StreamCursor
 } from '$lib/model/types';
-import { clampTopLeft, pref, sanitizeString } from '$lib/utils';
+import { clampTopLeft, displayName, pref } from '$lib/utils';
 
 import type { Client } from '../model/client.svelte';
 import { NumericModel } from '../model/prop.svelte';
@@ -145,7 +145,7 @@ export class PreviewChannel {
   name: string | undefined = $state<string | undefined>(undefined);
   config = $state<ChannelConfig | undefined>(undefined);
   label: string | null = $derived<string | null>(
-    this.config?.label ? this.config.label : this.name ? sanitizeString(this.name) : 'Unknown'
+    this.config?.label ? this.config.label : this.name ? displayName(this.name) : 'Unknown'
   );
   visible = $state(false);
   levelsMin = $state(0);

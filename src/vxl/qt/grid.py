@@ -14,6 +14,8 @@ from typing import Any
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QMouseEvent, QPainter, QPaintEvent, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QMenu, QSizePolicy, QWidget
+from vxlib.asyncio import spawn
+from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
 from vxl.instrument import Instrument, InstrumentState
 from vxl.instrument.config import AcquisitionTask, TaskPatch
@@ -37,7 +39,6 @@ from vxl.qt.ui.kit import (
     hbox,
     vbox,
 )
-from vxlib import Teardown, fire_and_forget
 
 log = logging.getLogger(__name__)
 
@@ -137,11 +138,11 @@ class TasksTableModel(TableModel[str, "_Row | None"]):
         if aux_data is None or column.setter is None:
             return
         patch = TaskPatch(**column.setter(row_data, aux_data, value))
-        fire_and_forget(self._instrument.update_tasks({row_data: patch}), log=log)
+        spawn(self._instrument.update_tasks({row_data: patch}), log=log)
 
     def delete(self, task_ids: list[str]) -> None:
         """Remove the given tasks, then clear the checkbox selection."""
-        fire_and_forget(self._instrument.remove_tasks(task_ids), log=log)
+        spawn(self._instrument.remove_tasks(task_ids), log=log)
         self.clear_checked()
 
     def teardown(self) -> None:
@@ -170,7 +171,7 @@ class TasksTable(QWidget):
         task = self._instrument.state.value.tasks.get(task_id)
         if task is None:
             return
-        fire_and_forget(self._instrument.move_stage(x=task.x, y=task.y), log=log)
+        spawn(self._instrument.move_stage(x=task.x, y=task.y), log=log)
 
     def contextMenuEvent(self, event: QContextMenuEvent | None) -> None:
         """Right-click → bulk actions on the checkbox-selected tasks."""
@@ -431,10 +432,10 @@ class GridCanvas(QWidget):
             menu.exec(event.globalPos())
 
     def _add_stack(self, x: float, y: float) -> None:
-        fire_and_forget(self._instrument.add_tasks([(x, y)]), log=log)
+        spawn(self._instrument.add_tasks([(x, y)]), log=log)
 
     def _move_stage(self, x: float, y: float) -> None:
-        fire_and_forget(self._instrument.move_stage(x=x, y=y), log=log)
+        spawn(self._instrument.move_stage(x=x, y=y), log=log)
 
 
 class StageControls(QWidget):

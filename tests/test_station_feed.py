@@ -2,7 +2,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from vxlib.reactivity import Cell
 
+from vxl._utils.files import load_yaml
 from vxl.instrument import AcquisitionMode, InstrumentConfig
 from vxl.station import (
     InstrumentView,
@@ -14,7 +16,6 @@ from vxl.station import (
     StationStatus,
 )
 from vxl.system import StationInfo
-from vxlib import Cell, load_yaml
 
 STATION = StationInfo(id=UUID("12345678-1234-5678-1234-567812345678"), name="scope")
 CONFIG = load_yaml(

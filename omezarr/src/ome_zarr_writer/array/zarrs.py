@@ -26,10 +26,10 @@ import numpy as np
 import zarr
 import zarrs  # noqa: F401 — registers the zarrs codec pipeline
 from cloudpathlib import S3Path
+from vxlib.s3 import AnonymousCredentials, ProfileCredentials
 from zarr.storage import LocalStore, ObjectStore
 
 from ome_zarr_writer.storage import S3Store
-from vxlib import AnonymousCredentials, ProfileCredentials
 
 from .base import ArrayWriter
 

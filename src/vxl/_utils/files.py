@@ -1,6 +1,9 @@
 """Validated YAML loading and comment-preserving model serialization."""
 
 import io
+import os
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +14,69 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.emitter import RoundTripEmitter
 from ruamel.yaml.events import MappingEndEvent
 
-from .utils import atomic_write
-
 try:
     from yaml import CSafeLoader as _YamlLoader
 except ImportError:
     from yaml import SafeLoader as _YamlLoader
+
+_REPLACE_ATTEMPTS = 5
+_REPLACE_BASE_DELAY_S = 0.05
+
+
+def _replace_with_retry(source: Path, target: Path) -> None:
+    """Replace ``target`` with ``source``, retrying transient sharing violations.
+
+    Windows refuses a replace while any process holds ``target`` open without
+    ``FILE_SHARE_DELETE``. Antivirus, the search indexer, and backup agents all
+    do so for a few milliseconds after a file is written, which makes a
+    single-attempt replace unreliable there. POSIX renames never fail this way,
+    so the first attempt always succeeds and this costs nothing.
+
+    ``ERROR_ACCESS_DENIED`` (5) and ``ERROR_SHARING_VIOLATION`` (32) both surface
+    as ``PermissionError``. Delays double, giving up after ~750 ms.
+    """
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            source.replace(target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_BASE_DELAY_S * 2**attempt)
+
+
+def atomic_write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically and durably.
+
+    Writes to a temp file in the same directory, fsyncs it, then atomically
+    replaces ``path`` so readers see either the old contents or the new ones,
+    never a partial write. The parent directory is fsynced afterward so the
+    rename itself survives power loss (POSIX only). The temp file is removed
+    if anything fails before the replace.
+
+    Blocks briefly if the replace hits a transient sharing violation, so call it
+    off the event loop (e.g. via ``asyncio.to_thread``).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp)
+    try:
+        # newline="" keeps output byte-deterministic (no Windows \n -> \r\n translation).
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        _replace_with_retry(tmp_path, path)
+        try:
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass  # non-POSIX (e.g. Windows): directory fsync unsupported
+    finally:
+        tmp_path.unlink(missing_ok=True)  # no-op after a successful replace; cleanup on failure
 
 
 class _FlowMapEmitter(RoundTripEmitter):

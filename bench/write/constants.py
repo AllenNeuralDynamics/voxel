@@ -3,6 +3,8 @@ file. Builds on the shared `bench.config` (S3 store, HOST, RESULTS_DIR)."""
 
 from pathlib import Path
 
+from vxlib.s3 import S3Store
+
 from bench.config import (
     BENCH_S3_BUCKET,
     BENCH_S3_ENDPOINT,
@@ -11,7 +13,6 @@ from bench.config import (
     HOST,
     RESULTS_DIR,
 )
-from vxlib import S3Store
 
 VAST = S3Store(endpoint=BENCH_S3_ENDPOINT, region=BENCH_S3_REGION)
 S3_BUCKET = BENCH_S3_BUCKET

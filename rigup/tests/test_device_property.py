@@ -12,9 +12,9 @@ from collections.abc import AsyncGenerator, Callable
 import pytest
 from rigup.device import DeviceController, DeviceHandle
 from rigup.node import LocalAdapter
+from vxlib.reactivity import ReactiveQuery
 
 from tests._mock import MockDevice
-from vxlib import ReactiveQuery
 
 
 def _as_float(value: object) -> float:

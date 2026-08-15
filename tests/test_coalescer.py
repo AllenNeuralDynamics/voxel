@@ -1,8 +1,7 @@
 import asyncio
 
 import pytest
-
-from vxlib import Coalescer
+from vxlib.coalescer import Coalescer
 
 
 async def test_close_awaits_running_drain_and_prevents_restart() -> None:

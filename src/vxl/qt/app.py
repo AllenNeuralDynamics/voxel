@@ -25,7 +25,11 @@ import qasync
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QEnterEvent, QIcon, QMouseEvent, QPalette
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
+from vxlib.asyncio import spawn
+from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
+from vxl._utils.color import Color
+from vxl._utils.logging import configure_logging
 from vxl.instrument import Instrument
 from vxl.instrument.store import InstrumentInspection
 from vxl.qt.devices import DevicesStore
@@ -35,7 +39,6 @@ from vxl.qt.preview.models import PreviewStore
 from vxl.qt.ui.assets import VOXEL_LOGO, load_fonts
 from vxl.qt.ui.kit import (
     Button,
-    Color,
     Colors,
     Flex,
     FontSize,
@@ -51,7 +54,6 @@ from vxl.qt.ui.kit import (
 )
 from vxl.station import InstrumentTemplates, SessionInfo, SessionView, Station, StationFeedConnection, StationFeedView
 from vxl.system import StationConfig, load_voxel_env
-from vxlib import Teardown, configure_logging, fire_and_forget
 
 from .channels import ChannelsPanel
 from .grid import GridCanvas, StageControls, TasksTable
@@ -319,7 +321,7 @@ class MainWindow(QMainWindow):
 
     def _ensure_shutdown(self) -> asyncio.Task[None]:
         if self._shutdown_task is None:
-            self._shutdown_task = fire_and_forget(self._shutdown(), name="qt-control-shutdown", log=log)
+            self._shutdown_task = spawn(self._shutdown(), name="qt-control-shutdown", log=log)
         return self._shutdown_task
 
     async def shutdown(self) -> None:
@@ -440,7 +442,7 @@ class LaunchWindow(QWidget):
     def _start_session(self, name: str, *, template: str | None = None) -> None:
         if self._session_task is not None and not self._session_task.done():
             return
-        self._session_task = fire_and_forget(
+        self._session_task = spawn(
             self._run_session(name, template=template),
             name="qt-instrument-session",
             log=log,

@@ -4,7 +4,7 @@
   import { Button, Select } from '$lib/kit';
   import type { Instrument, OpticalRoutingPolicy, RoutingDimension, SplitOpticalRoutingPolicy } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
-  import { cn, sanitizeString, toastError } from '$lib/utils';
+  import { cn, displayName, toastError } from '$lib/utils';
 
   import { asFixedPolicy, asSplitPolicy, clonePolicy } from './policy';
 
@@ -20,7 +20,7 @@
   let saving = $state(false);
 
   const routes = $derived(dimension.policyRoutes);
-  const routeOptions = $derived(routes.map((route) => ({ value: route, label: sanitizeString(route) })));
+  const routeOptions = $derived(routes.map((route) => ({ value: route, label: displayName(route) })));
   const canSplit = $derived(routes.length >= 2);
   const changed = $derived(JSON.stringify(draft) !== JSON.stringify(dimension.policy));
   const disabled = $derived(instrument.mode === 'capture' || saving);

@@ -22,7 +22,7 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import LogViewer from '$lib/LogViewer.svelte';
   import { type AcquisitionManifest, getVoxelApp, type InstrumentInspection } from '$lib/model';
-  import { cn, createPaneSize, pref, sanitizeString } from '$lib/utils';
+  import { cn, createPaneSize, displayName, pref } from '$lib/utils';
 
   const app = getVoxelApp();
 
@@ -162,7 +162,7 @@
 </script>
 
 {#snippet acquisitionStatus(status: AcquisitionManifest['status'])}
-  <span class="flex size-4 shrink-0 items-center justify-center" aria-label={sanitizeString(status)}>
+  <span class="flex size-4 shrink-0 items-center justify-center" aria-label={displayName(status)}>
     {#if status === 'completed'}
       <Check width="13" height="13" class="text-fg-muted" aria-hidden="true" />
     {:else if status === 'running'}
@@ -212,7 +212,7 @@
                     <button
                       type="button"
                       aria-expanded={expanded}
-                      aria-label={`${expanded ? 'Collapse' : 'Expand'} ${sanitizeString(group.name)} acquisitions`}
+                      aria-label={`${expanded ? 'Collapse' : 'Expand'} ${displayName(group.name)} acquisitions`}
                       onclick={() => toggleInstrument(group.name)}
                       class="flex size-5 shrink-0 cursor-pointer items-center justify-center text-fg-muted transition-colors hover:text-fg"
                     >
@@ -230,9 +230,9 @@
                     <a
                       href={resolve(`/instruments/${group.name}` as '/')}
                       class="min-w-0 flex-1 truncate p-2"
-                      title={sanitizeString(group.name)}
+                      title={displayName(group.name)}
                     >
-                      {sanitizeString(group.name)}
+                      {displayName(group.name)}
                     </a>
 
                     {#if active}

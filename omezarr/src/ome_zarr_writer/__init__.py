@@ -37,7 +37,7 @@ The array backend (`ArrayWriter.Backend.TS` / `.ZARRS`) is an `OMEZarrWriter` co
 option; each batch is downsampled and flushed in a worker process (see `buffer.BatchSlot`).
 """
 
-from vxlib.vec import UIVec2D, UIVec3D, UVec3D
+from vxlib.vector import UIVec2D, UIVec3D, UVec3D
 
 from .dataset import Compression, DownscaleType, Dtype, ScaleLevel
 from .storage import DirectS3, Local, S3Store, StagedS3, StagingConfig, Storage

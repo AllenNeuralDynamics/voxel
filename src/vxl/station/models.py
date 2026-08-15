@@ -5,13 +5,13 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
+from vxlib.schema import FrozenModel
 
 from rigup import DeviceInterface, PropertyModel
 from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, InstrumentConfig, InstrumentState
 from vxl.instrument.models import TaskTile
 from vxl.preview import StreamCursor
 from vxl.system import Remote, StationInfo
-from vxlib import SchemaModel
 
 
 class StationStatus(StrEnum):
@@ -25,14 +25,14 @@ class StationStatus(StrEnum):
     CLOSED = "closed"
 
 
-class SessionInfo(SchemaModel):
+class SessionInfo(FrozenModel):
     """Stable identity of one opened instrument session."""
 
     id: UUID
     instrument_name: str = Field(min_length=1)
 
 
-class DeviceState(SchemaModel):
+class DeviceState(FrozenModel):
     """Serializable interface and latest-successful properties for one open device."""
 
     interface: DeviceInterface
@@ -56,14 +56,14 @@ class InstrumentView(InstrumentState):
     remote_stores: dict[str, Remote]
 
 
-class SessionView(SchemaModel):
+class SessionView(FrozenModel):
     """Complete bounded view belonging to one opened instrument session."""
 
     info: SessionInfo
     instrument: InstrumentView
 
 
-class StationState(SchemaModel):
+class StationState(FrozenModel):
     """Current reactive lifecycle projection of the live station."""
 
     status: StationStatus = StationStatus.IDLE

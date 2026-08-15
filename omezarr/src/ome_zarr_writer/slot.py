@@ -38,7 +38,7 @@ import numpy as np
 from cloudpathlib import S3Path
 from numba.np.ufunc.parallel import threading_layer
 from pydantic import BaseModel, ConfigDict
-from vxlib.vec import UIVec3D
+from vxlib.vector import UIVec3D
 
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.dataset import DownscaleType, Dtype, ScaleLevel

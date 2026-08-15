@@ -4,7 +4,7 @@
   import { resolve } from '$app/paths';
   import { AlertCircleOutline, AlertOutline, Check, CircleDashed, DotsSpinner, Minus } from '$lib/icons';
   import { type AcquisitionManifest, type AcquisitionStatus, getVoxelApp, type VolumeStatus } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn, displayName } from '$lib/utils';
 
   const app = getVoxelApp();
   const acquisition = $derived(app.instrument?.acquisition ?? null);
@@ -42,7 +42,7 @@
   );
 
   function profileLabel(source: AcquisitionManifest, profileId: string): string {
-    return source.state_snapshot.imaging.profiles[profileId]?.label || sanitizeString(profileId);
+    return source.state_snapshot.imaging.profiles[profileId]?.label || displayName(profileId);
   }
 
   function taskLabel(taskId: string): string {
@@ -70,7 +70,7 @@
 </script>
 
 {#snippet statusIcon(status: AcquisitionStatus | VolumeStatus, size = 14)}
-  <span class="flex size-4 shrink-0 items-center justify-center" aria-label={sanitizeString(status)}>
+  <span class="flex size-4 shrink-0 items-center justify-center" aria-label={displayName(status)}>
     {#if status === 'completed'}
       <Check width={size} height={size} class="text-fg-faint" aria-hidden="true" />
     {:else if status === 'running'}
@@ -112,7 +112,7 @@
         <div class="mb-4 flex gap-2 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-danger">
           <AlertCircleOutline width="16" height="16" class="mt-0.5 shrink-0" />
           <div class="min-w-0">
-            <p class="font-medium">{sanitizeString(manifest.failure.kind)}</p>
+            <p class="font-medium">{displayName(manifest.failure.kind)}</p>
             <p class="mt-0.5 text-sm wrap-break-word">{manifest.failure.message}</p>
           </div>
         </div>
@@ -233,7 +233,7 @@
         <div class="mb-2 flex items-baseline justify-between gap-3">
           <h2 class="text-sm font-medium tracking-wide text-fg-muted uppercase">Recent acquisitions</h2>
           {#if recentAcquisitions.length > 0}
-            <span class="text-sm text-fg-faint">{sanitizeString(app.activeName ?? '')}</span>
+            <span class="text-sm text-fg-faint">{displayName(app.activeName ?? '')}</span>
           {/if}
         </div>
 

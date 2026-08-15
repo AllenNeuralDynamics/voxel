@@ -3,12 +3,13 @@ from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
+from vxlib.schema import FrozenModel
 
 from rigup import CommandRequest
+from vxl._utils.color import Color
 from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
-from vxlib import Color, SchemaModel
 
 from .errors import Violation, ViolationLoc, assignment_violations
 from .metadata import ExperimentMetadata, MetadataCls
@@ -16,7 +17,7 @@ from .topology import DiscreteAxisPositions, HALConfig
 from .traversal import TileOrder
 
 
-class Patch(BaseModel):
+class Patch(FrozenModel):
     """Base for partial-update models: only the fields the caller explicitly set are applied.
 
     ``extra="forbid"`` rejects unknown keys at construction, so a typo'd field fails loudly at the
@@ -24,13 +25,11 @@ class Patch(BaseModel):
     (including any explicitly set to ``None``, so a nullable field can be cleared).
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
 
 
-class ChannelConfig(SchemaModel):
+class ChannelConfig(FrozenModel):
     detection: str
     illumination: str
     filters: DiscreteAxisPositions = Field(default_factory=dict)
@@ -61,7 +60,7 @@ class ChannelPatch(Patch):
     emission: float | None = None
 
 
-class ProfileConfig(SchemaModel):
+class ProfileConfig(FrozenModel):
     """A named microscope profile: active channels and clocked signal configurations.
 
     ``sync`` is keyed by signal-generator UID. A profile may drive any subset of
@@ -84,12 +83,12 @@ class ProfilePatch(Patch):
     label: str | None = None
 
 
-class FixedOpticalRoutingPolicy(SchemaModel):
+class FixedOpticalRoutingPolicy(FrozenModel):
     type: Literal["fixed"]
     route: str
 
 
-class SplitOpticalRoutingPolicy(SchemaModel):
+class SplitOpticalRoutingPolicy(FrozenModel):
     type: Literal["split"]
     axis: Literal["x", "y"]
     threshold: float = Field(allow_inf_nan=False)
@@ -119,7 +118,7 @@ type OpticalRoutingPolicy = Annotated[
 ]
 
 
-class ImagingProtocol(SchemaModel):
+class ImagingProtocol(FrozenModel):
     channels: dict[str, ChannelConfig]
     profiles: dict[str, ProfileConfig]
 
@@ -298,7 +297,7 @@ class ImagingProtocol(SchemaModel):
         return violations
 
 
-class Stencil(SchemaModel):
+class Stencil(FrozenModel):
     """Tile-mosaic and z-range defaults prefilled into newly-authored tasks. All positions in micrometers (µm)."""
 
     x_offset: float = 0.0
@@ -325,7 +324,7 @@ class StencilPatch(Patch):
     z_end: float | None = None
 
 
-class ZStack(SchemaModel):
+class ZStack(FrozenModel):
     """A stage position and z-range. All coordinates are absolute stage positions in micrometers (µm)."""
 
     x: float
@@ -376,7 +375,7 @@ class WriterPatch(Patch):
     target_shard_gb: Annotated[float, Field(gt=0)] | None = None
 
 
-class InstrumentDefaults(SchemaModel):  # everything that can live in config.default
+class InstrumentDefaults(FrozenModel):  # everything that can live in config.default
     imaging: ImagingProtocol
     routing: dict[str, OpticalRoutingPolicy] = Field(default_factory=dict)
     metadata_cls: MetadataCls = ExperimentMetadata
@@ -507,17 +506,11 @@ class InstrumentState(InstrumentPreset):
     last_modified: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
 
 
-class InstrumentConfig(BaseModel):
+class InstrumentConfig(FrozenModel):
     """A complete instrument spec: the hardware blueprint (:class:`HALConfig`) plus a baseline
     acquisition state (``default``). Shared by shipped ``.voxel.yaml`` templates and each instrument's
     on-disk ``config.yaml`` — a template is just a config without a ``.voxel`` home yet."""
 
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-        frozen=True,
-        arbitrary_types_allowed=False,
-    )
     hal: HALConfig
     default: InstrumentDefaults
 

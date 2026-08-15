@@ -24,8 +24,7 @@ from ome_zarr_writer import (
 )
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.writer import _as_ome_zarr
-
-from vxlib import ProfileCredentials
+from vxlib.s3 import ProfileCredentials
 
 
 def write_volume(storage: Storage) -> None:

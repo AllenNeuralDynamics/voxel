@@ -9,8 +9,7 @@ import msgpack
 import numpy as np
 from numcodecs import Zstd
 from pydantic import Field, field_validator, model_validator
-
-from vxlib import SchemaModel
+from vxlib.schema import FrozenModel, SparseModel
 
 SOURCE_MAGIC = b"VXPS"
 SOURCE_FRAMING_VERSION = 1
@@ -67,7 +66,7 @@ def byte_unshuffle_u16(shuffled: bytes | bytearray | memoryview, *, width: int, 
     return interleaved.view("<u2").reshape(height, width).astype(np.uint16, copy=False)
 
 
-class PreviewViewport(SchemaModel):
+class PreviewViewport(FrozenModel):
     """Visible region in normalized coordinates [0, 1].
 
     When sent from the frontend, coordinates are stage-normalized.
@@ -132,7 +131,7 @@ type PreviewSourceEmission = tuple[str, PreviewLayer, bytes]
 type PreviewEmission = tuple[str, PreviewLayer, bytes]
 
 
-class SourceRectPx(SchemaModel):
+class SourceRectPx(FrozenModel):
     """Source region represented by an image, in integer sensor pixels."""
 
     x: int = Field(ge=0)
@@ -141,7 +140,7 @@ class SourceRectPx(SchemaModel):
     height: int = Field(gt=0)
 
 
-class PreviewSourceHeader(SchemaModel):
+class PreviewSourceHeader(SparseModel):
     """Immutable source metadata supplied by a camera node."""
 
     source_schema_version: Literal[1] = SOURCE_SCHEMA_VERSION
@@ -203,14 +202,14 @@ def preview_source_header(packed: bytes | bytearray | memoryview) -> PreviewSour
     return _parse_preview_source(packed)[1]
 
 
-class StreamCursor(SchemaModel):
+class StreamCursor(FrozenModel):
     """Position in one identified ordered stream."""
 
     stream_id: str = Field(min_length=1)
     seq: int = Field(ge=0)
 
 
-class VoxelPreviewHeader(SchemaModel):
+class VoxelPreviewHeader(FrozenModel):
     """Voxel delivery ordering and authoritative application-state association."""
 
     delivery_schema_version: Literal[1] = VOXEL_PREVIEW_SCHEMA_VERSION

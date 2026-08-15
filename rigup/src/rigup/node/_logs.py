@@ -13,10 +13,10 @@ import sys
 from contextlib import suppress
 
 from pydantic import BaseModel
+from vxlib.lifecycle import Teardown
 
 from rigup.transport import TransportClient, TransportServer
 from rigup.wire import pack, unpack
-from vxlib import Teardown
 
 LOG_TOPIC = "__log__"
 """Reserved broadcast topic for forwarded records. Device streams use ``{uid}.{topic}``, so it

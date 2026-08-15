@@ -24,7 +24,8 @@ from egrabber import (
     ct,
 )
 from rigup.device.props import enumerated, enumerated_int, numeric
-from vxlib.vec import IVec2D, Vec2D
+from vxl_drivers.utils import thread_safe_singleton
+from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera.base import (
     Camera,
@@ -36,7 +37,6 @@ from vxl.devices.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from vxlib import thread_safe_singleton
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 

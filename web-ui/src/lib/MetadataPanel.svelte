@@ -4,7 +4,7 @@
   import { Button, Dialog, Label, Select, TagInput, TextArea, TextInput } from '$lib/kit';
   import type { Instrument, JsonSchema, JsonSchemaProperty } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
-  import { sanitizeString, toastError } from '$lib/utils';
+  import { displayName, toastError } from '$lib/utils';
 
   interface Props {
     instrument: Instrument;
@@ -106,7 +106,7 @@
     {:else if prop.type === 'string' && prop.enum}
       <Select
         value={String(values[key] ?? prop.enum[0] ?? '')}
-        options={prop.enum.map((e) => ({ value: e, label: sanitizeString(e) }))}
+        options={prop.enum.map((e) => ({ value: e, label: displayName(e) }))}
         onchange={(v) => setField(key, v)}
         size="xs"
       />
@@ -136,7 +136,7 @@
 
   {#snippet fieldBlock(key: string, prop: JsonSchemaProperty)}
     <div class="flex flex-col gap-1.5">
-      <Label class="truncate" title={sanitizeString(key)}>{sanitizeString(key)}</Label>
+      <Label class="truncate" title={displayName(key)}>{displayName(key)}</Label>
       {@render fieldInput(key, prop)}
     </div>
   {/snippet}

@@ -11,6 +11,7 @@ from collections import defaultdict
 from typing import Any, overload
 
 from pydantic import BaseModel
+from vxlib.lifecycle import Teardown
 
 from rigup.build import build_objects_async
 from rigup.device import (
@@ -26,7 +27,6 @@ from rigup.device import (
     StreamCallback,
 )
 from rigup.wire import TopicDispatcher
-from vxlib import Teardown
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 

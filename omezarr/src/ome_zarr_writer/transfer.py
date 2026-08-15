@@ -21,8 +21,7 @@ from importlib.metadata import distribution
 from pathlib import Path
 
 from cloudpathlib import S3Path
-
-from vxlib import AnonymousCredentials, ProfileCredentials, S3Store
+from vxlib.s3 import AnonymousCredentials, ProfileCredentials, S3Store
 
 
 @cache

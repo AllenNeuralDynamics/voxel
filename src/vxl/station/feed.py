@@ -12,15 +12,17 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from vxlib.reactivity import Emitter
+
 from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, VoxelPreviewPacket
-from vxlib import Emitter
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
     from typing import Self
 
+    from vxlib.reactivity import Readable, Subscribable
+
     from vxl.system import StationInfo
-    from vxlib import Readable, Subscribable
 
 from .errors import StationFeedLaggedError
 from .models import StationFeedView, StationState, StationStatus, StreamCursor

@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import Self
 
 from cloudpathlib import S3Client, S3Path
-from pydantic import BaseModel, ConfigDict, model_validator
-
-from vxlib import AnonymousCredentials, ProfileCredentials, S3Store
+from pydantic import model_validator
+from vxlib.s3 import AnonymousCredentials, ProfileCredentials, S3Store
+from vxlib.schema import FrozenModel
 
 
 @lru_cache
@@ -43,11 +43,7 @@ def _s3_client(store: S3Store) -> S3Client:
     )
 
 
-class _Frozen(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-class StagingConfig(_Frozen):
+class StagingConfig(FrozenModel):
     """Tuning for staged (scratch → S3) upload."""
 
     max_pending: int = 4  # batches uploaded-or-queued before the flush blocks (bounds scratch growth)
@@ -55,13 +51,13 @@ class StagingConfig(_Frozen):
     retry_count: int = 10  # s5cmd per-object retries
 
 
-class Local(_Frozen):
+class Local(FrozenModel):
     """Write directly to a local directory."""
 
     target: Path
 
 
-class _S3(_Frozen):
+class _S3(FrozenModel):
     """Common S3 fields: the ``target`` (bound at construction to a cloudpathlib client for the
     connection, so cloudpathlib operations reach the endpoint) and the ``store`` connection (also
     used to configure the TensorStore and s5cmd clients, which don't take a cloudpathlib client)."""

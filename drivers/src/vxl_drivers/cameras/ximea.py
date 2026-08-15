@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 from rigup.device.props import enumerated, enumerated_int, numeric
-from vxlib.vec import IVec2D, Vec2D
+from vxlib.vector import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 

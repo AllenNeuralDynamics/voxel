@@ -28,13 +28,21 @@ import contextlib
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import Any, Protocol, final
 
-from vxlib.types import UNSET, Teardown, UnsetType
+from vxlib.lifecycle import Teardown
 
 log = logging.getLogger(__name__)
 
 type Listener[T] = Callable[[T], Awaitable[None] | None]
+
+
+@final
+class _UnsetType:
+    __slots__ = ()
+
+
+_UNSET = _UnsetType()
 
 
 class Subscribable[T]:
@@ -234,7 +242,7 @@ class ReactiveQuery[T](Subscribable[T]):
     def __init__(self, *triggers: Subscribable[Any], fn: Callable[[], Awaitable[T]]) -> None:
         super().__init__()
         self._fn = fn
-        self._value: T | UnsetType = UNSET
+        self._value: T | _UnsetType = _UNSET
         self._lock = asyncio.Lock()
         self._dirty = False
         self._closed = False
@@ -245,14 +253,14 @@ class ReactiveQuery[T](Subscribable[T]):
     @property
     def cache(self) -> T | None:
         """Last completed value (may be stale); ``None`` until the first compute."""
-        return None if isinstance(self._value, UnsetType) else self._value
+        return None if isinstance(self._value, _UnsetType) else self._value
 
     async def get(self) -> T:
         """Recompute now; emit if the completed value changed; return the fresh value."""
         async with self._lock:
             new = await self._fn()
             current = self._value
-            if current is UNSET or new != current:
+            if current is _UNSET or new != current:
                 self._value = new
                 await self._notify(new)
             return new
@@ -313,7 +321,7 @@ class ReactiveQuery[T](Subscribable[T]):
             log.exception("Error refreshing %s", type(self).__name__)
 
     def __repr__(self) -> str:
-        return f"ReactiveQuery(cached={self._value is not UNSET}, subs={len(self._subs)})"
+        return f"ReactiveQuery(cached={self._value is not _UNSET}, subs={len(self._subs)})"
 
 
 class Derived[S, T](Subscribable[T]):

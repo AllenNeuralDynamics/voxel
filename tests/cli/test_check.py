@@ -2,10 +2,10 @@ import io
 import json
 from pathlib import Path
 
+from vxl._utils.files import load_yaml
 from vxl.cli.check import run_check
 from vxl.instrument import InstrumentStore
 from vxl.instrument.config import InstrumentConfig
-from vxlib import load_yaml
 
 TEMPLATE = Path(__file__).parents[2] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 

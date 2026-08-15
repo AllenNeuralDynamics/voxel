@@ -17,6 +17,7 @@ from vxl_records import (
 )
 
 from rigup import PropResults, Result
+from vxl._utils.color import ColormapGroup, get_colormap_catalog
 from vxl.devices.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRequest,
@@ -39,7 +40,6 @@ from vxl.instrument.traversal import TileOrder
 from vxl.preview.protocol import VOXEL_PREVIEW_FRAMING_VERSION
 from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
 from vxl.system import StationInfo
-from vxlib import ColormapGroup, get_colormap_catalog
 
 station_router = APIRouter(prefix="/stations", tags=["station"])
 instrument_router = APIRouter(

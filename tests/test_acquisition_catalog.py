@@ -15,13 +15,14 @@ from vxl_records import (
     StorageSpec,
     VolumeStatus,
 )
+from vxlib.reactivity import Cell
 
+from vxl._utils.files import load_yaml
 from vxl.devices.camera import CaptureState
 from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, InstrumentConfig, InstrumentState
 from vxl.instrument.config import AcquisitionTask
 from vxl.instrument.core import AcquisitionRequest, Channel
 from vxl.system import System
-from vxlib import Cell, load_yaml
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 

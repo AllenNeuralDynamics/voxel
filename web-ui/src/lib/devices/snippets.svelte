@@ -1,7 +1,7 @@
 <script module lang="ts">
   import { wavelengthToColor } from '$lib/colors.svelte';
   import { type Channel } from '$lib/model';
-  import { sanitizeString } from '$lib/utils';
+  import { displayName } from '$lib/utils';
 
   export { channelDot, deviceIdentity };
 </script>
@@ -23,7 +23,7 @@
   <span
     class="inline-block size-1.5 shrink-0 rounded-full align-middle"
     style="background-color: {accent};"
-    title={sanitizeString(channel.id)}
+    title={displayName(channel.id)}
   ></span>
 {/snippet}
 
@@ -31,7 +31,7 @@
 {#snippet channelChip(channel: Channel)}
   <span class="inline-flex items-center gap-1 text-xs text-fg tabular-nums">
     {@render channelDot(channel)}
-    {sanitizeString(channel.id)}
+    {displayName(channel.id)}
   </span>
 {/snippet}
 

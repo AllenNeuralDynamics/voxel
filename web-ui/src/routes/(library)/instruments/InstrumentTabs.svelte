@@ -11,7 +11,7 @@
   import { AlertCircleOutline, AlertOutline, Check, DotsSpinner, Minus, Record } from '$lib/icons';
   import { Button, JsonView } from '$lib/kit';
   import type { AcquisitionManifest, HALConfig, Instrument, InstrumentDefaults, PresetRecord } from '$lib/model';
-  import { cn, sanitizeString } from '$lib/utils';
+  import { cn, displayName } from '$lib/utils';
 
   import InstrumentPresets from './InstrumentPresets.svelte';
   import { deviceCount } from './view';
@@ -146,7 +146,7 @@
               {#each Object.entries(instrumentState.value.imaging.profiles) as [profileId, profile] (profileId)}
                 <article class="rounded-lg border bg-card p-3 shadow-sm">
                   <h3 class="truncate text-lg font-medium text-fg">
-                    {profile.label ?? sanitizeString(profileId)}
+                    {profile.label ?? displayName(profileId)}
                   </h3>
                   {#if profile.desc}
                     <p class="mt-1 line-clamp-2 text-fg-muted">{profile.desc}</p>
@@ -161,7 +161,7 @@
                             style="background-color: {wavelengthToColor(channel.emission)}"
                           ></span>
                         {/if}
-                        {channel?.label ?? sanitizeString(channelId)}
+                        {channel?.label ?? displayName(channelId)}
                       </span>
                     {/each}
                   </div>
@@ -183,7 +183,7 @@
                       ></span>
                     {/if}
                     <h3 class="truncate text-lg font-medium text-fg">
-                      {channel.label ?? sanitizeString(channelId)}
+                      {channel.label ?? displayName(channelId)}
                     </h3>
                   </div>
                   <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">

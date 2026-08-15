@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
+from vxlib.lifecycle import Teardown
 
 from vxl.instrument import Instrument
 from vxl.preview import (
@@ -22,7 +23,6 @@ from vxl.preview import (
     VoxelPreviewPacket,
 )
 from vxl.station import StationFeed, StationFeedView, StreamCursor
-from vxlib import Teardown
 
 log = logging.getLogger(__name__)
 

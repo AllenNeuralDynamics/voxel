@@ -1,11 +1,12 @@
 from collections.abc import Iterable
 from threading import RLock
 
+from vxlib.poller import Poller
+
 from rigup import Device
 from vxl_drivers.tigerhub.box import TigerBox
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.params import TigerParam, TigerParams
-from vxlib import Poller
 
 
 class UnknownAxisError(ValueError):
