@@ -11,8 +11,8 @@ from vxl.devices.daq.clocked import Signals
 from vxl.devices.daq.clocked.waveform import validate_waveform
 from vxl.instrument import Instrument
 from vxl.instrument.config import AcquisitionTask, InstrumentConfig, InstrumentState
-from vxl.instrument.errors import Invalid, Loaded, Missing, OperationRejectedError, StartupError
-from vxl.instrument.store import InstrumentInspection, InstrumentStore
+from vxl.instrument.errors import OperationRejectedError, StartupError
+from vxl.instrument.store import InstrumentInspection, InstrumentStore, Invalid, Loaded, Missing
 from vxl.instrument.topology import HALConfig
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
@@ -52,8 +52,8 @@ def _semantically_invalid_state(config: InstrumentConfig) -> InstrumentState:
     return state.model_copy(update={"imaging": imaging, "tasks": {"broken": task}})
 
 
-def test_check_config_returns_the_parsed_config() -> None:
-    checked = InstrumentStore.check_config(TEMPLATE)
+def test_load_config_returns_the_parsed_config() -> None:
+    checked = InstrumentStore.load_config(TEMPLATE)
 
     assert checked.ok
     assert isinstance(checked.config, Loaded)
@@ -62,11 +62,11 @@ def test_check_config_returns_the_parsed_config() -> None:
     assert checked.violations == ()
 
 
-def test_check_config_reports_unknown_top_level_field(tmp_path: Path) -> None:
+def test_load_config_reports_unknown_top_level_field(tmp_path: Path) -> None:
     path = tmp_path / "typo.voxel.yaml"
     path.write_text(f"{TEMPLATE.read_text(encoding='utf-8')}\nmisspelled: true\n", encoding="utf-8")
 
-    checked = InstrumentStore.check_config(path)
+    checked = InstrumentStore.load_config(path)
 
     assert isinstance(checked.config, Invalid)
     assert [(violation.code, violation.loc) for violation in checked.violations] == [
@@ -150,7 +150,7 @@ def test_discovery_reports_an_unknown_stage_device(tmp_path: Path, monkeypatch: 
 
     info = station.discover_instruments()["broken-stage"]
 
-    assert isinstance(info.config, Loaded)
+    assert isinstance(info.config, Invalid)
     assert isinstance(info.state, Missing)
     assert [(violation.code, violation.loc, violation.msg) for violation in info.violations] == [
         (
@@ -160,12 +160,12 @@ def test_discovery_reports_an_unknown_stage_device(tmp_path: Path, monkeypatch: 
         )
     ]
     payload = info.model_dump(mode="json")
-    assert payload["config"]["status"] == "loaded"
+    assert payload["config"]["status"] == "invalid"
     assert payload["state"] == {"status": "missing"}
     assert payload["violations"][0]["loc"][0] == "config"
 
 
-def test_check_config_collects_independent_semantic_violations(tmp_path: Path) -> None:
+def test_load_config_collects_independent_semantic_violations(tmp_path: Path) -> None:
     path = tmp_path / "semantic-errors.voxel.yaml"
     config = TEMPLATE.read_text(encoding="utf-8")
     config = config.replace("    x: x_axis\n", "    x: missing_axis\n", 1)
@@ -182,9 +182,9 @@ def test_check_config_collects_independent_semantic_violations(tmp_path: Path) -
     config = config.replace("illumination: laser_488", "illumination: missing_illumination", 1)
     path.write_text(config, encoding="utf-8")
 
-    checked = InstrumentStore.check_config(path)
+    checked = InstrumentStore.load_config(path)
 
-    assert isinstance(checked.config, Loaded)
+    assert isinstance(checked.config, Invalid)
     assert not checked.ok
     assert [(violation.code, violation.loc) for violation in checked.violations] == [
         ("hal.stage.device_missing", ("config", "hal", "stage", "x")),
@@ -205,7 +205,7 @@ def test_check_config_collects_independent_semantic_violations(tmp_path: Path) -
 
 def test_store_uses_config_default_only_when_state_file_is_missing(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("missing-state", tmp_path)
+    directory = InstrumentStore.instantiate(config, "missing-state", tmp_path)
     inspection = InstrumentStore.check(directory)
 
     store = InstrumentStore.load(directory)
@@ -215,13 +215,13 @@ def test_store_uses_config_default_only_when_state_file_is_missing(tmp_path: Pat
     assert inspection.ok
     assert store.value.imaging == config.default.imaging
     assert store.home == directory
-    assert store.config == InstrumentConfig.read(directory / "config.yaml")
+    assert store.config == load_yaml(directory / "config.yaml", InstrumentConfig)
     assert not (directory / "state.json").exists()
 
 
 async def test_store_saves_selected_live_fields_as_defaults(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("save-default", tmp_path)
+    directory = InstrumentStore.instantiate(config, "save-default", tmp_path)
     store = InstrumentStore.load(directory)
     stencil = store.value.stencil.model_copy(update={"x_offset": 42.0})
     await store.update(stencil=stencil)
@@ -230,12 +230,12 @@ async def test_store_saves_selected_live_fields_as_defaults(tmp_path: Path) -> N
 
     assert store.default.value.stencil == stencil
     assert store.config.default.stencil == stencil
-    assert InstrumentConfig.read(directory / "config.yaml").default.stencil == stencil
+    assert load_yaml(directory / "config.yaml", InstrumentConfig).default.stencil == stencil
 
 
 async def test_store_restores_selected_defaults_to_live_state(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("restore-default", tmp_path)
+    directory = InstrumentStore.instantiate(config, "restore-default", tmp_path)
     store = InstrumentStore.load(directory)
     await store.update(stencil=store.value.stencil.model_copy(update={"x_offset": 42.0}))
 
@@ -248,7 +248,7 @@ async def test_store_restores_selected_defaults_to_live_state(tmp_path: Path) ->
 
 def test_instrument_constructs_from_the_validated_snapshot_without_rereading(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("validated", tmp_path)
+    directory = InstrumentStore.instantiate(config, "validated", tmp_path)
     store = InstrumentStore.load(directory)
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")
 
@@ -266,7 +266,7 @@ def test_instrument_constructs_from_the_validated_snapshot_without_rereading(tmp
 
 
 def test_store_rejects_an_invalid_existing_state_file(tmp_path: Path) -> None:
-    directory = _config().instantiate("invalid-state", tmp_path)
+    directory = InstrumentStore.instantiate(_config(), "invalid-state", tmp_path)
     path = directory / "state.json"
     path.write_text("{", encoding="utf-8")
 
@@ -279,7 +279,7 @@ def test_store_rejects_an_invalid_existing_state_file(tmp_path: Path) -> None:
 
 def test_store_rejects_an_incompatible_existing_state_file(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("incompatible-state", tmp_path)
+    directory = InstrumentStore.instantiate(config, "incompatible-state", tmp_path)
     path = directory / "state.json"
     path.write_text(_incompatible_state(config).model_dump_json(), encoding="utf-8")
 
@@ -313,13 +313,13 @@ async def test_archive_state_uses_the_next_available_backup_name(
 
 def test_store_check_reports_hal_incompatibility(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("incompatible", tmp_path)
+    directory = InstrumentStore.instantiate(config, "incompatible", tmp_path)
     (directory / "state.json").write_text(_incompatible_state(config).model_dump_json(), encoding="utf-8")
 
     checked = InstrumentStore.check(directory)
 
     assert isinstance(checked.config, Loaded)
-    assert isinstance(checked.state, Loaded)
+    assert isinstance(checked.state, Invalid)
     assert [(violation.code, violation.loc, violation.msg) for violation in checked.violations] == [
         (
             "imaging.channel.detection_missing",
@@ -331,7 +331,7 @@ def test_store_check_reports_hal_incompatibility(tmp_path: Path) -> None:
 
 def test_store_check_collects_independent_state_semantic_violations(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("semantic-state", tmp_path)
+    directory = InstrumentStore.instantiate(config, "semantic-state", tmp_path)
     (directory / "state.json").write_text(
         _semantically_invalid_state(config).model_dump_json(),
         encoding="utf-8",
@@ -339,7 +339,7 @@ def test_store_check_collects_independent_state_semantic_violations(tmp_path: Pa
 
     checked = InstrumentStore.check(directory)
 
-    assert isinstance(checked.state, Loaded)
+    assert isinstance(checked.state, Invalid)
     assert [(violation.code, violation.loc) for violation in checked.violations] == [
         (
             "imaging.profile.channel_missing",
@@ -351,7 +351,7 @@ def test_store_check_collects_independent_state_semantic_violations(tmp_path: Pa
 
 async def test_store_rejects_semantically_invalid_update_without_persisting(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("semantic-update", tmp_path)
+    directory = InstrumentStore.instantiate(config, "semantic-update", tmp_path)
     store = InstrumentStore.load(directory)
     original = store.value
 
@@ -368,7 +368,7 @@ def test_discovery_preserves_static_state_violations(
 ) -> None:
     station = _station(tmp_path, monkeypatch)
     config = _config()
-    directory = config.instantiate("incompatible", station.instruments_dir)
+    directory = InstrumentStore.instantiate(config, "incompatible", station.instruments_dir)
     (directory / "state.json").write_text(
         _incompatible_state(config).model_dump_json(),
         encoding="utf-8",
@@ -378,7 +378,7 @@ def test_discovery_preserves_static_state_violations(
 
     assert isinstance(info.config, Loaded)
     assert isinstance(info.config.value, InstrumentConfig)
-    assert isinstance(info.state, Loaded)
+    assert isinstance(info.state, Invalid)
     assert isinstance(info.state.value, InstrumentState)
     assert [(violation.code, violation.loc, violation.msg) for violation in info.violations] == [
         (

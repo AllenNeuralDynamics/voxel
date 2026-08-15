@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from vxl.instrument import InstrumentConfig, InstrumentStore
-from vxl.instrument.errors import Loaded
+from vxl.instrument.store import Loaded
 
 _BUILTIN_TEMPLATES_DIR = Path(__file__).parent / "builtins"
 log = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class InstrumentTemplates:
 
         for path in sorted(self._directory.glob("*.voxel.yaml")):
             name = path.name.removesuffix(".voxel.yaml")
-            inspected = InstrumentStore.check_config(path)
+            inspected = InstrumentStore.load_config(path)
             if inspected.ok and isinstance(inspected.config, Loaded):
                 found[name] = inspected.config.value
                 continue

@@ -34,7 +34,7 @@ def _input_error(path: Path, message: str, code: str) -> TargetCheck:
 
 def _check_path(path: Path) -> TargetCheck:
     if path.is_file():
-        return TargetCheck(path, InstrumentStore.check_config(path))
+        return TargetCheck(path, InstrumentStore.load_config(path))
     if path.is_dir() and (path.suffix == ".voxel" or (path / "config.yaml").exists()):
         return TargetCheck(path, InstrumentStore.check(path))
     return _input_error(path, f"Unsupported check target: {path}", "target.unsupported")

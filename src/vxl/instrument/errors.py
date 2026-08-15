@@ -1,12 +1,8 @@
-"""Structured validation results and expected instrument failures."""
+"""Structured validation errors and expected instrument failures."""
 
 from collections.abc import Collection
-from pathlib import Path
-from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, ValidationError
-
-from vxlib import load_yaml
+from pydantic import BaseModel
 
 type ViolationLoc = tuple[str | int, ...]
 
@@ -50,51 +46,6 @@ def assignment_violations(
     ]
 
 
-class Loaded[T: BaseModel](BaseModel, frozen=True):
-    """A persisted model that was found, read, and validated."""
-
-    status: Literal["loaded"] = "loaded"
-    value: T
-
-
-class Missing(BaseModel, frozen=True):
-    """A persisted model whose file was not found."""
-
-    status: Literal["missing"] = "missing"
-
-
-class Invalid(BaseModel, frozen=True):
-    """A persisted model whose file could not be read or validated."""
-
-    status: Literal["invalid"] = "invalid"
-
-
-type Inspected[T: BaseModel] = Annotated[Loaded[T] | Missing | Invalid, Field(discriminator="status")]
-
-
-def inspect_model[T: BaseModel](
-    path: Path,
-    model: type[T],
-    source: str,
-) -> tuple[Inspected[T], tuple[Violation, ...]]:
-    """Load a persisted model, returning structured violations instead of raising."""
-    try:
-        return Loaded(value=load_yaml(path, model)), ()
-    except FileNotFoundError:
-        return Missing(), ()
-    except ValidationError as exc:
-        return Invalid(), tuple(
-            Violation(
-                code=f"{source}.{error['type']}",
-                msg=error["msg"],
-                loc=(source, *error["loc"]),
-            )
-            for error in exc.errors()
-        )
-    except Exception as exc:
-        return Invalid(), (Violation(code=f"{source}.load", msg=str(exc), loc=(source,)),)
-
-
 class InstrumentError(Exception):
     """Base class for expected instrument failures."""
 
@@ -123,16 +74,11 @@ class InstrumentBusyError(InstrumentError):
 
 
 __all__ = [
-    "Inspected",
     "InstrumentBusyError",
     "InstrumentError",
-    "Invalid",
-    "Loaded",
-    "Missing",
     "OperationRejectedError",
     "StartupError",
     "Violation",
     "ViolationLoc",
     "assignment_violations",
-    "inspect_model",
 ]

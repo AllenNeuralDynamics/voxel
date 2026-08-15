@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from vxl.cli.check import run_check
+from vxl.instrument import InstrumentStore
 from vxl.instrument.config import InstrumentConfig
 from vxlib import load_yaml
 
@@ -21,7 +22,7 @@ def test_check_valid_config() -> None:
 
 def test_check_invalid_instrument_as_json(tmp_path: Path) -> None:
     config = load_yaml(TEMPLATE, InstrumentConfig)
-    directory = config.instantiate("broken", tmp_path)
+    directory = InstrumentStore.instantiate(config, "broken", tmp_path)
     (directory / "state.json").write_text("{", encoding="utf-8")
     output = io.StringIO()
 
@@ -36,7 +37,7 @@ def test_check_invalid_instrument_as_json(tmp_path: Path) -> None:
 
 def test_check_collection_expands_configs_and_instruments(tmp_path: Path) -> None:
     config = load_yaml(TEMPLATE, InstrumentConfig)
-    config.instantiate("installed", tmp_path)
+    InstrumentStore.instantiate(config, "installed", tmp_path)
     (tmp_path / "template.voxel.yaml").write_text(TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
     output = io.StringIO()
 

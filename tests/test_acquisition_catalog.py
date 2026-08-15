@@ -21,7 +21,7 @@ from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, 
 from vxl.instrument.config import AcquisitionTask
 from vxl.instrument.core import AcquisitionRequest, Channel
 from vxl.system import System
-from vxlib import Cell
+from vxlib import Cell, load_yaml
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 
@@ -84,7 +84,7 @@ class _FakeAxis:
 
 
 def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrument, AcquisitionCatalog, StorageSpec]:
-    config = InstrumentConfig.read(TEMPLATE)
+    config = load_yaml(TEMPLATE, InstrumentConfig)
     task = AcquisitionTask(x=0, y=0, start=0, end=0, profile_ids=["single_gfp"])
     state = InstrumentState(**config.default.model_dump()).model_copy(update={"tasks": {"task-a": task}})
     records = SQLiteRecords(

@@ -17,7 +17,7 @@ from rigup import (
     PropResults,
     Result,
 )
-from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState
+from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.config import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.core import Channel
 from vxl.instrument.errors import StartupError, Violation
@@ -31,7 +31,7 @@ from vxl.instrument.topology import (
     StageConfig,
 )
 from vxl.preview import PreviewFrame, PreviewLayer, PreviewViewport
-from vxlib import Cell
+from vxlib import Cell, load_yaml
 
 
 def _records(tmp_path: Path) -> SQLiteRecords:
@@ -445,7 +445,7 @@ async def test_instrument_validation_failure_closes_open_hal() -> None:
 
 
 async def test_instrument_startup_collects_profile_port_and_stage_violations() -> None:
-    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
+    config = load_yaml(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"), InstrumentConfig)
     state = InstrumentState(**config.default.model_dump())
     profile = state.imaging.profiles["single_gfp"]
     profile = profile.model_copy(
@@ -508,9 +508,9 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations() -
 
 
 async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
+    config = load_yaml(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"), InstrumentConfig)
     instrument = Instrument.from_path(
-        config.instantiate("runtime-validation", tmp_path),
+        InstrumentStore.instantiate(config, "runtime-validation", tmp_path),
         records=_records(tmp_path),
     )
 
@@ -572,9 +572,9 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
 
 
 async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
+    config = load_yaml(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"), InstrumentConfig)
     instrument = Instrument.from_path(
-        config.instantiate("coalescer-cleanup", tmp_path),
+        InstrumentStore.instantiate(config, "coalescer-cleanup", tmp_path),
         records=_records(tmp_path),
     )
 
@@ -600,9 +600,9 @@ async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None
 
 
 async def test_instrument_preview_rejects_stale_source_generation(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
+    config = load_yaml(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"), InstrumentConfig)
     instrument = Instrument.from_path(
-        config.instantiate("feed-lifecycle", tmp_path),
+        InstrumentStore.instantiate(config, "feed-lifecycle", tmp_path),
         records=_records(tmp_path),
     )
 
@@ -646,7 +646,7 @@ async def test_instrument_preview_rejects_stale_source_generation(tmp_path: Path
 
 
 async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
+    config = load_yaml(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"), InstrumentConfig)
     x_axis = config.hal.devices["x_axis"]
     hal = config.hal.model_copy(
         update={
@@ -670,7 +670,11 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
         }
     )
     instrument = Instrument.from_path(
-        config.model_copy(update={"hal": hal, "default": default}).instantiate("split-routing", tmp_path),
+        InstrumentStore.instantiate(
+            config.model_copy(update={"hal": hal, "default": default}),
+            "split-routing",
+            tmp_path,
+        ),
         records=_records(tmp_path),
     )
 

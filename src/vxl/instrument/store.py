@@ -3,26 +3,59 @@ import datetime
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from vxlib import Cell, Readable, Subscribable, atomic_write, save_yaml
+from vxlib import Cell, Readable, Subscribable, atomic_write, load_yaml, save_yaml
 
 from .config import InstrumentConfig, InstrumentDefaults, InstrumentPreset, InstrumentState
-from .errors import (
-    Inspected,
-    Invalid,
-    Loaded,
-    Missing,
-    OperationRejectedError,
-    StartupError,
-    Violation,
-    inspect_model,
-)
+from .errors import OperationRejectedError, StartupError, Violation
 
 PROMOTABLE_FIELDS = frozenset(InstrumentDefaults.model_fields)
 """Baseline fields that can move between the live state and persisted instrument defaults."""
+
+
+class Loaded[T: BaseModel](BaseModel, frozen=True):
+    """A persisted model that was found, read, and fully validated."""
+
+    status: Literal["loaded"] = "loaded"
+    value: T
+
+
+class Missing(BaseModel, frozen=True):
+    """A persisted model whose file was not found."""
+
+    status: Literal["missing"] = "missing"
+
+
+class Invalid[T: BaseModel](BaseModel, frozen=True):
+    """A persisted model that failed structural or semantic validation."""
+
+    status: Literal["invalid"] = "invalid"
+    value: T | None = None
+
+
+type Inspected[T: BaseModel] = Annotated[Loaded[T] | Missing | Invalid[T], Field(discriminator="status")]
+
+
+def _load_model[T: BaseModel](path: Path, model: type[T], source: str) -> tuple[Inspected[T], tuple[Violation, ...]]:
+    """Load one persisted model, returning structured violations instead of raising."""
+    try:
+        return Loaded(value=load_yaml(path, model)), ()
+    except FileNotFoundError:
+        return Missing(), ()
+    except ValidationError as exc:
+        return Invalid[T](), tuple(
+            Violation(
+                code=f"{source}.{error['type']}",
+                msg=error["msg"],
+                loc=(source, *error["loc"]),
+            )
+            for error in exc.errors()
+        )
+    except Exception as exc:
+        return Invalid[T](), (Violation(code=f"{source}.load", msg=str(exc), loc=(source,)),)
 
 
 @dataclass(frozen=True)
@@ -61,23 +94,33 @@ class InstrumentStore(Subscribable[InstrumentState]):
     """Validating persistence for one :class:`InstrumentState`."""
 
     @staticmethod
-    def check_config(path: Path | str) -> InstrumentInspection:
-        """Inspect one instrument configuration file without raising."""
+    def instantiate(config: InstrumentConfig, name: str, into: Path | str) -> Path:
+        """Create ``<into>/<name>.voxel`` and persist its initial configuration."""
+        directory = Path(into) / f"{name}.voxel"
+        if directory.exists():
+            raise FileExistsError(f"Instrument '{name}' already exists at {directory}")
+        directory.mkdir(parents=True)
+        save_yaml(directory / "config.yaml", config)
+        return directory
+
+    @staticmethod
+    def load_config(path: Path | str) -> InstrumentInspection:
+        """Load and semantically inspect one instrument configuration without raising."""
         path = Path(path)
-        config, inspected_violations = inspect_model(path, InstrumentConfig, "config")
-        violations = (
-            (
+        config, violations = _load_model(path, InstrumentConfig, "config")
+        if isinstance(config, Missing):
+            violations = (
                 Violation(
                     code="config.missing",
                     msg=f"No InstrumentConfig found at {path}",
                     loc=("config",),
                 ),
             )
-            if isinstance(config, Missing)
-            else inspected_violations
-        )
-        if isinstance(config, Loaded):
-            violations = (*violations, *config.value.semantic_violations())
+        elif isinstance(config, Loaded):
+            semantic_violations = tuple(config.value.semantic_violations())
+            if semantic_violations:
+                config = Invalid[InstrumentConfig](value=config.value)
+                violations = (*violations, *semantic_violations)
         return InstrumentInspection(config=config, violations=violations)
 
     @classmethod
@@ -100,12 +143,16 @@ class InstrumentStore(Subscribable[InstrumentState]):
     def check(cls, home: Path | str) -> InstrumentInspection:
         """Inspect an instrument directory without opening hardware or raising for invalid persisted state."""
         home = Path(home)
-        config_inspection = cls.check_config(home / "config.yaml")
+        config_inspection = cls.load_config(home / "config.yaml")
         config = config_inspection.config
-        state, state_violations = inspect_model(home / "state.json", InstrumentState, "state")
+        state, state_violations = _load_model(home / "state.json", InstrumentState, "state")
         violations = [*config_inspection.violations, *state_violations]
-        if isinstance(config, Loaded) and isinstance(state, Loaded):
-            violations.extend(state.value.semantic_violations(config.value.hal))
+        config_value = config.value if isinstance(config, (Loaded, Invalid)) else None
+        if config_value is not None and isinstance(state, Loaded):
+            semantic_violations = tuple(state.value.semantic_violations(config_value.hal))
+            if semantic_violations:
+                state = Invalid[InstrumentState](value=state.value)
+                violations.extend(semantic_violations)
         return InstrumentInspection(
             config=config,
             state=state,

@@ -1,6 +1,5 @@
 import datetime
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
@@ -9,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from rigup import CommandRequest
 from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
-from vxlib import Color, SchemaModel, load_yaml, save_yaml
+from vxlib import Color, SchemaModel
 
 from .errors import Violation, ViolationLoc, assignment_violations
 from .metadata import ExperimentMetadata, MetadataCls
@@ -528,17 +527,3 @@ class InstrumentConfig(BaseModel):
             *self.hal.semantic_violations(loc=("config", "hal")),
             *self.default.semantic_violations(self.hal, loc=("config", "default")),
         ]
-
-    @classmethod
-    def read(cls, path: Path | str) -> Self:
-        """Parse a config file; use :meth:`InstrumentStore.check_config` for semantic inspection."""
-        return load_yaml(Path(path), cls)
-
-    def instantiate(self, name: str, into: Path | str) -> Path:
-        """Write this config to ``<into>/<name>.voxel/config.yaml``; return the dir. Raises if it exists."""
-        directory = Path(into) / f"{name}.voxel"
-        if directory.exists():
-            raise FileExistsError(f"Instrument '{name}' already exists at {directory}")
-        directory.mkdir(parents=True)
-        save_yaml(directory / "config.yaml", self)
-        return directory

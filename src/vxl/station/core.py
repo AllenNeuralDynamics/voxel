@@ -103,7 +103,7 @@ class Station:
         async with self._lifecycle_lock:
             self._ensure_file_operation_allowed()
             self._instrument_home(name)
-            directory = config.instantiate(name, self.instruments_dir)
+            directory = InstrumentStore.instantiate(config, name, self.instruments_dir)
             return InstrumentStore.check(directory)
 
     async def archive_state(self, instrument_name: str) -> Path:
