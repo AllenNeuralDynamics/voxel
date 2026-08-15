@@ -17,12 +17,6 @@ dependencies = [
 [project.scripts]
 rigup-node = "rigup.node:run_node"
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.0",
-    "pytest-asyncio>=0.26.0",
-]
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 

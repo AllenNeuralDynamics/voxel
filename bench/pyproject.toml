@@ -12,7 +12,7 @@ dependencies = [
     "numpy>=2.3",
     "psutil>=5.9",
     "pydantic>=2.11",
-    "rich>=14",
+    "rich>=15",
 ]
 
 # Analysis stack (bench/*/analysis.py + loaders). pandas is the only hard requirement for reading results;

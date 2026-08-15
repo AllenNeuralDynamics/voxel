@@ -21,11 +21,11 @@ downsampling and compression work on the capture process.
 
 ## Write a local dataset
 
-The default TensorStore backend is available through the `ts` dependency group. From this repository:
+The default TensorStore backend is available through the `ts` extra. From this repository:
 
 ```bash
 cd omezarr
-uv sync --group ts
+uv sync --extra ts
 ```
 
 The writer API is synchronous so it can be called directly from a camera acquisition loop:
@@ -145,12 +145,12 @@ from ome_zarr_writer.array import ArrayWriter
 writer = OMEZarrWriter(backend=ArrayWriter.Backend.ZARRS, slots=3)
 ```
 
-Install the corresponding workspace group:
+Install the corresponding package extras:
 
 ```bash
-uv sync --group ts       # TensorStore
-uv sync --group zarrs    # zarr-python + zarrs
-uv sync --group s3       # boto3 and s5cmd for S3 workflows
+uv sync --extra ts       # TensorStore
+uv sync --extra zarrs    # zarr-python + zarrs
+uv sync --extra s3       # cloudpathlib S3 support and s5cmd for staged uploads
 ```
 
 ## Size the ring

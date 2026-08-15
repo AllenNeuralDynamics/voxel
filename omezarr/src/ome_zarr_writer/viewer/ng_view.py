@@ -4,6 +4,7 @@ Base classes and common functions for Neuroglancer viewers.
 This module provides abstractions that work with both FastAPI and httpd-based servers.
 """
 
+import sys
 from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
@@ -145,8 +146,6 @@ def ng_quick_view(
         viewer_port: Port for neuroglancer viewer
         viewer_token: Token for neuroglancer viewer
     """
-    from rich import print  # noqa: PLC0415 - Rich is needed only by this interactive CLI helper
-
     if server is None:
         server = HTTPDZarrServer(host="0.0.0.0", port=9000)  # noqa: S104 - serves remote viewers
 
@@ -159,13 +158,14 @@ def ng_quick_view(
     # Display connection info
     host_ip = get_host_ip()
     viewer_url = replace_hostname_with_ip(viewer)
-    print(
+    sys.stdout.write(
         f"\nRun port forwarding command: ssh -L {server.port}:localhost:{server.port} "
-        f"-L {viewer_port}:localhost:{viewer_port} {host_ip}"
+        f"-L {viewer_port}:localhost:{viewer_port} {host_ip}\n"
+        f"\nNeuroglancer viewer: {viewer_url}\n"
+        f"HTTP server: http://{host_ip}:{server.port}/\n"
+        "\nPress Ctrl+C to stop\n\n"
     )
-    print(f"\n[bold green]Neuroglancer viewer: {viewer_url}[/bold green]")
-    print(f"[green]HTTP server: http://{host_ip}:{server.port}/[/green]")
-    print("\n[yellow]Press Ctrl+C to stop[/yellow]\n")
+    sys.stdout.flush()
 
     try:
         import time  # noqa: PLC0415 - used only by this blocking interactive helper
@@ -173,6 +173,6 @@ def ng_quick_view(
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[yellow]Shutting down...[/yellow]")
+        sys.stdout.write("\nShutting down...\n")
         server.stop()
-        print("[green]Server stopped[/green]")
+        sys.stdout.write("Server stopped\n")

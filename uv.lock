@@ -157,7 +157,7 @@ requires-dist = [
     { name = "ome-zarr-writer", editable = "omezarr" },
     { name = "psutil", specifier = ">=5.9" },
     { name = "pydantic", specifier = ">=2.11" },
-    { name = "rich", specifier = ">=14" },
+    { name = "rich", specifier = ">=15" },
     { name = "vxl", editable = "." },
     { name = "vxlib", editable = "vxlib" },
 ]
@@ -1527,18 +1527,17 @@ name = "ome-zarr-writer"
 version = "0.1.0"
 source = { editable = "omezarr" }
 dependencies = [
+    { name = "cloudpathlib" },
     { name = "numba" },
+    { name = "numpy" },
     { name = "pydantic" },
     { name = "tbb", marker = "sys_platform == 'linux'" },
     { name = "vxlib" },
 ]
 
-[package.dev-dependencies]
+[package.optional-dependencies]
 aqz = [
     { name = "acquire-zarr" },
-]
-dev = [
-    { name = "pytest" },
 ]
 fastapi = [
     { name = "fastapi" },
@@ -1548,7 +1547,7 @@ ng = [
     { name = "neuroglancer" },
 ]
 s3 = [
-    { name = "boto3" },
+    { name = "cloudpathlib", extra = ["s3"] },
     { name = "s5cmd" },
 ]
 ts = [
@@ -1563,33 +1562,25 @@ zarrs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "acquire-zarr", marker = "extra == 'aqz'", specifier = ">=0.6.0" },
+    { name = "cloudpathlib", specifier = ">=0.24.0" },
+    { name = "cloudpathlib", extras = ["s3"], marker = "extra == 's3'", specifier = ">=0.24.0" },
+    { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.120.3" },
+    { name = "neuroglancer", marker = "extra == 'ng'" },
     { name = "numba", specifier = ">=0.62.1" },
+    { name = "numpy", specifier = ">=2.5.2" },
+    { name = "obstore", marker = "extra == 'zarrs'", specifier = ">=0.11.0" },
     { name = "pydantic", specifier = ">=2.11.9" },
+    { name = "pydantic-tensorstore", marker = "extra == 'ts'", git = "https://github.com/tlambert03/pydantic-tensorstore" },
+    { name = "s5cmd", marker = "extra == 's3'", specifier = ">=0.3.3" },
     { name = "tbb", marker = "sys_platform == 'linux'", specifier = ">=2021.0.0" },
+    { name = "tensorstore", marker = "extra == 'ts'", specifier = ">=0.1.76" },
+    { name = "uvicorn", marker = "extra == 'fastapi'", specifier = ">=0.38.0" },
     { name = "vxlib", editable = "vxlib" },
+    { name = "zarr", marker = "extra == 'zarrs'", specifier = ">=3.1.2" },
+    { name = "zarrs", marker = "extra == 'zarrs'", specifier = ">=0.2.0" },
 ]
-
-[package.metadata.requires-dev]
-aqz = [{ name = "acquire-zarr", specifier = ">=0.6.0" }]
-dev = [{ name = "pytest", specifier = ">=8.4.2" }]
-fastapi = [
-    { name = "fastapi", specifier = ">=0.120.3" },
-    { name = "uvicorn", specifier = ">=0.38.0" },
-]
-ng = [{ name = "neuroglancer" }]
-s3 = [
-    { name = "boto3", specifier = ">=1.40.65" },
-    { name = "s5cmd", specifier = ">=0.3.3" },
-]
-ts = [
-    { name = "pydantic-tensorstore", git = "https://github.com/tlambert03/pydantic-tensorstore" },
-    { name = "tensorstore", specifier = ">=0.1.76" },
-]
-zarrs = [
-    { name = "obstore", specifier = ">=0.11.0" },
-    { name = "zarr", specifier = ">=3.1.2" },
-    { name = "zarrs", specifier = ">=0.2.0" },
-]
+provides-extras = ["ts", "zarrs", "ng", "fastapi", "aqz", "s3"]
 
 [[package]]
 name = "opencv-python-headless"
@@ -2302,24 +2293,12 @@ dependencies = [
     { name = "vxlib" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "msgpack", specifier = ">=1.0.0" },
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "pyzmq", specifier = ">=27.1.0" },
     { name = "vxlib", editable = "vxlib" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.26.0" },
 ]
 
 [[package]]
@@ -2558,18 +2537,6 @@ wheels = [
 ]
 
 [[package]]
-name = "tigerasi"
-version = "0.0.27"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyserial" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/55/35/79187350792e3f45893c72942734128718787d0347680d808a4707f76c9a/tigerasi-0.0.27.tar.gz", hash = "sha256:490ca560eaeb5d57f0fdcb37ffdaabc087bf94eae77f952f0c4b0ec9d9cc11d5", size = 73347, upload-time = "2025-01-11T03:37:02.837Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/39/f3af634792f43a3d202d5964f66bd5c94a24297fb74d4e9042c8a1820601/tigerasi-0.0.27-py3-none-any.whl", hash = "sha256:e3edb4ea05a5469b9faaf55e660866583c05ca38fde63e613ce1bbe5ea79bdca", size = 23223, upload-time = "2025-01-11T03:37:00.451Z" },
-]
-
-[[package]]
 name = "tomlkit"
 version = "0.15.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2712,11 +2679,13 @@ source = { editable = "." }
 dependencies = [
     { name = "cloudpathlib", extra = ["s3"] },
     { name = "msgpack" },
+    { name = "nidaqmx" },
     { name = "numcodecs" },
     { name = "numpy" },
-    { name = "ome-zarr-writer" },
+    { name = "ome-zarr-writer", extra = ["s3", "ts"] },
     { name = "opencv-python-headless" },
     { name = "psutil" },
+    { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -2728,15 +2697,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-all = [
-    { name = "fastapi" },
-    { name = "pyside6" },
-    { name = "qasync" },
-    { name = "qtawesome" },
-    { name = "uvicorn" },
-    { name = "uvloop", marker = "sys_platform != 'win32'" },
-    { name = "websockets" },
-]
 qt = [
     { name = "pyside6" },
     { name = "qasync" },
@@ -2760,36 +2720,31 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cloudpathlib", extras = ["s3"], specifier = ">=0.24.0" },
-    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.121.1" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.121.1" },
     { name = "msgpack", specifier = ">=1.1.0" },
+    { name = "nidaqmx", specifier = ">=1.3.0" },
     { name = "numcodecs", specifier = ">=0.16.5" },
     { name = "numpy", specifier = ">=2.3.4" },
-    { name = "ome-zarr-writer", editable = "omezarr" },
+    { name = "ome-zarr-writer", extras = ["ts", "s3"], editable = "omezarr" },
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
     { name = "psutil", specifier = ">=5.9" },
+    { name = "pydantic", specifier = ">=2.11.9" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
-    { name = "pyside6", marker = "extra == 'all'", specifier = ">=6.8.0" },
     { name = "pyside6", marker = "extra == 'qt'", specifier = ">=6.8.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "qasync", marker = "extra == 'all'", specifier = ">=0.27.1" },
     { name = "qasync", marker = "extra == 'qt'", specifier = ">=0.27.1" },
-    { name = "qtawesome", marker = "extra == 'all'", specifier = ">=1.4.0" },
     { name = "qtawesome", marker = "extra == 'qt'", specifier = ">=1.4.0" },
-    { name = "rich", specifier = ">=14.2.0" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "rigup", editable = "rigup" },
     { name = "ruamel-yaml", specifier = ">=0.19.1,<0.20" },
-    { name = "uvicorn", marker = "extra == 'all'", specifier = ">=0.38.0" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.38.0" },
-    { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'all'" },
     { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'web'" },
     { name = "vxl-records", editable = "records" },
     { name = "vxlib", editable = "vxlib" },
-    { name = "websockets", marker = "extra == 'all'", specifier = ">=15.0.1" },
     { name = "websockets", marker = "extra == 'web'", specifier = ">=15.0.1" },
 ]
-provides-extras = ["web", "qt", "all"]
+provides-extras = ["web", "qt"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2805,10 +2760,10 @@ version = "0.1.0"
 source = { editable = "drivers" }
 dependencies = [
     { name = "aaopto-aotf" },
-    { name = "nidaqmx" },
     { name = "numpy" },
+    { name = "pydantic" },
     { name = "pyserial" },
-    { name = "tigerasi" },
+    { name = "rich" },
     { name = "vxl" },
     { name = "vxlib" },
 ]
@@ -2844,14 +2799,14 @@ requires-dist = [
     { name = "aaopto-aotf", specifier = ">=0.0.11" },
     { name = "coherent-lasers", marker = "extra == 'coherent-laser'", url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" },
     { name = "egrabber", marker = "extra == 'egrabber-camera'", url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" },
-    { name = "nidaqmx", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "obis-laser", marker = "extra == 'obis-laser'", git = "https://github.com/AllenNeuralDynamics/obis-laser.git" },
     { name = "optoicc", marker = "extra == 'opto-icc'", url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoICC-2.0.4922-py3-none-any.whl" },
     { name = "optokummenberg", marker = "extra == 'opto-kummenberg'", url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoKummenberg-1.0.4894-py3-none-any.whl" },
     { name = "pycobolt", marker = "extra == 'pycobolt-laser'", git = "https://github.com/cobolt-lasers/pycobolt.git" },
+    { name = "pydantic", specifier = ">=2.11.9" },
     { name = "pyserial", specifier = ">=3.5" },
-    { name = "tigerasi", specifier = ">=0.0.27" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
     { name = "vxl", editable = "." },
     { name = "vxlib", editable = "vxlib" },
