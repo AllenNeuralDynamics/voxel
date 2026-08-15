@@ -2,7 +2,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from rigup import BuildConfig
-from vxl.instrument.state import (
+from vxl.instrument.config import (
     ChannelConfig,
     ImagingProtocol,
     InstrumentDefaults,
@@ -29,15 +29,15 @@ def _hal_config(
         for uid in ("camera", "laser", "transmitted", "x_axis", "y_axis", "z_axis")
     }
     devices["selector"] = BuildConfig(
-        target="vxl.axes.simulated.SimulatedDiscreteAxis",
+        target="vxl.devices.axes.simulated.SimulatedDiscreteAxis",
         init={"slots": {0: "left", 1: "right"}},
     )
     devices["ni_selector"] = BuildConfig(
-        target="vxl.axes.discrete.ni.NiDiscreteAxis",
+        target="vxl.devices.axes.discrete.ni.NiDiscreteAxis",
         init={"slots": {0: {"pin": "ao0", "label": "sample"}}},
     )
     devices["route_selector"] = BuildConfig(
-        target="vxl.axes.simulated.SimulatedDiscreteAxis",
+        target="vxl.devices.axes.simulated.SimulatedDiscreteAxis",
         init={"slots": {0: "left", 1: "right"}},
     )
     payload = {

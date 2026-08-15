@@ -23,7 +23,7 @@ Many drivers depend on a vendor SDK or runtime (EGrabber, DCAM, serial libraries
 
 Grouped by the `vxl` interface each driver implements.
 
-### Cameras (`vxl.camera.base.Camera`)
+### Cameras (`vxl.devices.camera.base.Camera`)
 
 | Vendor / model | Target |
 |----------------|--------|
@@ -32,7 +32,7 @@ Grouped by the `vxl` interface each driver implements.
 | PCO | `vxl_drivers.cameras.pco.PCOCamera` |
 | Ximea | `vxl_drivers.cameras.ximea.XimeaCamera` |
 
-### Lasers (`vxl.laser.base.Laser`)
+### Lasers (`vxl.devices.laser.base.Laser`)
 
 | Vendor / model | Target |
 |----------------|--------|
@@ -45,13 +45,13 @@ Grouped by the `vxl` interface each driver implements.
 
 Oxxius lasers on a shared controller connect through `vxl_drivers.lasers.oxxius.OxxiusHub`.
 
-### AOTF (`vxl.aotf.base.AOTF`)
+### AOTF (`vxl.devices.aotf.base.AOTF`)
 
 | Vendor / model | Target |
 |----------------|--------|
 | AA OptoElectronics MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` |
 
-### Stage axes (`vxl.axes.continuous.base.ContinuousAxis`)
+### Stage axes (`vxl.devices.axes.continuous.base.ContinuousAxis`)
 
 | Vendor / model | Target |
 |----------------|--------|

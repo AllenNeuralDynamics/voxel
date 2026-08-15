@@ -21,7 +21,7 @@ from cloudpathlib import S3Path
 from ome_zarr_writer.array.ts import TSArrayReader
 from rich.console import Console
 
-from vxl.camera.base import ValidBits
+from vxl.devices.camera.base import ValidBits
 from vxlib import S3Store
 
 REGION = "us-west-2"  # aind-open-data (the real-data source) lives here

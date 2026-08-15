@@ -28,7 +28,7 @@ from vxl_drivers.axes.mmc._cmds import (
 from vxl_drivers.axes.mmc._hub import MMCCommunicationError, MMCHub
 
 from rigup import describe, enumerated, numeric
-from vxl.axes.continuous import ContinuousAxis, TTLStepper
+from vxl.devices.axes.continuous import ContinuousAxis, TTLStepper
 
 _MM_PER_USER_UNIT = {
     "nm": 0.000_001,

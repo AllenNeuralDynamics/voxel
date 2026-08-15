@@ -33,24 +33,47 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.121.1",
+    "uvicorn>=0.38.0",
+    "websockets>=15.0.1",
+    "uvloop; platform_system != 'Windows'",
+]
+qt = [
+    "PySide6>=6.8.0",
+    "qasync>=0.27.1",
+    "qtawesome>=1.4.0",
+]
+all = [
+    "fastapi>=0.121.1",
+    "uvicorn>=0.38.0",
+    "websockets>=15.0.1",
+    "uvloop; platform_system != 'Windows'",
+    "PySide6>=6.8.0",
+    "qasync>=0.27.1",
+    "qtawesome>=1.4.0",
+]
+
+[project.scripts]
+vxl = "vxl.cli:main"
+voxel = "vxl.cli:main"
+
 [project.urls]
 Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
-[project.entry-points."vxl.metadata"]
-exaspim = "vxl.metadata.ExaspimMetadata"
+[project.entry-points."vxl.instrument.metadata"]
+exaspim = "vxl.instrument.metadata.ExaspimMetadata"
 
 [build-system]
-requires = ["uv_build>=0.9.26,<0.10.0"]
+requires = ["uv_build>=0.12.5,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.workspace]
 members = [
-    "cli",
     "rigup",
     "drivers",
-    "web",
-    "qt",
     "vxlib",
     "omezarr",
     "bench",
@@ -78,12 +101,10 @@ addopts = "--strict-markers"
 norecursedirs = ["notes"]
 testpaths = [
     "tests",
-    "cli/tests",
     "drivers/tests",
     "omezarr/tests",
     "records/tests",
     "rigup/tests",
-    "web/tests",
 ]
 markers = [
     "slow: integration-flavored tests (ZMQ networking, zarr I/O); excluded from pre-push, run in CI",

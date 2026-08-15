@@ -11,7 +11,7 @@ from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 
 from rigup import describe
-from vxl.camera.base import (
+from vxl.devices.camera.base import (
     Camera,
     IntRange,
     PixelFormat,

@@ -1,10 +1,11 @@
 # vxl-records
 
 `vxl-records` is the durable record boundary for Voxel. It stores revisioned
-acquisition manifests and an ordered operational log journal behind focused
-`AcquisitionCatalog` and `LogJournal` APIs.
+acquisition manifests, reusable instrument presets, and an ordered operational log journal behind focused
+`AcquisitionCatalog`, `PresetCatalog`, and `LogJournal` APIs.
 
-The initial implementation uses a local SQLite database. Acquisition-root
+`SQLiteRecords` composes those APIs over one database; application code should depend on the `VoxelRecords`
+protocol when it does not require SQLite-specific behavior. The initial implementation uses a local SQLite database. Acquisition-root
 `manifest.json` files remain portable projections of the authoritative
 relational acquisition record.
 
@@ -16,3 +17,5 @@ legacy files remain available as a rollback source.
 explicit application-lifecycle context. Captured records pass through a bounded
 queue to one SQLite writer, and subscribers receive only committed `LogEntry`
 values. Queue overflow is represented by a durable warning entry.
+
+Run `uv run pytest records/tests` from the workspace to validate changes.

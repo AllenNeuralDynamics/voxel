@@ -1,23 +1,26 @@
 """Station-owned lifecycle and transport-neutral state feed."""
 
-from .core import InstrumentTemplates, Station
+from .core import Station
 from .errors import StationFeedLaggedError, StationNotConfiguredError
 from .feed import StationFeed, StationFeedConnection
 from .models import (
     DeviceState,
+    InstrumentView,
     SessionInfo,
-    SessionState,
+    SessionView,
     StationFeedView,
     StationState,
     StationStatus,
     StreamCursor,
 )
+from .templates import InstrumentTemplates
 
 __all__ = [
     "DeviceState",
     "InstrumentTemplates",
+    "InstrumentView",
     "SessionInfo",
-    "SessionState",
+    "SessionView",
     "Station",
     "StationFeed",
     "StationFeedConnection",

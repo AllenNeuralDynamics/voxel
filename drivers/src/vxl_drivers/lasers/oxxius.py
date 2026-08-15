@@ -9,7 +9,7 @@ from rigup.device.props import enumerated, numeric
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
 from rigup import Device, describe
-from vxl.laser.base import Laser
+from vxl.devices.laser.base import Laser
 
 # ==================== Protocol Constants ====================
 

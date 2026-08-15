@@ -4,14 +4,14 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from vxl_records import StorageSpec
 from vxlib.quantity import Frequency, Time
 
-from vxl.camera import StorageSpec
-from vxl.daq.clocked import Signals
+from vxl.devices.daq.clocked import Signals
 from vxl.instrument import AcquisitionMode, Instrument
+from vxl.instrument.config import WriterPatch
 from vxl.instrument.core import AcquisitionRequest
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
-from vxl.instrument.state import WriterPatch
 from vxlib import Cell
 
 
@@ -122,7 +122,7 @@ async def test_apply_settings_uses_locked_public_transition() -> None:
 async def test_acquisition_plans_after_acquiring_instrument_lock() -> None:
     instrument = cast("Any", instrument_in_mode(AcquisitionMode.IDLE))
     instrument._lock = asyncio.Lock()
-    instrument._bench = SimpleNamespace(value=object())
+    instrument._store = SimpleNamespace(value=object())
     planned = asyncio.Event()
 
     def generate_plan(_task_ids: list[str] | None) -> list[object]:

@@ -72,7 +72,7 @@ class AcquisitionManifest(RecordModel):
     ended_at: AwareDatetime | None = None
     failure: AcquisitionFailure | None = None
     storage: StorageSpec
-    bench_snapshot: dict[str, JsonValue]
+    state_snapshot: dict[str, JsonValue]
     hardware_snapshot: dict[str, JsonValue]
     volumes: list[AcquisitionVolume] = Field(min_length=1)
 

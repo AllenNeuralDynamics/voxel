@@ -16,11 +16,8 @@ members = [
     "ome-zarr-writer",
     "rigup",
     "vxl",
-    "vxl-cli",
     "vxl-drivers",
-    "vxl-qt",
     "vxl-records",
-    "vxl-web",
     "vxlib",
 ]
 
@@ -2744,6 +2741,28 @@ dependencies = [
     { name = "vxlib" },
 ]
 
+[package.optional-dependencies]
+all = [
+    { name = "fastapi" },
+    { name = "pyside6" },
+    { name = "qasync" },
+    { name = "qtawesome" },
+    { name = "uvicorn" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
+    { name = "websockets" },
+]
+qt = [
+    { name = "pyside6" },
+    { name = "qasync" },
+    { name = "qtawesome" },
+]
+web = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
+    { name = "websockets" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
@@ -2755,6 +2774,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cloudpathlib", extras = ["s3"], specifier = ">=0.24.0" },
+    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.121.1" },
+    { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.121.1" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "numcodecs", specifier = ">=0.16.5" },
     { name = "numpy", specifier = ">=2.3.4" },
@@ -2762,12 +2783,25 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
     { name = "psutil", specifier = ">=5.9" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
+    { name = "pyside6", marker = "extra == 'all'", specifier = ">=6.8.0" },
+    { name = "pyside6", marker = "extra == 'qt'", specifier = ">=6.8.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "qasync", marker = "extra == 'all'", specifier = ">=0.27.1" },
+    { name = "qasync", marker = "extra == 'qt'", specifier = ">=0.27.1" },
+    { name = "qtawesome", marker = "extra == 'all'", specifier = ">=1.4.0" },
+    { name = "qtawesome", marker = "extra == 'qt'", specifier = ">=1.4.0" },
     { name = "rich", specifier = ">=14.2.0" },
     { name = "rigup", editable = "rigup" },
+    { name = "uvicorn", marker = "extra == 'all'", specifier = ">=0.38.0" },
+    { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.38.0" },
+    { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'all'" },
+    { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'web'" },
     { name = "vxl-records", editable = "records" },
     { name = "vxlib", editable = "vxlib" },
+    { name = "websockets", marker = "extra == 'all'", specifier = ">=15.0.1" },
+    { name = "websockets", marker = "extra == 'web'", specifier = ">=15.0.1" },
 ]
+provides-extras = ["web", "qt", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2776,38 +2810,6 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "ruff", specifier = ">=0.8.0" },
 ]
-
-[[package]]
-name = "vxl-cli"
-version = "0.1.0"
-source = { editable = "cli" }
-dependencies = [
-    { name = "vxl" },
-    { name = "vxl-records" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "vxl-qt" },
-    { name = "vxl-web" },
-]
-qt = [
-    { name = "vxl-qt" },
-]
-web = [
-    { name = "vxl-web" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "vxl", editable = "." },
-    { name = "vxl-qt", marker = "extra == 'all'", editable = "qt" },
-    { name = "vxl-qt", marker = "extra == 'qt'", editable = "qt" },
-    { name = "vxl-records", editable = "records" },
-    { name = "vxl-web", marker = "extra == 'all'", editable = "web" },
-    { name = "vxl-web", marker = "extra == 'web'", editable = "web" },
-]
-provides-extras = ["web", "qt", "all"]
 
 [[package]]
 name = "vxl-drivers"
@@ -2870,25 +2872,6 @@ requires-dist = [
 provides-extras = ["opto-icc", "opto-kummenberg", "coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
 
 [[package]]
-name = "vxl-qt"
-version = "0.1.0"
-source = { editable = "qt" }
-dependencies = [
-    { name = "pyside6" },
-    { name = "qasync" },
-    { name = "qtawesome" },
-    { name = "vxl" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pyside6", specifier = ">=6.8.0" },
-    { name = "qasync", specifier = ">=0.27.1" },
-    { name = "qtawesome", specifier = ">=1.4.0" },
-    { name = "vxl", editable = "." },
-]
-
-[[package]]
 name = "vxl-records"
 version = "0.1.0"
 source = { editable = "records" }
@@ -2901,29 +2884,6 @@ dependencies = [
 requires-dist = [
     { name = "cloudpathlib", extras = ["s3"], specifier = ">=0.24.0" },
     { name = "pydantic", specifier = ">=2.11" },
-]
-
-[[package]]
-name = "vxl-web"
-version = "0.1.0"
-source = { editable = "web" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "uvicorn" },
-    { name = "uvloop", marker = "sys_platform != 'win32'" },
-    { name = "vxl" },
-    { name = "vxl-records" },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.121.1" },
-    { name = "uvicorn", specifier = ">=0.38.0" },
-    { name = "uvloop", marker = "sys_platform != 'win32'" },
-    { name = "vxl", editable = "." },
-    { name = "vxl-records", editable = "records" },
-    { name = "websockets", specifier = ">=15.0.1" },
 ]
 
 [[package]]

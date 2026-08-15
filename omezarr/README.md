@@ -14,7 +14,8 @@ add_frame(frame)                 # one z-slice at a time
                 → [staging]      # optional: local scratch → s5cmd upload to S3
 ```
 
-`close()` drains the final partial batch and releases the ring, write pool, and per-level array writers.
+`end_stack()` drains the final partial batch and closes its dataset while retaining the reusable ring. Final
+`close()` also releases that ring.
 
 ## Installation
 
@@ -29,7 +30,8 @@ The package is part of the uv workspace. Backends and tooling are optional depen
 | `fastapi` | HTTP server for the Neuroglancer viewer |
 
 ```bash
-uv sync --group ts          # default backend
+cd omezarr
+uv sync --group ts              # default backend
 uv sync --group ts --group s3   # writing to S3
 ```
 
@@ -38,37 +40,42 @@ uv sync --group ts --group s3   # writing to S3
 A minimal single-channel write to a local dataset:
 
 ```python
-from ome_zarr_writer import OMEZarrWriter, WriterConfig, ScaleLevel, UIVec3D, UVec3D
+from ome_zarr_writer import Local, OMEZarrWriter, WriterConfig, ScaleLevel, UIVec3D, UVec3D
 
 config = WriterConfig(
     volume_shape=UIVec3D(z=1000, y=2048, x=2048),
     voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
     max_level=ScaleLevel.L5,
-    target="/path/to/experiment.ome.zarr",
 )
 
-writer = OMEZarrWriter(config, slots=6)
+writer = OMEZarrWriter(slots=6)
+writer.begin_stack(config, Local(target="/path/to/experiment"))
 for frame in camera.stream():  # each frame is a [y, x] ndarray
     writer.add_frame(frame)
+writer.end_stack()
 writer.close()
 ```
 
-Writing to S3 uses an `S3Path` target, with credentials resolved from the AWS environment chain. Setting `scratch` stages shards on a fast local disk and uploads them per batch (staging requires an S3 target):
+Writing to S3 uses a concrete storage value. `DirectS3` writes directly to the target; `StagedS3` writes shards
+to a fast local disk and uploads them per batch. Credentials are resolved from the configured `S3Store` strategy
+and the standard AWS chain:
 
 ```python
 from cloudpathlib import S3Path
+from ome_zarr_writer import S3Store, StagedS3
 
-config = WriterConfig(
-    volume_shape=UIVec3D(z=1000, y=2048, x=2048),
-    voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+storage = StagedS3(
     target=S3Path("s3://my-bucket/experiment.ome.zarr"),
     scratch="/fast/scratch",
+    store=S3Store(),
 )
+writer.begin_stack(config, storage)
 ```
 
 ## Configuration
 
-`WriterConfig` is a frozen Pydantic model describing one dataset (a single stack and channel).
+`WriterConfig` is a frozen Pydantic model describing one dataset (a single stack and channel). The destination is
+a separate `Storage` value passed to `begin_stack()`.
 
 | Field | Default | Meaning |
 |-------|---------|---------|
@@ -76,14 +83,12 @@ config = WriterConfig(
 | `voxel_size` | required | Physical size per axis |
 | `voxel_unit` | `MICROMETER` | Unit for `voxel_size` |
 | `dtype` | `UINT16` | Pixel data type |
-| `target` | required | Output location — a local `Path` or an `S3Path` |
-| `scratch` | `None` | Local staging directory (requires an S3 `target`) |
 | `max_level` | `L7` | Deepest pyramid level (downscale factor `2^level`) |
 | `compression` | `BLOSC_LZ4` | Chunk compression codec |
-| `downscale_type` | `MEAN` | Pyramid reduction — `MEAN`, `GAUSSIAN`, `MIN`, `MAX` |
+| `downscale_type` | `GAUSSIAN` | Pyramid reduction — `MEAN`, `GAUSSIAN`, `MIN`, `MAX` |
 | `target_shard_gb` | `1.0` | Target shard size, used to derive shard geometry |
 
-Ring-buffer depth (`slots`), backend, and buffer mode are `OMEZarrWriter` constructor options rather than config fields.
+Ring-buffer depth (`slots`) and backend are `OMEZarrWriter` constructor options rather than config fields.
 
 ## Backends
 
@@ -93,7 +98,7 @@ The backend is selected with `ArrayWriter.Backend`, passed to the writer as `bac
 |---------|---------|--------|
 | `Backend.TS` | TensorStore — local filesystem and S3 | Default |
 | `Backend.ZARRS` | zarr-python with the zarrs Rust codec pipeline — local filesystem only | Implemented |
-| `Backend.AQZ` | Acquire-zarr | Declared, not yet implemented |
+| `Backend.AQZ` | Acquire-zarr | Unsupported |
 
 Each batch is held in a shared-memory ring slot (`BatchSlot`) whose worker process both downsamples and writes it, so the compress+write never contends with the capture loop's GIL.
 

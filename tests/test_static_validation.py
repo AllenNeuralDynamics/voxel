@@ -6,19 +6,19 @@ from pydantic import ValidationError
 from vxl_records import SQLiteRecords
 
 from vxl import system as system_module
-from vxl.camera import SensorROI
-from vxl.daq.clocked import Signals
-from vxl.daq.clocked.waveform import validate_waveform
+from vxl.devices.camera import SensorROI
+from vxl.devices.daq.clocked import Signals
+from vxl.devices.daq.clocked.waveform import validate_waveform
 from vxl.instrument import Instrument
-from vxl.instrument.bench import InstrumentBench, InstrumentConfig, InstrumentInspection
+from vxl.instrument.config import AcquisitionTask, InstrumentConfig, InstrumentState
 from vxl.instrument.errors import Invalid, Loaded, Missing, OperationRejectedError, StartupError
-from vxl.instrument.state import AcquisitionTask, InstrumentState
+from vxl.instrument.store import InstrumentInspection, InstrumentStore
 from vxl.instrument.topology import HALConfig
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
 from vxlib import load_yaml
 
-TEMPLATE = Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel.yaml"
+TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 
 
 def _config() -> InstrumentConfig:
@@ -53,7 +53,7 @@ def _semantically_invalid_state(config: InstrumentConfig) -> InstrumentState:
 
 
 def test_check_config_returns_the_parsed_config() -> None:
-    checked = InstrumentBench.check_config(TEMPLATE)
+    checked = InstrumentStore.check_config(TEMPLATE)
 
     assert checked.ok
     assert isinstance(checked.config, Loaded)
@@ -66,7 +66,7 @@ def test_check_config_reports_unknown_top_level_field(tmp_path: Path) -> None:
     path = tmp_path / "typo.voxel.yaml"
     path.write_text(f"{TEMPLATE.read_text(encoding='utf-8')}\nmisspelled: true\n", encoding="utf-8")
 
-    checked = InstrumentBench.check_config(path)
+    checked = InstrumentStore.check_config(path)
 
     assert isinstance(checked.config, Invalid)
     assert [(violation.code, violation.loc) for violation in checked.violations] == [
@@ -98,25 +98,25 @@ def test_persisted_state_leaves_reject_unknown_fields() -> None:
         HALConfig.model_validate({**config.hal.model_dump(), "stgae": config.hal.stage})
 
 
-def test_bench_check_collects_config_and_state_errors(tmp_path: Path) -> None:
+def test_store_check_collects_config_and_state_errors(tmp_path: Path) -> None:
     directory = tmp_path / "broken.voxel"
     directory.mkdir()
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")
-    (directory / "bench.json").write_text("{", encoding="utf-8")
+    (directory / "state.json").write_text("{", encoding="utf-8")
 
-    inspected = InstrumentBench.check(directory)
+    inspected = InstrumentStore.check(directory)
 
     assert isinstance(inspected.config, Invalid)
     assert isinstance(inspected.state, Invalid)
     assert not inspected.ok
-    assert {violation.loc[0] for violation in inspected.violations} == {"config", "bench"}
+    assert {violation.loc[0] for violation in inspected.violations} == {"config", "state"}
 
 
 def test_inspection_requires_violations_for_blocking_artifact_statuses() -> None:
     with pytest.raises(ValidationError, match="missing or invalid config must include a config violation"):
         InstrumentInspection(config=Missing())
 
-    with pytest.raises(ValidationError, match="invalid state must include a bench violation"):
+    with pytest.raises(ValidationError, match="invalid state must include a state violation"):
         InstrumentInspection(config=Loaded(value=_config()), state=Invalid())
 
 
@@ -182,7 +182,7 @@ def test_check_config_collects_independent_semantic_violations(tmp_path: Path) -
     config = config.replace("illumination: laser_488", "illumination: missing_illumination", 1)
     path.write_text(config, encoding="utf-8")
 
-    checked = InstrumentBench.check_config(path)
+    checked = InstrumentStore.check_config(path)
 
     assert isinstance(checked.config, Loaded)
     assert not checked.ok
@@ -203,57 +203,57 @@ def test_check_config_collects_independent_semantic_violations(tmp_path: Path) -
     ]
 
 
-def test_bench_uses_config_default_only_when_file_is_missing(tmp_path: Path) -> None:
+def test_store_uses_config_default_only_when_state_file_is_missing(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("missing-bench", tmp_path)
-    inspection = InstrumentBench.check(directory)
+    directory = config.instantiate("missing-state", tmp_path)
+    inspection = InstrumentStore.check(directory)
 
-    bench = InstrumentBench.load(directory)
+    store = InstrumentStore.load(directory)
 
     assert isinstance(inspection.config, Loaded)
     assert isinstance(inspection.state, Missing)
     assert inspection.ok
-    assert bench.value.imaging == config.default.imaging
-    assert bench.home == directory
-    assert bench.config == InstrumentConfig.read(directory / "config.yaml")
-    assert not (directory / "bench.json").exists()
+    assert store.value.imaging == config.default.imaging
+    assert store.home == directory
+    assert store.config == InstrumentConfig.read(directory / "config.yaml")
+    assert not (directory / "state.json").exists()
 
 
-async def test_bench_saves_selected_live_fields_as_defaults(tmp_path: Path) -> None:
+async def test_store_saves_selected_live_fields_as_defaults(tmp_path: Path) -> None:
     config = _config()
     directory = config.instantiate("save-default", tmp_path)
-    bench = InstrumentBench.load(directory)
-    stencil = bench.value.stencil.model_copy(update={"x_offset": 42.0})
-    await bench.update(stencil=stencil)
+    store = InstrumentStore.load(directory)
+    stencil = store.value.stencil.model_copy(update={"x_offset": 42.0})
+    await store.update(stencil=stencil)
 
-    await bench.save_as_default({"stencil"})
+    await store.save_as_default({"stencil"})
 
-    assert bench.default.value.stencil == stencil
-    assert bench.config.default.stencil == stencil
+    assert store.default.value.stencil == stencil
+    assert store.config.default.stencil == stencil
     assert InstrumentConfig.read(directory / "config.yaml").default.stencil == stencil
 
 
-async def test_bench_restores_selected_defaults_to_live_state(tmp_path: Path) -> None:
+async def test_store_restores_selected_defaults_to_live_state(tmp_path: Path) -> None:
     config = _config()
     directory = config.instantiate("restore-default", tmp_path)
-    bench = InstrumentBench.load(directory)
-    await bench.update(stencil=bench.value.stencil.model_copy(update={"x_offset": 42.0}))
+    store = InstrumentStore.load(directory)
+    await store.update(stencil=store.value.stencil.model_copy(update={"x_offset": 42.0}))
 
-    await bench.restore_default({"stencil"})
+    await store.restore_default({"stencil"})
 
-    assert bench.value.stencil == bench.default.value.stencil
-    persisted = InstrumentState.model_validate_json((directory / "bench.json").read_text(encoding="utf-8"))
-    assert persisted.stencil == bench.default.value.stencil
+    assert store.value.stencil == store.default.value.stencil
+    persisted = InstrumentState.model_validate_json((directory / "state.json").read_text(encoding="utf-8"))
+    assert persisted.stencil == store.default.value.stencil
 
 
 def test_instrument_constructs_from_the_validated_snapshot_without_rereading(tmp_path: Path) -> None:
     config = _config()
     directory = config.instantiate("validated", tmp_path)
-    bench = InstrumentBench.load(directory)
+    store = InstrumentStore.load(directory)
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")
 
     instrument = Instrument(
-        bench,
+        store,
         records=SQLiteRecords(
             tmp_path / "records.sqlite3",
             resolve_root=lambda _spec: tmp_path / "acquisitions",
@@ -262,114 +262,114 @@ def test_instrument_constructs_from_the_validated_snapshot_without_rereading(tmp
 
     assert instrument.path == directory
     assert instrument.default.value == config.default
-    assert instrument.state.value == bench.value
+    assert instrument.state.value == store.value
 
 
-def test_bench_rejects_an_invalid_existing_file(tmp_path: Path) -> None:
-    directory = _config().instantiate("invalid-bench", tmp_path)
-    path = directory / "bench.json"
+def test_store_rejects_an_invalid_existing_state_file(tmp_path: Path) -> None:
+    directory = _config().instantiate("invalid-state", tmp_path)
+    path = directory / "state.json"
     path.write_text("{", encoding="utf-8")
 
     with pytest.raises(StartupError) as raised:
-        InstrumentBench.load(directory)
+        InstrumentStore.load(directory)
 
-    assert {violation.code for violation in raised.value.violations} == {"bench.load"}
+    assert {violation.code for violation in raised.value.violations} == {"state.load"}
     assert path.read_text(encoding="utf-8") == "{"
 
 
-def test_bench_rejects_an_incompatible_existing_file(tmp_path: Path) -> None:
+def test_store_rejects_an_incompatible_existing_state_file(tmp_path: Path) -> None:
     config = _config()
-    directory = config.instantiate("incompatible-bench", tmp_path)
-    path = directory / "bench.json"
+    directory = config.instantiate("incompatible-state", tmp_path)
+    path = directory / "state.json"
     path.write_text(_incompatible_state(config).model_dump_json(), encoding="utf-8")
 
     with pytest.raises(StartupError) as raised:
-        InstrumentBench.load(directory)
+        InstrumentStore.load(directory)
 
     assert {violation.code for violation in raised.value.violations} == {"imaging.channel.detection_missing"}
     assert "missing_camera" in str(raised.value)
 
 
-async def test_archive_bench_uses_the_next_available_backup_name(
+async def test_archive_state_uses_the_next_available_backup_name(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     station = _station(tmp_path, monkeypatch)
     directory = station.instruments_dir / "scope.voxel"
     directory.mkdir()
-    bench = directory / "bench.json"
+    state_path = directory / "state.json"
 
-    bench.write_text("first", encoding="utf-8")
-    first = await station.archive_bench("scope")
-    bench.write_text("second", encoding="utf-8")
-    second = await station.archive_bench("scope")
+    state_path.write_text("first", encoding="utf-8")
+    first = await station.archive_state("scope")
+    state_path.write_text("second", encoding="utf-8")
+    second = await station.archive_state("scope")
 
-    assert first.name == "bench.bak.json"
+    assert first.name == "state.bak.json"
     assert first.read_text(encoding="utf-8") == "first"
-    assert second.name == "bench.bak.2.json"
+    assert second.name == "state.bak.2.json"
     assert second.read_text(encoding="utf-8") == "second"
-    assert not bench.exists()
+    assert not state_path.exists()
 
 
-def test_bench_check_reports_hal_incompatibility(tmp_path: Path) -> None:
+def test_store_check_reports_hal_incompatibility(tmp_path: Path) -> None:
     config = _config()
     directory = config.instantiate("incompatible", tmp_path)
-    (directory / "bench.json").write_text(_incompatible_state(config).model_dump_json(), encoding="utf-8")
+    (directory / "state.json").write_text(_incompatible_state(config).model_dump_json(), encoding="utf-8")
 
-    checked = InstrumentBench.check(directory)
+    checked = InstrumentStore.check(directory)
 
     assert isinstance(checked.config, Loaded)
     assert isinstance(checked.state, Loaded)
     assert [(violation.code, violation.loc, violation.msg) for violation in checked.violations] == [
         (
             "imaging.channel.detection_missing",
-            ("bench", "imaging", "channels", "gfp", "detection"),
+            ("state", "imaging", "channels", "gfp", "detection"),
             "Detection assembly 'missing_camera' is not configured.",
         )
     ]
 
 
-def test_bench_check_collects_independent_state_semantic_violations(tmp_path: Path) -> None:
+def test_store_check_collects_independent_state_semantic_violations(tmp_path: Path) -> None:
     config = _config()
     directory = config.instantiate("semantic-state", tmp_path)
-    (directory / "bench.json").write_text(
+    (directory / "state.json").write_text(
         _semantically_invalid_state(config).model_dump_json(),
         encoding="utf-8",
     )
 
-    checked = InstrumentBench.check(directory)
+    checked = InstrumentStore.check(directory)
 
     assert isinstance(checked.state, Loaded)
     assert [(violation.code, violation.loc) for violation in checked.violations] == [
         (
             "imaging.profile.channel_missing",
-            ("bench", "imaging", "profiles", "single_gfp", "channels", 0),
+            ("state", "imaging", "profiles", "single_gfp", "channels", 0),
         ),
-        ("task.profile_missing", ("bench", "tasks", "broken", "profile_ids", 0)),
+        ("task.profile_missing", ("state", "tasks", "broken", "profile_ids", 0)),
     ]
 
 
-async def test_bench_rejects_semantically_invalid_update_without_persisting(tmp_path: Path) -> None:
+async def test_store_rejects_semantically_invalid_update_without_persisting(tmp_path: Path) -> None:
     config = _config()
     directory = config.instantiate("semantic-update", tmp_path)
-    bench = InstrumentBench.load(directory)
-    original = bench.value
+    store = InstrumentStore.load(directory)
+    original = store.value
 
     with pytest.raises(OperationRejectedError, match=r"missing_channel.*missing_profile"):
-        await bench.set(_semantically_invalid_state(config))
+        await store.set(_semantically_invalid_state(config))
 
-    assert bench.value == original
-    assert not (directory / "bench.json").exists()
+    assert store.value == original
+    assert not (directory / "state.json").exists()
 
 
-def test_discovery_preserves_static_bench_violations(
+def test_discovery_preserves_static_state_violations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     station = _station(tmp_path, monkeypatch)
     config = _config()
     directory = config.instantiate("incompatible", station.instruments_dir)
-    (directory / "bench.json").write_text(
+    (directory / "state.json").write_text(
         _incompatible_state(config).model_dump_json(),
         encoding="utf-8",
     )
@@ -383,7 +383,7 @@ def test_discovery_preserves_static_bench_violations(
     assert [(violation.code, violation.loc, violation.msg) for violation in info.violations] == [
         (
             "imaging.channel.detection_missing",
-            ("bench", "imaging", "channels", "gfp", "detection"),
+            ("state", "imaging", "channels", "gfp", "detection"),
             "Detection assembly 'missing_camera' is not configured.",
         )
     ]
@@ -397,7 +397,7 @@ async def test_launch_rejects_static_violations_before_constructing_instrument(
     directory = station.instruments_dir / "broken.voxel"
     directory.mkdir()
     (directory / "config.yaml").write_text("hal: []\n", encoding="utf-8")
-    (directory / "bench.json").write_text("{", encoding="utf-8")
+    (directory / "state.json").write_text("{", encoding="utf-8")
 
     def unexpected_instrument(_instrument: Instrument, *_args: object, **_kwargs: object) -> None:
         raise AssertionError("Instrument construction must not run after static validation fails")
@@ -407,6 +407,6 @@ async def test_launch_rejects_static_violations_before_constructing_instrument(
     with pytest.raises(StartupError) as raised:
         await station.open_session("broken")
 
-    assert {violation.loc[0] for violation in raised.value.violations} == {"config", "bench"}
+    assert {violation.loc[0] for violation in raised.value.violations} == {"config", "state"}
     assert station.state.value.status is StationStatus.IDLE
     assert station.state.value.session is None

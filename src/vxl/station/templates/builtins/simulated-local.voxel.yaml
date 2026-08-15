@@ -1,0 +1,162 @@
+# Simulated Local — all devices in-process (no ZMQ). Launches with no hardware attached.
+# A .voxel.yaml template: `hal` (the hardware blueprint) + `default` (the baseline acquisition state).
+# Instantiation writes <name>.voxel/config.yaml; state.json is created after the first state change.
+
+hal:
+  devices:
+    daq_hub:
+      target: vxl.devices.daq.SimulatedDaqmx
+      init: { device_name: "MockDev1" }
+    daq:
+      target: vxl.devices.daq.SimulatedSignalGenerator
+      init:
+        hub: daq_hub
+        ports:
+          laser_488: ao0
+          laser_561: ao1
+          camera_1: ao2
+          aotf_1: ao3
+    camera_1:
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source:
+          sensor_size_px: "10640,14192"
+          pixel_size_um: "3.76,3.76"
+    aotf_1:
+      target: vxl.devices.aotf.simulated.SimulatedAotf
+      init: { blanking_mode: "external" }
+    laser_488:
+      target: &aotf_laser_target vxl.devices.laser.simulated.SimulatedAOTFShutteredLaser
+      init:
+        wavelength: 488
+        aotf: aotf_1
+        aotf_channel: 1
+        aotf_frequency_mhz: 98.2
+    laser_561:
+      target: *aotf_laser_target
+      init:
+        wavelength: 561
+        aotf: aotf_1
+        aotf_channel: 2
+        aotf_frequency_mhz: 87.4
+    fw_emission:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: { 0: "BP525", 1: "BP600", 2: "BP700" }
+    illumination_side_selector:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: { 0: "left", 1: "right" }
+    x_axis:
+      target: &axis_target vxl.devices.axes.simulated.SimulatedContinuousAxis
+      init: { lower_limit: 0, upper_limit: 36700 }
+    y_axis:
+      target: *axis_target
+      init: { lower_limit: 0, upper_limit: 23000 }
+    z_axis:
+      target: *axis_target
+      init: { lower_limit: 0, upper_limit: 50000 }
+
+  stage:
+    x: x_axis
+    y: y_axis
+    z: z_axis
+
+  detection:
+    camera_1:
+      filter_wheels: [fw_emission]
+      magnification: 8.0
+
+  illumination:
+    laser_488:
+      routing:
+        excitation_side: [left, right]
+    laser_561:
+      routing:
+        excitation_side: [left, right]
+
+  optical_routing:
+    excitation_side:
+      left:
+        illumination_side_selector: left
+      right:
+        illumination_side_selector: right
+
+default:
+  routing:
+    excitation_side:
+      type: fixed
+      route: left
+
+  imaging:
+    channels:
+      gfp:
+        detection: camera_1
+        illumination: laser_488
+        filters:
+          fw_emission: "BP525"
+        desc: "GFP channel"
+        label: GFP
+        emission: 510
+      rfp:
+        detection: camera_1
+        illumination: laser_561
+        filters:
+          fw_emission: "BP600"
+        desc: "RFP channel"
+        label: RFP
+        emission: 600
+
+    profiles:
+      single_gfp:
+        channels: ["gfp"]
+        z_step: 1.0
+        sync:
+          daq:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            waveforms:
+              camera_1: &camera_waveform
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.0, max: 0.95 }
+              laser_488:
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.1, max: 0.9 }
+              aotf_1: &aotf_blanking_waveform
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.05, max: 0.95 }
+        desc: "Single GFP channel"
+      single_rfp:
+        channels: ["rfp"]
+        z_step: 1.0
+        sync:
+          daq:
+            sample_rate: "100 kHz"
+            duration: "0.2 s"
+            rest_time: "0.05 s"
+            waveforms:
+              camera_1: *camera_waveform
+              laser_561:
+                type: pulse
+                voltage: { min: 0.0, max: 5.0 }
+                window: { min: 0.1, max: 0.9 }
+              aotf_1: *aotf_blanking_waveform
+        desc: "Single RFP channel"
+
+  stencil:
+    x_offset: 0.0
+    y_offset: 0.0
+    overlap_x: 0.1
+    overlap_y: 0.1
+    z_start: 0.0
+    z_end: 511.0
+
+  traversal: snake_row
+
+  output:
+    max_level: 3
+    compression: blosc.lz4

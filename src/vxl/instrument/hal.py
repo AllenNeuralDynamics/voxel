@@ -4,9 +4,9 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from rigup import DeviceHandle, DeviceInterface, Rig
-from vxl.axes import ContinuousAxisHandle
-from vxl.camera import CameraHandle
-from vxl.daq.clocked import SignalGeneratorHandle
+from vxl.devices.axes import ContinuousAxisHandle
+from vxl.devices.camera import CameraHandle
+from vxl.devices.daq.clocked import SignalGeneratorHandle
 
 from .errors import StartupError, Violation, ViolationLoc
 from .topology import HALConfig

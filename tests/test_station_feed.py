@@ -3,33 +3,42 @@ from uuid import UUID
 
 import pytest
 
-from vxl.instrument import AcquisitionMode, InstrumentConfig, InstrumentState
-from vxl.station import SessionInfo, SessionState, StationFeed, StationFeedLaggedError, StationState, StationStatus
+from vxl.instrument import AcquisitionMode, InstrumentConfig
+from vxl.station import (
+    InstrumentView,
+    SessionInfo,
+    SessionView,
+    StationFeed,
+    StationFeedLaggedError,
+    StationState,
+    StationStatus,
+)
 from vxl.system import StationInfo
 from vxlib import Cell, load_yaml
 
 STATION = StationInfo(id=UUID("12345678-1234-5678-1234-567812345678"), name="scope")
 CONFIG = load_yaml(
-    Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel.yaml",
+    Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml",
     InstrumentConfig,
 )
-SESSION = SessionState(
+SESSION = SessionView(
     info=SessionInfo(
         id=UUID("87654321-4321-8765-4321-876543218765"),
         instrument_name="instrument",
+    ),
+    instrument=InstrumentView(
+        **CONFIG.default.model_dump(),
+        config=CONFIG,
         mode=AcquisitionMode.IDLE,
         active_profile_id="single_gfp",
         preview_revision=0,
         fov=None,
         routing_targets={},
+        task_tiles=[],
+        devices={},
+        acquisition=None,
+        remote_stores={},
     ),
-    bench=InstrumentState(**CONFIG.default.model_dump()),
-    task_tiles=[],
-    devices={},
-    acquisition=None,
-    defaults=CONFIG.default,
-    hardware=CONFIG.hal,
-    remote_stores={},
 )
 
 

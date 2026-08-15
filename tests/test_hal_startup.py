@@ -18,10 +18,10 @@ from rigup import (
     Result,
 )
 from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState
+from vxl.instrument.config import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.core import Channel
 from vxl.instrument.errors import StartupError, Violation
 from vxl.instrument.hal import HAL
-from vxl.instrument.state import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.topology import (
     DetectionAssemblyConfig,
     HALConfig,
@@ -156,7 +156,7 @@ class _FailsInstrumentValidation(Instrument):
         return [Violation(code="test.startup", msg="instrument validation failed")]
 
 
-class _FakeBench:
+class _FakeStore:
     def __init__(self, value: InstrumentState) -> None:
         self.value = value
 
@@ -445,7 +445,7 @@ async def test_instrument_validation_failure_closes_open_hal() -> None:
 
 
 async def test_instrument_startup_collects_profile_port_and_stage_violations() -> None:
-    config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
+    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
     state = InstrumentState(**config.default.model_dump())
     profile = state.imaging.profiles["single_gfp"]
     profile = profile.model_copy(
@@ -485,13 +485,13 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations() -
     )
     daq_interface = DeviceInterface(uid="daq", type="signal_generator", commands={}, properties={})
     instrument = cast("Any", object.__new__(Instrument))
-    instrument._bench = _FakeBench(state)
+    instrument._store = _FakeStore(state)
     instrument._hal = _FakeInstrumentHAL({"camera_1": camera_interface, "daq": daq_interface})
 
     violations = await instrument._startup_violations()
 
     assert {violation.code for violation in violations} == {
-        "bench.stage_position.out_of_bounds",
+        "state.stage_position.out_of_bounds",
         "imaging.profile.props.device_unavailable",
         "imaging.profile.props.property_missing",
         "imaging.profile.props.property_read_only",
@@ -500,15 +500,15 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations() -
         "imaging.profile.sync.not_signal_generator",
         "imaging.profile.sync.port_missing",
     }
-    assert {violation.loc for violation in violations if violation.code == "bench.stage_position.out_of_bounds"} == {
-        ("bench", "tasks", "outside", "x"),
-        ("bench", "tasks", "outside", "start"),
-        ("bench", "stencil", "z_end"),
+    assert {violation.loc for violation in violations if violation.code == "state.stage_position.out_of_bounds"} == {
+        ("state", "tasks", "outside", "x"),
+        ("state", "tasks", "outside", "start"),
+        ("state", "stencil", "z_end"),
     }
 
 
 async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
+    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("runtime-validation", tmp_path),
         records=_records(tmp_path),
@@ -572,7 +572,7 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
 
 
 async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
+    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("coalescer-cleanup", tmp_path),
         records=_records(tmp_path),
@@ -600,7 +600,7 @@ async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None
 
 
 async def test_instrument_preview_rejects_stale_source_generation(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
+    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
     instrument = Instrument.from_path(
         config.instantiate("feed-lifecycle", tmp_path),
         records=_records(tmp_path),
@@ -646,7 +646,7 @@ async def test_instrument_preview_rejects_stale_source_generation(tmp_path: Path
 
 
 async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
-    config = InstrumentConfig.read(Path("src/vxl/_templates/simulated-local.voxel.yaml"))
+    config = InstrumentConfig.read(Path("src/vxl/station/templates/builtins/simulated-local.voxel.yaml"))
     x_axis = config.hal.devices["x_axis"]
     hal = config.hal.model_copy(
         update={

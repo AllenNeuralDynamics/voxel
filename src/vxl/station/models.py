@@ -7,10 +7,8 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from rigup import DeviceInterface, PropertyModel
-from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, InstrumentState
+from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, InstrumentConfig, InstrumentState
 from vxl.instrument.models import TaskTile
-from vxl.instrument.state import InstrumentDefaults
-from vxl.instrument.topology import HALConfig
 from vxl.preview import StreamCursor
 from vxl.system import Remote, StationInfo
 from vxlib import SchemaModel
@@ -28,15 +26,10 @@ class StationStatus(StrEnum):
 
 
 class SessionInfo(SchemaModel):
-    """Lightweight runtime summary of one opened instrument session."""
+    """Stable identity of one opened instrument session."""
 
     id: UUID
     instrument_name: str = Field(min_length=1)
-    mode: AcquisitionMode
-    active_profile_id: str = Field(min_length=1)
-    preview_revision: int = Field(ge=0)
-    fov: tuple[float, float] | None
-    routing_targets: dict[str, str]
 
 
 class DeviceState(SchemaModel):
@@ -46,24 +39,35 @@ class DeviceState(SchemaModel):
     props: dict[str, PropertyModel]
 
 
-class SessionState(SchemaModel):
-    """Complete bounded state belonging to one opened instrument session."""
+class InstrumentView(InstrumentState):
+    """Persisted instrument state enriched with its current runtime projection."""
 
-    info: SessionInfo
-    bench: InstrumentState
+    config: InstrumentConfig
+
+    mode: AcquisitionMode
+    active_profile_id: str = Field(min_length=1)
+    preview_revision: int = Field(ge=0)
+    fov: tuple[float, float] | None
+    routing_targets: dict[str, str]
+
     task_tiles: list[TaskTile]
     devices: dict[str, DeviceState]
     acquisition: ActiveAcquisitionState | None
-    defaults: InstrumentDefaults
-    hardware: HALConfig
     remote_stores: dict[str, Remote]
+
+
+class SessionView(SchemaModel):
+    """Complete bounded view belonging to one opened instrument session."""
+
+    info: SessionInfo
+    instrument: InstrumentView
 
 
 class StationState(SchemaModel):
     """Current reactive lifecycle projection of the live station."""
 
     status: StationStatus = StationStatus.IDLE
-    session: SessionState | None = None
+    session: SessionView | None = None
     error: str | None = None
 
     @model_validator(mode="after")
@@ -90,8 +94,9 @@ class StationFeedView(StationState):
 
 __all__ = [
     "DeviceState",
+    "InstrumentView",
     "SessionInfo",
-    "SessionState",
+    "SessionView",
     "StationFeedView",
     "StationState",
     "StationStatus",

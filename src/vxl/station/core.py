@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,13 +10,11 @@ from uuid import UUID, uuid4
 
 from vxl_records import SQLiteRecords, VoxelRecords
 
-from vxl.camera import resolve_storage
-from vxl.instrument import Instrument, InstrumentBench, InstrumentConfig, InstrumentInspection
-from vxl.instrument.errors import Loaded
-from vxlib import Cell, Computed, Readable, Teardown
+from vxl.instrument import Instrument, InstrumentConfig, InstrumentInspection, InstrumentStore
+from vxlib import Cell, Readable, Teardown
 
 from .feed import StationFeed
-from .models import DeviceState, SessionInfo, SessionState, StationState, StationStatus
+from .models import DeviceState, InstrumentView, SessionInfo, SessionView, StationState, StationStatus
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -25,56 +22,11 @@ if TYPE_CHECKING:
     from vxl.system import StationConfig
 
 
-def _create_instrument(home: Path, records: VoxelRecords) -> Instrument:
-    return Instrument.from_path(home, records=records)
-
-
 def _describe_error(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"
 
 
-_TEMPLATES_DIR = Path(__file__).parents[1] / "_templates"
-log = logging.getLogger(__name__)
-
-
 type InstrumentFactory = Callable[[Path, VoxelRecords], Instrument]
-
-
-class InstrumentTemplates:
-    """Discover validated instrument configurations from one template directory."""
-
-    def __init__(self, directory: Path | str = _TEMPLATES_DIR) -> None:
-        self._directory = Path(directory)
-
-    @property
-    def directory(self) -> Path:
-        """Directory containing ``*.voxel.yaml`` instrument templates."""
-        return self._directory
-
-    def discover(self) -> dict[str, InstrumentConfig]:
-        """Return valid templates while logging every invalid configuration."""
-        found: dict[str, InstrumentConfig] = {}
-        if not self._directory.is_dir():
-            return found
-
-        for path in sorted(self._directory.glob("*.voxel.yaml")):
-            name = path.name.removesuffix(".voxel.yaml")
-            inspected = InstrumentBench.check_config(path)
-            if inspected.ok and isinstance(inspected.config, Loaded):
-                found[name] = inspected.config.value
-                continue
-            log.warning(
-                "Skipping instrument template '%s': %s",
-                path.name,
-                "; ".join(violation.msg for violation in inspected.violations),
-            )
-        return found
-
-    def get(self, name: str) -> InstrumentConfig:
-        """Return one valid template or raise when it is unavailable."""
-        if (template := self.discover().get(name)) is None:
-            raise KeyError(f"No instrument template '{name}'")
-        return template
 
 
 class Station:
@@ -100,11 +52,11 @@ class Station:
         self.instruments_dir.mkdir(exist_ok=True)
         self._records = records or SQLiteRecords(
             self._config.dir / "records.sqlite3",
-            resolve_root=lambda spec: resolve_storage(spec).target,
+            resolve_root=lambda spec: self._config.resolve_storage(spec).target,
         )
-        self._instrument_factory = instrument_factory or _create_instrument
+        self._instrument_factory = instrument_factory
         self._instrument: Instrument | None = None
-        self._session_info: Computed[SessionInfo] | None = None
+        self._session_info: SessionInfo | None = None
         self._session_teardowns: list[Teardown] = []
         self._state = Cell(StationState())
         self._lifecycle_lock = asyncio.Lock()
@@ -141,7 +93,7 @@ class Station:
     def discover_instruments(self) -> dict[str, InstrumentInspection]:
         """Inspect every installed instrument without opening hardware."""
         return {
-            directory.stem: InstrumentBench.check(directory)
+            directory.stem: InstrumentStore.check(directory)
             for directory in sorted(self.instruments_dir.glob("*.voxel"))
             if directory.is_dir()
         }
@@ -152,10 +104,10 @@ class Station:
             self._ensure_file_operation_allowed()
             self._instrument_home(name)
             directory = config.instantiate(name, self.instruments_dir)
-            return InstrumentBench.check(directory)
+            return InstrumentStore.check(directory)
 
-    async def archive_bench(self, instrument_name: str) -> Path:
-        """Archive an inactive installed instrument's bench under the next available name."""
+    async def archive_state(self, instrument_name: str) -> Path:
+        """Archive an inactive installed instrument's state under the next available name."""
         async with self._lifecycle_lock:
             self._ensure_file_operation_allowed()
             state = self._state.value
@@ -165,16 +117,16 @@ class Station:
             directory = self._instrument_home(instrument_name)
             if not directory.is_dir():
                 raise FileNotFoundError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
-            bench = directory / "bench.json"
-            if not bench.exists():
-                raise FileNotFoundError(f"No bench.json to archive for '{instrument_name}'")
+            state_path = directory / "state.json"
+            if not state_path.exists():
+                raise FileNotFoundError(f"No state.json to archive for '{instrument_name}'")
 
-            archive = directory / "bench.bak.json"
+            archive = directory / "state.bak.json"
             index = 2
             while archive.exists():
-                archive = directory / f"bench.bak.{index}.json"
+                archive = directory / f"state.bak.{index}.json"
                 index += 1
-            bench.rename(archive)
+            state_path.rename(archive)
             return archive
 
     async def open_session(self, instrument_name: str) -> SessionInfo:
@@ -202,40 +154,36 @@ class Station:
             await self._state.set(StationState(status=StationStatus.OPENING))
             instrument: Instrument | None = None
             try:
-                instrument = self._instrument_factory(instrument_home, self._records)
+                instrument = (
+                    self._instrument_factory(instrument_home, self._records)
+                    if self._instrument_factory is not None
+                    else Instrument.from_path(instrument_home, records=self._records, system=self._config)
+                )
                 await instrument.open()
                 self._instrument = instrument
                 session_id = uuid4()
-                self._session_info = Computed(
-                    instrument.mode,
-                    instrument.active_profile_id,
-                    instrument.preview_revision,
-                    instrument.fov,
-                    instrument.routing_targets,
-                    fn=lambda: SessionInfo(
-                        id=session_id,
-                        instrument_name=instrument_name,
-                        mode=instrument.mode.value,
-                        active_profile_id=instrument.active_profile_id.value,
-                        preview_revision=instrument.preview_revision.value,
-                        fov=instrument.fov.cache,
-                        routing_targets=instrument.routing_targets.value,
-                    ),
+                self._session_info = SessionInfo(
+                    id=session_id,
+                    instrument_name=instrument_name,
                 )
-                self._session_teardowns.append(self._session_info.subscribe(self._refresh_session_state))
-                self._session_teardowns.append(instrument.state.subscribe(self._refresh_session_state))
-                self._session_teardowns.append(instrument.task_tiles.subscribe(self._refresh_session_state))
-                self._session_teardowns.append(instrument.acquisition.subscribe(self._refresh_session_state))
-                self._session_teardowns.append(instrument.default.subscribe(self._refresh_session_state))
-                self._session_teardowns.append(instrument.device_props_updates.subscribe(self._refresh_session_state))
+                self._session_teardowns.append(instrument.mode.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.active_profile_id.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.preview_revision.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.fov.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.routing_targets.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.state.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.task_tiles.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.acquisition.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.default.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.device_props_updates.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.preview.subscribe(self._feed.publish_preview))
-                session_state = self._build_session_state(instrument)
+                session_view = self._build_session_view(instrument)
             except BaseException as launch_error:
                 await self._teardown_failed_launch(instrument, launch_error)
                 raise
 
-            await self._state.set(StationState(status=StationStatus.ACTIVE, session=session_state))
-            return session_state.info
+            await self._state.set(StationState(status=StationStatus.ACTIVE, session=session_view))
+            return session_view.info
 
     @asynccontextmanager
     async def instrument(self, session_id: UUID) -> AsyncIterator[Instrument]:
@@ -317,8 +265,6 @@ class Station:
             teardown()
         self._session_teardowns = []
         self._feed.clear_preview()
-        if self._session_info is not None:
-            self._session_info.close()
         self._session_info = None
         try:
             await instrument.close()
@@ -336,7 +282,7 @@ class Station:
         self._instrument = None
         await self._state.set(StationState())
 
-    async def _refresh_session_state(self, _value: object) -> None:
+    async def _refresh_session_view(self, _value: object) -> None:
         instrument = self._instrument
         if instrument is None or self._session_info is None:
             return
@@ -346,7 +292,7 @@ class Station:
         await self._state.set(
             StationState(
                 status=current.status,
-                session=self._build_session_state(instrument),
+                session=self._build_session_view(instrument),
                 error=current.error,
             )
         )
@@ -356,8 +302,6 @@ class Station:
             teardown()
         self._session_teardowns = []
         self._feed.clear_preview()
-        if self._session_info is not None:
-            self._session_info.close()
         self._session_info = None
 
         if instrument is None:
@@ -395,26 +339,34 @@ class Station:
         if status is StationStatus.FAULTED:
             raise RuntimeError("station is faulted; recovery is required before modifying instruments")
 
-    def _build_session_state(self, instrument: Instrument) -> SessionState:
+    def _build_session_view(self, instrument: Instrument) -> SessionView:
         if self._session_info is None:
             raise RuntimeError("station instrument has no attached session")
         device_props = instrument.device_props
-        return SessionState(
-            info=self._session_info.value,
-            bench=instrument.state.value,
-            task_tiles=instrument.task_tiles.value,
-            devices={
-                device_id: DeviceState(
-                    interface=interface,
-                    props=dict(device_props.get(device_id, {})),
-                )
-                for device_id, interface in instrument.device_interfaces.items()
-            },
-            acquisition=instrument.acquisition.value,
-            defaults=instrument.default.value,
-            hardware=instrument.hardware_config,
-            remote_stores=dict(instrument.remote_stores),
+        return SessionView(
+            info=self._session_info,
+            instrument=InstrumentView.model_validate(
+                {
+                    **instrument.state.value.model_dump(),
+                    "config": instrument.config,
+                    "mode": instrument.mode.value,
+                    "active_profile_id": instrument.active_profile_id.value,
+                    "preview_revision": instrument.preview_revision.value,
+                    "fov": instrument.fov.cache,
+                    "routing_targets": instrument.routing_targets.value,
+                    "task_tiles": instrument.task_tiles.value,
+                    "devices": {
+                        device_id: DeviceState(
+                            interface=interface,
+                            props=dict(device_props.get(device_id, {})),
+                        )
+                        for device_id, interface in instrument.device_interfaces.items()
+                    },
+                    "acquisition": instrument.acquisition.value,
+                    "remote_stores": dict(instrument.remote_stores),
+                }
+            ),
         )
 
 
-__all__ = ["InstrumentTemplates", "Station"]
+__all__ = ["Station"]

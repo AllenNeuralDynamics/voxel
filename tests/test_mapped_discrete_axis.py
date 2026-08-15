@@ -2,8 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from rigup import BuildConfig
-from vxl.axes.discrete.mapped import MappedDiscreteAxis, OwnedMappedDiscreteAxis
-from vxl.axes.simulated import SimulatedContinuousAxis
+from vxl.devices.axes.discrete.mapped import MappedDiscreteAxis, OwnedMappedDiscreteAxis
+from vxl.devices.axes.simulated import SimulatedContinuousAxis
 
 
 def make_axis() -> SimulatedContinuousAxis:
@@ -82,7 +82,7 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
     mapped = OwnedMappedDiscreteAxis(
         uid="selector",
         axis=BuildConfig(
-            target="vxl.axes.simulated.SimulatedContinuousAxis",
+            target="vxl.devices.axes.simulated.SimulatedContinuousAxis",
             init={
                 "lower_limit": 0,
                 "upper_limit": 100,

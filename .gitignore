@@ -17,3 +17,6 @@ wheels/
 notes
 .obsidian
 .old
+
+# web-ui build
+src/vxl/web/static/

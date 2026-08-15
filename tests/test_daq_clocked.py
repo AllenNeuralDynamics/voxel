@@ -1,14 +1,14 @@
-"""Hardware-free tests for ``vxl.daq.clocked``."""
+"""Hardware-free tests for ``vxl.devices.daq.clocked``."""
 
 import numpy as np
 import pytest
 from vxlib.quantity import Frequency, Time
 
-from vxl.daq import SimulatedDaqmx
-from vxl.daq.clocked import SignalGeneratorController, Signals
-from vxl.daq.clocked.ni import NiSignalGenerator
-from vxl.daq.clocked.simulated import SimulatedSignalGenerator
-from vxl.daq.clocked.waveform import (
+from vxl.devices.daq import SimulatedDaqmx
+from vxl.devices.daq.clocked import SignalGeneratorController, Signals
+from vxl.devices.daq.clocked.ni import NiSignalGenerator
+from vxl.devices.daq.clocked.simulated import SimulatedSignalGenerator
+from vxl.devices.daq.clocked.waveform import (
     DerivedMirror,
     DerivedOffset,
     DerivedScale,

@@ -21,9 +21,9 @@ from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
 from vxlib import Cell, Emitter, ReactiveQuery, load_yaml
 
-TEMPLATE = Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel.yaml"
+TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 INSTRUMENT_CONFIG = load_yaml(TEMPLATE, InstrumentConfig)
-BENCH = InstrumentState(**INSTRUMENT_CONFIG.default.model_dump())
+STATE = InstrumentState(**INSTRUMENT_CONFIG.default.model_dump())
 
 
 class FakeInstrument:
@@ -41,11 +41,11 @@ class FakeInstrument:
         self.close_error = close_error
         self.open_started = open_started
         self.open_release = open_release
-        self.state = Cell(BENCH)
+        self.state = Cell(STATE)
         self.default = Cell(INSTRUMENT_CONFIG.default)
         self.mode = Cell(AcquisitionMode.IDLE)
         self.acquisition = Cell[ActiveAcquisitionState | None](None)
-        self.active_profile_id = Cell(next(iter(BENCH.imaging.profiles)))
+        self.active_profile_id = Cell(next(iter(STATE.imaging.profiles)))
         self.routing_targets = Cell[dict[str, str]]({})
         self.device_interfaces: dict[str, DeviceInterface] = {}
         self.device_props: dict[str, DeviceProps] = {}
@@ -53,6 +53,7 @@ class FakeInstrument:
         self.device_props_updates = Emitter[tuple[str, DeviceProps]]()
         self.preview = Emitter[PreviewSourceEmission]()
         self.preview_revision = Cell(0)
+        self.config = INSTRUMENT_CONFIG
         self.hardware_config = INSTRUMENT_CONFIG.hal
         self.fov = ReactiveQuery(fn=self._get_fov)
         self.task_tiles = Cell[list[TaskTile]]([])
@@ -226,7 +227,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(station
     assert snapshot.session is not None
     assert snapshot.session.info.id == session.id
     assert snapshot.session.info.instrument_name == session.instrument_name
-    assert snapshot.session.info.preview_revision == 1
+    assert snapshot.session.instrument.preview_revision == 1
     assert snapshot.error == "OSError: close failed"
     await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"ignored"))
     assert len(delivered) == 1

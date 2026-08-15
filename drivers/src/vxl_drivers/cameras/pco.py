@@ -8,7 +8,7 @@ from rigup.device.props import enumerated, enumerated_int, numeric
 from vxlib.vec import IVec2D, Vec2D
 
 from rigup import describe
-from vxl.camera.base import (
+from vxl.devices.camera.base import (
     Camera,
     IntRange,
     PixelFormat,

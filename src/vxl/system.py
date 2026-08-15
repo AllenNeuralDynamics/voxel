@@ -13,12 +13,14 @@ import logging
 import socket
 import sys
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import ClassVar, Literal, Self
 from uuid import UUID, uuid4
 
 import psutil
+from cloudpathlib import S3Path
 from dotenv import load_dotenv
+from ome_zarr_writer import DirectS3, Local, StagedS3, Storage
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
@@ -26,6 +28,14 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     YamlConfigSettingsSource,
+)
+from vxl_records import (
+    DatasetLocation,
+    LocalLocation,
+    LocationRole,
+    LocationStatus,
+    ObjectLocation,
+    StorageSpec,
 )
 
 from vxlib import S3Store, save_yaml
@@ -152,6 +162,43 @@ class System(BaseSettings):
     @staticmethod
     def hostname() -> str:
         return socket.gethostname()
+
+    def resolve_storage(self, spec: StorageSpec, subpath: PurePosixPath | None = None) -> Storage:
+        """Resolve portable storage against this machine's configuration."""
+        relpath = spec.path / (subpath or PurePosixPath())
+        if spec.remote is None:
+            return Local(target=self.store / relpath)
+
+        if spec.remote.store not in self.remotes:
+            raise KeyError(f"unknown remote store '{spec.remote.store}'; configured: {sorted(self.remotes)}")
+        store = self.remotes[spec.remote.store].connection
+        target = S3Path(f"s3://{spec.remote.root}") / relpath.as_posix()
+        if spec.remote.stage:
+            return StagedS3(scratch=self.scratch / relpath, target=target, store=store)
+        return DirectS3(target=target, store=store)
+
+    def describe_dataset_location(self, spec: StorageSpec, target: Path | S3Path) -> DatasetLocation:
+        """Describe a concrete writer target as a durable acquisition-record location."""
+        if spec.remote is None:
+            if not isinstance(target, Path):
+                raise TypeError(f"local storage resolved to a non-local target: {target}")
+            return LocalLocation(
+                role=LocationRole.DESTINATION,
+                status=LocationStatus.WRITING,
+                host=self.hostname(),
+                path=str(target),
+            )
+
+        if not isinstance(target, S3Path):
+            raise TypeError(f"object storage resolved to a non-object target: {target}")
+        return ObjectLocation(
+            role=LocationRole.DESTINATION,
+            status=LocationStatus.WRITING,
+            host=self.hostname(),
+            store=spec.remote.store,
+            bucket=target.bucket,
+            key=target.key,
+        )
 
     class Ram:
         """Weighted RAM-budget mediation for consumers sharing this machine's memory.
@@ -292,4 +339,11 @@ class StationConfig(System):
         return StationInfo(id=self.id, name=self.name)
 
 
-__all__ = ["Remote", "StationConfig", "StationInfo", "System", "load_voxel_env", "remote_store_fingerprint"]
+__all__ = [
+    "Remote",
+    "StationConfig",
+    "StationInfo",
+    "System",
+    "load_voxel_env",
+    "remote_store_fingerprint",
+]

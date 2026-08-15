@@ -30,7 +30,7 @@ def _manifest(
         origin=AcquisitionOrigin(host="controller-1", operator="operator"),
         created_at=CREATED_AT,
         storage=StorageSpec(path=PurePosixPath(f"runs/{acquisition_id}")),
-        bench_snapshot={},
+        state_snapshot={},
         hardware_snapshot={},
         volumes=[AcquisitionVolume(task="task-a", profile="488")],
     )

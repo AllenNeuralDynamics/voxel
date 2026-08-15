@@ -16,14 +16,14 @@ from vxl_records import (
     VolumeStatus,
 )
 
-from vxl.camera import CaptureState
+from vxl.devices.camera import CaptureState
 from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, InstrumentConfig, InstrumentState
-from vxl.instrument import core as instrument_core
+from vxl.instrument.config import AcquisitionTask
 from vxl.instrument.core import AcquisitionRequest, Channel
-from vxl.instrument.state import AcquisitionTask
+from vxl.system import System
 from vxlib import Cell
 
-TEMPLATE = Path(__file__).parents[1] / "src/vxl/_templates/simulated-local.voxel.yaml"
+TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
 
 
 class _FakeCamera:
@@ -95,8 +95,9 @@ def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrumen
     camera = _FakeCamera(tmp_path / "data", close_error=close_error)
     axis = _FakeAxis()
     instrument = cast("Any", object.__new__(Instrument))
-    instrument._bench = SimpleNamespace(value=state, home=tmp_path / "scope.voxel")
+    instrument._store = SimpleNamespace(value=state, home=tmp_path / "scope.voxel")
     instrument._records = records
+    instrument._system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={})
     instrument._hal = SimpleNamespace(
         cameras={"camera_1": camera},
         config=config.hal,
@@ -125,16 +126,10 @@ def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrumen
     return instrument, catalog, StorageSpec(path=PurePosixPath("run"))
 
 
-async def test_acquisition_manifest_tracks_completed_dataset(monkeypatch, tmp_path: Path) -> None:
+async def test_acquisition_manifest_tracks_completed_dataset(tmp_path: Path) -> None:
     instrument, catalog, storage = _instrument(tmp_path)
     states: list[ActiveAcquisitionState | None] = []
     instrument.acquisition.subscribe(states.append)
-    monkeypatch.setattr(
-        instrument_core,
-        "resolve_storage",
-        lambda _storage: SimpleNamespace(target=tmp_path / "data/run"),
-    )
-
     started = await instrument.start_acquisition(AcquisitionRequest(storage=storage, operator="operator"))
     await instrument.wait_acquisition()
 
@@ -160,7 +155,7 @@ async def test_acquisition_manifest_tracks_completed_dataset(monkeypatch, tmp_pa
     assert isinstance(location, LocalLocation)
     assert location.status is LocationStatus.AVAILABLE
     assert location.path == str(tmp_path / "data/run/tasks/0001/single_gfp/gfp.ome.zarr")
-    assert persisted.bench_snapshot == instrument.state.value.model_dump(mode="json")
+    assert persisted.state_snapshot == instrument.state.value.model_dump(mode="json")
     assert (tmp_path / "data/run/manifest.json").is_file()
     assert not (tmp_path / "data/run/record.json").exists()
 

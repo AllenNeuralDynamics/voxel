@@ -24,7 +24,7 @@ from enum import StrEnum
 from rigup.device.props import enumerated, numeric
 
 from rigup import describe
-from vxl.laser.base import Laser
+from vxl.devices.laser.base import Laser
 from vxl_drivers.serial import SerialTransport
 
 DEFAULT_BAUD = 9600
