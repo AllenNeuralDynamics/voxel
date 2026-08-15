@@ -1,119 +1,180 @@
 # ome-zarr-writer
 
-A high-performance streaming writer for OME-Zarr v3 / OME-NGFF v0.5 multiscale volumes, built for microscopy acquisition. Frames arrive one at a time; the writer batches them, generates the multiscale pyramid on the fly, and flushes sharded chunks to a local path or S3.
+**Stream microscopy frames into sharded, multiscale OME-Zarr datasets while acquisition continues.**
 
-## Pipeline
+ome-zarr-writer accepts one two-dimensional frame at a time, assembles bounded batches in shared memory, and builds
+an OME-NGFF v0.5 pyramid in worker processes. It writes Zarr v3 datasets to a local filesystem or S3 without placing
+downsampling and compression work on the capture process.
 
-Each frame passes through a fixed pipeline. Ingestion never blocks on I/O — downsampling and writing happen on background workers while the next batch fills.
+> [!WARNING]
+> ome-zarr-writer is under active development. Its API and output policy may change before the first stable release.
 
-```
-add_frame(frame)                 # one z-slice at a time
-    → ring buffer                # frames accumulate into a batch (batch_z slices)
-        → pyramid                # batch downsampled to every level (numba, numpy fallback)
-            → array backend      # sharded, compressed write per pyramid level
-                → [staging]      # optional: local scratch → s5cmd upload to S3
-```
+## Highlights
 
-`end_stack()` drains the final partial batch and closes its dataset while retaining the reusable ring. Final
-`close()` also releases that ring.
+- **Frame-oriented ingestion** — callers provide individual NumPy frames instead of materializing a complete volume.
+- **Concurrent processing** — a bounded shared-memory ring overlaps capture with pyramid generation and storage.
+- **Multiscale output** — each batch is downsampled through the configured level and written as sharded Zarr v3.
+- **Local and S3 storage** — write directly to either destination or stage shards on fast local storage before upload.
+- **Reusable resources** — one `OMEZarrWriter` retains its expensive ring across compatible stacks.
+- **Observable performance** — per-batch collection, processing, flush, transfer, and eviction metrics are written into
+  each dataset.
 
-## Installation
+## Write a local dataset
 
-The package is part of the uv workspace. Backends and tooling are optional dependency groups, installed as needed:
-
-| Group | Provides |
-|-------|----------|
-| `ts` | TensorStore backend (default; local + S3) |
-| `zarrs` | Zarr + Rust-codec backend (local filesystem) |
-| `s3` | S3 credential/transfer support (boto3) |
-| `ng` | Neuroglancer viewer helpers |
-| `fastapi` | HTTP server for the Neuroglancer viewer |
+The default TensorStore backend is available through the `ts` dependency group. From this repository:
 
 ```bash
 cd omezarr
-uv sync --group ts              # default backend
-uv sync --group ts --group s3   # writing to S3
+uv sync --group ts
 ```
 
-## Usage
-
-A minimal single-channel write to a local dataset:
+The writer API is synchronous so it can be called directly from a camera acquisition loop:
 
 ```python
-from ome_zarr_writer import Local, OMEZarrWriter, WriterConfig, ScaleLevel, UIVec3D, UVec3D
+from pathlib import Path
 
-config = WriterConfig(
-    volume_shape=UIVec3D(z=1000, y=2048, x=2048),
-    voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
-    max_level=ScaleLevel.L5,
-)
+import numpy as np
+from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, UIVec3D, UVec3D, WriterConfig
 
-writer = OMEZarrWriter(slots=6)
-writer.begin_stack(config, Local(target="/path/to/experiment"))
-for frame in camera.stream():  # each frame is a [y, x] ndarray
-    writer.add_frame(frame)
-writer.end_stack()
-writer.close()
+
+def main() -> None:
+    config = WriterConfig(
+        volume_shape=UIVec3D(z=16, y=256, x=256),
+        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        max_level=ScaleLevel.L2,
+    )
+    writer = OMEZarrWriter(slots=3)
+    writer.begin_stack(config, Local(target=Path("experiment/stack")))
+    try:
+        for z in range(config.volume_shape.z):
+            frame = np.full((config.volume_shape.y, config.volume_shape.x), z, dtype=np.uint16)
+            writer.add_frame(frame)
+    finally:
+        writer.close()
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-Writing to S3 uses a concrete storage value. `DirectS3` writes directly to the target; `StagedS3` writes shards
-to a fast local disk and uploads them per batch. Credentials are resolved from the configured `S3Store` strategy
-and the standard AWS chain:
+This creates `experiment/stack.ome.zarr`; the suffix is added only when it is not already present. `close()` drains
+the active stack and releases the ring. To write several volumes with the same writer, call `end_stack()` after each
+volume, begin the next one, and call `close()` once at the end.
+
+## Pipeline
+
+```mermaid
+flowchart TD
+    frames["2D frames"] --> ring["Bounded shared-memory ring"]
+    ring --> worker["One worker process per slot"]
+    worker --> pyramid["L0 plus multiscale pyramid"]
+    pyramid --> backend["TensorStore or zarrs backend"]
+    backend --> local["Local dataset"]
+    backend -->|direct write| s3["S3 dataset"]
+    backend --> scratch["Local staging"]
+    scratch -->|s5cmd upload| s3
+```
+
+`add_frame()` normally returns after copying into the collecting slot. When every slot is processing, the next batch
+boundary waits for a slot to become reusable. This bounded backpressure prevents the writer from consuming unlimited
+memory or local scratch space.
+
+The ring is reused when batch shape, pyramid depth, and dtype still match. A geometry change releases it and allocates
+a replacement before opening the next stack.
+
+## Configure a dataset
+
+`WriterConfig` is a frozen Pydantic model. It combines acquisition geometry with the output-format settings inherited
+from `WriterSettings`; the destination remains a separate storage value passed to `begin_stack()`.
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `volume_shape` | required | Complete level-0 extent in `(z, y, x)` order |
+| `voxel_size` | required | Physical spacing in `(z, y, x)` order |
+| `voxel_unit` | `micrometer` | Unit attached to spatial axes |
+| `dtype` | `uint16` | Stored pixel type |
+| `max_level` | `L7` | Deepest pyramid level; level `n` is reduced by `2ⁿ` |
+| `compression` | `blosc.lz4` | Inner-chunk compression |
+| `downscale_type` | `gaussian` | `gaussian`, `mean`, `min`, or `max` pyramid reduction |
+| `target_shard_gb` | `1.0` | Target used to derive the lateral shard geometry |
+| `shard_z_chunks` | `1` | Number of chunks along z in each shard |
+| `batch_z_shards` | `1` | Number of z-shards collected in each batch |
+
+Chunk edges are at least 64 voxels and otherwise follow the maximum pyramid factor. Batch depth is
+`batch_z_shards × shard_z_chunks × 2^max_level`; these settings therefore affect both throughput and ring memory.
+
+Each dataset contains OME-NGFF group metadata, one array per scale level, and a best-effort `metrics.json` containing
+the resolved configuration and per-batch timing and byte counts.
+
+## Choose storage
+
+Storage values make each write path explicit:
+
+| Storage | Behavior | Additional requirements |
+| --- | --- | --- |
+| `Local` | Writes arrays directly to a filesystem path | Selected array backend |
+| `DirectS3` | Writes metadata and arrays directly to S3 | `S3Store` and backend S3 support |
+| `StagedS3` | Writes shards to local scratch, uploads them with s5cmd, then evicts successful uploads | `s3` group and sufficient scratch space |
 
 ```python
+from pathlib import Path
+
 from cloudpathlib import S3Path
 from ome_zarr_writer import S3Store, StagedS3
 
 storage = StagedS3(
-    target=S3Path("s3://my-bucket/experiment.ome.zarr"),
-    scratch="/fast/scratch",
-    store=S3Store(),
+    target=S3Path("s3://my-bucket/acquisitions/stack"),
+    scratch=Path("/fast/scratch/stack.ome.zarr"),
+    store=S3Store(region="us-east-1"),
 )
-writer.begin_stack(config, storage)
 ```
 
-## Configuration
+`S3Store` selects an endpoint, region, and credential strategy; secrets remain in the standard AWS credential chain.
+For staged writes, `StagingConfig.max_pending` bounds queued uploads. A failed upload is surfaced and its local shard
+is retained rather than evicted.
 
-`WriterConfig` is a frozen Pydantic model describing one dataset (a single stack and channel). The destination is
-a separate `Storage` value passed to `begin_stack()`.
+## Choose an array backend
 
-| Field | Default | Meaning |
-|-------|---------|---------|
-| `volume_shape` | required | Full `(z, y, x)` extent of the level-0 volume |
-| `voxel_size` | required | Physical size per axis |
-| `voxel_unit` | `MICROMETER` | Unit for `voxel_size` |
-| `dtype` | `UINT16` | Pixel data type |
-| `max_level` | `L7` | Deepest pyramid level (downscale factor `2^level`) |
-| `compression` | `BLOSC_LZ4` | Chunk compression codec |
-| `downscale_type` | `GAUSSIAN` | Pyramid reduction — `MEAN`, `GAUSSIAN`, `MIN`, `MAX` |
-| `target_shard_gb` | `1.0` | Target shard size, used to derive shard geometry |
+TensorStore is the default. The zarr-python backend uses the zarrs Rust codec pipeline. Both currently support local
+and direct S3 targets.
 
-Ring-buffer depth (`slots`) and backend are `OMEZarrWriter` constructor options rather than config fields.
+```python
+from ome_zarr_writer import OMEZarrWriter
+from ome_zarr_writer.array import ArrayWriter
 
-## Backends
+writer = OMEZarrWriter(backend=ArrayWriter.Backend.ZARRS, slots=3)
+```
 
-The backend is selected with `ArrayWriter.Backend`, passed to the writer as `backend=`.
+Install the corresponding workspace group:
 
-| Backend | Targets | Status |
-|---------|---------|--------|
-| `Backend.TS` | TensorStore — local filesystem and S3 | Default |
-| `Backend.ZARRS` | zarr-python with the zarrs Rust codec pipeline — local filesystem only | Implemented |
-| `Backend.AQZ` | Acquire-zarr | Unsupported |
+```bash
+uv sync --group ts       # TensorStore
+uv sync --group zarrs    # zarr-python + zarrs
+uv sync --group s3       # boto3 and s5cmd for S3 workflows
+```
 
-Each batch is held in a shared-memory ring slot (`BatchSlot`) whose worker process both downsamples and writes it, so the compress+write never contends with the capture loop's GIL.
+## Size the ring
 
-## Layout
+The writer knows the cost of one slot but intentionally does not decide how much machine RAM it may consume. A host
+application can pass a `sizer` to `begin_stack()` and use `ome_zarr_writer.sizing.slots_for_budget()` to convert its
+own byte budget into a ring depth.
 
-| Path | Responsibility |
-|------|----------------|
-| [`writer.py`](src/ome_zarr_writer/writer.py) | `OMEZarrWriter`, `WriterConfig`, batch orchestration and staging |
-| [`dataset.py`](src/ome_zarr_writer/dataset.py) | OME-NGFF / Zarr v3 metadata, `ScaleLevel`, `Compression`, `DownscaleType` |
-| [`array/`](src/ome_zarr_writer/array/) | `ArrayWriter` base and the TensorStore / zarrs backends |
-| [`slot.py`](src/ome_zarr_writer/slot.py) | `BatchSlot` ring slot — worker process downsamples + writes one batch |
-| [`pyramid.py`](src/ome_zarr_writer/pyramid.py) | Downsampling kernels (numba JIT, numpy reference) |
-| [`transfer.py`](src/ome_zarr_writer/transfer.py) | s5cmd wrapper for staged S3 upload |
-| [`viewer/`](src/ome_zarr_writer/viewer/) | Read-side loader and Neuroglancer helpers |
+The sizing model includes shared memory, float32 pyramid intermediates, and cast buffers. It distinguishes a
+configuration that cannot fit its assigned budget from a transient lack of currently available machine memory.
+Explicit `slots=` remains useful for small programs and benchmarks.
 
-## Examples and tests
+## Development
 
-Runnable examples live in [`examples/`](examples/): `basic_write.py` (local write with read-back verification), `s3_backend_example.py` (S3 auth variants and staging), and `ng_viewer_fastapi.py` / `ng_viewer_httpd.py` (Neuroglancer visualization). Metadata validation tests are in [`tests/metadata/`](tests/metadata/).
+From the Voxel workspace root:
+
+```bash
+uv sync --all-packages --all-extras --all-groups
+uv run ruff check omezarr
+uv run basedpyright omezarr
+uv run pytest omezarr/tests -m "not slow"
+```
+
+Run `uv run pytest omezarr/tests` for the complete suite. S3 integration tests use a temporary MinIO container and
+skip when Docker is unavailable. Runnable local, S3, and Neuroglancer examples live in [`examples/`](examples/).
+
+ome-zarr-writer is part of the [Voxel](../) project and is available under its [MIT license](../LICENSE).

@@ -1,62 +1,129 @@
 # vxl-drivers
 
-Hardware drivers for Voxel microscopes. Each driver implements a device interface defined in the `vxl` package — `Camera`, `Laser`, `AOTF`, or `ContinuousAxis` — so concrete instruments plug into a rig the same way their simulated counterparts do. This package contains real-hardware drivers only; simulated devices live in the `vxl` package.
+**Connect Voxel's device interfaces to real microscope hardware.**
 
-## Using the drivers
+vxl-drivers contains the vendor-specific cameras, lasers, motion controllers, and related devices used by Voxel
+instruments. The `vxl` package defines the device contracts, while [rigup](../rigup/) constructs the configured
+devices and presents them through the same asynchronous handle API used for simulated hardware.
 
-Drivers are referenced from an instrument template by their fully qualified class name. Each device in the template's `hal:` section names a `target` class and its constructor `init` arguments:
+## Highlights
+
+- **Configuration-selected hardware** — instrument configurations identify drivers by import path, without embedding
+  vendor-specific construction in the instrument runtime.
+- **Common device contracts** — physical cameras, lasers, AOTFs, and axes implement the interfaces defined by `vxl`.
+- **Shared-controller support** — hubs own serial buses or vendor connections and are injected into colocated device
+  drivers by rigup.
+- **Hardware-free application development** — simulated devices remain in `vxl`; install and load this package only
+  when connecting physical hardware.
+
+## How the package fits
+
+```mermaid
+flowchart TD
+    config["Instrument hal configuration"] --> rigup["rigup construction and handles"]
+    contracts["vxl device interfaces"] --> drivers["vxl-drivers implementations"]
+    rigup --> drivers
+    drivers --> vendor["Vendor SDK or serial protocol"]
+    vendor --> hardware["Physical hardware"]
+```
+
+Application code normally controls a configured driver through a rigup `DeviceHandle`; it does not instantiate the
+driver directly. This keeps local, subprocess-hosted, and remote devices on the same control surface.
+
+## Configure hardware
+
+Each entry in an instrument's `hal.devices` mapping names a driver `target` and its constructor `init` arguments.
+rigup supplies the device UID and resolves references to other configured devices on the same node. For example, a
+Tiger hub can own one controller connection shared by several axes:
 
 ```yaml
 hal:
   devices:
-    camera_1:
-      target: vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera
-      init: { serial: "S/N-001" }
-    stage_x:
+    tiger_controller:
+      target: vxl_drivers.tigerhub.TigerHub
+      init: {box: COM3}
+
+    x_axis:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: { hub: tiger_hub, axis_label: "X" }
+      init: {hub: tiger_controller, axis_label: x, units: um}
 ```
 
-Many drivers depend on a vendor SDK or runtime (EGrabber, DCAM, serial libraries) and require the corresponding hardware to run. To explore Voxel without any hardware, start from the `simulated-local` template, which wires up the simulated devices from the `vxl` package; swap in the drivers below when moving to a real microscope.
+A hub and the devices that depend on it must run in the same process. See the [rigup README](../rigup/) for local,
+subprocess, and remote-node placement.
 
-## Driver catalog
+> [!CAUTION]
+> Constructing a hardware driver may immediately open a physical device. Confirm ports, addresses, limits, and laser
+> safety controls before loading a real instrument configuration.
 
-Grouped by the `vxl` interface each driver implements.
+## Included integrations
 
-### Cameras (`vxl.devices.camera.base.Camera`)
+These are concrete integrations present in the package. Actual operation also depends on compatible hardware,
+firmware, operating-system drivers, and vendor runtimes.
 
-| Vendor / model | Target |
-|----------------|--------|
-| Vieworks (via EGrabber) | `vxl_drivers.cameras.egrabber.VieworksCamera` |
-| Hamamatsu (via DCAM) | `vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera` |
-| PCO | `vxl_drivers.cameras.pco.PCOCamera` |
-| Ximea | `vxl_drivers.cameras.ximea.XimeaCamera` |
+### Cameras
 
-### Lasers (`vxl.devices.laser.base.Laser`)
+| Hardware | Target | Python support |
+| --- | --- | --- |
+| Vieworks through Euresys eGrabber | `vxl_drivers.cameras.egrabber.VieworksCamera` | `egrabber-camera` extra |
+| Hamamatsu DCAM cameras | `vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera` | Bundled Python wrapper; native DCAM runtime required |
+| PCO sCMOS cameras | `vxl_drivers.cameras.pco.PCOCamera` | `pco` package installed separately |
+| Ximea cameras | `vxl_drivers.cameras.ximea.XimeaCamera` | `ximea-camera` extra |
 
-| Vendor / model | Target |
-|----------------|--------|
-| Vortran Stradus | `vxl_drivers.lasers.vortran_stradus.VortranStradus` |
-| Cobolt Skyra | `vxl_drivers.lasers.cobolt_skyra.CoboltSkyra` |
-| Coherent Genesis MX | `vxl_drivers.lasers.coherent.genesis_mx.GenesisMX` |
-| Coherent OBIS (LX / LS) | `vxl_drivers.lasers.coherent.obis.ObisLX`, `ObisLS` |
-| MPB VFL | `vxl_drivers.lasers.mpb.vfl.MpbVfl` |
-| Oxxius (LBX / LCX) | `vxl_drivers.lasers.oxxius.OxxiusLBX`, `OxxiusLCX` |
+### Lasers and AOTFs
 
-Oxxius lasers on a shared controller connect through `vxl_drivers.lasers.oxxius.OxxiusHub`.
+| Hardware | Target | Python support |
+| --- | --- | --- |
+| Vortran Stradus | `vxl_drivers.lasers.vortran_stradus.VortranStradus` | `vortran-laser` extra |
+| Cobolt Skyra | `vxl_drivers.lasers.cobolt_skyra.CoboltSkyra` | `pycobolt-laser` extra |
+| Coherent Genesis MX | `vxl_drivers.lasers.coherent.genesis_mx.GenesisMX` | `coherent-laser` extra |
+| Coherent OBIS LX and LS | `vxl_drivers.lasers.coherent.obis.ObisLX`, `ObisLS` | `obis-laser` extra |
+| MPB VFL | `vxl_drivers.lasers.mpb.vfl.MpbVfl` | Serial support included |
+| Oxxius LBX and LCX | `vxl_drivers.lasers.oxxius.OxxiusLBX`, `OxxiusLCX` | Serial support included |
+| AA Opto-Electronic MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` | Included dependency |
 
-### AOTF (`vxl.devices.aotf.base.AOTF`)
+Oxxius lasers sharing a controller use `vxl_drivers.lasers.oxxius.OxxiusHub` as their configured hub.
 
-| Vendor / model | Target |
-|----------------|--------|
-| AA OptoElectronics MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` |
+### Motion control
 
-### Stage axes (`vxl.devices.axes.continuous.base.ContinuousAxis`)
+| Hardware | Target | Python support |
+| --- | --- | --- |
+| ASI Tiger controller | `vxl_drivers.tigerhub.TigerHub` | Serial support included |
+| ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
+| Micronix MMC-100 controller | `vxl_drivers.axes.mmc.MMCHub` | Serial support included |
+| Micronix MMC-100 linear axis | `vxl_drivers.axes.mmc.MMCLinearAxis` | Configured with an `MMCHub` |
 
-| Vendor / model | Target |
-|----------------|--------|
-| ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` |
-| ASI Tiger TTL stepper | `vxl_drivers.axes.asi.TigerTTLStepper` |
-| ASI Tiger XYZ stage | `vxl_drivers.axes.stage.TigerXYZStage` |
+## Install vendor support
 
-The ASI drivers share a serial-protocol layer in [`tigerhub/`](src/vxl_drivers/tigerhub) (`TigerHub`, `TigerBox`), which speaks the Tiger/MS2000 command set to an ASI controller. See [`tigerhub/ops/`](src/vxl_drivers/tigerhub/ops) for the operation, parser, and model reference.
+Install only the optional dependency needed by the hardware being configured. From the Voxel workspace, for example:
+
+```bash
+uv sync --package vxl-drivers --extra egrabber-camera
+```
+
+Available extras are listed in [`pyproject.toml`](pyproject.toml). A Python extra may provide bindings without
+installing the vendor's native runtime, device driver, firmware, or license; follow the corresponding vendor's
+installation requirements as well.
+
+## Develop and validate drivers
+
+A driver implements the appropriate `vxl` device interface and exposes its public commands and properties through
+rigup. It should keep vendor-specific types behind that boundary, serialize access to shared controller resources,
+and release hardware deterministically from `close()`.
+
+Run the hardware-independent checks from the workspace root:
+
+```bash
+uv sync --all-packages --all-groups
+uv run ruff check drivers
+uv run basedpyright drivers
+uv run pytest drivers/tests
+```
+
+These checks cannot establish compatibility with a physical device or vendor runtime. Hardware validation should
+name the exact model, firmware, connection, and exercised operations.
+
+
+Low-level ASI Tiger command behavior is documented separately in the
+[`tigerhub/ops` reference](src/vxl_drivers/tigerhub/ops/README.md).
+
+vxl-drivers is part of the [Voxel](../) project and is available under its [MIT license](../LICENSE).

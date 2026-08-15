@@ -1,131 +1,155 @@
 <h1>
-    <div>
-        <img src="voxel-logo.png" alt="Voxel Logo" width="50" height="50">
-    </div>
+    <img src="voxel-logo.png" alt="Voxel Logo" width="40" height="40" align="center">
     Voxel
 </h1>
 
-A light sheet microscopy platform for hardware control, acquisition orchestration, and data streaming. A control
-**station** owns one active instrument session and exposes it to the web or desktop application. The **instrument**
-combines opened hardware with persisted acquisition state. Device control is built on [rigup](rigup/), which runs
-devices in-process or across networked nodes behind one API.
+**Control, coordinate, and acquire with light-sheet microscopes.**
 
-> [!Warning]
-> Under active development. APIs, configuration schemas, and documentation are evolving.
+Voxel is an application-first microscopy platform built from reusable Python components. It brings local and
+distributed hardware under one control model, coordinates preview and acquisition workflows, streams datasets into
+storage, and records operational history through web and desktop interfaces.
 
-## Getting started
+> [!WARNING]
+> Voxel is under active development. APIs and configuration schemas may change before the first stable release.
 
-Requires [uv](https://docs.astral.sh/uv/) and [Nub](https://nubjs.com/) (for the web frontend).
+## Highlights
+
+- **One microscope application** — operate a station through the Svelte web interface, with an early PySide desktop
+  interface for native workflows; use the unified CLI to configure and launch the application and its device nodes.
+- **Local or distributed hardware** — [rigup](rigup/) presents in-process devices and devices hosted on remote nodes
+  through the same typed asynchronous API.
+- **Acquisition-aware state** — configure imaging profiles, optical routing, specimen metadata, traversal, and
+  acquisition tasks as validated instrument state.
+- **Streaming data and preview** — deliver live preview frames while writing multiscale OME-Zarr acquisitions.
+- **Durable records** — retain acquisition manifests, reusable presets, and structured operational logs in SQLite.
+- **Hardware-free exploration** — run a complete simulated microscope before connecting physical devices.
+
+## Try the simulated microscope
+
+Voxel currently requires Python 3.13+, [uv](https://docs.astral.sh/uv/), and
+[Nub](https://nubjs.com/) for building the web interface.
 
 ```bash
-uv sync --all-packages --all-extras --all-groups
+git clone https://github.com/AllenNeuralDynamics/voxel.git
+cd voxel
+
+uv sync --all-packages --extra web
+nub install --cwd web-ui --frozen-lockfile
+nub run --cwd web-ui build
+
 uv run vxl station init --name my-microscope
-```
-
-The one-time station command creates `~/.voxel/station.yaml`, which is required by the web and desktop control
-applications. Remote device nodes do not require a station; they may use an optional `~/.voxel/system.yaml`,
-`VOXEL_*` environment variables, or machine defaults.
-
-### Web interface (FastAPI + SvelteKit)
-
-The frontend is built once, then served by the backend:
-
-```bash
-cd web-ui && nub install && nub run build && cd ..
 uv run vxl serve
 ```
 
-Open http://localhost:8000 and launch the `simulated-local` template to explore the full interface with no hardware attached.
+Open [http://localhost:8000](http://localhost:8000), create an instrument from the `simulated-local` template, and
+open it. The simulated configuration exercises the application without requiring microscope hardware.
 
-### Desktop interface (PySide6)
+Station initialization is a one-time operation that writes `~/.voxel/station.yaml`. Remote device nodes do not need
+a station configuration; they use an optional `~/.voxel/system.yaml`, `VOXEL_*` environment variables, or defaults.
+
+The Qt interface is an early implementation and does not yet cover the complete web workflow. To try it, install the
+Qt dependencies and launch the same station:
 
 ```bash
-uv run vxl qt                 # optionally: uv run vxl qt config.yaml
+uv sync --all-packages --extra qt
+uv run vxl qt
 ```
+
+## Use the instrument API
+
+The application is built around a reusable `Instrument` API. An instrument can be opened directly without creating
+a `Station`; callers provide persistent records and retain explicit control of hardware lifetime.
+
+```python
+from pathlib import Path
+
+from vxl.instrument import Instrument
+from vxl_records import SQLiteRecords
+
+records = SQLiteRecords(
+    Path("records.sqlite3"),
+    resolve_root=lambda spec: Path("data") / spec.path,
+)
+instrument = Instrument.from_path("my-microscope.voxel", records=records)
+
+await instrument.open()
+try:
+    await instrument.set_active_profile("single_gfp")
+    await instrument.start_preview()
+finally:
+    await instrument.close()
+```
+
+An instrument directory contains `config.yaml`, the hardware definition and configured defaults, and `state.json`,
+the current operator-editable acquisition state.
+
+## How Voxel fits together
+
+```mermaid
+flowchart TD
+    interfaces["Web · Qt · CLI"] --> station["Station<br/>application lifecycle and live state"]
+    station -->|opens and supervises| instrument["Instrument<br/>hardware and acquisition behavior"]
+    station -->|provides| records["VoxelRecords<br/>SQLite metadata, presets, and logs"]
+    instrument -->|records lifecycle| records
+    instrument -->|controls through| rigup["rigup device handles"]
+    rigup --> local["local devices"]
+    rigup --> remote["remote nodes"]
+    instrument -->|writes images| data["OME-Zarr datasets<br/>configured storage"]
+```
+
+- **Instrument** owns opened hardware, persisted acquisition state, preview, and acquisition behavior.
+- **Station** owns application lifecycle for at most one active instrument session and publishes complete state and
+  preview streams to application interfaces.
+- **VoxelRecords** stores acquisition metadata, presets, and logs. Image data is written separately as OME-Zarr
+  datasets to configured storage.
+
+## Workspace packages
+
+Voxel is a uv workspace. The root `vxl` distribution provides microscope orchestration and the application
+interfaces; the other distributions have narrower library boundaries.
+
+| Package | Responsibility |
+| --- | --- |
+| [`vxl`](src/vxl/) | Instrument and station runtimes, device abstractions, CLI, and web and Qt interfaces |
+| [`rigup`](rigup/) | Typed local and network-transparent device control |
+| [`vxl-drivers`](drivers/) | Implementations for supported cameras, stages, lasers, and related hardware |
+| [`vxl-records`](records/) | SQLite-backed acquisition, preset, and log records |
+| [`ome-zarr-writer`](omezarr/) | Streaming multiscale OME-Zarr writing |
+| [`vxlib`](vxlib/) | Shared reactive primitives, schemas, and utilities |
+| [`web-ui`](web-ui/) | SvelteKit frontend compiled into `vxl.web` package data |
+
+The non-published [`bench`](bench/) workspace contains OME-Zarr performance and behavior benchmarks.
 
 ## Development
 
-Choose the environment that matches the area you are working on:
+Choose only the application extras needed for your work, or install the complete environment:
 
 ```bash
-# Core libraries and workspace packages
-uv sync --all-packages --all-groups
-
-# Web application
-uv sync --all-packages --extra web --all-groups
-nub install --cwd web-ui --frozen-lockfile
-
-# Qt application
-uv sync --all-packages --extra qt --all-groups
-
-# Complete development environment
 uv sync --all-packages --all-extras --all-groups
 nub install --cwd web-ui --frozen-lockfile
-```
-
-Install the repository hooks after the initial setup:
-
-```bash
 uvx pre-commit install
-uvx pre-commit run --all-files  # optional initial validation
 ```
 
-`pre-commit` runs Ruff and updates the uv lockfile. `pre-push` adds basedpyright, the non-slow Python tests, and
-frontend checks. Run the principal checks directly while developing:
+Run the repository checks directly with:
 
 ```bash
 uv run ruff check
 uv run ruff format --check
 uv run basedpyright
-uv run pytest -m "not slow"
+uv run pytest
 nub run --cwd web-ui check
 ```
 
-Tests marked `slow` exercise networking or Zarr I/O and can be run explicitly with `uv run pytest -m slow`. Only run
-hardware-dependent tests when the relevant equipment is explicitly available.
+For frontend development, run `nub run --cwd web-ui dev` beside `uv run vxl serve`. Build the frontend and Python
+release artifacts together with `uv run scripts/build.py`.
 
-For frontend work, run the Vite development server separately from the Python backend:
+Package-specific boundaries and workflows are documented in their respective READMEs. Types and docstrings remain
+the source of truth for individual APIs.
 
-```bash
-nub run --cwd web-ui dev
-uv run vxl serve
-```
+## Feedback and license
 
-Build release artifacts with the locked frontend dependencies and generated static bundle included:
+Voxel is developed at the [Allen Institute for Neural Dynamics](https://alleninstitute.org/division/neural-dynamics/).
+Questions, bug reports, and feature proposals are welcome through
+[GitHub Issues](https://github.com/AllenNeuralDynamics/voxel/issues).
 
-```bash
-uv run scripts/build.py
-```
-
-## Concepts
-
-- **Station** — the application lifecycle boundary. It owns at most one instrument session and publishes the session's
-  complete state and preview stream through a **StationFeed**.
-- **Instrument** — opened hardware (a **HAL**, the runtime device handles) together with persisted acquisition state. Cameras, lasers, stages, analog outputs, and AOTFs are reached through typed async device handles that behave the same whether the device is local or on a remote node.
-- **Templates → instruments** — a microscope is described by a `.voxel.yaml` template with a `hal:` section (the hardware blueprint) and a `default:` section (the baseline acquisition state). Shipped templates live in [`src/vxl/station/templates/builtins/`](src/vxl/station/templates/builtins/). Launching one instantiates an instrument under `~/.voxel/instruments/<name>.voxel/` as `config.yaml` (hardware) and `state.json` (live state).
-- **Imaging** — **channels** pair a detection path (camera + filter positions) with an illumination path (laser); **profiles** group channels with DAQ waveform timing for synchronized multi-channel acquisition.
-- **Acquisition tasks** — planned stacks and tiles, persisted alongside the rest of the instrument state in `state.json`.
-- **Records** — acquisitions, reusable presets, and operational logs stored through `vxl-records`; SQLite is the local
-  implementation.
-
-Start from [`simulated-local.voxel.yaml`](src/vxl/station/templates/builtins/simulated-local.voxel.yaml) — every device is simulated and runs in-process, so the whole platform is explorable without a microscope.
-
-## Packages
-
-Voxel is a [uv](https://docs.astral.sh/uv/) workspace. The `vxl` package at the root provides microscope orchestration; the rest are workspace members.
-
-| Package | Description |
-|---------|-------------|
-| [vxl](src/vxl/) | Microscope runtime, unified CLI, and web and Qt interfaces |
-| [rigup](rigup/) | Distributed device control framework |
-| [vxl-drivers](drivers/) | Hardware drivers (ASI Tiger stages, Vieworks/Hamamatsu/PCO/Ximea cameras, lasers, AA Opto AOTFs) |
-| [vxl-records](records/) | SQLite-backed acquisitions, presets, and operational log journal |
-| [vxlib](vxlib/) | Shared types and utilities |
-| [omezarr](omezarr/) | OME-Zarr streaming writer with multi-scale pyramids |
-| [bench](bench/) | Non-published OME-Zarr performance and behavior benchmarks |
-
-The Svelte frontend source lives in [`web-ui/`](web-ui/) and builds into package data served by `vxl.web`.
-
-## License
-
-[MIT](LICENSE) — Allen Institute, Neural Dynamics
+Voxel is distributed under the [MIT License](LICENSE).

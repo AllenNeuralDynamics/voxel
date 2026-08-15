@@ -1,7 +1,9 @@
 # vxlib
 
-Small shared building blocks used across the Voxel workspace. The current public surface includes reactive
-primitives, schema and vector types, YAML/JSON helpers, logging setup, and general utilities.
+`vxlib` provides the domain-neutral foundations shared by packages in the Voxel workspace. Its scope includes reactive
+state, lifecycle callbacks, immutable schema models, numeric and quantity types, vector utilities, S3 connection
+models, polling, and update coalescing.
 
-Keep domain behavior in the package that owns it; `vxlib` is for dependencies that are genuinely shared. Its API is
-still evolving, so use the exports from `vxlib` rather than importing private modules.
+The package is intentionally small and carries no microscopy or application-level behavior. Public concepts are
+defined by focused modules such as `vxlib.reactivity`, `vxlib.schema`, and `vxlib.quantity`; the package root does not
+serve as a flat re-exported API.

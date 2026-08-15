@@ -1,33 +1,37 @@
 # rigup
 
-A framework for controlling hardware devices — locally, in a child process, or across networked machines — with a single async API and a single YAML config. Devices are declared in configuration, driven through typed async handles, and behave identically no matter where they run.
+**Control Python hardware through one asynchronous API, whether devices run locally, in a managed subprocess, or on
+another machine.**
 
-## Mental model
+rigup is a hardware-control library for applications that need process isolation or distributed device hosting
+without maintaining separate client APIs. Drivers expose commands and properties, a `Rig` constructs the requested
+topology, and callers interact with every device through a `DeviceHandle`.
 
-Every device passes through four layers:
+> [!WARNING]
+> rigup is under active development. Its public API and wire protocol may change before the first stable release.
 
-```
-Device            hardware abstraction — one subclass per device (rigup.device.driver)
-  └─ DeviceController   introspects @describe'd members, runs commands, streams properties
-       └─ Adapter       Local (in-process) or Transport (over the wire)
-            └─ DeviceHandle   the public async API
-```
+## Highlights
 
-A **`Rig`** groups devices into **`Node`s**. A node is one of three kinds:
+- **Location-transparent handles** — the same calls control in-process, subprocess, and remote devices.
+- **Discoverable interfaces** — commands, properties, constraints, and presentation metadata are derived from the
+  driver and represented by validated models.
+- **Hardware-safe execution** — synchronous calls for each device run on a dedicated single-worker executor, while
+  separate devices remain independent.
+- **Reactive properties** — streamed observations update one latest-successful cache shared by typed handle views and
+  subscribers.
+- **Explicit lifecycle** — `Rig` builds devices, reports partial build failures, and closes devices and managed
+  processes deterministically.
 
-- **local** — devices built in-process, no serialization
-- **subprocess** — devices built in a child process rigup spawns
-- **remote** — devices built in a process on another machine
+## Define a device
 
-The same handle calls work across all three; only the `Adapter` beneath differs.
-
-## Defining a device
-
-A device is a subclass of `Device` whose exposed members are marked with decorators. Read-only telemetry uses `@property` + `@describe`; a constrained read/write value uses a descriptor (`@numeric`, `@numeric_int`, `@enumerated`, `@enumerated_int`); a command is any `@describe`'d method.
+A driver subclasses `Device`. Only methods and properties marked with `@describe` become part of its public
+interface. Constrained property descriptors validate writes and carry their bounds or options across the handle
+boundary.
 
 ```python
 from enum import StrEnum
-from rigup.device import Device, describe, numeric
+
+from rigup import Device, describe, numeric
 
 
 class LaserState(StrEnum):
@@ -35,12 +39,13 @@ class LaserState(StrEnum):
     ON = "on"
 
 
-class MyLaser(Device[LaserState]):
+class Laser(Device[LaserState]):
     __DEVICE_TYPE__ = "laser"
 
-    def __init__(self, uid: str):
+    def __init__(self, uid: str) -> None:
         super().__init__(uid)
         self._power = 0.0
+        self._enabled = False
 
     @numeric(minimum=0.0, maximum=100.0, step=0.1)
     @describe(label="Power", units="mW", stream=True)
@@ -49,77 +54,148 @@ class MyLaser(Device[LaserState]):
 
     @power.setter
     def power(self, value: float) -> None:
-        self._power = value  # clamped and step-snapped before it reaches here
+        self._power = value
 
     @describe(label="Enable")
-    def enable(self) -> None: ...
+    def enable(self) -> None:
+        self._enabled = True
 ```
 
-`@describe` is what makes a member visible over the wire — undecorated methods and properties stay private. `stream=True` publishes the value on a timer so subscribers get live updates. The bounds on `@numeric` are serialized alongside the value, so a UI can render the right control without hard-coding limits.
+`stream=True` asks the controller to poll the property and publish changed observations. It is appropriate for live
+telemetry, not for events that require lossless delivery.
 
-## Configuring a rig
+## Build and use a rig
 
-A rig is declared in YAML. Top-level `devices:` run in-process; `nodes:` run in a subprocess or on a remote host. Each device gives a `target` class, `init` constructor arguments, and optional `defaults` applied after construction.
+`RigConfig` is a Pydantic model; an application may construct it directly or validate configuration loaded from
+YAML or another source. Each target is the import path of a `Device` subclass.
+
+```python
+import asyncio
+
+from rigup import DeviceConfig, Rig, RigConfig
+
+
+async def main() -> None:
+    config = RigConfig(
+        devices={
+            "laser": DeviceConfig(
+                target="my_devices.Laser",
+                defaults={"power": 5.0},
+            )
+        }
+    )
+    rig = Rig(config, name="example")
+
+    await rig.open()
+    try:
+        laser = rig.devices["laser"]
+        await laser.call("enable")
+        await laser.props.set(power=12.5)
+        print(await laser.props.get_value("power"))
+    finally:
+        await rig.close()
+
+
+asyncio.run(main())
+```
+
+`DeviceHandle.call()` returns the command value and raises when the operation fails. `run_command()`, batched
+commands, and property operations expose `Result` models when the caller needs per-operation error handling.
+
+Successful property reads, writes, and stream observations enter `handle.props.cache`. Subscribe to `handle.props`
+for complete cache snapshots, or use `handle.props.property(name, parser)` in a typed handle subclass for one parsed,
+subscribable property.
+
+## Place devices
+
+Top-level `devices` run in the application process. Entries under `nodes` run elsewhere:
 
 ```yaml
 devices:
   laser:
-    target: mypackage.MyLaser
-    init: { uid: "laser" }
-    defaults: { power: 5.0 }
+    target: my_devices.Laser
 
 nodes:
-  stage_node:
-    kind: subprocess          # inferred from `address` if omitted
+  isolated_camera:
+    kind: subprocess
+    devices:
+      camera:
+        target: my_devices.Camera
+
+  motion_host:
+    kind: remote
+    address: tcp://192.168.1.20:5555
     devices:
       stage:
-        target: mypackage.MyStage
-        init: { uid: "stage", port: "/dev/ttyUSB0" }
-
-  remote_scope:
-    kind: remote
-    address: "tcp://192.168.1.100:5555"
-    devices:
-      daq:
-        target: mypackage.MyDaq
-        init: { uid: "daq" }
+        target: my_devices.Stage
 ```
 
-## Local vs. distributed
+| Placement | Lifecycle | Communication |
+| --- | --- | --- |
+| Top-level device | Constructed and closed in the application process | Direct adapter; no serialization |
+| Subprocess node | Spawned and terminated by `Rig` | ZeroMQ over a temporary IPC endpoint by default |
+| Remote node | Supervised independently and claimed while the rig is open | ZeroMQ over configured TCP or IPC endpoints |
 
-Configuration is the only thing that changes between running every device in one process and spreading devices across machines — the code that drives the rig is identical:
+If `kind` is omitted, no address or a local-only address selects `subprocess`; a non-local TCP address selects
+`remote`. An explicit `kind` always wins.
 
-```python
-from rigup import Rig, RigConfig
+Device UIDs must be unique across the complete rig. A constructor argument may refer to another configured device by
+UID, but both devices must occupy the same process. Independent targets within a dependency layer can initialize in
+parallel; devices sharing a target class initialize sequentially to protect SDKs with shared process state.
 
-rig = Rig(RigConfig.model_validate(config))
-await rig.open()
+## Run a remote node
 
-laser = rig.devices["laser"]
-await laser.call("enable")
-props = await laser.props.get("power")
-
-await rig.close()
-```
-
-For subprocess and remote nodes, rigup communicates over ZeroMQ through a transport abstraction (`transport/`) — RPC on a request/reply channel and property streams on a publish/subscribe channel. A node accepts one orchestrator at a time (a `CLAIM`/`RELEASE` handshake), so two rigs cannot contend for the same hardware. None of this is visible from the handle API.
-
-## Layout
-
-| Path | Responsibility |
-|------|----------------|
-| [`device/`](src/rigup/device/) | `Device`, `DeviceController`, `DeviceHandle`, property descriptors, command/property schemas |
-| [`node/`](src/rigup/node/) | `LocalNode`, `SubprocessNode`, `RemoteNode`, and the daemon that hosts devices in a node process |
-| [`transport/`](src/rigup/transport/) | Wire-agnostic RPC + pub/sub contracts, with a ZeroMQ implementation |
-| [`rig.py`](src/rigup/rig.py) | `Rig` — builds nodes from config and aggregates their devices |
-| [`config.py`](src/rigup/config.py) | `RigConfig` / `NodeConfig` schemas |
-| [`build.py`](src/rigup/build.py) | Configuration-driven instantiation with error accumulation |
-
-## Tests
-
-Tests live in [`tests/`](tests/) and run under pytest (`asyncio_mode = "auto"`). They cover the rig lifecycle, each node kind, the transport layer, the protocol, and the property descriptors. Networked tests are marked `slow`:
+Start the daemon on the device host, using the node ID declared by the controlling rig:
 
 ```bash
-uv run pytest rigup/tests
-uv run pytest rigup/tests -m "not slow"
+rigup-node motion_host --address tcp://0.0.0.0:5555
 ```
+
+The TCP RPC endpoint uses the configured port and the stream endpoint uses the following port, so this example needs
+ports `5555` and `5556` available on the trusted LAN. The controlling rig sends the device build configuration after
+connecting. A claim/release handshake prevents two rigs from controlling the daemon concurrently, but the current
+transport does not provide authentication or encryption.
+
+Node logs are forwarded into the controlling process's Python logging system. Log and device streams use a lossy
+publish/subscribe channel so they cannot back-pressure hardware operations; commands and explicit property reads and
+writes use the reliable request channel.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    caller["Application"] --> handle["DeviceHandle"]
+    handle --> adapter["Adapter"]
+    adapter -->|in process| controller["DeviceController"]
+    adapter -->|transport protocol| daemon["Node daemon"]
+    daemon --> controller
+    controller --> device["Device"]
+```
+
+- `Device` is the synchronous, hardware-facing abstraction.
+- `DeviceController` discovers the public interface, runs synchronous hardware calls, and publishes streams.
+- An adapter provides the common asynchronous command, property, and subscription contract.
+- `DeviceHandle` is the application-facing API; subclasses can add typed convenience methods and properties.
+- `Rig` constructs nodes and devices from configuration and owns their runtime lifecycle.
+
+The protocol uses Pydantic payload models and MessagePack serialization. Request/response and notification traffic
+travels over a reliable DEALER/ROUTER channel; high-rate streams travel separately over PUB/SUB. Application code
+should use handles rather than construct protocol frames directly.
+
+## Develop rigup
+
+From the Voxel workspace root:
+
+```bash
+uv sync --all-packages --all-groups
+uv run ruff check rigup
+uv run basedpyright rigup
+uv run pytest rigup/tests
+```
+
+Use `uv run pytest rigup/tests -m "not slow"` to omit transport and subprocess integration tests.
+
+Device implementations intended for Voxel live in [`vxl-drivers`](../drivers/) or alongside Voxel's vendor-neutral
+device interfaces. rigup itself remains independent of microscope acquisition and user-interface concerns.
+
+rigup is part of the [Voxel](../) project and is available under its [MIT license](../LICENSE).
