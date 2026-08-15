@@ -10,17 +10,17 @@ threshold are flagged. Note that decorative panel dividers are exempt from
 the 3:1 non-text rule, so a flagged `border` row is informational.
 
 Usage:
-    uv run vxlib/scripts/check_theme_contrast.py
-    uv run vxlib/scripts/check_theme_contrast.py web-ui/src/lib/themes/jetbrains.dark.css
-    uv run vxlib/scripts/check_theme_contrast.py --only-fails
+    uv run scripts/check_theme_contrast.py
+    uv run scripts/check_theme_contrast.py web-ui/src/lib/themes/jetbrains.dark.css
+    uv run scripts/check_theme_contrast.py --only-fails
 """
 
 import argparse
 import re
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-THEMES_DIR = REPO_ROOT / "web" / "ui" / "src" / "lib" / "themes"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+THEMES_DIR = REPO_ROOT / "web-ui" / "src" / "lib" / "themes"
 
 SURFACES = ["canvas", "surface", "elevated", "element-bg"]
 TEXT_TOKENS = ["fg", "fg-muted", "fg-faint", "fg-accent"]

@@ -1,10 +1,10 @@
 """Manual MMC-100 smoke test.
 
 Read-only by default:
-    uv run python drivers/scripts/mmc/smoke.py --port /dev/tty.usbserial-... --axis 1
+    uv run python -m vxl_drivers.axes.mmc.smoke --port /dev/tty.usbserial-... --axis 1
 
 Motion must be explicitly enabled:
-    uv run python drivers/scripts/mmc/smoke.py --port COM4 --axis 1 --exercise-motion --distance 1
+    uv run python -m vxl_drivers.axes.mmc.smoke --port COM4 --axis 1 --exercise-motion --distance 1
 """
 
 import argparse
@@ -37,7 +37,7 @@ def read_pending_errors(axis: MMCLinearAxis) -> list[ControllerError]:
     return axis.read_and_clear_errors() if axis.status.has_error else []
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901, PLR0915 - keep hardware exercise and recovery visibly linear
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     log = logging.getLogger("mmc-smoke")
