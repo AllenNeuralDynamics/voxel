@@ -4,7 +4,7 @@
   export const buttonVariants = tv({
     base: [
       'inline-flex shrink-0 items-center justify-center',
-      'rounded border font-medium',
+      'rounded-md border font-medium',
       'transition-[color,background-color,border-color,transform] focus:outline-none',
       'focus-visible:ring-2 focus-visible:ring-focused focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
       'active:scale-[0.98]',

@@ -5,7 +5,7 @@
 
   import { Crosshair, FitToScreen, FolderMoveOutline, ImageMultiple, Layers, Plus, TrashCanOutline } from '$lib/icons';
   import { ContextMenu, HoverCard, Rename } from '$lib/kit';
-  import { getVoxelApp, type Snapshot, type SnapshotGroup } from '$lib/model';
+  import { getVoxelStation, type Snapshot, type SnapshotGroup } from '$lib/model';
   import { resolveColormapColor } from '$lib/preview/render';
   import { cn, toastError, trimFloat } from '$lib/utils';
 
@@ -18,7 +18,7 @@
     ids: string[];
   }
 
-  const app = getVoxelApp();
+  const app = getVoxelStation();
   const snaps = app.snaps;
   const scene = getStageScene();
   const stage = $derived(app.instrument?.stage ?? null);

@@ -4,7 +4,7 @@
 
   import { Eraser, Plus, Record, TrashCanOutline, VectorCombine } from '$lib/icons';
   import { ContextMenu, Rename } from '$lib/kit';
-  import { getVoxelApp, type InpaintMosaic } from '$lib/model';
+  import { getVoxelStation, type InpaintMosaic } from '$lib/model';
   import { cn, toastError } from '$lib/utils';
 
   import type { Bounds, Painter } from '../draw';
@@ -17,7 +17,7 @@
     channels: string[];
   }
 
-  const app = getVoxelApp();
+  const app = getVoxelStation();
   const inpaint = app.inpaint;
   const scene = getStageScene();
   const stage = $derived(app.instrument?.stage ?? null);

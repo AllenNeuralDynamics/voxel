@@ -4,14 +4,17 @@
 
 export { default as Button, type ButtonVariants, buttonVariants } from './Button.svelte';
 export { default as Checkbox, type CheckboxVariants, checkboxVariants } from './Checkbox.svelte';
+export * as Breadcrumb from './cn/breadcrumb';
 export * as Collapsible from './cn/collapsible';
 export * as ContextMenu from './cn/context-menu';
 export * as Dialog from './cn/dialog';
 export * as DropdownMenu from './cn/dropdown-menu';
 export * as HoverCard from './cn/hover-card';
 export * as Sheet from './cn/sheet';
+export * as Sidebar from './cn/sidebar';
 export { Toaster } from './cn/sonner';
 export { Spinner } from './cn/spinner';
+export * as Tooltip from './cn/tooltip';
 export { default as ColorPicker } from './ColorPicker.svelte';
 export { default as Field } from './Field.svelte';
 export { default as JsonView } from './JsonView.svelte';

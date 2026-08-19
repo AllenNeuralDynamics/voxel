@@ -4,7 +4,7 @@
 
   import { Eye, EyeOff, VideoCamera } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
-  import { getVoxelApp } from '$lib/model';
+  import { getVoxelStation } from '$lib/model';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { pref } from '$lib/utils';
 
@@ -14,7 +14,7 @@
   // A hit means the pointer is over the live tile — enough to open the live view; it carries no data.
   type LiveHit = { readonly overTile: true };
 
-  const app = getVoxelApp();
+  const app = getVoxelStation();
   const previews = getPreviewContext();
   const scene = getStageScene();
   const instrument = $derived(app.instrument);

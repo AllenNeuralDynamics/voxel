@@ -57,7 +57,7 @@
 
 <Select.Root type="single" value={selected} onValueChange={handleChange} {items} disabled={loading}>
   <div class={cn('relative', className)}>
-    <Select.Trigger class={cn(styles.trigger(), 'w-full rounded px-3 pr-8')}>
+    <Select.Trigger class={cn(styles.trigger(), 'w-full rounded-md px-3 pr-8')}>
       <span class="flex items-center gap-1.5 truncate">
         <span class="inline-block size-1.5 shrink-0 rounded-full {selectedHasTasks ? 'bg-info' : 'bg-fg-faint/50'}"
         ></span>

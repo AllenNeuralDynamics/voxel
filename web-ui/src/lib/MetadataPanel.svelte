@@ -143,7 +143,7 @@
 
   {#if jsonSchema}
     {@const entries = getSchemaEntries(jsonSchema)}
-    <div class="mt-2 flex flex-col gap-3">
+    <div class="flex flex-col gap-3">
       <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-3 gap-y-3">
         {#each entries.filter(([k]) => k !== 'notes') as [key, prop] (key)}
           {@render fieldBlock(key, prop)}

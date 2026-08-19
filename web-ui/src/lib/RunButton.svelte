@@ -3,12 +3,12 @@
 
   import AcquisitionDialog from '$lib/AcquisitionDialog.svelte';
   import { Button } from '$lib/kit';
-  import type { VoxelApp } from '$lib/model';
+  import type { Station } from '$lib/model';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { cn, toastError } from '$lib/utils';
 
   interface Props {
-    app: VoxelApp;
+    app: Station;
     class?: string;
   }
 

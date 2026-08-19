@@ -8,7 +8,7 @@
 
   import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
-  import { DEFAULT_STAGE_ORIENTATION, getVoxelApp } from '$lib/model';
+  import { DEFAULT_STAGE_ORIENTATION, getVoxelStation } from '$lib/model';
   import { displayName, pref, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
@@ -17,7 +17,7 @@
 
   let { viewport = $bindable<StageViewport>({ mode: 'auto' }) }: { viewport?: StageViewport } = $props();
 
-  const app = getVoxelApp();
+  const app = getVoxelStation();
   const stageLayersCollapsed = pref('stage:sidebar-collapsed', false);
   provideStageScene();
   const scene = getStageScene();
