@@ -21,7 +21,8 @@ from vxl._utils.files import load_yaml
 from vxl.devices.camera import CaptureState
 from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument, InstrumentConfig, InstrumentState
 from vxl.instrument.config import AcquisitionTask
-from vxl.instrument.core import AcquisitionRequest, Channel
+from vxl.instrument.core import Channel
+from vxl.instrument.models import AcquisitionRequest
 from vxl.system import System
 
 TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
@@ -101,7 +102,7 @@ def _instrument(tmp_path: Path, *, close_error: bool = False) -> tuple[Instrumen
     instrument._system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={})
     instrument._hal = SimpleNamespace(
         cameras={"camera_1": camera},
-        config=config.hal,
+        topology=config.hal,
         stage=SimpleNamespace(x=axis, y=axis, z=axis, scanning_axis=axis),
     )
     instrument._channels = {"gfp": Channel(uid="gfp", camera=cast("Any", camera), laser=cast("Any", _FakeLaser()))}

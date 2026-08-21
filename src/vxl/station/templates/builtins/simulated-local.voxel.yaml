@@ -69,11 +69,9 @@ hal:
 
   illumination:
     laser_488:
-      routing:
-        excitation_side: [left, right]
+      routing: [excitation_side]
     laser_561:
-      routing:
-        excitation_side: [left, right]
+      routing: [excitation_side]
 
   optical_routing:
     excitation_side:

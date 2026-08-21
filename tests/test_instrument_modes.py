@@ -11,8 +11,8 @@ from vxlib.reactivity import Cell
 from vxl.devices.daq.clocked import Signals
 from vxl.instrument import AcquisitionMode, Instrument
 from vxl.instrument.config import WriterPatch
-from vxl.instrument.core import AcquisitionRequest
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
+from vxl.instrument.models import AcquisitionRequest
 
 
 def instrument_in_mode(mode: AcquisitionMode) -> Instrument:

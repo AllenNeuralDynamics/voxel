@@ -10,11 +10,11 @@ from vxl._utils.files import load_yaml
 from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
 from vxl.devices.daq.clocked.waveform import validate_waveform
+from vxl.hal import HardwareTopology
 from vxl.instrument import Instrument
 from vxl.instrument.config import AcquisitionTask, InstrumentConfig, InstrumentState
 from vxl.instrument.errors import OperationRejectedError, StartupError
 from vxl.instrument.store import InstrumentInspection, InstrumentStore, Invalid, Loaded, Missing
-from vxl.instrument.topology import HALConfig
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
 
@@ -95,7 +95,7 @@ def test_persisted_state_leaves_reject_unknown_fields() -> None:
         SensorROI.model_validate({"x": 0, "y": 0, "w": 128, "h": 128, "width": 128})
 
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        HALConfig.model_validate({**config.hal.model_dump(), "stgae": config.hal.stage})
+        HardwareTopology.model_validate({**config.hal.model_dump(), "stgae": config.hal.stage})
 
 
 def test_store_check_collects_config_and_state_errors(tmp_path: Path) -> None:

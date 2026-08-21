@@ -2,7 +2,7 @@ from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
-from vxl_records import AcquisitionManifest
+from vxl_records import AcquisitionManifest, StorageSpec
 
 from .traversal import Tile
 
@@ -11,6 +11,14 @@ class AcquisitionMode(StrEnum):
     IDLE = "idle"
     PREVIEW = "preview"
     CAPTURE = "capture"
+
+
+class AcquisitionRequest(BaseModel):
+    """Parameters of an acquisition run. Shared by the instrument API and web request body."""
+
+    storage: StorageSpec
+    task_ids: list[str] | None = None
+    operator: str | None = None
 
 
 class VolumeProgress(BaseModel, frozen=True):

@@ -81,13 +81,11 @@ hal:
     camera_1:
       filter_wheels: [fw_detection, fw_emission_cam1]
       magnification: 8.0
-      routing:
-        detection_mode: [widefield, confocal]
+      routing: [detection_mode]
     camera_2:
       filter_wheels: [fw_detection, fw_emission_cam2]
       magnification: 8.0
-      routing:
-        detection_mode: [widefield, confocal]
+      routing: [detection_mode]
 
   illumination:
     laser_488: {}

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Self
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from vxl_records import (
     AcquisitionManifest,
     AcquisitionOrigin,
@@ -29,6 +29,7 @@ from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Resul
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
+from vxl.hal import HAL, HardwareTopology
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.system import Remote, System, remote_store_fingerprint
 
@@ -49,11 +50,9 @@ from .config import (
     ZStack,
 )
 from .errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
-from .hal import HAL
 from .metadata import ExperimentMetadata, resolve_metadata_class
-from .models import AcquisitionMode, ActiveAcquisitionState, TaskTile, VolumeProgress
+from .models import AcquisitionMode, AcquisitionRequest, ActiveAcquisitionState, TaskTile, VolumeProgress
 from .store import PROMOTABLE_FIELDS, InstrumentStore
-from .topology import HALConfig
 from .traversal import TileOrder
 
 logger = logging.getLogger(__name__)
@@ -61,14 +60,6 @@ logger = logging.getLogger(__name__)
 
 def _merge_route_updates(current: dict[str, str], update: dict[str, str]) -> dict[str, str]:
     return current | update
-
-
-class AcquisitionRequest(BaseModel):
-    """Parameters of an acquisition run. Shared by the instrument API and the web request body."""
-
-    storage: StorageSpec
-    task_ids: list[str] | None = None  # None → every planned task, in traversal order
-    operator: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,9 +147,9 @@ class Instrument:
         return self._store.config
 
     @property
-    def hardware_config(self) -> HALConfig:
+    def hardware_config(self) -> HardwareTopology:
         """The immutable hardware topology without access to runtime device handles."""
-        return self._hal.config
+        return self._hal.topology
 
     @property
     def preview(self) -> Subscribable[PreviewSourceEmission]:
@@ -237,7 +228,7 @@ class Instrument:
 
     def _apply_viewport(self, channels: Mapping[str, Channel]) -> None:
         for ch_id, ch in channels.items():
-            rot = self._hal.config.detection[self._channel_config(ch_id).detection].rotation_deg
+            rot = self._hal.topology.detection[self._channel_config(ch_id).detection].rotation_deg
             ch.camera.preview_viewport.update(self._viewport.to_sensor_space(rot) if rot else self._viewport)
 
     async def open(self) -> None:
@@ -536,7 +527,7 @@ class Instrument:
 
     async def _move_optical_routes(self, routes: Mapping[str, str]) -> None:
         positions: dict[str, str] = {}
-        topology = self._hal.config.optical_routing.root
+        topology = self._hal.topology.optical_routing.root
         for dimension, route_name in routes.items():
             dimension_routes = topology.get(dimension)
             if dimension_routes is None or route_name not in dimension_routes:
@@ -576,7 +567,7 @@ class Instrument:
                 AcquisitionMode.IDLE,
                 AcquisitionMode.PREVIEW,
             )
-            if dimension not in self._hal.config.optical_routing.root:
+            if dimension not in self._hal.topology.optical_routing.root:
                 raise OperationRejectedError(f"No optical-routing dimension '{dimension}'")
             await self._store.update(routing={**self._store.value.routing, dimension: policy})
 
@@ -1133,7 +1124,7 @@ class Instrument:
                 created_at=datetime.datetime.now(tz=datetime.UTC),
                 storage=storage,
                 state_snapshot=state.model_dump(mode="json"),
-                hardware_snapshot=self._hal.config.model_dump(mode="json"),
+                hardware_snapshot=self._hal.topology.model_dump(mode="json"),
                 volumes=plan,
             )
             await self._records.acquisitions.create(manifest)
@@ -1284,7 +1275,7 @@ class Instrument:
                         subpath=subpath / ch_id,
                         num_frames=num_frames,
                         z_step=z_step,
-                        magnification=self._hal.config.detection[config.detection].magnification,
+                        magnification=self._hal.topology.detection[config.detection].magnification,
                         settings=settings,
                     )
                 )
@@ -1466,7 +1457,7 @@ class Instrument:
                     continue
                 roi = profile.rois.get(camera_id)
                 width_px, height_px = (roi.w, roi.h) if roi is not None else (sensor_size.x, sensor_size.y)
-                path = self._hal.config.detection[camera_id]
+                path = self._hal.topology.detection[camera_id]
                 factor = pixel_size / path.magnification
                 if path.rotation_deg % 180 == 0:
                     widths.append(width_px * factor.x)
@@ -1479,7 +1470,7 @@ class Instrument:
     async def _compute_current_fov(self) -> tuple[float, float]:
         if not self._hal.cameras:
             raise RuntimeError("Instrument is not open")
-        detection = self._hal.config.detection
+        detection = self._hal.topology.detection
         fovs: list[tuple[float, float]] = []
         for ch_id, channel in self.active_channels.items():
             frame_area = await channel.camera.frame_area_um.get()
@@ -1528,7 +1519,10 @@ class Instrument:
             raise KeyError(f"Device '{device_id}' not found") from None
 
     def _settable_devices(self) -> set[str]:
-        return self._store.value.imaging.get_profile_settable_devices(self._active_profile_id.value, self._hal.config)
+        return self._store.value.imaging.get_profile_settable_devices(
+            self._active_profile_id.value,
+            self._hal.topology,
+        )
 
     def _channel_config(self, channel_id: str) -> ChannelConfig:
         return self._store.value.imaging.channels[channel_id]

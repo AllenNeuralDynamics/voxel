@@ -108,30 +108,23 @@ hal:
     camera_1:
       filter_wheels: [fw_detection_shared, fw_emission_cam1]
       magnification: 8.0
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
     camera_2:
       filter_wheels: [fw_detection_shared, fw_emission_cam2]
       magnification: 8.0
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
 
   illumination:
     laser_405:
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
     laser_488:
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
     laser_561:
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
     laser_640:
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
     laser_730:
-      routing:
-        beam_path: [sample, calibration]
+      routing: [beam_path]
 
   optical_routing:
     beam_path:

@@ -1,6 +1,8 @@
+"""Static microscope hardware topology models and validation."""
+
 import logging
 from collections.abc import Mapping
-from typing import Annotated, Self
+from typing import Self
 
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
 from vxlib.schema import FrozenModel
@@ -12,29 +14,18 @@ from .errors import Violation, ViolationLoc, assignment_violations
 logger = logging.getLogger(__name__)
 
 
-class StageConfig(FrozenModel):
+class StageAxes(FrozenModel):
     x: str
     y: str
     z: str
 
 
-type SupportedOpticalRoutes = Annotated[list[str], Field(min_length=1)]
-
-
-class OpticalAssemblyConfig(FrozenModel):
+class OpticalAssembly(FrozenModel):
     aux_devices: list[str] = Field(default_factory=list)
-    routing: dict[str, SupportedOpticalRoutes] = Field(default_factory=dict)
-
-    @field_validator("routing")
-    @classmethod
-    def _validate_unique_routes(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
-        for dimension, routes in value.items():
-            if duplicates := sorted({route for route in routes if routes.count(route) > 1}):
-                raise ValueError(f"routes for '{dimension}' must be unique (duplicates: {duplicates})")
-        return value
+    routing: set[str] = Field(default_factory=set)
 
 
-class DetectionAssemblyConfig(OpticalAssemblyConfig):
+class DetectionAssembly(OpticalAssembly):
     filter_wheels: list[str]
     magnification: float = Field(..., gt=0, description="Optical magnification of the detection path")
     rotation_deg: int = Field(0, description="Camera rotation relative to stage axes (multiple of 90)")
@@ -54,7 +45,7 @@ class DetectionAssemblyConfig(OpticalAssemblyConfig):
         return value
 
 
-class IlluminationAssemblyConfig(OpticalAssemblyConfig): ...
+class IlluminationAssembly(OpticalAssembly): ...
 
 
 type DiscreteAxisPositions = dict[str, str]
@@ -62,7 +53,7 @@ type RouteByDimension = dict[str, str]
 type RoutingSelectorOwners = dict[str, RouteByDimension]
 
 
-class OpticalRouteConfig(RootModel[DiscreteAxisPositions]):
+class OpticalRouteDefinition(RootModel[DiscreteAxisPositions]):
     """One named optical route: discrete-axis UID to selected position label."""
 
     model_config = ConfigDict(frozen=True)
@@ -74,7 +65,7 @@ class OpticalRouteConfig(RootModel[DiscreteAxisPositions]):
         return self
 
 
-class OpticalRoutingConfig(RootModel[dict[str, dict[str, OpticalRouteConfig]]]):
+class OpticalRouting(RootModel[dict[str, dict[str, OpticalRouteDefinition]]]):
     """Routing dimensions keyed directly to their named routes.
 
     Example:
@@ -99,14 +90,14 @@ class OpticalRoutingConfig(RootModel[dict[str, dict[str, OpticalRouteConfig]]]):
         return self
 
 
-class HALConfig(RigConfig, frozen=True):
+class HardwareTopology(RigConfig, frozen=True):
     """The hardware blueprint: a rig (``devices`` + ``nodes``, inherited) plus the microscope wiring
     (stage axes, optical assemblies, and routing). Immutable — loaded once, never edited at runtime."""
 
-    stage: StageConfig
-    detection: dict[str, DetectionAssemblyConfig]
-    illumination: dict[str, IlluminationAssemblyConfig]
-    optical_routing: OpticalRoutingConfig = Field(default_factory=lambda: OpticalRoutingConfig({}))
+    stage: StageAxes
+    detection: dict[str, DetectionAssembly]
+    illumination: dict[str, IlluminationAssembly]
+    optical_routing: OpticalRouting = Field(default_factory=lambda: OpticalRouting({}))
 
     @property
     def device_uids(self) -> set[str]:
@@ -268,9 +259,8 @@ class HALConfig(RigConfig, frozen=True):
         assembly_groups = (("detection", self.detection), ("illumination", self.illumination))
         for assembly_type, assemblies in assembly_groups:
             for assembly_id, assembly in assemblies.items():
-                for dimension, supported_routes in assembly.routing.items():
-                    routes = self.optical_routing.root.get(dimension)
-                    if routes is None:
+                for dimension in assembly.routing:
+                    if dimension not in self.optical_routing.root:
                         violations.append(
                             Violation(
                                 code="hal.optical_routing.participation.dimension_missing",
@@ -280,15 +270,6 @@ class HALConfig(RigConfig, frozen=True):
                         )
                         continue
                     referenced_dimensions.add(dimension)
-                    for index, route in enumerate(supported_routes):
-                        if route not in routes:
-                            violations.append(
-                                Violation(
-                                    code="hal.optical_routing.participation.route_missing",
-                                    msg=f"Route '{route}' is not defined for routing dimension '{dimension}'.",
-                                    loc=(*loc, assembly_type, assembly_id, "routing", dimension, index),
-                                )
-                            )
         return violations, referenced_dimensions
 
     def _routing_topology_violations(

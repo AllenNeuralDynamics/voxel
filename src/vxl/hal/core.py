@@ -1,3 +1,5 @@
+"""Microscope hardware runtime and typed device inventory."""
+
 import asyncio
 import logging
 from collections.abc import Collection, Mapping
@@ -8,8 +10,8 @@ from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.camera import CameraHandle
 from vxl.devices.daq.clocked import SignalGeneratorHandle
 
-from .errors import StartupError, Violation, ViolationLoc
-from .topology import HALConfig
+from .errors import HALStartupError, Violation, ViolationLoc
+from .topology import HardwareTopology
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +32,9 @@ class Stage:
 class HAL:
     """Runtime hardware abstraction: opens the rig and exposes typed device handles."""
 
-    def __init__(self, config: HALConfig, name: str = "VoxelHAL") -> None:
-        self._cfg = config
-        self._rig = Rig(config, name)
+    def __init__(self, topology: HardwareTopology, name: str = "VoxelHAL") -> None:
+        self._topology = topology
+        self._rig = Rig(topology, name)
 
         self.cameras: dict[str, CameraHandle] = {}
         self.lasers: dict[str, DeviceHandle] = {}
@@ -45,8 +47,8 @@ class HAL:
         self._stage: Stage | None = None
 
     @property
-    def config(self) -> HALConfig:
-        return self._cfg
+    def topology(self) -> HardwareTopology:
+        return self._topology
 
     @property
     def rig(self) -> Rig:
@@ -84,7 +86,7 @@ class HAL:
             raise
         if violations:
             await self.close()
-            raise StartupError(violations)
+            raise HALStartupError(violations)
 
     async def close(self) -> None:
         self._stage = None
@@ -150,7 +152,7 @@ class HAL:
                 case _:
                     logger.debug("Uncategorized device '%s' of type '%s'", uid, interface.type)
 
-        self.fws.update((uid, self.rig.devices[uid]) for uid in self._cfg.filter_wheels if uid in self.rig.devices)
+        self.fws.update((uid, self.rig.devices[uid]) for uid in self._topology.filter_wheels if uid in self.rig.devices)
         return violations, unavailable
 
     async def _camera_geometry_violations(self) -> list[Violation]:
@@ -213,15 +215,15 @@ class HAL:
     def _resolve_stage(self) -> None:
         """Publish composite runtime handles after every startup check succeeds."""
         self._stage = Stage(
-            x=self.continuous_axes[self._cfg.stage.x],
-            y=self.continuous_axes[self._cfg.stage.y],
-            z=self.continuous_axes[self._cfg.stage.z],
+            x=self.continuous_axes[self._topology.stage.x],
+            y=self.continuous_axes[self._topology.stage.y],
+            z=self.continuous_axes[self._topology.stage.z],
         )
 
     def _camera_path_violations(self, unavailable: set[str]) -> list[Violation]:
         violations = []
         camera_ids = set(self.cameras.keys())
-        detection_ids = set(self._cfg.detection.keys())
+        detection_ids = set(self._topology.detection.keys())
         if missing := camera_ids - detection_ids:
             violations.append(
                 Violation(
@@ -243,7 +245,7 @@ class HAL:
     def _laser_path_violations(self, unavailable: set[str]) -> list[Violation]:
         violations = []
         laser_ids = set(self.lasers.keys())
-        illumination_ids = set(self._cfg.illumination.keys())
+        illumination_ids = set(self._topology.illumination.keys())
         if missing := laser_ids - illumination_ids:
             violations.append(
                 Violation(
@@ -263,7 +265,7 @@ class HAL:
         return violations
 
     def _stage_violations(self, unavailable: set[str]) -> list[Violation]:
-        stage_cfg = self._cfg.stage
+        stage_cfg = self._topology.stage
         if invalid := {stage_cfg.x, stage_cfg.y, stage_cfg.z} - set(self.continuous_axes.keys()) - unavailable:
             return [
                 Violation(
@@ -276,7 +278,7 @@ class HAL:
 
     def _filter_wheel_violations(self, unavailable: set[str]) -> list[Violation]:
         return self._discrete_axis_role_violations(
-            self._cfg.filter_wheels,
+            self._topology.filter_wheels,
             unavailable,
             code="hal.filter_wheel.not_discrete_axis",
             label="Filter wheels",
@@ -286,7 +288,7 @@ class HAL:
     def _routing_selector_violations(self, unavailable: set[str]) -> list[Violation]:
         selectors = {
             selector_uid
-            for routes in self._cfg.optical_routing.root.values()
+            for routes in self._topology.optical_routing.root.values()
             for route in routes.values()
             for selector_uid in route.root
         }
@@ -322,13 +324,13 @@ class HAL:
         reserved = (
             set(self.cameras.keys())
             | set(self.lasers.keys())
-            | set(self._cfg.filter_wheels)
-            | {self._cfg.stage.x, self._cfg.stage.y, self._cfg.stage.z}
+            | set(self._topology.filter_wheels)
+            | {self._topology.stage.x, self._topology.stage.y, self._topology.stage.z}
             | set(self.signal_generators.keys())
         )
 
         violations = []
-        path_groups = [("detection", self._cfg.detection), ("illumination", self._cfg.illumination)]
+        path_groups = [("detection", self._topology.detection), ("illumination", self._topology.illumination)]
         for path_type, paths in path_groups:
             for path_id, path in paths.items():
                 for aux in path.aux_devices:

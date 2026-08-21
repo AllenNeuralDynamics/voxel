@@ -16,6 +16,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
 from vxl._utils.logging import configure_logging, get_uvicorn_log_config
+from vxl.hal import HALStartupError
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError
 from vxl.station import InstrumentTemplates, Station
 from vxl.system import StationConfig, System, load_voxel_env
@@ -55,12 +56,19 @@ def _register_error_handlers(app: FastAPI) -> None:
     async def _on_instrument_busy(_request: Request, error: InstrumentBusyError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(error)})
 
-    @app.exception_handler(StartupError)
-    async def _on_startup_error(_request: Request, error: StartupError) -> JSONResponse:
+    def startup_error_response(error: StartupError | HALStartupError) -> JSONResponse:
         details: list[dict[str, Any]] = [
             violation.model_dump(mode="json", exclude_none=True) for violation in error.violations
         ]
         return JSONResponse(status_code=422, content={"detail": details})
+
+    @app.exception_handler(StartupError)
+    async def _on_instrument_startup_error(_request: Request, error: StartupError) -> JSONResponse:
+        return startup_error_response(error)
+
+    @app.exception_handler(HALStartupError)
+    async def _on_hal_startup_error(_request: Request, error: HALStartupError) -> JSONResponse:
+        return startup_error_response(error)
 
 
 @asynccontextmanager

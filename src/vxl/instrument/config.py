@@ -10,10 +10,10 @@ from rigup import CommandRequest
 from vxl._utils.color import Color
 from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
+from vxl.hal import DiscreteAxisPositions, HardwareTopology
 
 from .errors import Violation, ViolationLoc, assignment_violations
 from .metadata import ExperimentMetadata, MetadataCls
-from .topology import DiscreteAxisPositions, HALConfig
 from .traversal import TileOrder
 
 
@@ -129,7 +129,7 @@ class ImagingProtocol(FrozenModel):
             raise ValueError(f"at least one {(info.field_name or 'entry').rstrip('s')} must be present")
         return v
 
-    def get_profile_settable_devices(self, profile_id: str, hal: HALConfig) -> set[str]:
+    def get_profile_settable_devices(self, profile_id: str, hal: HardwareTopology) -> set[str]:
         profile = self.profiles[profile_id]
         ids: set[str] = set()
         for ch_id in profile.channels:
@@ -144,7 +144,7 @@ class ImagingProtocol(FrozenModel):
             ids.update(signals.waveforms.keys())
         return ids - hal.filter_wheels
 
-    def hal_violations(self, hal: HALConfig, *, loc: ViolationLoc) -> list[Violation]:
+    def hal_violations(self, hal: HardwareTopology, *, loc: ViolationLoc) -> list[Violation]:
         """Return relationships between this imaging protocol and a HAL config that cannot resolve."""
         violations = []
         for ch_id, ch in self.channels.items():
@@ -408,7 +408,7 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
                     )
         return routes
 
-    def semantic_violations(self, hal: HALConfig, *, loc: ViolationLoc) -> list[Violation]:
+    def semantic_violations(self, hal: HardwareTopology, *, loc: ViolationLoc) -> list[Violation]:
         """Return all cross-section violations in these defaults."""
         imaging_loc = (*loc, "imaging")
         return [
@@ -417,13 +417,13 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
             *self._routing_violations(hal, loc=(*loc, "routing")),
         ]
 
-    def _routing_violations(self, hal: HALConfig, *, loc: ViolationLoc) -> list[Violation]:
-        participating: dict[str, list[tuple[str, str, list[str]]]] = {}
-        for assembly_type, assemblies in (("detection", hal.detection), ("illumination", hal.illumination)):
-            for assembly_id, assembly in assemblies.items():
-                for dimension, supported_routes in assembly.routing.items():
+    def _routing_violations(self, hal: HardwareTopology, *, loc: ViolationLoc) -> list[Violation]:
+        participating: set[str] = set()
+        for assemblies in (hal.detection, hal.illumination):
+            for assembly in assemblies.values():
+                for dimension in assembly.routing:
                     if dimension in hal.optical_routing.root:
-                        participating.setdefault(dimension, []).append((assembly_type, assembly_id, supported_routes))
+                        participating.add(dimension)
 
         violations = assignment_violations(
             expected=participating,
@@ -444,7 +444,6 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
                 case SplitOpticalRoutingPolicy(lower=lower, upper=upper):
                     selected = [("lower", lower), ("upper", upper)]
 
-            valid_selected = []
             for field, route in selected:
                 if route not in routes:
                     violations.append(
@@ -454,22 +453,6 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
                             loc=(*loc, dimension, field),
                         )
                     )
-                else:
-                    valid_selected.append((field, route))
-
-            for assembly_type, assembly_id, supported_routes in participating[dimension]:
-                for field, route in valid_selected:
-                    if route not in supported_routes:
-                        violations.append(
-                            Violation(
-                                code="optical_routing.policy.route_unsupported",
-                                msg=(
-                                    f"{assembly_type.title()} assembly '{assembly_id}' does not support "
-                                    f"route '{route}' in routing dimension '{dimension}'."
-                                ),
-                                loc=(*loc, dimension, field),
-                            )
-                        )
         return violations
 
 
@@ -483,7 +466,7 @@ class InstrumentPreset(InstrumentDefaults):
         """Extract the reusable preset fields from complete instrument state."""
         return cls.model_validate(state.model_dump(include=set(cls.model_fields)))
 
-    def semantic_violations(self, hal: HALConfig, *, loc: ViolationLoc = ("state",)) -> list[Violation]:
+    def semantic_violations(self, hal: HardwareTopology, *, loc: ViolationLoc = ("state",)) -> list[Violation]:
         """Return all cross-section violations in the reusable preset."""
         violations = super().semantic_violations(hal, loc=loc)
         for task_id, task in self.tasks.items():
@@ -507,11 +490,11 @@ class InstrumentState(InstrumentPreset):
 
 
 class InstrumentConfig(FrozenModel):
-    """A complete instrument spec: the hardware blueprint (:class:`HALConfig`) plus a baseline
+    """A complete instrument spec: the :class:`HardwareTopology` plus a baseline
     acquisition state (``default``). Shared by shipped ``.voxel.yaml`` templates and each instrument's
     on-disk ``config.yaml`` — a template is just a config without a ``.voxel`` home yet."""
 
-    hal: HALConfig
+    hal: HardwareTopology
     default: InstrumentDefaults
 
     def semantic_violations(self) -> list[Violation]:

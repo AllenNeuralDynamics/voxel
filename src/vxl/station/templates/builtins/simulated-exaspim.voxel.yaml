@@ -87,16 +87,13 @@ hal:
   illumination:
     laser_488:
       aux_devices: [left_focus, right_focus]
-      routing:
-        excitation_side: [left, right]
+      routing: [excitation_side]
     laser_561:
       aux_devices: [left_focus, right_focus]
-      routing:
-        excitation_side: [left, right]
+      routing: [excitation_side]
     laser_640:
       aux_devices: [left_focus, right_focus]
-      routing:
-        excitation_side: [left, right]
+      routing: [excitation_side]
 
   optical_routing:
     excitation_side:

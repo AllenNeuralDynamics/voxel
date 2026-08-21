@@ -19,19 +19,20 @@ from rigup import (
     Result,
 )
 from vxl._utils.files import load_yaml
+from vxl.hal import (
+    HAL,
+    DetectionAssembly,
+    HALStartupError,
+    HardwareTopology,
+    IlluminationAssembly,
+    OpticalRouteDefinition,
+    OpticalRouting,
+    StageAxes,
+)
 from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.config import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
 from vxl.instrument.core import Channel
 from vxl.instrument.errors import StartupError, Violation
-from vxl.instrument.hal import HAL
-from vxl.instrument.topology import (
-    DetectionAssemblyConfig,
-    HALConfig,
-    IlluminationAssemblyConfig,
-    OpticalRouteConfig,
-    OpticalRoutingConfig,
-    StageConfig,
-)
 from vxl.preview import PreviewFrame, PreviewLayer, PreviewViewport
 
 
@@ -197,24 +198,24 @@ class _FakeInstrumentHAL:
         self.stage = _FakeStage()
 
 
-def _hal_config() -> HALConfig:
+def _hal_config() -> HardwareTopology:
     uids = {"camera", "laser", "x", "y", "z", "filter"}
     devices = {uid: BuildConfig(target="builtins.object") for uid in uids}
-    return HALConfig(
+    return HardwareTopology(
         devices=devices,
-        stage=StageConfig(x="x", y="y", z="z"),
+        stage=StageAxes(x="x", y="y", z="z"),
         detection={
-            "camera": DetectionAssemblyConfig(
+            "camera": DetectionAssembly(
                 filter_wheels=["filter"],
                 magnification=1,
                 rotation_deg=0,
             )
         },
-        illumination={"laser": IlluminationAssemblyConfig()},
+        illumination={"laser": IlluminationAssembly()},
     )
 
 
-def _routed_hal_config() -> HALConfig:
+def _routed_hal_config() -> HardwareTopology:
     config = _hal_config()
     return config.model_copy(
         update={
@@ -225,12 +226,12 @@ def _routed_hal_config() -> HALConfig:
                     init={"slots": {0: "left", 1: "right"}},
                 ),
             },
-            "illumination": {"laser": IlluminationAssemblyConfig(routing={"excitation_side": ["left", "right"]})},
-            "optical_routing": OpticalRoutingConfig(
+            "illumination": {"laser": IlluminationAssembly(routing={"excitation_side"})},
+            "optical_routing": OpticalRouting(
                 {
                     "excitation_side": {
-                        "left": OpticalRouteConfig({"selector": "left"}),
-                        "right": OpticalRouteConfig({"selector": "right"}),
+                        "left": OpticalRouteDefinition({"selector": "left"}),
+                        "right": OpticalRouteDefinition({"selector": "right"}),
                     }
                 }
             ),
@@ -278,7 +279,7 @@ async def test_build_errors_suppress_follow_on_type_violations(monkeypatch: pyte
     hal = HAL(config)
     monkeypatch.setattr(hal, "_rig", rig)
 
-    with pytest.raises(StartupError) as raised:
+    with pytest.raises(HALStartupError) as raised:
         await hal.open()
 
     assert rig.opened
@@ -298,7 +299,7 @@ async def test_optical_routing_selector_must_be_a_discrete_axis(monkeypatch: pyt
     hal = HAL(config)
     monkeypatch.setattr(hal, "_rig", rig)
 
-    with pytest.raises(StartupError) as raised:
+    with pytest.raises(HALStartupError) as raised:
         await hal.open()
 
     routing_violations = [
@@ -316,7 +317,7 @@ async def test_runtime_compatibility_errors_close_the_rig(monkeypatch: pytest.Mo
     rig = _FakeRig()
     monkeypatch.setattr(hal, "_rig", rig)
 
-    with pytest.raises(StartupError) as raised:
+    with pytest.raises(HALStartupError) as raised:
         await hal.open()
 
     assert rig.closed
@@ -335,7 +336,7 @@ async def test_interface_failures_are_collected_without_cascading(monkeypatch: p
     hal = HAL(config)
     monkeypatch.setattr(hal, "_rig", rig)
 
-    with pytest.raises(StartupError) as raised:
+    with pytest.raises(HALStartupError) as raised:
         await hal.open()
 
     assert rig.closed
@@ -364,7 +365,7 @@ async def test_camera_geometry_transport_failures_are_collected_and_close_the_ri
     monkeypatch.setattr(hal, "_inspect_and_classify_devices", inspect_and_classify_devices)
     monkeypatch.setattr(hal, "_compatibility_violations", lambda _: [])
 
-    with pytest.raises(StartupError) as raised:
+    with pytest.raises(HALStartupError) as raised:
         await hal.open()
 
     assert rig.closed
@@ -393,7 +394,7 @@ async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch
     monkeypatch.setattr(hal, "_inspect_and_classify_devices", inspect_and_classify_devices)
     monkeypatch.setattr(hal, "_compatibility_violations", lambda _: [])
 
-    with pytest.raises(StartupError) as raised:
+    with pytest.raises(HALStartupError) as raised:
         await hal.open()
 
     assert {violation.loc for violation in raised.value.violations} == {

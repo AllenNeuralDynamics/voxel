@@ -2,6 +2,13 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from rigup import BuildConfig
+from vxl.hal import (
+    DetectionAssembly,
+    HardwareTopology,
+    IlluminationAssembly,
+    OpticalRouting,
+    StageAxes,
+)
 from vxl.instrument.config import (
     ChannelConfig,
     ImagingProtocol,
@@ -10,20 +17,13 @@ from vxl.instrument.config import (
     ProfileConfig,
     SplitOpticalRoutingPolicy,
 )
-from vxl.instrument.topology import (
-    DetectionAssemblyConfig,
-    HALConfig,
-    IlluminationAssemblyConfig,
-    OpticalRoutingConfig,
-    StageConfig,
-)
 
 
 def _hal_config(
     *,
     optical_routing: object | None = None,
-    illumination_routing: dict[str, list[str]] | None = None,
-) -> HALConfig:
+    illumination_routing: set[str] | None = None,
+) -> HardwareTopology:
     devices = {
         uid: BuildConfig(target="builtins.object")
         for uid in ("camera", "laser", "transmitted", "x_axis", "y_axis", "z_axis")
@@ -42,22 +42,22 @@ def _hal_config(
     )
     payload = {
         "devices": devices,
-        "stage": StageConfig(x="x_axis", y="y_axis", z="z_axis"),
+        "stage": StageAxes(x="x_axis", y="y_axis", z="z_axis"),
         "detection": {
-            "camera": DetectionAssemblyConfig(
+            "camera": DetectionAssembly(
                 filter_wheels=["selector"],
                 magnification=1,
                 rotation_deg=0,
             )
         },
         "illumination": {
-            "laser": IlluminationAssemblyConfig(routing=illumination_routing or {}),
-            "transmitted": IlluminationAssemblyConfig(),
+            "laser": IlluminationAssembly(routing=illumination_routing or set()),
+            "transmitted": IlluminationAssembly(),
         },
     }
     if optical_routing is not None:
         payload["optical_routing"] = optical_routing
-    return HALConfig.model_validate(payload)
+    return HardwareTopology.model_validate(payload)
 
 
 def _imaging(*, filters: dict[str, str] | None = None) -> ImagingProtocol:
@@ -95,7 +95,7 @@ def test_optical_routing_config_uses_direct_dimension_and_route_maps() -> None:
         }
     }
 
-    routing = OpticalRoutingConfig.model_validate(payload)
+    routing = OpticalRouting.model_validate(payload)
 
     assert routing.model_dump() == payload
 
@@ -103,25 +103,27 @@ def test_optical_routing_config_uses_direct_dimension_and_route_maps() -> None:
 def test_optical_routing_dimension_must_define_a_route() -> None:
     message = "Optical routing dimensions must define at least one route: excitation_side"
     with pytest.raises(ValidationError, match=message):
-        OpticalRoutingConfig.model_validate({"excitation_side": {}})
+        OpticalRouting.model_validate({"excitation_side": {}})
 
 
 def test_optical_route_must_define_a_selector() -> None:
     with pytest.raises(ValidationError, match="Optical routes must define at least one selector"):
-        OpticalRoutingConfig.model_validate({"excitation_side": {"left": {}}})
+        OpticalRouting.model_validate({"excitation_side": {"left": {}}})
 
 
 def test_empty_optical_routing_config_is_valid() -> None:
-    assert OpticalRoutingConfig.model_validate({}).root == {}
+    assert OpticalRouting.model_validate({}).root == {}
 
 
-def test_assembly_routing_and_filter_wheel_lists_reject_invalid_cardinality() -> None:
-    with pytest.raises(ValidationError, match="List should have at least 1 item"):
-        IlluminationAssemblyConfig(routing={"excitation_side": []})
-    with pytest.raises(ValidationError, match="routes for 'excitation_side' must be unique"):
-        IlluminationAssemblyConfig(routing={"excitation_side": ["left", "left"]})
+def test_assembly_routing_is_a_set_of_dimensions() -> None:
+    assembly = IlluminationAssembly.model_validate({"routing": ["excitation_side", "excitation_side"]})
+
+    assert assembly.routing == {"excitation_side"}
+
+
+def test_filter_wheel_lists_reject_duplicates() -> None:
     with pytest.raises(ValidationError, match="filter wheels must be unique"):
-        DetectionAssemblyConfig(filter_wheels=["selector", "selector"], magnification=1, rotation_deg=0)
+        DetectionAssembly(filter_wheels=["selector", "selector"], magnification=1, rotation_deg=0)
 
 
 def test_discrete_axis_positions_are_checked_against_device_slots() -> None:
@@ -155,7 +157,7 @@ def test_optical_routes_validate_their_discrete_axis_positions() -> None:
 
     violations = _hal_config(
         optical_routing=routing,
-        illumination_routing={"excitation_side": ["left"]},
+        illumination_routing={"excitation_side"},
     ).semantic_violations()
 
     assert [(violation.code, violation.loc) for violation in violations] == [
@@ -216,7 +218,7 @@ def test_optical_routes_must_use_the_same_selectors() -> None:
     }
     hal = _hal_config(
         optical_routing=routing,
-        illumination_routing={"excitation_side": ["left", "right"]},
+        illumination_routing={"excitation_side"},
     )
 
     assert [(violation.code, violation.loc) for violation in hal.semantic_violations()] == [
@@ -231,7 +233,7 @@ def test_assemblies_must_reference_configured_routing_dimensions_and_routes() ->
     routing = {"excitation_side": {"left": {"route_selector": "left"}}}
     hal = _hal_config(
         optical_routing=routing,
-        illumination_routing={"missing_dimension": ["left"]},
+        illumination_routing={"missing_dimension"},
     )
 
     assert [(violation.code, violation.loc) for violation in hal.semantic_violations()] == [
@@ -246,21 +248,6 @@ def test_assemblies_must_reference_configured_routing_dimensions_and_routes() ->
     ]
 
 
-def test_assemblies_must_only_claim_routes_the_dimension_defines() -> None:
-    routing = {"excitation_side": {"left": {"route_selector": "left"}}}
-    hal = _hal_config(
-        optical_routing=routing,
-        illumination_routing={"excitation_side": ["left", "right"]},
-    )
-
-    assert [(violation.code, violation.loc) for violation in hal.semantic_violations()] == [
-        (
-            "hal.optical_routing.participation.route_missing",
-            ("hal", "illumination", "laser", "routing", "excitation_side", 1),
-        )
-    ]
-
-
 def test_routing_selectors_have_exclusive_ownership() -> None:
     routing = {
         "excitation_side": {"left": {"route_selector": "left"}},
@@ -268,7 +255,7 @@ def test_routing_selectors_have_exclusive_ownership() -> None:
     }
     payload = _hal_config(
         optical_routing=routing,
-        illumination_routing={"excitation_side": ["left"], "detection_view": ["primary"]},
+        illumination_routing={"excitation_side", "detection_view"},
     )
 
     assert [(violation.code, violation.loc) for violation in payload.semantic_violations()] == [
@@ -283,7 +270,7 @@ def test_routing_selector_cannot_also_be_a_filter_wheel() -> None:
     routing = {"excitation_side": {"left": {"selector": "left"}}}
     hal = _hal_config(
         optical_routing=routing,
-        illumination_routing={"excitation_side": ["left"]},
+        illumination_routing={"excitation_side"},
     )
 
     assert [(violation.code, violation.loc) for violation in hal.semantic_violations()] == [
@@ -366,7 +353,7 @@ def test_instrument_defaults_resolves_all_optical_routes() -> None:
     }
 
 
-def test_routing_policy_is_complete_and_references_supported_routes() -> None:
+def test_routing_policy_is_complete_and_references_defined_routes() -> None:
     routing = {
         "excitation_side": {
             "left": {"route_selector": "left"},
@@ -375,11 +362,11 @@ def test_routing_policy_is_complete_and_references_supported_routes() -> None:
     }
     hal = _hal_config(
         optical_routing=routing,
-        illumination_routing={"excitation_side": ["left"]},
+        illumination_routing={"excitation_side"},
     )
 
     missing = InstrumentDefaults(imaging=_imaging()).semantic_violations(hal, loc=("default",))
-    unsupported = InstrumentDefaults.model_validate(
+    split = InstrumentDefaults.model_validate(
         {
             "imaging": _imaging(),
             "routing": {
@@ -403,12 +390,7 @@ def test_routing_policy_is_complete_and_references_supported_routes() -> None:
     assert [(violation.code, violation.loc) for violation in missing] == [
         ("optical_routing.policy.missing", ("default", "routing", "excitation_side"))
     ]
-    assert [(violation.code, violation.loc) for violation in unsupported] == [
-        (
-            "optical_routing.policy.route_unsupported",
-            ("default", "routing", "excitation_side", "upper"),
-        )
-    ]
+    assert split == []
     assert [(violation.code, violation.loc) for violation in missing_route] == [
         (
             "optical_routing.policy.route_missing",
@@ -426,7 +408,7 @@ def test_nonparticipating_assemblies_do_not_need_separate_routing_policies() -> 
     }
     hal = _hal_config(
         optical_routing=routing,
-        illumination_routing={"excitation_side": ["left", "right"]},
+        illumination_routing={"excitation_side"},
     )
     defaults = InstrumentDefaults.model_validate(
         {

@@ -109,20 +109,15 @@ hal:
 
   illumination:
     laser_405:
-      routing:
-        illumination_end: [front, rear]
+      routing: [illumination_end]
     laser_488:
-      routing:
-        illumination_end: [front, rear]
+      routing: [illumination_end]
     laser_561:
-      routing:
-        illumination_end: [front, rear]
+      routing: [illumination_end]
     laser_640:
-      routing:
-        illumination_end: [front, rear]
+      routing: [illumination_end]
     laser_730:
-      routing:
-        illumination_end: [front, rear]
+      routing: [illumination_end]
 
   optical_routing:
     illumination_end:
