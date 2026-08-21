@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { resolveInstrumentView } from '$lib/instruments/view';
+  import { resolveInstrumentView } from '$lib/instruments/instrument-view';
   import { Button, JsonView } from '$lib/kit';
   import { getVoxelStation, type InstrumentDefaults } from '$lib/model';
 
@@ -24,7 +24,7 @@
   );
 </script>
 
-<div class="py-4 pt-3">
+<div class="p-4">
   {#if stateView}
     <section>
       <div class="mb-2 flex items-center gap-3">

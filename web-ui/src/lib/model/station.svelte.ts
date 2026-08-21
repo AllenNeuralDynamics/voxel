@@ -3,7 +3,7 @@ import { getContext, setContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { browser } from '$app/environment';
-import { type DeviceRole, type DeviceRoleKind, sortByRoleOrder } from '$lib/model/role';
+import { assignDeviceRoles, type DeviceRoleAssignment } from '$lib/model/device-role';
 import { displayName, pref } from '$lib/utils';
 import { decodeMsgpack } from '$lib/utils/msgpack';
 
@@ -359,41 +359,6 @@ export class Instrument {
     });
   });
 
-  // Devices grouped by contextual role — a palette index per backing device, in role order.
-  // Sourced from `activeChannels` (channel devices) plus stage + sync; channel devices keep their
-  // channel-derived kind (first tag wins). Emission/channel are read off `Channel`, not duplicated here.
-  readonly roles = $derived.by<Map<string, DeviceRole>>(() => {
-    const kinds = new SvelteMap<string, DeviceRoleKind>();
-    const tag = (id: string, kind: DeviceRoleKind): void => {
-      if (!kinds.has(id)) kinds.set(id, kind);
-    };
-    for (const ch of this.activeChannels) {
-      tag(ch.camera.id, 'camera');
-      tag(ch.laser.id, 'laser');
-      for (const f of ch.filters) tag(f.wheel.id, 'filter');
-      for (const aux of ch.auxilliary) tag(aux.id, 'aux');
-    }
-    for (const axisId of [this.hal.stage.x, this.hal.stage.y, this.hal.stage.z]) if (axisId) tag(axisId, 'stage');
-    for (const sig of Object.values(this.activeProfile?.sync ?? {}))
-      for (const devId of Object.keys(sig.waveforms)) tag(devId, 'waveform');
-
-    const out = new SvelteMap<string, DeviceRole>();
-    const counters: Record<DeviceRoleKind, number> = {
-      camera: 0,
-      laser: 0,
-      filter: 0,
-      aux: 0,
-      stage: 0,
-      waveform: 0,
-      other: 0
-    };
-    for (const [id, kind] of sortByRoleOrder(kinds)) {
-      if (!this.devices.has(id)) continue; // pure DAQ port labels have no backing device
-      out.set(id, { kind, index: counters[kind]++ });
-    }
-    return out;
-  });
-
   // Per-device divergence from the active profile, keyed by device id, over the *settable* devices:
   // channel camera/laser/aux + sync AO — never filter wheels (driven by commands) or stage. A never-saved
   // rw prop counts as dirty (so a freshly-configured device is savable). Drives save gating + propRow.
@@ -441,6 +406,8 @@ export class Instrument {
   readonly #base: string;
   readonly #stationBase: string;
   readonly #onAcquisitionCreated: (manifest: AcquisitionManifest) => void;
+  /** Frozen for the open session so every handle keeps a stable role and color index across state updates. */
+  readonly #deviceRoles: ReadonlyMap<string, DeviceRoleAssignment>;
   #schemaCls: string | null = null; // metadata_cls the schema was last fetched for
 
   constructor(
@@ -460,12 +427,19 @@ export class Instrument {
     this.acquisition = session.instrument.acquisition;
     this.hal = session.instrument.config.hal;
     this.default = session.instrument.config.default;
+    this.#deviceRoles = assignDeviceRoles(this.hal, this.state.imaging);
     this.remoteStores = session.instrument.remote_stores;
     for (const [deviceId, device] of Object.entries(session.instrument.devices)) {
       const base = `${this.#base}/devices/${encodeURIComponent(deviceId)}`;
       this.devices.set(
         deviceId,
-        createDevice(client, base, this.#snapshotFrom(deviceId, device), () => this.mode === 'capture')
+        createDevice(
+          client,
+          base,
+          this.#snapshotFrom(deviceId, device),
+          () => this.mode === 'capture',
+          this.#roleFor(deviceId)
+        )
       );
       this.devices.get(deviceId)?.replaceProperties(this.#resultsFrom(device));
     }
@@ -497,7 +471,8 @@ export class Instrument {
             this.#client,
             `${this.#base}/devices/${encodeURIComponent(id)}`,
             snapshot,
-            () => this.mode === 'capture'
+            () => this.mode === 'capture',
+            this.#roleFor(id)
           )
         );
       this.devices.get(id)?.replaceProperties(this.#resultsFrom(state));
@@ -515,6 +490,10 @@ export class Instrument {
       state: session.instrument,
       task_tiles: session.instrument.task_tiles
     };
+  }
+
+  #roleFor(deviceId: string): DeviceRoleAssignment {
+    return this.#deviceRoles.get(deviceId) ?? { role: 'other', roleIndex: 0 };
   }
 
   #snapshotFrom(id: string, state: DeviceState): import('./types').DeviceSnapshot {

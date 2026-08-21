@@ -3,9 +3,11 @@
   import { Pane, PaneGroup } from 'paneforge';
   import { useEventListener, watch } from 'runed';
   import { onDestroy, onMount, untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
 
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import type { ResolvedPathname } from '$app/types';
   import { activateDashboardWindow, DASHBOARD_WINDOW_NAME, getDashboardOpener } from '$lib/app-windows';
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
@@ -112,7 +114,6 @@
     { id: '/plan', label: 'Plan' },
     { id: '/run', label: 'Run' }
   ];
-  const controlRoutes = [inspectRoute, ...workflowRoutes];
   const instrumentId = $derived(app.activeName ?? page.params.instrumentId ?? '');
   const instrumentInspection = $derived(instrumentId ? app.discovery.instruments[instrumentId] : undefined);
   const instrumentHasIssue = $derived(
@@ -153,27 +154,40 @@
     return pathname.startsWith(`${operateRoot}/`) ? pathname.slice(operateRoot.length) : null;
   }
 
-  const currentPath = $derived(operateRelativePath(page.url.pathname) ?? '/');
-  const viewId = $derived(
-    currentPath === '/' || currentPath.startsWith('/devices/')
-      ? '/'
-      : (controlRoutes.find((route) => route.id !== '/' && currentPath.startsWith(route.id))?.id ??
-          (currentPath === '/debug' ? '/debug' : '/library'))
-  );
-  const controlActive = $derived(controlRoutes.some((route) => route.id === viewId));
+  const currentPath = $derived(operateRelativePath(page.url.pathname) ?? '');
+  const inspectActive = $derived(page.route.id?.includes('/(inspect)') ?? false);
+  const activeWorkflow = $derived(workflowRoutes.find((route) => currentPath.startsWith(route.id))?.id ?? null);
+  const inspectPaths = new SvelteMap<string, ResolvedPathname>();
+
+  function inspectPathKey(station: string, instrument: string): string {
+    return `${station}\u0000${instrument}`;
+  }
 
   watch(
-    () => [app.activeTarget, viewId] as const,
-    ([activeTarget, currentView]) => {
-      if (activeTarget === null && currentView !== '/' && controlRoutes.some((route) => route.id === currentView)) {
+    () => [inspectActive, stationId, page.params.instrumentId, page.url.pathname] as const,
+    ([active, station, routeInstrumentId, pathname]) => {
+      if (active && routeInstrumentId) {
+        inspectPaths.set(inspectPathKey(station, routeInstrumentId), pathname as ResolvedPathname);
+      }
+    }
+  );
+
+  watch(
+    () => [app.activeTarget, activeWorkflow] as const,
+    ([activeTarget, currentWorkflow]) => {
+      if (activeTarget === null && currentWorkflow !== null) {
         goto(operateRoot, { replaceState: true });
       }
     }
   );
 
   function selectView(id: string) {
-    if (viewId === id || !instrumentId) return;
-    const target = id === '/' ? operateRoot : instrumentTargetPath(stationId, instrumentId, id);
+    const selected = id === inspectRoute.id ? inspectActive : activeWorkflow === id;
+    if (selected || !instrumentId) return;
+    const target =
+      id === inspectRoute.id
+        ? (inspectPaths.get(inspectPathKey(stationId, instrumentId)) ?? operateRoot)
+        : instrumentTargetPath(stationId, instrumentId, id);
     goto(target, { keepFocus: true, noScroll: true });
   }
 
@@ -218,19 +232,19 @@
   const inspectSegment = $derived<Segment>({
     key: inspectRoute.id,
     label: inspectRoute.label,
-    highlighted: viewId === inspectRoute.id,
+    highlighted: inspectActive,
     select: () => selectView(inspectRoute.id)
   });
   const workflowSegments = $derived<Segment[]>(
     workflowRoutes.map((route) => ({
       key: route.id,
       label: route.label,
-      highlighted: viewId === route.id,
+      highlighted: activeWorkflow === route.id,
       select: () => selectView(route.id)
     }))
   );
-  /** True when the current view is a workflow step rather than Inspect — used to brighten the nav border. */
-  const workflowActive = $derived(controlActive && !inspectSegment.highlighted);
+  /** True when the current view is a workflow step — used to brighten the nav border. */
+  const workflowActive = $derived(activeWorkflow !== null);
 
   const previewModes: { mode: PreviewMode; label: string }[] = [
     { mode: 'live', label: 'Live' },

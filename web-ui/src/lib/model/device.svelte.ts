@@ -6,6 +6,7 @@ import { toastError } from '$lib/utils';
 import { parseVec2D, type Vec2D } from '$lib/utils/vec';
 
 import { Client } from './client.svelte';
+import type { DeviceRoleAssignment } from './device-role';
 import {
   type AnyPropModel,
   BoolModel,
@@ -21,10 +22,12 @@ import type { DeviceInterface, DeviceSnapshot, PropResult, PropResults, SensorRO
 /**
  * A single device: its introspected interface plus a live, reactive cache of property models.
  * Reads come off `props` (hydrated and kept fresh by the instrument feed); writes (`setProps`, `runCommand`)
- * go out over REST. Role/accent are NOT carried here — those are profile-derived on `Instrument`.
+ * go out over REST. Its configured role and role-relative index are stable for the instrument session.
  */
 export class DeviceHandle {
   readonly id: string;
+  readonly role: DeviceRoleAssignment['role'];
+  readonly roleIndex: number;
   connected = $state(false);
   error = $state<string | undefined>(undefined);
   interface = $state<DeviceInterface | undefined>(undefined);
@@ -34,11 +37,19 @@ export class DeviceHandle {
   #disabled: () => boolean;
   #base: string;
 
-  constructor(client: Client, base: string, snapshot: DeviceSnapshot, disabled: () => boolean) {
+  constructor(
+    client: Client,
+    base: string,
+    snapshot: DeviceSnapshot,
+    disabled: () => boolean,
+    assignment: DeviceRoleAssignment
+  ) {
     this.#client = client;
     this.#base = base;
     this.#disabled = disabled;
     this.id = snapshot.id;
+    this.role = assignment.role;
+    this.roleIndex = assignment.roleIndex;
     this.applySnapshot(snapshot);
   }
 
@@ -441,20 +452,21 @@ export function createDevice(
   client: Client,
   base: string,
   snapshot: DeviceSnapshot,
-  disabled: () => boolean
+  disabled: () => boolean,
+  assignment: DeviceRoleAssignment
 ): DeviceHandle {
   switch (snapshot.interface?.type) {
     case 'camera':
-      return new CameraHandle(client, base, snapshot, disabled);
+      return new CameraHandle(client, base, snapshot, disabled, assignment);
     case 'laser':
-      return new LaserHandle(client, base, snapshot, disabled);
+      return new LaserHandle(client, base, snapshot, disabled, assignment);
     case 'continuous_axis':
-      return new AxisHandle(client, base, snapshot, disabled);
+      return new AxisHandle(client, base, snapshot, disabled, assignment);
     case 'discrete_axis':
-      return new DiscreteAxisHandle(client, base, snapshot, disabled);
+      return new DiscreteAxisHandle(client, base, snapshot, disabled, assignment);
     case 'signal_generator':
-      return new SignalGeneratorHandle(client, base, snapshot, disabled);
+      return new SignalGeneratorHandle(client, base, snapshot, disabled, assignment);
     default:
-      return new DeviceHandle(client, base, snapshot, disabled);
+      return new DeviceHandle(client, base, snapshot, disabled, assignment);
   }
 }

@@ -2,7 +2,7 @@
   import { tv, type VariantProps } from 'tailwind-variants';
 
   export const sidebarMenuButtonVariants = tv({
-    base: 'peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded p-2 text-left text-lg font-normal text-fg-muted outline-hidden transition-[width,height,padding,color,background-color] hover:bg-element-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focused active:bg-element-active active:text-fg data-open:hover:bg-element-hover data-open:hover:text-fg data-active:bg-element-selected data-active:text-fg group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-ui-sm! group-data-[collapsible=icon]:p-2! disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate',
+    base: 'peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded p-2 text-left text-lg font-normal text-fg outline-hidden transition-[width,height,padding,color,background-color] hover:bg-element-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focused active:bg-element-active active:text-fg data-open:hover:bg-element-hover data-open:hover:text-fg data-active:bg-element-selected data-active:text-fg group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-ui-sm! group-data-[collapsible=icon]:p-2! disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate',
     variants: {
       variant: {
         default: 'hover:bg-element-hover hover:text-fg',

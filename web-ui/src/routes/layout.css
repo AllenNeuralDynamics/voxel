@@ -185,6 +185,11 @@
     @apply bg-background text-foreground;
   }
 
+  html,
+  body {
+    @apply overscroll-none;
+  }
+
   @supports selector(::-webkit-scrollbar) {
     /* Thin scrollbars — webkit (Chrome, Safari, Edge).
      * Hover-reveal: the thumb is transparent at rest and only paints while the

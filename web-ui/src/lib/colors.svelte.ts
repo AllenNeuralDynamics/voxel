@@ -1,4 +1,4 @@
-import type { DeviceRole } from '$lib/model/role';
+import type { DeviceRole } from '$lib/model/device-role';
 import { themes } from '$lib/themes/manager.svelte';
 
 /**
@@ -226,8 +226,8 @@ export function waveformPortColor(index: number): string {
  * emission wavelength. Theme-aware via the palettes/emission helpers above.
  * Returns `undefined` for `kind === 'other'` — no honest color to assign.
  */
-export function resolveDeviceColor(role: DeviceRole, emission?: number): string | undefined {
-  switch (role.kind) {
+export function resolveDeviceColor(role: DeviceRole, roleIndex: number, emission?: number): string | undefined {
+  switch (role) {
     case 'camera':
       return desaturateColor(wavelengthToColor(emission), 0.5);
     case 'laser':
@@ -235,14 +235,14 @@ export function resolveDeviceColor(role: DeviceRole, emission?: number): string 
     case 'filter':
     case 'aux': {
       const aux = auxPalette();
-      return aux[role.index % aux.length];
+      return aux[roleIndex % aux.length];
     }
     case 'stage': {
       const stage = stagePalette();
-      return stage[role.index % stage.length];
+      return stage[roleIndex % stage.length];
     }
     case 'waveform':
-      return waveformDeviceColor(role.index);
+      return waveformDeviceColor(roleIndex);
     default:
       return undefined;
   }

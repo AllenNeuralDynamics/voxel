@@ -6,7 +6,7 @@
   import { Select } from '$lib/kit';
   import type { SelectOption } from '$lib/kit/Select.svelte';
   import type { DerivedWaveform, Signals, Waveform } from '$lib/model';
-  import { getVoxelStation } from '$lib/model';
+  import { getVoxelStation, ROLE_ORDER } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
   import { displayName, toastError } from '$lib/utils';
 
@@ -95,8 +95,11 @@
   const waveformIds = $derived.by<string[]>(() => {
     const available = Object.keys(baseWaveforms);
     const ordered: string[] = [];
-    for (const id of instrument?.roles.keys() ?? []) {
-      if (available.includes(id)) ordered.push(id);
+    const devices = [...(instrument?.devices.values() ?? [])].sort(
+      (left, right) => ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || left.roleIndex - right.roleIndex
+    );
+    for (const device of devices) {
+      if (available.includes(device.id)) ordered.push(device.id);
     }
     for (const id of available) {
       if (!ordered.includes(id)) ordered.push(id);
@@ -113,11 +116,12 @@
     const result: Record<string, string> = {};
     let portIndex = 0;
     for (const id of waveformIds) {
-      const role = instrument?.roles.get(id);
+      const device = instrument?.devices.get(id);
       const emission = instrument?.activeChannels.find(
         (channel) => channel.camera.id === id || channel.laser.id === id
       )?.emission;
-      result[id] = (role && resolveDeviceColor(role, emission)) || waveformPortColor(portIndex++);
+      result[id] =
+        (device && resolveDeviceColor(device.role, device.roleIndex, emission)) || waveformPortColor(portIndex++);
     }
     return result;
   });
@@ -145,7 +149,7 @@
       mode: groupMode,
       waveformIds,
       waveforms: displayWaveforms,
-      roles: instrument?.roles ?? new Map(),
+      roles: new Map([...(instrument?.devices.entries() ?? [])].map(([id, device]) => [id, device.role])),
       channels: channelGroups
     })
   );

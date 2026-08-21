@@ -35,7 +35,7 @@
   </span>
 {/snippet}
 
-<div class="py-4">
+<div class="p-4">
   {#if sorted.length > 0}
     <div class="overflow-hidden rounded-lg border border-border bg-card">
       {#each sorted as manifest, index (manifest.id)}

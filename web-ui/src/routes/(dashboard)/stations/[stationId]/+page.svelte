@@ -5,10 +5,9 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { AlertCircleOutline, ChevronRight } from '$lib/icons';
-  import InstrumentChannels from '$lib/instruments/overview/InstrumentChannels.svelte';
-  import InstrumentDevices from '$lib/instruments/overview/InstrumentDevices.svelte';
-  import InstrumentProfiles from '$lib/instruments/overview/InstrumentProfiles.svelte';
-  import { resolveInstrumentView, violationLocation } from '$lib/instruments/view';
+  import { resolveInstrumentView, violationLocation } from '$lib/instruments/instrument-view';
+  import OverviewDevices from '$lib/instruments/overview/OverviewDevices.svelte';
+  import OverviewImaging from '$lib/instruments/overview/OverviewImaging.svelte';
   import { Button, Field, TextInput } from '$lib/kit';
   import { errorMessage } from '$lib/model';
   import { dashboardInstrumentPath, instrumentPath, stationPath } from '$lib/routes';
@@ -217,9 +216,8 @@
         </div>
       {/if}
       <div class="max-w-6xl space-y-6">
-        <InstrumentProfiles imaging={selected.state.imaging} />
-        <InstrumentChannels channels={selected.state.imaging.channels} />
-        <InstrumentDevices hal={selected.config.hal} />
+        <OverviewImaging imaging={selected.state.imaging} />
+        <OverviewDevices hal={selected.config.hal} imaging={selected.state.imaging} />
       </div>
     {:else if selected?.errors.length}
       <section class="max-w-4xl overflow-hidden rounded-lg border border-danger/40 bg-danger/5">

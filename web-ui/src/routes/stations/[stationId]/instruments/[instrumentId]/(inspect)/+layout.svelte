@@ -5,8 +5,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { AlertCircleOutline } from '$lib/icons';
-  import { buildDeviceTopology, groupDeviceNavigation } from '$lib/instruments/device-topology';
-  import { resolveInstrumentView, violationLocation } from '$lib/instruments/view';
+  import { buildDeviceTopology, groupDevicesForNavigation } from '$lib/instruments/device-topology';
+  import { resolveInstrumentView, violationLocation } from '$lib/instruments/instrument-view';
   import { Button, Dialog, Sidebar } from '$lib/kit';
   import { ApiError, getVoxelStation, type Violation } from '$lib/model';
   import { configurePath, instrumentDevicePath } from '$lib/routes';
@@ -22,6 +22,10 @@
   const stationId = $derived(page.params.stationId);
   const id = $derived(page.params.instrumentId);
   const selected = $derived(id ? resolveInstrumentView(app.discovery, { kind: 'instrument', name: id }) : null);
+  const activeInstrument = $derived(id && app.activeName === id ? app.instrument : null);
+  const hal = $derived(activeInstrument?.hal ?? selected?.config?.hal ?? null);
+  const instrumentState = $derived(activeInstrument?.state ?? selected?.state ?? null);
+  const topology = $derived(hal && instrumentState ? buildDeviceTopology(hal, instrumentState.imaging) : null);
   const acquisitions = $derived(id ? app.acquisitions.filter((manifest) => manifest.instrument === id) : []);
   const location = $derived(parseInstrumentSectionPath(stationId, page.url.pathname));
   const section = $derived(instrumentSections.find(({ id: sectionId }) => sectionId === location?.section));
@@ -39,9 +43,7 @@
       ? instrumentSections.filter(({ id: sectionId }) => sectionId !== 'overview' && sectionId !== 'devices')
       : instrumentSections.filter(({ id: sectionId }) => sectionId === 'acquisitions')
   );
-  const deviceGroups = $derived(
-    selected?.config ? groupDeviceNavigation(buildDeviceTopology(selected.config.hal)) : []
-  );
+  const deviceGroups = $derived(topology ? groupDevicesForNavigation(topology) : []);
   const instrumentLabel = $derived(
     selected ? displayName(selected.name) : id && acquisitions.length ? displayName(id) : 'Instrument not found'
   );
@@ -136,6 +138,14 @@
     return instrumentDevicePath(stationId, id ?? '', targetId);
   }
 
+  function deviceIssue(targetId: string): { label: string; class: string } | null {
+    const device = activeInstrument?.devices.get(targetId);
+    if (!device) return null;
+    if (device.error) return { label: device.error, class: 'bg-danger' };
+    if (!device.connected) return { label: 'Disconnected', class: 'bg-warning' };
+    return null;
+  }
+
   setInstrumentPageContext({
     get opening() {
       return app.busy || app.openingName !== null || app.stationStatus === 'opening';
@@ -163,7 +173,7 @@
     aria-label={`${instrumentLabel} navigation`}
   >
     <Sidebar.Content>
-      <Sidebar.Group class="px-0 py-2">
+      <Sidebar.Group class="py-2">
         <Sidebar.Menu>
           {#if id}
             <Sidebar.MenuItem>
@@ -201,16 +211,22 @@
       </Sidebar.Group>
 
       {#each deviceGroups as deviceGroup (deviceGroup.id)}
-        <Sidebar.Group class="px-0 py-1">
+        <Sidebar.Group class="py-2">
           <Sidebar.GroupLabel>{deviceGroup.label}</Sidebar.GroupLabel>
           <Sidebar.Menu>
-            {#each deviceGroup.devices as device (device.id)}
-              {@const current = location?.section === 'devices' && deviceId === device.id}
+            {#each deviceGroup.deviceIds as targetId (targetId)}
+              {@const current = location?.section === 'devices' && deviceId === targetId}
+              {@const issue = deviceIssue(targetId)}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton isActive={current} title={displayName(device.id)}>
+                <Sidebar.MenuButton isActive={current} title={displayName(targetId)}>
                   {#snippet child({ props })}
-                    <a {...props} href={devicePath(device.id)} aria-current={current ? 'page' : undefined}>
-                      <span class="truncate">{displayName(device.id)}</span>
+                    <a {...props} href={devicePath(targetId)} aria-current={current ? 'page' : undefined}>
+                      <span class="truncate">{displayName(targetId)}</span>
+                      {#if issue}
+                        <span class={`ml-auto size-1.5 shrink-0 rounded-full ${issue.class}`} title={issue.label}
+                        ></span>
+                        <span class="sr-only">{issue.label}</span>
+                      {/if}
                     </a>
                   {/snippet}
                 </Sidebar.MenuButton>
@@ -222,57 +238,62 @@
     </Sidebar.Content>
   </Sidebar.Root>
 
-  <main class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-    <div class="flex h-full min-h-0 flex-col gap-1 px-4 py-3">
+  <main class="min-h-0 min-w-0 flex-1 overflow-hidden">
+    <div class="flex h-full min-h-0 flex-col gap-1">
       {#if breadcrumbItems.length > 0}
-        <LibraryBreadcrumb items={breadcrumbItems} />
+        <div class="shrink-0 px-4 pt-3">
+          <LibraryBreadcrumb items={breadcrumbItems} />
+        </div>
       {/if}
 
       {#if selected || acquisitions.length > 0}
         {#if failure}
-          <section
-            class="mt-1 flex max-h-[min(18rem,45vh)] shrink-0 flex-col overflow-hidden rounded-lg border border-danger/40 bg-danger/5"
-          >
-            <div class="flex shrink-0 items-start gap-3 border-b border-danger/25 p-3">
-              <AlertCircleOutline width="18" height="18" class="mt-0.5 shrink-0 text-danger" />
-              <div class="min-w-0 flex-1">
-                <h2 class="text-base font-medium text-danger">{failure.title}</h2>
-                <p class="mt-0.5 text-sm text-fg-muted">{failure.description}</p>
+          <div class="shrink-0 px-4 pt-1">
+            <section
+              class="flex max-h-[min(18rem,45vh)] flex-col overflow-hidden rounded-lg border border-danger/40 bg-danger/5"
+            >
+              <div class="flex shrink-0 items-start gap-3 border-b border-danger/25 p-3">
+                <AlertCircleOutline width="18" height="18" class="mt-0.5 shrink-0 text-danger" />
+                <div class="min-w-0 flex-1">
+                  <h2 class="text-base font-medium text-danger">{failure.title}</h2>
+                  <p class="mt-0.5 text-sm text-fg-muted">{failure.description}</p>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  <span class="text-sm text-fg-muted">
+                    {failure.violations.length}
+                    {failure.violations.length === 1 ? 'issue' : 'issues'}
+                  </span>
+                  {#if failure.source === 'state'}
+                    <Button variant="outline" size="xs" onclick={() => (archiveStateDialogOpen = true)}>
+                      Archive state…
+                    </Button>
+                  {:else if failure.source === 'startup'}
+                    <Button variant="outline" size="xs" disabled={app.busy} onclick={openInstrument}>
+                      {app.busy ? 'Retrying…' : 'Retry'}
+                    </Button>
+                  {/if}
+                </div>
               </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <span class="text-sm text-fg-muted">
-                  {failure.violations.length}
-                  {failure.violations.length === 1 ? 'issue' : 'issues'}
-                </span>
-                {#if failure.source === 'state'}
-                  <Button variant="outline" size="xs" onclick={() => (archiveStateDialogOpen = true)}>
-                    Archive state…
-                  </Button>
-                {:else if failure.source === 'startup'}
-                  <Button variant="outline" size="xs" disabled={app.busy} onclick={openInstrument}>
-                    {app.busy ? 'Retrying…' : 'Retry'}
-                  </Button>
-                {/if}
-              </div>
-            </div>
-            <ul class="min-h-0 divide-y divide-border/40 overflow-y-auto">
-              {#each failure.violations as violation, index (`${violation.code ?? ''}:${violationLocation(violation)}:${index}`)}
-                <li class="px-3 py-2">
-                  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    {#if violationLocation(violation)}
-                      <span class="font-mono text-xs wrap-anywhere text-fg-muted">{violationLocation(violation)}</span>
-                    {/if}
-                    {#if violation.code}
-                      <span class="rounded bg-danger/10 px-1.5 py-0.5 font-mono text-xs text-danger">
-                        {violation.code}
-                      </span>
-                    {/if}
-                  </div>
-                  <p class="mt-1 text-sm text-fg">{violation.msg}</p>
-                </li>
-              {/each}
-            </ul>
-          </section>
+              <ul class="min-h-0 divide-y divide-border/40 overflow-y-auto">
+                {#each failure.violations as violation, index (`${violation.code ?? ''}:${violationLocation(violation)}:${index}`)}
+                  <li class="px-3 py-2">
+                    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      {#if violationLocation(violation)}
+                        <span class="font-mono text-xs wrap-anywhere text-fg-muted">{violationLocation(violation)}</span
+                        >
+                      {/if}
+                      {#if violation.code}
+                        <span class="rounded bg-danger/10 px-1.5 py-0.5 font-mono text-xs text-danger">
+                          {violation.code}
+                        </span>
+                      {/if}
+                    </div>
+                    <p class="mt-1 text-sm text-fg">{violation.msg}</p>
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          </div>
         {/if}
 
         <div class="min-h-0 flex-1 overflow-y-auto">

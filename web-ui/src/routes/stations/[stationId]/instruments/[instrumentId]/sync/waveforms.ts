@@ -1,5 +1,4 @@
-import type { DerivedWaveform, Waveform } from '$lib/model';
-import type { DeviceRoleKind } from '$lib/model/role';
+import type { DerivedWaveform, DeviceRole, Waveform } from '$lib/model';
 
 export type GroupMode = 'related' | 'device-type' | 'channel';
 
@@ -19,7 +18,7 @@ interface GroupingContext {
   mode: GroupMode;
   waveformIds: string[];
   waveforms: Record<string, Waveform>;
-  roles: ReadonlyMap<string, { kind: DeviceRoleKind }>;
+  roles: ReadonlyMap<string, DeviceRole>;
   channels: ChannelGroup[];
 }
 
@@ -124,12 +123,13 @@ function groupRelated(waveformIds: string[], waveforms: Record<string, Waveform>
   return groups;
 }
 
-const ROLE_LABELS: Record<DeviceRoleKind, string> = {
+const ROLE_LABELS: Record<DeviceRole, string> = {
   camera: 'Cameras',
   laser: 'Lasers',
   filter: 'Filters',
   aux: 'Auxiliary',
   stage: 'Stage',
+  routing: 'Routing',
   waveform: 'Waveforms',
   other: 'Other'
 };
@@ -137,12 +137,12 @@ const ROLE_LABELS: Record<DeviceRoleKind, string> = {
 function groupByDeviceType(
   waveformIds: string[],
   waveforms: Record<string, Waveform>,
-  roles: ReadonlyMap<string, { kind: DeviceRoleKind }>
+  roles: ReadonlyMap<string, DeviceRole>
 ): WaveformGroup[] {
-  const groups = new Map<DeviceRoleKind, string[]>();
+  const groups = new Map<DeviceRole, string[]>();
   const genericWaveforms: string[] = [];
   for (const id of waveformIds) {
-    const kind = roles.get(id)?.kind ?? 'waveform';
+    const kind = roles.get(id) ?? 'waveform';
     if (kind === 'waveform') {
       genericWaveforms.push(id);
       continue;

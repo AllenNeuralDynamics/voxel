@@ -72,7 +72,7 @@
   }
 </script>
 
-<div class="flex min-h-full gap-4 py-4">
+<div class="flex min-h-full gap-4 p-4">
   <aside class="w-64 shrink-0">
     <div class="mb-2 flex items-center justify-between gap-2">
       <h2 class="text-base font-medium tracking-wide text-fg-muted uppercase">

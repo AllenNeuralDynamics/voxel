@@ -11,7 +11,7 @@ export type InstrumentKind = 'instrument' | 'template';
 
 export type InstrumentSelection = { kind: InstrumentKind; name: string };
 
-/** Normalized, discovery-derived view of one instrument or template, independent of whether it is open. */
+/** Normalized discovery view of one instrument or template, independent of whether it is open. */
 export interface InstrumentView {
   name: string;
   kind: InstrumentKind;

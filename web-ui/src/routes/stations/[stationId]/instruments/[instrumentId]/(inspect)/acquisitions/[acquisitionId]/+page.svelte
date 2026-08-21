@@ -22,7 +22,7 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-2">
+<div class="flex min-h-full flex-col gap-2 p-4">
   {#if manifest}
     <div class="flex shrink-0 items-center justify-end gap-2">
       <span class="rounded-full bg-element-bg px-1.5 py-px text-sm text-fg-muted">{manifest.status}</span>
@@ -30,7 +30,7 @@
     </div>
   {/if}
 
-  <div class="min-h-0 flex-1 overflow-y-auto">
+  <div class="min-h-0 flex-1">
     {#if manifest}
       <JsonView data={manifest} expandDepth={1} />
     {:else}

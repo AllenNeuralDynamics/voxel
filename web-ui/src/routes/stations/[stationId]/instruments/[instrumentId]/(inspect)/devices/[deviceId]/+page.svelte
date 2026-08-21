@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { buildDeviceTopology } from '$lib/instruments/device-topology';
-  import { resolveInstrumentView } from '$lib/instruments/view';
+  import { buildDeviceTopology, buildDeviceUsageIndex, resolveDeviceConfig } from '$lib/instruments/device-topology';
+  import { resolveInstrumentView } from '$lib/instruments/instrument-view';
   import { Button } from '$lib/kit';
   import { getVoxelStation } from '$lib/model';
   import { instrumentDevicePath } from '$lib/routes';
@@ -18,11 +18,15 @@
   const selected = $derived(id ? resolveInstrumentView(app.discovery, { kind: 'instrument', name: id }) : null);
   const activeInstrument = $derived(id && app.activeName === id ? app.instrument : null);
   const hal = $derived(activeInstrument?.hal ?? selected?.config?.hal ?? null);
+  const imaging = $derived(activeInstrument?.imaging ?? selected?.state?.imaging ?? null);
   const device = $derived(deviceId ? activeInstrument?.devices.get(deviceId) : undefined);
   const canOpen = $derived(!!selected?.config && !selected.errorSource && !activeInstrument);
-  const entry = $derived(
-    hal && deviceId ? (buildDeviceTopology(hal).find(({ id: entryId }) => entryId === deviceId) ?? null) : null
-  );
+  const topology = $derived(hal && imaging ? buildDeviceTopology(hal, imaging) : null);
+  const deviceUsages = $derived(hal ? buildDeviceUsageIndex(hal) : new Map());
+  const entry = $derived(deviceId ? (topology?.get(deviceId) ?? null) : null);
+  const config = $derived(hal && deviceId && entry ? resolveDeviceConfig(hal, deviceId, entry.nodeId) : undefined);
+  const node = $derived(hal && entry?.nodeId ? hal.nodes[entry.nodeId] : null);
+  const usages = $derived(deviceId ? (deviceUsages.get(deviceId) ?? []) : []);
 
   function devicePath(targetId: string) {
     return instrumentDevicePath(stationId, id ?? '', targetId);
@@ -136,8 +140,8 @@
 {/snippet}
 
 {#if id && deviceId && hal}
-  {#if entry}
-    <div class="w-full max-w-4xl space-y-8 py-4">
+  {#if entry && config}
+    <div class="w-full max-w-4xl space-y-8 p-4">
       {#if device?.connected}
         <DeviceControls {device} />
       {:else}
@@ -171,31 +175,34 @@
       <section id="details" class="rounded-lg border border-border/60 p-3">
         <h3 class="mb-3 text-sm font-medium text-fg-muted">Details</h3>
         <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1.5">
-          {#if entry.roles.length > 0}
-            <dt class="font-medium text-fg-muted">{entry.roles.length === 1 ? 'Role' : 'Roles'}</dt>
-            <dd class="text-fg">{entry.roles.join(', ')}</dd>
+          <dt class="font-medium text-fg-muted">Role</dt>
+          <dd class="text-fg">{displayName(entry.role)}</dd>
+
+          {#if usages.length > 0}
+            <dt class="font-medium text-fg-muted">{usages.length === 1 ? 'Usage' : 'Usages'}</dt>
+            <dd class="text-fg">{usages.join(', ')}</dd>
           {/if}
 
           <dt class="font-medium text-fg-muted">Driver</dt>
-          <dd class="truncate font-mono text-fg" title={entry.config.target}>{entry.config.target}</dd>
+          <dd class="truncate font-mono text-fg" title={config.target}>{config.target}</dd>
 
           <dt class="font-medium text-fg-muted">Runtime</dt>
           <dd class="flex min-w-0 items-baseline gap-2 text-fg">
             <span>{entry.nodeId ? displayName(entry.nodeId) : 'Local'}</span>
             <span class="text-fg-faint" aria-hidden="true">·</span>
-            <span class="capitalize">{entry.node?.kind ?? 'In process'}</span>
-            {#if entry.node?.address}
+            <span class="capitalize">{node?.kind ?? 'In process'}</span>
+            {#if node?.address}
               <span class="text-fg-faint" aria-hidden="true">·</span>
-              <span class="truncate font-mono" title={entry.node.address}>{entry.node.address}</span>
+              <span class="truncate font-mono" title={node.address}>{node.address}</span>
             {/if}
           </dd>
 
           <dt class="pt-3 font-medium text-fg-muted">Init</dt>
-          <dd class="min-w-0 pt-3">{@render configValue(entry.config.init ?? {}, 'init', 0)}</dd>
+          <dd class="min-w-0 pt-3">{@render configValue(config.init ?? {}, 'init', 0)}</dd>
 
-          {#if entry.config.defaults !== null && entry.config.defaults !== undefined}
+          {#if config.defaults !== null && config.defaults !== undefined}
             <dt class="pt-3 font-medium text-fg-muted">Defaults</dt>
-            <dd class="min-w-0 pt-3">{@render configValue(entry.config.defaults, 'defaults', 0)}</dd>
+            <dd class="min-w-0 pt-3">{@render configValue(config.defaults, 'defaults', 0)}</dd>
           {/if}
         </dl>
       </section>
