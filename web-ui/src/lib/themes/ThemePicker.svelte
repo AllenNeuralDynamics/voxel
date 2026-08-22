@@ -24,7 +24,7 @@
   }
 
   const triggerClass =
-    'flex w-full items-center justify-between gap-2.5 rounded border border-input bg-element-bg px-2.5 py-2 text-lg transition-colors hover:bg-element-hover focus:border-focused focus:outline-none';
+    'flex h-ui-sm w-full min-w-0 items-center justify-between gap-2.5 rounded border border-input bg-transparent px-2.5 text-lg transition-colors hover:bg-element-hover focus:border-focused focus:outline-none';
   const itemClass =
     'flex w-full cursor-default items-center justify-between gap-2.5 rounded px-2.5 py-2 text-lg outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg';
   const contentClass =
@@ -45,10 +45,10 @@
   {@const currentId = variant === 'light' ? themes.prefs.get().light : themes.prefs.get().dark}
   {@const setTheme = variant === 'light' ? themes.setLight.bind(themes) : themes.setDark.bind(themes)}
   <Select.Root type="single" value={currentId} onValueChange={(v) => v && setTheme(v as ThemeId)} {items}>
-    <Select.Trigger class={triggerClass}>
+    <Select.Trigger id={`${variant}-theme`} aria-label={`${variant} theme`} class={triggerClass}>
       {@const t = getTheme(currentId)}
-      <span>{t?.name ?? 'Select...'}</span>
-      <div class="flex items-center gap-2">
+      <span class="min-w-0 truncate">{t?.name ?? 'Select...'}</span>
+      <div class="flex shrink-0 items-center gap-2">
         {#if t?.swatches[variant]}
           {@render swatches(t.swatches[variant]!)}
         {/if}
@@ -61,8 +61,8 @@
           <Select.Group>
             {#each themeList as t (t.id)}
               <Select.Item value={t.id} label={t.name} class={itemClass}>
-                <span>{t.name}</span>
-                <div class="flex items-center gap-2 pr-4">
+                <span class="min-w-0 truncate">{t.name}</span>
+                <div class="flex shrink-0 items-center gap-2 pr-4">
                   {@render swatches(t.swatches[variant]!)}
                 </div>
               </Select.Item>
@@ -76,12 +76,12 @@
 
 <div class="flex flex-col gap-6">
   <!-- Density -->
-  <div class="flex flex-col gap-1.5">
+  <div class="flex items-center justify-between">
     <span class="text-lg font-medium text-fg">Density</span>
-    <div class="flex gap-1.5">
+    <div class="flex gap-1">
       {#each densities as d (d)}
         <button
-          class="flex-1 cursor-pointer rounded-md border px-2 py-1.5 text-lg capitalize transition-colors {pillClass(
+          class="h-ui-sm w-20 cursor-pointer rounded-md border px-2 text-base capitalize transition-colors hover:bg-element-hover {pillClass(
             themes.prefs.get().density === d
           )}"
           onclick={() => themes.setDensity(d)}
@@ -92,15 +92,13 @@
     </div>
   </div>
 
-  <hr class="border-border/50" />
-
-  <!-- Theme -->
+  <!-- Mode -->
   <div class="flex items-center justify-between">
-    <span class="text-lg font-medium text-fg">Theme</span>
+    <span class="text-lg font-medium text-fg">Mode</span>
     <div class="flex gap-1">
       {#each modes as m (m)}
         <button
-          class="cursor-pointer rounded-md border px-2 py-1 text-base capitalize transition-colors {pillClass(
+          class="h-ui-sm w-20 cursor-pointer rounded-md border px-2 text-base capitalize transition-colors hover:bg-element-hover {pillClass(
             themes.prefs.get().mode === m
           )}"
           onclick={() => themes.setMode(m)}
@@ -111,21 +109,17 @@
     </div>
   </div>
 
-  {#if themes.prefs.get().mode === 'light' || themes.prefs.get().mode === 'auto'}
-    <div class="flex flex-col gap-1.5">
-      {#if themes.prefs.get().mode === 'auto'}
-        <Label>Light</Label>
-      {/if}
+  <div class="flex items-center justify-between gap-2">
+    <Label for="light-theme" class="text-lg font-medium text-fg">Light Theme</Label>
+    <div class="w-62 min-w-0 shrink-0">
       {@render themeSelect('light')}
     </div>
-  {/if}
+  </div>
 
-  {#if themes.prefs.get().mode === 'dark' || themes.prefs.get().mode === 'auto'}
-    <div class="flex flex-col gap-1.5">
-      {#if themes.prefs.get().mode === 'auto'}
-        <Label>Dark</Label>
-      {/if}
+  <div class="flex items-center justify-between gap-2">
+    <Label for="dark-theme" class="text-lg font-medium text-fg">Dark Theme</Label>
+    <div class="w-62 min-w-0 shrink-0">
       {@render themeSelect('dark')}
     </div>
-  {/if}
+  </div>
 </div>

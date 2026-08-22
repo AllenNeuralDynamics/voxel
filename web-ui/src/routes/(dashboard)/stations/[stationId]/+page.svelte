@@ -4,6 +4,7 @@
 
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { sendStationWindowRequest, stationWindowRequest } from '$lib/app-windows';
   import { AlertCircleOutline, ChevronRight } from '$lib/icons';
   import { resolveInstrumentView, violationLocation } from '$lib/instruments/instrument-view';
   import OverviewDevices from '$lib/instruments/overview/OverviewDevices.svelte';
@@ -13,7 +14,7 @@
   import { dashboardInstrumentPath, instrumentPath, stationPath } from '$lib/routes';
   import { displayName, toastError } from '$lib/utils';
 
-  import { getDashboardState } from '../state.svelte';
+  import { getDashboardState } from '../../state.svelte';
 
   const dashboard = getDashboardState();
   const stationId = $derived(page.params.stationId ?? '');
@@ -68,8 +69,7 @@
     actionName = name;
     actionError = null;
     const target = instrumentTarget(name);
-    const needsLaunch = activeInstrument !== name;
-    const controlWindow = dashboard.acquireStationWindow(stationId, target);
+    const controlWindow = dashboard.acquireStationWindow(stationId, `${target}?open=1`);
 
     if (!controlWindow) {
       actionError = 'The control window was blocked by the browser.';
@@ -78,11 +78,9 @@
     }
 
     try {
-      if (needsLaunch) {
-        await dashboard.launchInstrument(stationId, name);
-        if (!controlWindow.created) controlWindow.ref.location.href = target;
+      if (!controlWindow.created) {
+        sendStationWindowRequest(controlWindow.ref, stationWindowRequest(stationId, name, true));
       }
-      controlWindow.ref.focus();
     } catch (error) {
       if (controlWindow.created) {
         controlWindow.ref.close();
@@ -110,8 +108,8 @@
     try {
       await dashboard.createInstrument(stationId, templateName, name);
       const target = instrumentTarget(name);
-      controlWindow.ref.location.href = target;
-      controlWindow.ref.focus();
+      if (controlWindow.created) controlWindow.ref.location.href = `${target}?open=1`;
+      else sendStationWindowRequest(controlWindow.ref, stationWindowRequest(stationId, name, true));
       await goto(dashboardInstrumentPath(stationId, name), { replaceState: true });
     } catch (error) {
       if (controlWindow.created) {
@@ -126,7 +124,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-  <header class="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-surface px-6">
+  <header class="flex h-14 shrink-0 items-center gap-4 border-b border-border px-6">
     <nav class="flex min-w-0 flex-1 items-center gap-1.5" aria-label="Breadcrumb">
       <a
         href={stationPath(stationId)}
@@ -153,19 +151,20 @@
       </Button>
     {:else if selection?.kind === 'instrument'}
       {@const invalid = !selected?.config || selected.errorSource === 'config'}
-      {@const blocked = activeInstrument !== null && activeInstrument !== selection.name}
       <Button
         class="shrink-0"
         size="sm"
         variant={activeInstrument === selection.name ? 'outline' : 'default'}
-        disabled={invalid || blocked || actionName !== null}
+        disabled={invalid || actionName !== null}
         onclick={() => openInstrument(selection.name)}
       >
         {actionName === selection.name
           ? 'Opening…'
           : activeInstrument === selection.name
             ? 'Open control'
-            : 'Open instrument'}
+            : activeInstrument
+              ? 'Switch instrument'
+              : 'Open instrument'}
       </Button>
     {/if}
   </header>
@@ -201,7 +200,7 @@
       </section>
     {:else if selection?.kind === 'instrument' && activeInstrument && activeInstrument !== selection.name}
       <div class="mb-5 rounded-lg border border-border bg-element-bg/40 p-3 text-fg-muted">
-        Close {displayName(activeInstrument)} before opening this instrument.
+        The control window will ask before closing {displayName(activeInstrument)} and switching instruments.
       </div>
     {/if}
 

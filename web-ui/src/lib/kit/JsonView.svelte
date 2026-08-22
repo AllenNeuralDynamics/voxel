@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { SvelteMap } from 'svelte/reactivity';
+
   import { cn } from '$lib/utils';
 
   import JsonView from './JsonView.svelte';
@@ -14,6 +16,7 @@
   }
 
   let { data, baseline = undefined, expandDepth = 1, comparing = baseline !== undefined, depth = 0 }: Props = $props();
+  const expanded = new SvelteMap<string, boolean>();
 
   type Entry = { key: string; value: unknown; baseline: unknown };
 
@@ -88,7 +91,10 @@
   <div class="space-y-px">
     {#each entries as { key, value, baseline: baselineValue } (key)}
       {#if isContainer(value)}
-        <details open={depth < expandDepth}>
+        <details
+          open={expanded.get(key) ?? depth < expandDepth}
+          ontoggle={(event) => expanded.set(key, event.currentTarget.open)}
+        >
           <summary
             class={cn(
               rowStyle,

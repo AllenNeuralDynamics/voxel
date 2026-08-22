@@ -29,11 +29,13 @@ export class DashboardState {
       return { ref: existing, created: false };
     }
 
-    const ref = window.open(initialUrl, stationWindowName(stationId));
+    const ref = window.open('', stationWindowName(stationId));
     if (!ref) return null;
     this.#stationWindows.set(stationId, ref);
+    const created = ref.location.href === 'about:blank';
+    if (created && initialUrl !== 'about:blank') ref.location.href = initialUrl;
     ref.focus();
-    return { ref, created: true };
+    return { ref, created };
   }
 
   releaseStationWindow(stationId: string, ref: Window): void {
@@ -87,16 +89,9 @@ export class DashboardState {
     }
   }
 
-  async launchInstrument(stationId: string, instrumentName: string): Promise<void> {
-    const base = `/stations/${encodeURIComponent(stationId)}`;
-    await this.client.post(`${base}/sessions`, { instrument_name: instrumentName });
-    await this.loadStation(stationId);
-  }
-
   async createInstrument(stationId: string, template: string, instrumentName: string): Promise<void> {
     const base = `/stations/${encodeURIComponent(stationId)}`;
     await this.client.post(`${base}/instruments`, { template, name: instrumentName });
-    await this.client.post(`${base}/sessions`, { instrument_name: instrumentName });
     await this.loadStation(stationId);
   }
 

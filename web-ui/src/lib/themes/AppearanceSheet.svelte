@@ -7,7 +7,7 @@
 </script>
 
 <Sheet.Root bind:open>
-  <Sheet.Content side="right" overlay={false} class="w-80 sm:max-w-80">
+  <Sheet.Content side="right" overlay={false} class="w-full max-w-96 sm:max-w-96">
     <Sheet.Header>
       <Sheet.Title>Appearance</Sheet.Title>
       <Sheet.Description class="text-lg">Choose a color theme for the interface.</Sheet.Description>

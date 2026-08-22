@@ -1,4 +1,5 @@
 // Lucide Icons
+export { default as ChevronsUpDown } from '~icons/lucide/chevrons-up-down';
 export { default as CircleDashed } from '~icons/lucide/circle-dashed';
 export { default as Crosshair } from '~icons/lucide/crosshair';
 export { default as EllipsisVertical } from '~icons/lucide/ellipsis-vertical';

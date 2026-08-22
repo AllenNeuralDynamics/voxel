@@ -89,9 +89,9 @@
               <div class="mt-1 ml-3">{@render configValue(item, `${path}[${index}]`, depth + 1)}</div>
             </div>
           {:else}
-            <div class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3">
-              <span class="font-mono text-fg-muted">[{index}]</span>
-              <div class="min-w-0">{@render configValue(item, `${path}[${index}]`, depth)}</div>
+            <div class="flex min-w-0 items-baseline gap-3">
+              <span class="shrink-0 font-mono text-fg-muted">[{index}]</span>
+              <div class="min-w-0 flex-1">{@render configValue(item, `${path}[${index}]`, depth)}</div>
             </div>
           {/if}
         {/each}
@@ -99,21 +99,18 @@
     {/if}
   {:else if isRecord(value)}
     {#if Object.keys(value).length > 0}
-      <div
-        class={cn(
-          'grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1',
-          depth > 0 && 'border-l border-border pl-3'
-        )}
-      >
+      <div class={cn('space-y-1', depth > 0 && 'border-l border-border pl-3')}>
         {#each Object.entries(value) as [key, item] (key)}
           {#if isStructured(item)}
-            <div class="col-span-2 min-w-0">
+            <div class="min-w-0">
               <div class="font-mono text-fg-muted">{key}:</div>
               <div class="mt-1 ml-3">{@render configValue(item, `${path}.${key}`, depth + 1)}</div>
             </div>
           {:else}
-            <div class="font-mono text-fg-muted">{key}:</div>
-            <div class="min-w-0">{@render configValue(item, `${path}.${key}`, depth)}</div>
+            <div class="flex min-w-0 items-baseline gap-2">
+              <span class="shrink-0 font-mono text-fg-muted">{key}:</span>
+              <div class="min-w-0 flex-1">{@render configValue(item, `${path}.${key}`, depth)}</div>
+            </div>
           {/if}
         {/each}
       </div>

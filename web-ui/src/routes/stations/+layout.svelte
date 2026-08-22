@@ -4,17 +4,26 @@
   import { useEventListener, watch } from 'runed';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
+  import { toast } from 'svelte-sonner';
 
-  import { goto } from '$app/navigation';
+  import { goto, replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import type { ResolvedPathname } from '$app/types';
-  import { activateDashboardWindow, DASHBOARD_WINDOW_NAME, getDashboardOpener } from '$lib/app-windows';
+  import {
+    activateDashboardWindow,
+    DASHBOARD_WINDOW_NAME,
+    getDashboardOpener,
+    isStationWindowRequest,
+    sendStationWindowRequest,
+    stationWindowName,
+    stationWindowRequest
+  } from '$lib/app-windows';
   import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
   import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
   import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
   import RoutingMonitor from '$lib/devices/RoutingMonitor.svelte';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import { Logout, Microscope, Power } from '$lib/icons';
+  import { Logout, Power } from '$lib/icons';
   import { Button, Dialog, Spinner } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { type PreviewMode, setVoxelStation, Station } from '$lib/model';
@@ -27,6 +36,7 @@
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import ConnectionSplash from './ConnectionSplash.svelte';
+  import InstrumentSelector from './InstrumentSelector.svelte';
   import WorkspaceViewer from './WorkspaceViewer.svelte';
 
   const { children } = $props();
@@ -74,7 +84,10 @@
     untrack(() => session.applyInstrumentStatus(status, cursor));
   });
 
-  onMount(() => toastError(app.initialize(stationId)));
+  onMount(() => {
+    window.name = stationWindowName(stationId);
+    void initializeShell();
+  });
   onDestroy(() => {
     previews.current?.dispose();
     app.dispose();
@@ -82,6 +95,15 @@
   useEventListener(window, 'beforeunload', () => {
     previews.current?.dispose();
     app.dispose();
+  });
+  useEventListener(window, 'message', (event) => {
+    if (event.origin !== window.location.origin || !isStationWindowRequest(event.data)) return;
+    if (event.data.stationId !== stationId) return;
+    if (!app.ready) {
+      deferredSelection = { instrumentId: event.data.instrumentId, open: event.data.open };
+      return;
+    }
+    toastError(requestInstrumentSelection(event.data.instrumentId, event.data.open));
   });
 
   // --- Keyboard shortcuts ---
@@ -94,7 +116,7 @@
     else preview.startPreview();
   });
   createHotkeySequence(['Mod+K', 'Q'], () => {
-    if (app.instrument) closeDialogOpen = true;
+    if (app.instrument) showCloseDialog();
   });
 
   // --- Shell nav ---
@@ -114,7 +136,10 @@
     { id: '/plan', label: 'Plan' },
     { id: '/run', label: 'Run' }
   ];
-  const instrumentId = $derived(app.activeName ?? page.params.instrumentId ?? '');
+  const selectedInstrumentId = $derived(page.params.instrumentId ?? '');
+  const instrumentId = $derived(app.activeName ?? selectedInstrumentId);
+  const stationName = $derived(app.discovery.station.name || displayName(stationId));
+  const windowTitle = $derived(`Voxel — ${stationName}`);
   const instrumentInspection = $derived(instrumentId ? app.discovery.instruments[instrumentId] : undefined);
   const instrumentHasIssue = $derived(
     instrumentInspection
@@ -139,13 +164,9 @@
           ? 'The station is closed'
           : 'Open instrument'
   );
-  /** Dot on the instrument button: green when it is the open one, red when its config is broken. */
+  /** Configuration issues remain visible while the instrument is offline; active state is conveyed by the controls. */
   const instrumentStatusDot = $derived<{ tone: string; label: string } | null>(
-    app.activeName === instrumentId
-      ? { tone: 'bg-success', label: 'Active instrument' }
-      : instrumentHasIssue
-        ? { tone: 'bg-danger', label: 'Configuration issue' }
-        : null
+    instrumentHasIssue ? { tone: 'bg-danger', label: 'Configuration issue' } : null
   );
   const operateRoot = $derived(instrumentPath(stationId, instrumentId));
 
@@ -172,6 +193,31 @@
     }
   );
 
+  async function initializeShell(): Promise<void> {
+    try {
+      await app.initialize(stationId);
+      const shouldOpen = page.url.searchParams.get('open') === '1';
+      if (shouldOpen) {
+        replaceState(instrumentPath(stationId, selectedInstrumentId), page.state);
+      }
+      if (deferredSelection) {
+        const request = deferredSelection;
+        deferredSelection = null;
+        await requestInstrumentSelection(request.instrumentId, request.open);
+        return;
+      }
+      if (!selectedInstrumentId) return;
+      if (app.activeName && app.activeName !== selectedInstrumentId) {
+        pendingSwitch = { instrumentId: selectedInstrumentId, open: shouldOpen };
+        closeDialogOpen = true;
+      } else if (shouldOpen && !app.activeName) {
+        await app.launch(selectedInstrumentId);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   watch(
     () => [app.activeTarget, activeWorkflow] as const,
     ([activeTarget, currentWorkflow]) => {
@@ -191,6 +237,40 @@
     goto(target, { keepFocus: true, noScroll: true });
   }
 
+  function instrumentInspectPath(name: string): ResolvedPathname {
+    return inspectPaths.get(inspectPathKey(stationId, name)) ?? instrumentPath(stationId, name);
+  }
+
+  async function requestInstrumentSelection(name: string, open: boolean): Promise<void> {
+    if (instrumentTransition) return;
+    if (app.activeName && app.activeName !== name) {
+      pendingSwitch = { instrumentId: name, open };
+      closeDialogOpen = true;
+      return;
+    }
+
+    const target = open ? instrumentPath(stationId, name) : instrumentInspectPath(name);
+    await goto(target, { keepFocus: true, noScroll: true });
+    if (open && !app.activeName) await app.launch(name);
+  }
+
+  function selectInstrument(targetStationId: string, name: string): void {
+    if (targetStationId === stationId) {
+      toastError(requestInstrumentSelection(name, false));
+      return;
+    }
+
+    const target = instrumentPath(targetStationId, name);
+    const controlWindow = window.open('', stationWindowName(targetStationId));
+    if (!controlWindow) {
+      toast.error('The station window was blocked by the browser.');
+      return;
+    }
+    if (controlWindow.location.href === 'about:blank') controlWindow.location.href = target;
+    else sendStationWindowRequest(controlWindow, stationWindowRequest(targetStationId, name, false));
+    controlWindow.focus();
+  }
+
   function resolveDashboardWindow(): Window | null {
     return getDashboardOpener() ?? window.open(stationPath(stationId), DASHBOARD_WINDOW_NAME);
   }
@@ -203,6 +283,16 @@
   function openInstrument(): void {
     if (!instrumentId || !canOpenInstrument) return;
     toastError(app.launch(instrumentId));
+  }
+
+  function showCloseDialog(): void {
+    pendingSwitch = null;
+    closeDialogOpen = true;
+  }
+
+  function cancelClose(): void {
+    closeDialogOpen = false;
+    pendingSwitch = null;
   }
 
   async function closeInstrument(exit: boolean): Promise<void> {
@@ -229,6 +319,41 @@
     await goto(dashboardPath, { keepFocus: true, noScroll: true });
   }
 
+  async function confirmClose(): Promise<void> {
+    if (closingInstrument) return;
+    closingInstrument = true;
+    try {
+      if (pendingSwitch) {
+        const target = pendingSwitch;
+        await app.close();
+        await goto(instrumentInspectPath(target.instrumentId), { keepFocus: true, noScroll: true });
+        closeDialogOpen = false;
+        pendingSwitch = null;
+        if (target.open) await app.launch(target.instrumentId);
+      } else {
+        await closeInstrument(false);
+        closeDialogOpen = false;
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      closingInstrument = false;
+    }
+  }
+
+  async function confirmCloseAndExit(): Promise<void> {
+    if (closingInstrument) return;
+    closingInstrument = true;
+    try {
+      await closeInstrument(true);
+      closeDialogOpen = false;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      closingInstrument = false;
+    }
+  }
+
   const inspectSegment = $derived<Segment>({
     key: inspectRoute.id,
     label: inspectRoute.label,
@@ -253,6 +378,7 @@
 
   // Pane sizes
   let shellRef = $state<HTMLElement | null>(null);
+  let instrumentControl = $state<HTMLElement | null>(null);
   const contentPane = createPaneSize(() => shellRef, {
     min: 45,
     default: 45,
@@ -281,8 +407,17 @@
 
   // --- Dialog state ---
 
+  type PendingSwitch = { instrumentId: string; open: boolean };
+
   let closeDialogOpen = $state(false);
+  let pendingSwitch = $state<PendingSwitch | null>(null);
+  let deferredSelection = $state<PendingSwitch | null>(null);
+  let closingInstrument = $state(false);
 </script>
+
+<svelte:head>
+  <title>{windowTitle}</title>
+</svelte:head>
 
 {#if !app.client.isConnected || !app.ready}
   <ConnectionSplash {app} />
@@ -336,22 +471,29 @@
           <!-- An instrument is in scope (open, or named in the URL) — offer the Inspect button. -->
           {#if instrumentId}
             <div
+              bind:this={instrumentControl}
               class={cn(
                 '-ml-1 flex h-ui-md shrink items-stretch divide-x divide-border overflow-hidden rounded-md border transition-colors',
                 inspectSegment.highlighted ? 'border-border bg-element-selected' : 'border-border-faint'
               )}
             >
+              <InstrumentSelector
+                {stationId}
+                instrumentId={selectedInstrumentId || instrumentId}
+                anchor={instrumentControl}
+                disabled={instrumentTransition}
+                onselect={selectInstrument}
+              />
               <button
                 type="button"
                 onclick={inspectSegment.select}
                 class={cn(
-                  'flex max-w-64 min-w-52 shrink items-center gap-2 px-2 transition-colors',
+                  'flex max-w-64 min-w-45 shrink items-center gap-2 px-2 transition-colors',
                   inspectSegment.highlighted ? 'text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
                 )}
                 title={`Inspect ${displayName(instrumentId)}`}
                 aria-label={`Inspect ${displayName(instrumentId)}`}
               >
-                <Microscope width="14" height="14" class="shrink-0" />
                 <span class="truncate text-lg">{displayName(instrumentId)}</span>
                 {#if instrumentStatusDot}
                   <span
@@ -374,7 +516,7 @@
                   type="button"
                   title="Close instrument"
                   aria-label="Close instrument"
-                  onclick={() => (closeDialogOpen = true)}
+                  onclick={showCloseDialog}
                   class="flex w-7 shrink-0 cursor-pointer items-center justify-center text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-danger"
                 >
                   <Logout width="14" height="14" />
@@ -464,33 +606,28 @@
   <Dialog.Root bind:open={closeDialogOpen}>
     <Dialog.Content size="sm" showCloseButton={false}>
       <Dialog.Header>
-        <Dialog.Title>Close instrument</Dialog.Title>
+        <Dialog.Title>{pendingSwitch ? 'Switch instrument?' : 'Close instrument'}</Dialog.Title>
       </Dialog.Header>
       <p class="text-lg text-fg-muted">
-        Are you sure you want to close
-        <span class="font-medium text-fg">{displayName(app.activeName ?? 'the active instrument')}</span>? Its hardware
-        will be disconnected.
+        {#if pendingSwitch}
+          Close <span class="font-medium text-fg">{displayName(app.activeName ?? 'the active instrument')}</span> and
+          {pendingSwitch.open ? 'open' : 'inspect'}
+          <span class="font-medium text-fg">{displayName(pendingSwitch.instrumentId)}</span>? The current instrument's
+          hardware will be disconnected.
+        {:else}
+          Are you sure you want to close
+          <span class="font-medium text-fg">{displayName(app.activeName ?? 'the active instrument')}</span>? Its
+          hardware will be disconnected.
+        {/if}
       </p>
       <Dialog.Footer>
-        <Button variant="ghost" onclick={() => (closeDialogOpen = false)}>Cancel</Button>
-        <Button
-          variant="danger"
-          onclick={() => {
-            closeDialogOpen = false;
-            toastError(closeInstrument(false));
-          }}
-        >
-          Close
+        <Button variant="ghost" disabled={closingInstrument} onclick={cancelClose}>Cancel</Button>
+        <Button variant="danger" disabled={closingInstrument} onclick={confirmClose}>
+          {closingInstrument ? 'Closing…' : pendingSwitch ? 'Close and switch' : 'Close'}
         </Button>
-        <Button
-          variant="danger"
-          onclick={() => {
-            closeDialogOpen = false;
-            toastError(closeInstrument(true));
-          }}
-        >
-          Close & Exit
-        </Button>
+        {#if !pendingSwitch}
+          <Button variant="danger" disabled={closingInstrument} onclick={confirmCloseAndExit}>Close & Exit</Button>
+        {/if}
       </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Root>

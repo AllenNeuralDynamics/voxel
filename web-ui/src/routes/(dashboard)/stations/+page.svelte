@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
   import { dashboardInstrumentPath } from '$lib/routes';
 
-  import { getDashboardState } from './state.svelte';
+  import { getDashboardState } from '../state.svelte';
 
   const dashboard = getDashboardState();
 
