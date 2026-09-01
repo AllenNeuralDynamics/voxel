@@ -86,7 +86,7 @@
     {disabled}
     onclick={oninspect}
     class={cn(
-      'flex max-w-64 min-w-52 shrink items-center gap-2 px-2 text-left text-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+      'flex max-w-64 min-w-48 shrink items-center gap-2 px-2 text-left text-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40',
       active ? 'text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
     )}
     title={`Inspect ${displayName(instrumentId ?? app.activeName ?? 'instrument')}`}
@@ -103,7 +103,7 @@
   <DropdownMenu.Root onOpenChange={(open) => open && void load()}>
     <DropdownMenu.Trigger
       {disabled}
-      class="flex max-w-64 min-w-52 shrink cursor-pointer items-center gap-2 px-2 text-left text-lg text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+      class="flex max-w-64 min-w-48 shrink cursor-pointer items-center gap-2 px-2 text-left text-lg text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
       title={instrumentId ? 'Switch instrument' : 'Choose instrument'}
       aria-label={instrumentId ? 'Switch instrument' : 'Choose instrument'}
     >

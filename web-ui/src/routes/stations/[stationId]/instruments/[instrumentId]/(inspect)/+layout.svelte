@@ -168,7 +168,7 @@
 <Sidebar.Provider class="h-full min-h-0 overflow-hidden">
   <Sidebar.Root
     collapsible="none"
-    class="w-54 shrink-0 overflow-hidden border-r border-border"
+    class="w-50 shrink-0 overflow-hidden border-r border-border"
     role="navigation"
     aria-label={`${instrumentLabel} navigation`}
   >
@@ -239,7 +239,7 @@
   </Sidebar.Root>
 
   <main class="min-h-0 min-w-0 flex-1 overflow-hidden">
-    <div class="flex h-full min-h-0 flex-col gap-1">
+    <div class="flex h-full min-h-0 flex-col gap-1 bg-canvas">
       {#if breadcrumbItems.length > 0}
         <div class="shrink-0 px-4 pt-3">
           <LibraryBreadcrumb items={breadcrumbItems} />
