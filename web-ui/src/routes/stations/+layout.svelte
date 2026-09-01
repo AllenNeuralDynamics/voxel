@@ -164,10 +164,6 @@
           ? 'The station is closed'
           : 'Open instrument'
   );
-  /** Configuration issues remain visible while the instrument is offline; active state is conveyed by the controls. */
-  const instrumentStatusDot = $derived<{ tone: string; label: string } | null>(
-    instrumentHasIssue ? { tone: 'bg-danger', label: 'Configuration issue' } : null
-  );
   const operateRoot = $derived(instrumentPath(stationId, instrumentId));
 
   function operateRelativePath(pathname: string): string | null {
@@ -370,6 +366,7 @@
   );
   /** True when the current view is a workflow step — used to brighten the nav border. */
   const workflowActive = $derived(activeWorkflow !== null);
+  const instrumentNavActive = $derived(!!app.instrument && inspectSegment.highlighted);
 
   const previewModes: { mode: PreviewMode; label: string }[] = [
     { mode: 'live', label: 'Live' },
@@ -378,7 +375,6 @@
 
   // Pane sizes
   let shellRef = $state<HTMLElement | null>(null);
-  let instrumentControl = $state<HTMLElement | null>(null);
   const contentPane = createPaneSize(() => shellRef, {
     min: 45,
     default: 45,
@@ -468,42 +464,21 @@
     <PaneGroup direction="horizontal" autoSaveId="shell:frame" class="h-full w-full bg-surface text-fg">
       <Pane {...contentPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
         <header class="pane-header">
-          <!-- An instrument is in scope (open, or named in the URL) — offer the Inspect button. -->
-          {#if instrumentId}
-            <div
-              bind:this={instrumentControl}
-              class={cn(
-                '-ml-1 flex h-ui-md shrink items-stretch divide-x divide-border overflow-hidden rounded-md border transition-colors',
-                inspectSegment.highlighted ? 'border-border bg-element-selected' : 'border-border-faint'
-              )}
-            >
-              <InstrumentSelector
-                {stationId}
-                instrumentId={selectedInstrumentId || instrumentId}
-                anchor={instrumentControl}
-                disabled={instrumentTransition}
-                onselect={selectInstrument}
-              />
-              <button
-                type="button"
-                onclick={inspectSegment.select}
-                class={cn(
-                  'flex max-w-64 min-w-45 shrink items-center gap-2 px-2 transition-colors',
-                  inspectSegment.highlighted ? 'text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
-                )}
-                title={`Inspect ${displayName(instrumentId)}`}
-                aria-label={`Inspect ${displayName(instrumentId)}`}
-              >
-                <span class="truncate text-lg">{displayName(instrumentId)}</span>
-                {#if instrumentStatusDot}
-                  <span
-                    class={cn('size-1.5 shrink-0 rounded-full', instrumentStatusDot.tone)}
-                    title={instrumentStatusDot.label}
-                  >
-                    <span class="sr-only">{instrumentStatusDot.label}</span>
-                  </span>
-                {/if}
-              </button>
+          <div
+            class={cn(
+              '-ml-1 flex h-ui-md shrink items-stretch divide-x divide-border overflow-hidden rounded-md border transition-colors',
+              instrumentNavActive ? 'border-border bg-element-selected' : 'border-border-faint'
+            )}
+          >
+            <InstrumentSelector
+              {stationId}
+              instrumentId={instrumentId || null}
+              active={instrumentNavActive}
+              disabled={instrumentTransition}
+              oninspect={inspectSegment.select}
+              onselect={selectInstrument}
+            />
+            {#if instrumentId}
               {#if instrumentTransition}
                 <span
                   class="flex w-7 shrink-0 items-center justify-center text-fg-muted"
@@ -533,8 +508,8 @@
                   <Power width="14" height="14" />
                 </button>
               {/if}
-            </div>
-          {/if}
+            {/if}
+          </div>
           <!-- Stricter: the workflow steps need a loaded instrument, not just a name. -->
           {#if app.instrument}
             <div

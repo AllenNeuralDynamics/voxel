@@ -10,8 +10,8 @@
           'bg-transparent shadow-[0_0_0_1px_var(--border)] hover:bg-element-hover hover:text-fg hover:shadow-[0_0_0_1px_var(--border-focused)]'
       },
       size: {
-        default: 'h-ui-sm text-lg',
-        sm: 'h-ui-xs text-base',
+        default: 'h-ui-sm text-base',
+        sm: 'h-ui-xs text-sm',
         lg: 'h-ui-md text-lg group-data-[collapsible=icon]:p-0!'
       }
     },

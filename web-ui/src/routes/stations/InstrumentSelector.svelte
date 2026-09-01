@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
 
   import { Check, ChevronsUpDown } from '$lib/icons';
@@ -16,13 +15,14 @@
 
   interface Props {
     stationId: string;
-    instrumentId: string;
-    anchor?: HTMLElement | null;
+    instrumentId: string | null;
+    active?: boolean;
     disabled?: boolean;
+    oninspect: () => void;
     onselect: (stationId: string, instrumentId: string) => void;
   }
 
-  const { stationId, instrumentId, anchor = null, disabled = false, onselect }: Props = $props();
+  const { stationId, instrumentId, active = false, disabled = false, oninspect, onselect }: Props = $props();
   const app = getVoxelStation();
   const discoveries = new SvelteMap<string, StationDiscovery>();
   const snapshots = new SvelteMap<string, StationFeedView>();
@@ -32,6 +32,8 @@
   let loadError = $state<string | null>(null);
 
   const sortedStations = $derived([...stations].sort((left, right) => left.name.localeCompare(right.name)));
+  const currentInspection = $derived(instrumentId ? app.discovery.instruments[instrumentId] : undefined);
+  const currentHasIssue = $derived(currentInspection ? hasIssue(currentInspection) : false);
 
   function hasIssue(inspection: InstrumentInspection): boolean {
     return inspection.config.status !== 'loaded' || inspection.violations.length > 0;
@@ -76,62 +78,90 @@
       loading = false;
     }
   }
-
-  onMount(() => void load());
 </script>
 
-<DropdownMenu.Root onOpenChange={(open) => open && void load()}>
-  <DropdownMenu.Trigger
+{#if app.instrument}
+  <button
+    type="button"
     {disabled}
-    class="flex w-7 shrink-0 cursor-pointer items-center justify-center text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-    title="Choose instrument"
-    aria-label="Choose instrument"
+    onclick={oninspect}
+    class={cn(
+      'flex max-w-64 min-w-52 shrink items-center gap-2 px-2 text-left text-lg transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+      active ? 'text-fg' : 'text-fg-muted hover:bg-element-hover hover:text-fg'
+    )}
+    title={`Inspect ${displayName(instrumentId ?? app.activeName ?? 'instrument')}`}
+    aria-label={`Inspect ${displayName(instrumentId ?? app.activeName ?? 'instrument')}`}
   >
-    {#if loading && stations.length === 0}
-      <Spinner class="size-3.5" />
-    {:else}
-      <ChevronsUpDown width="14" height="14" />
+    <span class="min-w-0 flex-1 truncate">{displayName(instrumentId ?? app.activeName ?? 'Instrument')}</span>
+    {#if currentHasIssue}
+      <span class="size-1.5 shrink-0 rounded-full bg-danger" title="Configuration issue">
+        <span class="sr-only">Configuration issue</span>
+      </span>
     {/if}
-  </DropdownMenu.Trigger>
-  <DropdownMenu.Content customAnchor={anchor} align="start" class="w-(--bits-floating-anchor-width)">
-    {#each sortedStations as station, stationIndex (station.id)}
-      {#if stationIndex > 0}
-        <DropdownMenu.Separator />
+  </button>
+{:else}
+  <DropdownMenu.Root onOpenChange={(open) => open && void load()}>
+    <DropdownMenu.Trigger
+      {disabled}
+      class="flex max-w-64 min-w-52 shrink cursor-pointer items-center gap-2 px-2 text-left text-lg text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+      title={instrumentId ? 'Switch instrument' : 'Choose instrument'}
+      aria-label={instrumentId ? 'Switch instrument' : 'Choose instrument'}
+    >
+      <span class="min-w-0 flex-1 truncate">
+        {instrumentId ? displayName(instrumentId) : 'Choose Instrument'}
+      </span>
+      {#if currentHasIssue}
+        <span class="size-1.5 shrink-0 rounded-full bg-danger" title="Configuration issue">
+          <span class="sr-only">Configuration issue</span>
+        </span>
       {/if}
-      <DropdownMenu.Group>
-        {@const discovery = discoveries.get(station.id)}
-        <DropdownMenu.GroupHeading class="text-sm font-medium text-fg-muted">{station.name}</DropdownMenu.GroupHeading>
-        {#if discovery}
-          {#each Object.entries(discovery.instruments).sort( ([left], [right]) => left.localeCompare(right) ) as [name, inspection] (name)}
-            {@const selected = station.id === stationId && name === instrumentId}
-            {@const active = activeInstrument(station.id) === name}
-            {@const invalid = hasIssue(inspection)}
-            <DropdownMenu.Item class="text-base" onclick={() => onselect(station.id, name)}>
-              <span
-                class={cn(
-                  'size-1.5 shrink-0 rounded-full',
-                  invalid ? 'bg-danger' : active ? 'bg-success' : 'bg-fg-faint'
-                )}
-                aria-hidden="true"
-              ></span>
-              <span class="min-w-0 flex-1 truncate" title={displayName(name)}>{displayName(name)}</span>
-              {#if selected}
-                <Check class="size-4 text-fg" aria-label="Selected" />
-              {/if}
-            </DropdownMenu.Item>
-          {:else}
-            <DropdownMenu.Item disabled class="text-base">No instruments</DropdownMenu.Item>
-          {/each}
-        {:else if errors.has(station.id)}
-          <DropdownMenu.Item disabled class="text-base text-danger">Station unavailable</DropdownMenu.Item>
-        {:else}
-          <DropdownMenu.Item disabled class="text-base">Loading instruments…</DropdownMenu.Item>
+      {#if loading && stations.length === 0}
+        <Spinner class="size-3.5 shrink-0" />
+      {:else}
+        <ChevronsUpDown width="14" height="14" class="shrink-0" />
+      {/if}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="start" class="w-(--bits-floating-anchor-width)">
+      {#each sortedStations as station, stationIndex (station.id)}
+        {#if stationIndex > 0}
+          <DropdownMenu.Separator />
         {/if}
-      </DropdownMenu.Group>
-    {:else}
-      <DropdownMenu.Item disabled class={cn('text-base', loadError && 'text-danger')}>
-        {loading ? 'Loading stations…' : loadError ? 'Unable to load stations' : 'No stations'}
-      </DropdownMenu.Item>
-    {/each}
-  </DropdownMenu.Content>
-</DropdownMenu.Root>
+        <DropdownMenu.Group>
+          {@const discovery = discoveries.get(station.id)}
+          <DropdownMenu.GroupHeading class="text-sm font-medium text-fg-muted">{station.name}</DropdownMenu.GroupHeading
+          >
+          {#if discovery}
+            {#each Object.entries(discovery.instruments).sort( ([left], [right]) => left.localeCompare(right) ) as [name, inspection] (name)}
+              {@const selected = station.id === stationId && name === instrumentId}
+              {@const stationInstrumentActive = activeInstrument(station.id) === name}
+              {@const invalid = hasIssue(inspection)}
+              <DropdownMenu.Item class="text-base" onclick={() => onselect(station.id, name)}>
+                <span
+                  class={cn(
+                    'size-1.5 shrink-0 rounded-full',
+                    invalid ? 'bg-danger' : stationInstrumentActive ? 'bg-success' : 'bg-fg-faint'
+                  )}
+                  aria-hidden="true"
+                ></span>
+                <span class="min-w-0 flex-1 truncate" title={displayName(name)}>{displayName(name)}</span>
+                {#if selected}
+                  <Check class="size-4 text-fg" aria-label="Selected" />
+                {/if}
+              </DropdownMenu.Item>
+            {:else}
+              <DropdownMenu.Item disabled class="text-base">No instruments</DropdownMenu.Item>
+            {/each}
+          {:else if errors.has(station.id)}
+            <DropdownMenu.Item disabled class="text-base text-danger">Station unavailable</DropdownMenu.Item>
+          {:else}
+            <DropdownMenu.Item disabled class="text-base">Loading instruments…</DropdownMenu.Item>
+          {/if}
+        </DropdownMenu.Group>
+      {:else}
+        <DropdownMenu.Item disabled class={cn('text-base', loadError && 'text-danger')}>
+          {loading ? 'Loading stations…' : loadError ? 'Unable to load stations' : 'No stations'}
+        </DropdownMenu.Item>
+      {/each}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{/if}
