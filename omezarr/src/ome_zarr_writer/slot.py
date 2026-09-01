@@ -2,7 +2,7 @@
 
 `BatchSlot`'s worker does both halves of the batch pipeline: it reads the collected L0 frames from
 shared memory, builds the pyramid, and writes every level to the store itself. The main process only
-fills L0 (`add_frame`) and waits on the result — so the CPU/GIL-heavy compress+write never touches the
+fills reserved L0 destinations and waits on the result — so the CPU/GIL-heavy compress+write never touches the
 capture event loop. That's the whole point: overlap the flush with capture without starving it.
 
 Self-contained by design: there is no `get_volume` (the main process never reads the pyramid) and no
@@ -11,8 +11,9 @@ separate flush stage — downsample and write are one worker task.
     slot = BatchSlot(name="s0", shape_l0=..., max_level=ScaleLevel.L7, dtype=Dtype.UINT16)
     slot.bind_output(setup)              # once per dataset: worker opens one ArrayWriter per level
     slot.assign_batch(0)                 # IDLE → COLLECTING
-    for z, frame in enumerate(frames):
-        slot.add_frame(frame, z)
+    for frame in frames:
+        np.copyto(slot.frame_array(), frame)
+        slot.commit_frame()
     fut = slot.flush()                   # worker: downsample + write this batch to the store (async)
     result = fut.result()                # BatchResult(process/flush start+end timestamps, flushed_bytes)
     ...
@@ -64,7 +65,7 @@ _NUMBA_THREADS = max(1, min(int(os.environ.get("VOXEL_NUMBA_THREADS", "16")), _N
 
 def _prefault_zero(arr: np.ndarray) -> None:
     """Zero (and thereby commit) a freshly created SharedMemory-backed array, in parallel — so the
-    commit is paid here, off the capture path, rather than as page faults during add_frame."""
+    commit is paid here, off the capture path, rather than as page faults during frame population."""
     n = int(arr.shape[0])
     if arr.nbytes < _PREFAULT_MIN_BYTES or n <= 1 or _PREFAULT_WORKERS <= 1:
         arr.fill(0)
@@ -246,7 +247,8 @@ class BatchSlot:
         self.filled_l0 = 0
         self.batch_idx: int | None = None
 
-        self._lock = threading.Lock()
+        self._condition = threading.Condition()
+        self._active_readers = 0
         self._stage = SlotStage.IDLE  # explicit stage while no task is in flight (IDLE / COLLECTING)
         self._future: Future[BatchResult] | None = None  # set by flush(); stage derives from it
 
@@ -291,6 +293,17 @@ class BatchSlot:
             return SlotStage.PROCESSING
         return SlotStage.ERROR if fut.exception() is not None else SlotStage.IDLE
 
+    @property
+    def active_readers(self) -> int:
+        """Number of retained read-only frame views that still reference this slot."""
+        with self._condition:
+            return self._active_readers
+
+    @property
+    def reusable(self) -> bool:
+        """Whether the slot can be assigned a new batch without overwriting an active reader."""
+        return self.stage == SlotStage.IDLE and self.active_readers == 0
+
     def bind_output(self, setup: OutputSetup) -> None:
         """Open the worker's per-level writers for a dataset. Call once per dataset before the first
         batch; blocks until the writers are open."""
@@ -298,23 +311,65 @@ class BatchSlot:
 
     def assign_batch(self, batch_idx: int) -> None:
         """Prepare an IDLE (empty) slot to collect a new batch."""
-        if self.stage != SlotStage.IDLE:
-            raise ValueError(f"assign_batch requires an IDLE slot, got {self.stage.name}")
-        self._future = None
-        self._stage = SlotStage.COLLECTING
-        self.batch_idx = batch_idx
-        self.filled_l0 = 0
+        with self._condition:
+            if not self.reusable:
+                raise ValueError(
+                    f"assign_batch requires a reusable slot, got stage={self.stage.name}, "
+                    f"active_readers={self._active_readers}"
+                )
+            self._future = None
+            self._stage = SlotStage.COLLECTING
+            self.batch_idx = batch_idx
+            self.filled_l0 = 0
 
-    def add_frame(self, frame: np.ndarray, z_idx: int) -> None:
-        """Write one frame into the L0 buffer at ``z_idx`` (main process)."""
-        _, y0, x0 = self.shape_l0
-        if frame.shape != (y0, x0):
-            raise ValueError(f"Frame shape {frame.shape} does not match L0 frame {(y0, x0)}")
-        if z_idx < 0 or z_idx >= self.shape_l0.z:
-            raise IndexError(f"z_idx {z_idx} is outside L0 depth {self.shape_l0.z}")
-        with self._lock:
-            self._arrays[ScaleLevel.L0][z_idx, :y0, :x0] = frame.astype(self._dtype, copy=False)
-            self.filled_l0 = max(self.filled_l0, z_idx + 1)
+    def frame_array(self) -> np.ndarray:
+        """Return the next writable L0 frame destination while this slot is collecting."""
+        with self._condition:
+            if self.stage != SlotStage.COLLECTING:
+                raise RuntimeError(f"frame_array requires COLLECTING, got {self.stage.name}")
+            if self.filled_l0 >= self.shape_l0.z:
+                raise IndexError(f"slot is full at L0 depth {self.shape_l0.z}")
+            return self._arrays[ScaleLevel.L0][self.filled_l0]
+
+    def commit_frame(self) -> None:
+        """Mark a populated L0 frame as complete and visible to slot consumers."""
+        with self._condition:
+            if self.stage != SlotStage.COLLECTING:
+                raise RuntimeError(f"commit_frame requires COLLECTING, got {self.stage.name}")
+            if self.filled_l0 >= self.shape_l0.z:
+                raise IndexError(f"slot is full at L0 depth {self.shape_l0.z}")
+            self.filled_l0 += 1
+
+    def retain_last_frame(self) -> np.ndarray:
+        """Retain the most recently committed frame and prevent slot reuse until released."""
+        with self._condition:
+            if self.filled_l0 <= 0:
+                raise RuntimeError("cannot retain a slot with no committed frames")
+            self._active_readers += 1
+            frame = self._arrays[ScaleLevel.L0][self.filled_l0 - 1].view()
+            frame.flags.writeable = False
+            return frame
+
+    def abort_empty_batch(self) -> None:
+        """Return an empty collecting slot to IDLE after its first frame aborts."""
+        with self._condition:
+            if self.stage != SlotStage.COLLECTING or self.filled_l0 != 0:
+                raise RuntimeError("only an empty collecting slot can be aborted")
+            self._stage = SlotStage.IDLE
+            self.batch_idx = None
+
+    def release_reader(self) -> None:
+        """Release one retained frame view."""
+        with self._condition:
+            if self._active_readers <= 0:
+                raise RuntimeError("release_reader called with no active readers")
+            self._active_readers -= 1
+            self._condition.notify_all()
+
+    def wait_for_reader_change(self, timeout: float) -> None:
+        """Wait briefly for a retained reader to release, used when every ring slot is pinned."""
+        with self._condition:
+            self._condition.wait(timeout=timeout)
 
     def flush(self) -> Future[BatchResult]:
         """Flush the collected batch to the store: kick off the worker's downsample-and-write and return
@@ -330,6 +385,8 @@ class BatchSlot:
 
     def close(self) -> None:
         """Close the worker's writers, shut the worker down, then unlink the shared memory."""
+        with self._condition:
+            self._condition.wait_for(lambda: self._active_readers == 0)
         try:
             self._executor.submit(_worker_close_output).result()
         except Exception:

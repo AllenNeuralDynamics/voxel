@@ -10,7 +10,6 @@ import os
 import pickle
 from pathlib import Path
 
-import numpy as np
 import pytest
 from cloudpathlib import S3Path
 from ome_zarr_writer import DirectS3, S3Store, ScaleLevel, WriterConfig
@@ -88,7 +87,8 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
         for b in range(z // batch_z):
             slot.assign_batch(b)
             for i in range(batch_z):
-                slot.add_frame(np.full((y, x), b * batch_z + i + 1, dtype=np.uint16), i)
+                slot.frame_array().fill(b * batch_z + i + 1)
+                slot.commit_frame()
             result = slot.flush().result()  # waits for the worker's downsample + write
             assert result.flushed_bytes > 0
             assert result.process_started <= result.process_ended <= result.flush_ended
@@ -141,7 +141,8 @@ def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
         for b, slot in enumerate(slots):
             slot.assign_batch(b)
             for i in range(batch_z):
-                slot.add_frame(np.full((y, x), b * batch_z + i + 1, dtype=np.uint16), i)
+                slot.frame_array().fill(b * batch_z + i + 1)
+                slot.commit_frame()
         futures = [slot.flush() for slot in slots]
         results = [fut.result() for fut in futures]
         assert all(r.flushed_bytes > 0 for r in results)

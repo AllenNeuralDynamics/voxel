@@ -98,7 +98,6 @@ class HamamatsuCamera(Camera):
 
         self._serial = str(serial)
         self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
-        self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
         self._dropped_frames = 0
         self._pre_frame_time = 0.0
@@ -377,25 +376,19 @@ class HamamatsuCamera(Camera):
         self._pre_frame_count = 0
         self._cam.cap_start()
 
-    @describe(label="Grab Frame", desc="Grab a single frame from the camera buffer.")
-    def grab_frame(self) -> np.ndarray:
-        """Grab a frame from the camera buffer."""
+    def _grab_frame(self, out: np.ndarray) -> None:
+        """Copy one acquired SDK frame into the caller-owned destination."""
         timeout_ms = 1000
-        dtype = np.uint8 if self.pixel_format == "MONO8" else np.uint16
 
         try:
             if self._cam.wait_capevent_frameready(timeout_ms) is not False:
                 image = self._cam.buf_getlastframedata()
                 if image is not False:
-                    self._latest_frame = np.copy(image)
-                    return image
-        except Exception:
-            self.log.exception("Failed to grab frame")
-
-        # Return empty frame on failure
-        image = np.zeros((self.frame_size_px.y, self.frame_size_px.x), dtype=dtype)
-        self._latest_frame = image
-        return image
+                    np.copyto(out, image, casting="no")
+                    return
+        except Exception as exc:
+            raise RuntimeError("Failed to grab Hamamatsu frame") from exc
+        raise RuntimeError("Timed out waiting for a Hamamatsu frame")
 
     @describe(label="Stop", desc="Stop the camera acquisition.")
     def stop(self) -> None:

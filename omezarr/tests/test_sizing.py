@@ -7,7 +7,6 @@ production bugs, so both are pinned here.
 
 from pathlib import Path
 
-import numpy as np
 import pytest
 from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, WriterConfig
 from ome_zarr_writer.sizing import (
@@ -197,7 +196,8 @@ def test_sizer_is_optional_and_falls_back_to_constructor_slots(tmp_path: Path) -
         assert writer._ring is not None
         assert len(writer._ring) == MIN_SLOTS
         for i in range(cfg.volume_shape.z):
-            writer.add_frame(np.full((cfg.volume_shape.y, cfg.volume_shape.x), i + 1, dtype=np.uint16))
+            with writer.new_frame() as frame:
+                frame.fill(i + 1)
         writer.end_stack()
     finally:
         writer.close()

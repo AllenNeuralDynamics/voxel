@@ -184,10 +184,9 @@ class SimulatedCamera(Camera):
         frame_msg = f"{frame_count}" if frame_count else "infinite"
         self.log.debug("started, acquiring %s frames", frame_msg)
 
-    def grab_frame(self) -> np.ndarray:
-        """Grab a frame from the simulated camera.
+    def _grab_frame(self, out: np.ndarray) -> None:
+        """Populate one frame from the cached simulated-camera reference.
 
-        Returns the cached reference frame for each grab.
         Simulates real camera behavior by blocking until next frame is ready based on frame_rate_hz.
 
         Raises:
@@ -229,9 +228,8 @@ class SimulatedCamera(Camera):
         reference_frame = self._reference_frame
         if reference_frame is None:
             raise RuntimeError("Reference frame not generated. Call start() first.")
-        frame = reference_frame.copy()
+        np.copyto(out, reference_frame, casting="no")
         self._frame_count += 1
-        return frame
 
     def stop(self) -> None:
         """Stop the simulated camera."""

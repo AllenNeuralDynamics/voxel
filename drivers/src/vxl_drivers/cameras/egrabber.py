@@ -330,8 +330,8 @@ class VieworksCamera(Camera):
         raw = self._dev.remote.get("AcquisitionStatus", dtype=str)
         self.log.debug("AcquisitionStatus: %s", raw)
 
-    def grab_frame(self) -> np.ndarray:
-        """Grab a frame from the camera buffer."""
+    def _grab_frame(self, out: np.ndarray) -> None:
+        """Copy one acquired SDK buffer directly into the caller-owned destination."""
         # Note: creating the buffer and then "pushing" it at the end has the
         #   effect of moving the internal camera frame buffer from the output
         #   pool back to the input pool, so it can be reused.
@@ -356,7 +356,7 @@ class VieworksCamera(Camera):
             buffer_size = column_count * row_count * bytes_per_pixel
             data = ct.cast(ptr, ct.POINTER(ct.c_ubyte * buffer_size)).contents
             frame = np.frombuffer(data, count=column_count * row_count, dtype=self.pixel_type.dtype)
-            return frame.reshape((row_count, column_count)).copy()
+            np.copyto(out, frame.reshape((row_count, column_count)), casting="no")
 
     def stop(self) -> None:
         """Stop the camera from acquiring frames."""

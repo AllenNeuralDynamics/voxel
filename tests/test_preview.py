@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 
 import numpy as np
+from ome_zarr_writer import FrameLease
 
 from vxl.preview import LatestFrameQueue, PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
 from vxl.preview.generator import RENDER_CAP
@@ -36,20 +37,15 @@ def test_expanded_grows_and_clamps() -> None:
 
 async def test_viewport_emitted_when_zoomed() -> None:
     captured: list[PreviewFrame] = []
-    gen = _gen(sink=captured.append)
+    gen = _gen(sink=captured.append, viewport=PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5))
     try:
-        await gen._schedule_viewport(
-            _frame(),
-            1,
-            PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5),
-            valid_bits=16,
-            source_stream_id="stream-1",
-        )
+        gen.submit_frame(_frame(), 1)
+        assert gen._viewport_task is not None
+        await gen._viewport_task
     finally:
         gen.close()
 
-    assert len(captured) == 1
-    view = captured[0]
+    view = next(frame for frame in captured if frame.header.layer is PreviewLayer.VIEWPORT)
     assert view.header.layer is PreviewLayer.VIEWPORT
     assert view.header.source_rect_px.width > 1000  # includes overscan beyond the requested half-sensor viewport
     assert view.header.width <= RENDER_CAP
@@ -60,17 +56,14 @@ async def test_no_viewport_frame_at_full_viewport() -> None:
     captured: list[PreviewFrame] = []
     gen = _gen(sink=captured.append)
     try:
-        await gen._schedule_viewport(
-            _frame(),
-            1,
-            PreviewViewport(),
-            valid_bits=16,
-            source_stream_id="stream-1",
-        )
+        gen.submit_frame(_frame(), 1)
+        assert gen._viewport_task is None
+        assert gen._overview_future is not None
+        await gen._overview_future
     finally:
         gen.close()
 
-    assert captured == []
+    assert all(frame.header.layer is not PreviewLayer.VIEWPORT for frame in captured)
 
 
 async def test_latest_frame_queue_replaces_only_the_matching_pending_stream() -> None:
@@ -91,6 +84,7 @@ async def test_latest_frame_queue_replaces_only_the_matching_pending_stream() ->
 
 async def test_overview_and_viewport_share_capture_identity_and_resize_exactly() -> None:
     captured: list[PreviewFrame] = []
+    released: list[bool] = []
     frame = _frame(w=230, h=180)
     gen = _gen(
         sink=captured.append,
@@ -99,7 +93,7 @@ async def test_overview_and_viewport_share_capture_identity_and_resize_exactly()
         viewport=PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5),
     )
     try:
-        gen.submit_frame(frame, 42)
+        gen.submit_frame(FrameLease(frame, lambda: released.append(True)), 42)
         assert gen._overview_future is not None
         assert gen._viewport_task is not None
         await gen._overview_future
@@ -107,6 +101,7 @@ async def test_overview_and_viewport_share_capture_identity_and_resize_exactly()
     finally:
         gen.close()
 
+    assert released == [True]
     by_layer = {source.header.layer: source for source in captured}
     overview = by_layer[PreviewLayer.OVERVIEW]
     viewport = by_layer[PreviewLayer.VIEWPORT]

@@ -76,7 +76,6 @@ class XimeaCamera(Camera):
 
         self._serial = str(serial)
         self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
-        self._latest_frame: np.ndarray | None = None
         self._buffer_size_frames = 0
 
         # Initialize camera
@@ -283,19 +282,14 @@ class XimeaCamera(Camera):
         self.log.info("Starting camera acquisition")
         self._camera.start_acquisition()
 
-    @describe(label="Grab Frame", desc="Grab a single frame from the camera buffer.")
-    def grab_frame(self) -> np.ndarray:
-        """Grab a frame from the camera buffer."""
+    def _grab_frame(self, out: np.ndarray) -> None:
+        """Copy one acquired SDK frame into the caller-owned destination."""
         try:
             self._camera.get_image(self._image)
             image = self._image.get_image_data_numpy()
-        except Exception:
-            self.log.exception("Failed to grab frame")
-            dtype = np.uint8 if self.pixel_format == "MONO8" else np.uint16
-            image = np.zeros((self.frame_size_px.y, self.frame_size_px.x), dtype=dtype)
-
-        self._latest_frame = np.copy(image)
-        return image
+        except Exception as exc:
+            raise RuntimeError("Failed to grab Ximea frame") from exc
+        np.copyto(out, image, casting="no")
 
     @describe(label="Stop", desc="Stop the camera acquisition.")
     def stop(self) -> None:

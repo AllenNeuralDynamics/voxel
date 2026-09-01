@@ -10,7 +10,6 @@ Marked `slow` — excluded from pre-push, run in CI; skips when Docker is unavai
 
 from pathlib import Path
 
-import numpy as np
 import pytest
 from cloudpathlib import S3Path
 from conftest import Minio
@@ -53,7 +52,8 @@ def test_s3_roundtrip(minio: Minio, kind: str, tmp_path: Path, monkeypatch: pyte
     writer = OMEZarrWriter(slots=3)
     writer.begin_stack(cfg, _storage(kind, tmp_path, minio))
     for i in range(z):
-        writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
+        with writer.new_frame() as frame:
+            frame.fill(i + 1)
     writer.close()
 
     # Objects landed in S3: group + level metadata and L0 shards.
@@ -91,7 +91,8 @@ def test_s3_roundtrip_zarrs_backend(
     writer = OMEZarrWriter(backend=ArrayWriter.Backend.ZARRS, slots=3)
     writer.begin_stack(cfg, DirectS3(target=S3Path(f"s3://{minio.bucket}/zarrs"), store=minio.store()))
     for i in range(z):
-        writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
+        with writer.new_frame() as frame:
+            frame.fill(i + 1)
     writer.close()
 
     arr = TSArrayReader(S3Path(f"s3://{minio.bucket}/zarrs.ome.zarr/0"), minio.store()).read_3d(z0=0, n=z)

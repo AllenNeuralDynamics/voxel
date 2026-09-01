@@ -393,8 +393,9 @@ def run_combo(
     for batch_idx in range(batches):
         block = blocks[batch_idx % len(blocks)]  # rotate through the distinct real-data samples
         for i in range(BATCH_SIZE):
-            writer.add_frame(block[i])
-            next_t += interval  # pace at fps; if the writer back-pressures, add_frame runs long and we fall behind
+            with writer.new_frame() as frame:
+                frame[...] = block[i]
+            next_t += interval  # pace at fps; if the writer back-pressures, new_frame runs long and we fall behind
             delay = next_t - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)

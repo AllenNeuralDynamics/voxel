@@ -76,7 +76,8 @@ The write bench renders a **curated standalone HTML report** — no server, no c
 
 ```bash
 uv run -m bench.sync pull             # optional: pull other machines' results first
-uv run -m bench.write.report --open   # writes results/write/report.html and opens it
+
+   # writes results/write/report.html and opens it
 ```
 
 It contains a summary table plus fixed, meaningful plotly figures: throughput vs shard size (by codec),

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,7 @@ from functools import partial
 from uuid import uuid4
 
 import numpy as np
+from ome_zarr_writer import FrameLease
 
 from .protocol import PreviewFrame, PreviewLayer, PreviewViewport, ValidBits
 
@@ -65,6 +67,34 @@ type _OverviewFuture = asyncio.Future[PreviewFrame]
 type _Sink = Callable[[PreviewFrame], None]
 
 
+class _PreviewSource:
+    """One full-resolution source whose final release closes an optional writer lease."""
+
+    def __init__(self, frame: np.ndarray | FrameLease) -> None:
+        self.array = frame.array if isinstance(frame, FrameLease) else frame
+        self._lease = frame if isinstance(frame, FrameLease) else None
+        self._references = 1
+        self._lock = threading.Lock()
+
+    def retain(self) -> "_PreviewSource":
+        with self._lock:
+            if self._references <= 0:
+                raise RuntimeError("preview source is closed")
+            self._references += 1
+        return self
+
+    def release(self) -> None:
+        lease: FrameLease | None = None
+        with self._lock:
+            if self._references <= 0:
+                raise RuntimeError("preview source released too many times")
+            self._references -= 1
+            if self._references == 0:
+                lease, self._lease = self._lease, None
+        if lease is not None:
+            lease.close()
+
+
 class PreviewGenerator:
     """Generates the overview frame and the zoomed viewport image from raw camera frames.
 
@@ -89,7 +119,7 @@ class PreviewGenerator:
         self._frame_idx: int = 0
         self._source_stream_id = uuid4().hex
         self._work_epoch = 0
-        self._current_frame: np.ndarray | None = None
+        self._current_source: _PreviewSource | None = None
         self._current_valid_bits: ValidBits = 16
 
         self._viewport_task: asyncio.Task[None] | None = None
@@ -101,9 +131,9 @@ class PreviewGenerator:
 
     def set_viewport(self, viewport: PreviewViewport, *, regenerate: bool = False) -> asyncio.Task[None] | None:
         self._viewport = viewport
-        if regenerate and self._current_frame is not None:
+        if regenerate and self._current_source is not None:
             return self._schedule_viewport(
-                self._current_frame,
+                self._current_source,
                 self._frame_idx,
                 viewport,
                 valid_bits=self._current_valid_bits,
@@ -111,7 +141,7 @@ class PreviewGenerator:
             )
         return None
 
-    def submit_frame(self, frame: np.ndarray, idx: int, *, valid_bits: ValidBits = 16) -> None:
+    def submit_frame(self, frame: np.ndarray | FrameLease, idx: int, *, valid_bits: ValidBits = 16) -> None:
         """Process a new raw frame: dispatch overview and viewport work in the background.
 
         The viewport uses cancel-stale (latest viewport invalidates prior work). Overview
@@ -119,13 +149,15 @@ class PreviewGenerator:
         frame's preview rather than queueing. Returns immediately so callers
         (preview loop, acquisition grab loop) are not gated by preview work.
         """
+        source = _PreviewSource(frame)
+        previous = self._current_source
         self._frame_idx = idx
-        self._current_frame = frame
+        self._current_source = source
         self._current_valid_bits = valid_bits
         source_stream_id = self._source_stream_id
 
         self._schedule_viewport(
-            frame,
+            source,
             idx,
             self._viewport,
             valid_bits=valid_bits,
@@ -137,11 +169,11 @@ class PreviewGenerator:
             gen_start = time.perf_counter()
             work_epoch = self._work_epoch
             loop = asyncio.get_running_loop()
-            self._overview_future = loop.run_in_executor(
-                self._overview_executor,
+            overview_source = source.retain()
+            concurrent_future = self._overview_executor.submit(
                 partial(
                     PreviewFrame.from_source,
-                    frame,
+                    overview_source.array,
                     camera_id=self._camera_id,
                     source_stream_id=source_stream_id,
                     layer=PreviewLayer.OVERVIEW,
@@ -151,6 +183,8 @@ class PreviewGenerator:
                     valid_bits=valid_bits,
                 ),
             )
+            concurrent_future.add_done_callback(lambda _: overview_source.release())
+            self._overview_future = asyncio.wrap_future(concurrent_future, loop=loop)
             self._overview_future.add_done_callback(
                 partial(
                     self._on_overview_done,
@@ -161,13 +195,21 @@ class PreviewGenerator:
             )
         else:
             self.health.record_overview_drop()  # Gate 1 drop: prior overview still generating
+        if previous is not None:
+            previous.release()
 
     def reset_stream(self) -> str:
         """Start and return a new camera capture identity."""
         self.cancel_pending()
-        self._current_frame = None
+        self.clear_frame()
         self._source_stream_id = uuid4().hex
         return self._source_stream_id
+
+    def clear_frame(self) -> None:
+        """Release the retained latest full-resolution source without changing stream identity."""
+        source, self._current_source = self._current_source, None
+        if source is not None:
+            source.release()
 
     def cancel_pending(self) -> None:
         """Cancel preview work without shutting down the reusable worker executors."""
@@ -180,6 +222,7 @@ class PreviewGenerator:
     def close(self) -> None:
         """Shutdown the preview generator and cleanup resources."""
         self.cancel_pending()
+        self.clear_frame()
         self._overview_executor.shutdown(wait=False, cancel_futures=True)
         self._viewport_executor.shutdown(wait=False, cancel_futures=True)
 
@@ -191,41 +234,45 @@ class PreviewGenerator:
 
     def _schedule_viewport(
         self,
-        frame: np.ndarray,
+        source: _PreviewSource,
         frame_idx: int,
         viewport: PreviewViewport,
         *,
         valid_bits: ValidBits,
         source_stream_id: str,
-    ) -> asyncio.Task[None]:
+    ) -> asyncio.Task[None] | None:
         work_epoch = self._work_epoch
+        self._cancel_viewport_task()
+
+        if not viewport.needs_adjustment:
+            return None
+
+        render_viewport = viewport.expanded(OVERSCAN_MARGIN)
+        viewport_source = source.retain()
+        concurrent_future = self._viewport_executor.submit(
+            partial(
+                PreviewFrame.from_source,
+                viewport_source.array,
+                camera_id=self._camera_id,
+                source_stream_id=source_stream_id,
+                layer=PreviewLayer.VIEWPORT,
+                frame_idx=frame_idx,
+                viewport=render_viewport,
+                target_width=RENDER_CAP,
+                valid_bits=valid_bits,
+            )
+        )
+        concurrent_future.add_done_callback(lambda _: viewport_source.release())
 
         async def generate_and_send() -> None:
-            if not viewport.needs_adjustment:
-                return
-            render_viewport = viewport.expanded(OVERSCAN_MARGIN)
             try:
-                viewport_frame = await asyncio.get_running_loop().run_in_executor(
-                    self._viewport_executor,
-                    partial(
-                        PreviewFrame.from_source,
-                        frame,
-                        camera_id=self._camera_id,
-                        source_stream_id=source_stream_id,
-                        layer=PreviewLayer.VIEWPORT,
-                        frame_idx=frame_idx,
-                        viewport=render_viewport,
-                        target_width=RENDER_CAP,
-                        valid_bits=valid_bits,
-                    ),
-                )
+                viewport_frame = await asyncio.wrap_future(concurrent_future)
             except asyncio.CancelledError:
                 return
             if work_epoch != self._work_epoch:
                 return
             self._sink(viewport_frame)
 
-        self._cancel_viewport_task()
         task = asyncio.create_task(generate_and_send())
         self._viewport_task = task
         return task

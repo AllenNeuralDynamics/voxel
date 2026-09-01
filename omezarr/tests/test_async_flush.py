@@ -7,6 +7,7 @@ per-frame values mean any reuse-before-flush would corrupt the read-back, so a g
 the invariant holds while flush overlaps capture.
 """
 
+from concurrent.futures import Future
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,8 @@ def test_OMEZarrWriter_async_flush_wrapping_ring_roundtrip(tmp_path: Path) -> No
     writer = OMEZarrWriter(slots=2)  # BatchSlot (process) — worker does downsample + write off the main GIL
     writer.begin_stack(cfg, Local(target=tmp_path / "v2"))
     for i in range(z):
-        writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
+        with writer.new_frame() as frame:
+            frame.fill(i + 1)
     writer.end_stack()
     writer.close()
 
@@ -55,7 +57,8 @@ def test_OMEZarrWriter_reuses_ring_across_stacks(tmp_path: Path) -> None:  # noq
     for stack, base in (("a", 1), ("b", 1000)):
         writer.begin_stack(cfg, Local(target=tmp_path / stack))
         for i in range(z):
-            writer.add_frame(np.full((y, x), base + i, dtype=np.uint16))
+            with writer.new_frame() as frame:
+                frame.fill(base + i)
         writer.end_stack()
     writer.close()
 
@@ -63,3 +66,79 @@ def test_OMEZarrWriter_reuses_ring_across_stacks(tmp_path: Path) -> None:  # noq
         arr = _read_l0(tmp_path / stack, z)
         assert int(arr[0].max()) == base, stack
         assert int(arr[z - 1].max()) == base + z - 1, stack
+
+
+@pytest.mark.slow
+def test_frame_abort_does_not_advance(tmp_path: Path) -> None:
+    cfg = WriterConfig(
+        volume_shape=UIVec3D(z=1, y=64, x=64),
+        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        max_level=ScaleLevel.L0,
+    )
+    writer = OMEZarrWriter(slots=2)
+    writer.begin_stack(cfg, Local(target=tmp_path / "abort"))
+    with pytest.raises(ValueError, match="could not broadcast"), writer.new_frame() as abandoned:
+        np.copyto(abandoned, np.empty(0, dtype=np.uint16))
+    assert writer._ring is not None
+    assert all(slot.reusable for slot in writer._ring)
+    with writer.new_frame() as frame:
+        frame.fill(7)
+    writer.end_stack()
+    writer.close()
+
+    assert int(_read_l0(tmp_path / "abort", 1)[0].max()) == 7
+
+
+@pytest.mark.slow
+def test_retained_frame_prevents_slot_reuse_after_processing(tmp_path: Path) -> None:
+    cfg = WriterConfig(
+        volume_shape=UIVec3D(z=1, y=64, x=64),
+        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        max_level=ScaleLevel.L0,
+    )
+    writer = OMEZarrWriter(slots=2)
+    writer.begin_stack(cfg, Local(target=tmp_path / "retained"))
+    with writer.new_frame() as frame:
+        frame.fill(11)
+    lease = writer.latest_frame()
+    writer.end_stack()
+
+    assert writer._ring is not None
+    retained_slot = next(slot for slot in writer._ring if slot.active_readers)
+    assert retained_slot.stage.name == "IDLE"
+    assert not retained_slot.reusable
+    assert not lease.array.flags.writeable
+    lease.close()
+    assert retained_slot.reusable
+    writer.close()
+
+
+@pytest.mark.slow
+def test_flush_failure_poisoning_is_sticky(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = WriterConfig(
+        volume_shape=UIVec3D(z=1, y=64, x=64),
+        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        max_level=ScaleLevel.L0,
+    )
+    writer = OMEZarrWriter(slots=2)
+    dataset = writer.begin_stack(cfg, Local(target=tmp_path / "failed"))
+    failed: Future[None] = Future()
+    failed.set_exception(RuntimeError("flush failed"))
+    monkeypatch.setattr(dataset._ring[0], "flush", lambda: failed)
+
+    with writer.new_frame() as frame:
+        frame.fill(1)
+    lease = writer.latest_frame()
+    with pytest.raises(RuntimeError, match="flush failed"):
+        dataset.close()
+
+    assert not dataset.ready_for_batch
+    with pytest.raises(RuntimeError, match="cannot continue"), dataset.new_frame():
+        pass
+    with pytest.raises(RuntimeError, match="flush failed"):
+        writer.end_stack()
+    assert writer._ring is not None
+    assert writer._ring_failed
+
+    lease.close()
+    writer.close()

@@ -47,8 +47,8 @@ def main() -> None:
     writer.begin_stack(config, Local(target=Path("experiment/stack")))
     try:
         for z in range(config.volume_shape.z):
-            frame = np.full((config.volume_shape.y, config.volume_shape.x), z, dtype=np.uint16)
-            writer.add_frame(frame)
+            with writer.new_frame() as frame:
+                frame.fill(z)
     finally:
         writer.close()
 
@@ -75,9 +75,12 @@ flowchart TD
     scratch -->|s5cmd upload| s3
 ```
 
-`add_frame()` normally returns after copying into the collecting slot. When every slot is processing, the next batch
-boundary waits for a slot to become reusable. This bounded backpressure prevents the writer from consuming unlimited
-memory or local scratch space.
+`new_frame()` commits its writable slot on clean context exit and aborts it if the block raises. When every slot is
+processing or retained by a reader, the next frame waits for a slot to become reusable. This bounded
+backpressure prevents the writer from consuming unlimited memory or local scratch space.
+
+`latest_frame()` returns a read-only `FrameLease` for the most recently committed frame. Close the lease when the
+reader is finished so its ring slot can be reused.
 
 The ring is reused when batch shape, pyramid depth, and dtype still match. A geometry change releases it and allocates
 a replacement before opening the next stack.

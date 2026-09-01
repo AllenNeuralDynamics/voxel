@@ -38,7 +38,8 @@ def write_volume(storage: Storage) -> None:
     writer = OMEZarrWriter(slots=3)
     writer.begin_stack(cfg, storage)
     for i in range(z):
-        writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))
+        with writer.new_frame() as frame:
+            frame.fill(i + 1)
     writer.close()
     print(f"wrote {z} frames to {_as_ome_zarr(storage.target)}")
 

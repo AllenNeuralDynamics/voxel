@@ -10,6 +10,7 @@ from typing import Literal, cast
 
 import numpy as np
 from ome_zarr_writer import (
+    FrameLease,
     OMEZarrWriter,
     UIVec3D,
     UVec3D,
@@ -243,7 +244,7 @@ class CameraController(DeviceController["Camera"]):
     async def _preview_loop(self):
         try:
             while self._mode == CameraMode.PREVIEW:
-                frame = await self._run_sync(self.device.grab_frame)
+                frame = await self._run_sync(self.device.grab_frame_owned)
                 self._previewer.submit_frame(
                     frame,
                     idx=self._frame_idx,
@@ -407,9 +408,9 @@ class CameraController(DeviceController["Camera"]):
     async def _close_stack(self) -> None:
         """Flush and close the writer, then reset the camera to a reusable IDLE state.
 
-        The camera is always reset even if ``writer.close()`` raises (e.g. a flush error): the writer is
-        dropped, the buffer freed, and the mode returned to IDLE in a ``finally``, so a close failure
-        can't wedge the camera into "Stack already open" on the next run.
+        The camera is always reset even if ``writer.end_stack()`` raises. A failed writer ring remains
+        owned but poisoned until preview releases its readers; the next stack or :meth:`release_writer`
+        then replaces it safely.
         """
         self._previewer.cancel_pending()
         try:
@@ -447,6 +448,8 @@ class CameraController(DeviceController["Camera"]):
         if self._task is not None and not self._task.done():
             raise RuntimeError("Cannot release writer while a capture task is in progress.")
         if self._writer is not None:
+            self._previewer.cancel_pending()
+            self._previewer.clear_frame()
             await self._run_sync(self._writer.close)
             self._writer = None
             log.info("Writer ring released for %s", self.device.uid)
@@ -496,15 +499,37 @@ class CameraController(DeviceController["Camera"]):
     async def _collect_batch(self, num_frames: int, writer: OMEZarrWriter) -> None:
         """Grab ``num_frames`` frames into the writer, then stop the camera."""
         for _ in range(num_frames):
-            frame = await self._run_sync(self.device.grab_frame)
-            writer.add_frame(frame)
-            self._previewer.submit_frame(
-                frame,
-                self._frame_idx,
-                valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))],
-            )
+            frame = await self._capture_into_writer(writer)
+            try:
+                self._previewer.submit_frame(
+                    frame,
+                    self._frame_idx,
+                    valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))],
+                )
+            except Exception:
+                frame.close()
+                raise
             self._frame_idx += 1
         await self._run_sync(self.device.stop)
+
+    async def _capture_into_writer(self, writer: OMEZarrWriter) -> FrameLease:
+        """Fill and commit one writer frame as one serialized, cancellation-safe device transaction."""
+
+        def _grab() -> FrameLease:
+            with writer.new_frame() as frame:
+                self.device.grab_frame(out=frame)
+            return writer.latest_frame()
+
+        task = asyncio.create_task(self._run_sync(_grab))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # run_in_executor work cannot be stopped once running. Wait for the transaction to settle so
+            # its destination is not reused mid-write, then release a committed frame nobody will consume.
+            with suppress(Exception):
+                frame = await task
+                frame.close()
+            raise
 
     @describe(label="Capture State")
     async def capture_state(self) -> CaptureState:
@@ -735,19 +760,32 @@ class Camera(Device):
         self._configure_trigger_polarity(self.trigger_polarity)
         self._start(frame_count)
 
+    def grab_frame(self, *, out: np.ndarray) -> None:
+        """Populate a validated caller-owned frame destination."""
+        expected_shape = (self.frame_size_px.y, self.frame_size_px.x)
+        expected_dtype = np.dtype(self.pixel_type.dtype)
+        if out.shape != expected_shape:
+            raise ValueError(f"Frame destination shape {out.shape} does not match {expected_shape}")
+        if out.dtype != expected_dtype:
+            raise TypeError(f"Frame destination dtype {out.dtype} does not match {expected_dtype}")
+        if not out.flags.c_contiguous:
+            raise ValueError("Frame destination must be C-contiguous")
+        if not out.flags.writeable:
+            raise ValueError("Frame destination must be writable")
+        if not out.dtype.isnative:
+            raise ValueError("Frame destination must use native byte order")
+        self._grab_frame(out)
+
+    def grab_frame_owned(self) -> np.ndarray:
+        """Allocate, populate, and return one independently owned frame."""
+        size = self.frame_size_px
+        frame = np.empty((size.y, size.x), dtype=self.pixel_type.dtype)
+        self.grab_frame(out=frame)
+        return frame
+
     @abstractmethod
-    def grab_frame(self) -> np.ndarray:
-        """Grab a frame from the camera buffer.
-
-        If binning is via software, the GPU binned
-        image is computed and returned.
-
-        Returns:
-            The camera frame of size (height, width).
-
-        Raises:
-            RuntimeError: If the camera is not started.
-        """
+    def _grab_frame(self, out: np.ndarray) -> None:
+        """Driver primitive that fills a validated destination completely or raises."""
 
     @abstractmethod
     def stop(self) -> None:

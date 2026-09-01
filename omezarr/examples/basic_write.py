@@ -7,7 +7,6 @@ back with `TSArrayReader` and checks the per-frame content.
 import tempfile
 from pathlib import Path
 
-import numpy as np
 from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, UIVec3D, UVec3D, WriterConfig
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.writer import _as_ome_zarr
@@ -29,7 +28,8 @@ def main(directory: Path | None = None, filename: str = "stack") -> None:
     writer = OMEZarrWriter(slots=3)
     writer.begin_stack(cfg, storage)
     for i in range(z):
-        writer.add_frame(np.full((y, x), i + 1, dtype=np.uint16))  # frame i holds value i+1
+        with writer.new_frame() as frame:
+            frame.fill(i + 1)  # frame i holds value i+1
     writer.close()
 
     dataset = _as_ome_zarr(storage.target)  # writer.target is None after close(); derive from the storage

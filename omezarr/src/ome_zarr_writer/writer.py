@@ -14,8 +14,9 @@ The module provides two objects:
     writer = OMEZarrWriter(slots=5)
     for config, storage in volumes:
         writer.begin_stack(config, storage)
-        for frame in frames:
-            writer.add_frame(frame)
+        for source in frames:
+            with writer.new_frame() as frame:
+                np.copyto(frame, source)
         writer.end_stack()
     writer.close()
 """
@@ -25,7 +26,7 @@ import logging
 import math
 import threading
 from collections.abc import Callable, Generator, Iterator
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -290,11 +291,42 @@ class Ring:
         return self.slots[idx]
 
 
+class FrameLease:
+    """Read-only access to one committed frame that prevents its batch slot from being reused."""
+
+    def __init__(self, array: np.ndarray, release: Callable[[], None]) -> None:
+        self._array = array.view()
+        self._array.flags.writeable = False
+        self._release: Callable[[], None] | None = release
+        self._lock = threading.Lock()
+
+    @property
+    def array(self) -> np.ndarray:
+        """The retained read-only frame view."""
+        with self._lock:
+            if self._release is None:
+                raise RuntimeError("frame lease is closed")
+            return self._array
+
+    def close(self) -> None:
+        """Release retained access. Idempotent and safe to call from a consumer thread."""
+        with self._lock:
+            release, self._release = self._release, None
+        if release is not None:
+            release()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
 class DatasetWriter:
     """Writes one multiscale OME-Zarr dataset (a single stack + channel) from a frame stream, using a
     ring of :class:`BatchSlot`s supplied by the caller.
 
-    Frames are ingested via :meth:`add_frame`; each fills the current slot until a batch is complete,
+    Frames are ingested via :meth:`new_frame`; each frame fills the current slot until a batch is complete,
     then the slot's worker downsamples **and** writes that batch to the store — off the main process, so
     the compress+write never contends with the caller's capture loop. The main process only feeds frames
     and waits on the per-batch flush futures (for slot reuse and at close). The ring is borrowed: the
@@ -371,10 +403,13 @@ class DatasetWriter:
         self._inflight: dict[int, tuple[int, Future[BatchResult]]] = {}
 
         # Pipeline cursor for this dataset. Batch assignment is lazy — the first frame of each batch
-        # promotes the current slot from IDLE to COLLECTING (see add_frame).
+        # promotes one reusable slot from IDLE to COLLECTING (see new_frame).
         self._frames_added = 0
-        self._next_batch_idx = 0
-        self._current_slot = 0
+        self._current_slot: int | None = None
+        self._next_slot_hint = 0
+        self._frame_open = False
+        self._latest_slot: BatchSlot | None = None
+        self._failure: BaseException | None = None
         self._batches = BatchMetrics.create_many(self._volume_z, self._batch_z)  # one record per batch, by index
 
     @property
@@ -384,52 +419,145 @@ class DatasetWriter:
 
     @property
     def ready_for_batch(self) -> bool:
-        """Whether the next batch can be collected without blocking: at least one ring slot is IDLE."""
-        return any(slot.stage == SlotStage.IDLE for slot in self._ring)
+        """Whether another frame can be accepted without waiting for processing or retained readers."""
+        if self._failure is not None:
+            return False
+        if self._current_slot is not None:
+            slot = self._ring[self._current_slot]
+            if slot.stage == SlotStage.COLLECTING and slot.filled_l0 < self._batch_z:
+                return True
+        return any(slot.reusable for slot in self._ring)
 
     @property
     def batches(self) -> list[BatchMetrics]:
         """The per-batch metrics records for this dataset, indexed by batch."""
         return self._batches
 
-    def add_frame(self, frame: np.ndarray) -> None:
-        """Add one frame. On a batch boundary, hand the filled batch to its slot's worker to downsample
-        and write, then rotate to the next slot (waiting if that slot's flush hasn't finished)."""
+    @contextmanager
+    def new_frame(self) -> Generator[np.ndarray]:
+        """Yield the next writable destination, committing on clean exit and aborting if the block raises."""
+        self._raise_if_failed()
+        if self._frame_open:
+            raise RuntimeError("a frame is already open")
         if self._frames_added >= self._volume_z:
             raise RuntimeError(f"volume complete: {self._frames_added}/{self._volume_z} frames")
+        if self._current_slot is None:
+            self._assign_collecting_slot()
+        if self._current_slot is None:  # pragma: no cover - narrowed by _assign_collecting_slot
+            raise RuntimeError("writer did not assign a collecting slot")
         slot = self._ring[self._current_slot]
-        if slot.stage == SlotStage.IDLE:  # first frame of a new batch
-            slot.assign_batch(self._next_batch_idx)
-            self._batches[self._next_batch_idx].collecting.begin()
-            self._next_batch_idx += 1
-        if slot.batch_idx is None:  # narrowing: assigned above, or on a prior frame of this batch
-            raise RuntimeError("slot has no batch assigned")
-        slot.add_frame(frame, self._frames_added % self._batch_z)
+        frame = slot.frame_array()
+        self._frame_open = True
+        try:
+            yield frame
+        except BaseException:
+            self._abort_frame()
+            raise
+        else:
+            self._commit_frame()
+        finally:
+            frame.flags.writeable = False
+
+    def latest_frame(self) -> FrameLease:
+        """Retain read-only access to the latest committed frame until the returned lease closes."""
+        self._raise_if_failed()
+        if self._frame_open:
+            raise RuntimeError("cannot lease the latest frame while a frame is open")
+        if self._latest_slot is None:
+            raise RuntimeError("no frame has been committed")
+        return FrameLease(self._latest_slot.retain_last_frame(), self._latest_slot.release_reader)
+
+    def _assign_collecting_slot(self) -> None:
+        """Choose any reusable ring slot, waiting only when processing or retained reads occupy all slots."""
+        while True:
+            self._reap()
+            for offset in range(self._slot_count):
+                slot_idx = (self._next_slot_hint + offset) % self._slot_count
+                slot = self._ring[slot_idx]
+                if not slot.reusable:
+                    continue
+                if slot_idx in self._inflight:
+                    self._harvest(slot_idx)  # completed future: record metrics before reassigning its memory
+                batch_idx = self._frames_added // self._batch_z
+                slot.assign_batch(batch_idx)
+                self._batches[batch_idx].collecting.begin()
+                self._current_slot = slot_idx
+                self._next_slot_hint = (slot_idx + 1) % self._slot_count
+                return
+
+            if self._inflight:
+                wait((future for _, future in self._inflight.values()), return_when=FIRST_COMPLETED)
+                continue
+
+            # Every worker is finished, so retained readers are the only remaining owners. Wait briefly
+            # on one slot and rescan; another slot may be the one whose reader actually released.
+            self._ring[self._next_slot_hint].wait_for_reader_change(timeout=0.01)
+
+    def _commit_frame(self) -> None:
+        """Commit the open frame."""
+        if not self._frame_open:
+            raise RuntimeError("no frame is open")
+        if self._current_slot is None:
+            raise RuntimeError("open frame has no collecting slot")
+
+        slot = self._ring[self._current_slot]
+        slot.commit_frame()
+
+        if slot.batch_idx is None:
+            raise RuntimeError("collecting slot has no batch assigned")
         self._batches[slot.batch_idx].collected_frames += 1
         self._frames_added += 1
-        if self._frames_added % self._batch_z == 0 and self._frames_added < self._volume_z:
-            self._flush_current()  # hand the filled batch to its worker (downsample + write)
-            # Rotate to the next slot. If its flush hasn't finished, wait — the backpressure that blocks
-            # the caller once every slot is occupied; a no-op while the ring has spare slots.
-            nxt = (self._current_slot + 1) % self._slot_count
-            if nxt in self._inflight:
-                self._harvest(nxt)  # wait for the slot's flush → record metrics, queue upload, slot IDLE
-            self._current_slot = nxt
-            self._reap()  # harvest any completed flushes (metrics + uploads), surfacing failures
-            if self._staging is not None:
-                self._reap_uploads()  # surface a failed upload promptly rather than acquiring into a doomed run
+        self._frame_open = False
+
+        try:
+            if slot.filled_l0 == self._batch_z and self._frames_added < self._volume_z:
+                self._flush_current()
+                self._current_slot = None
+                self._reap()
+                if self._staging is not None:
+                    self._reap_uploads()
+        except Exception as exc:
+            self._failure = self._failure or exc
+            raise
+        self._latest_slot = slot
+
+    def _abort_frame(self) -> None:
+        """Close the open frame without advancing any frame or batch cursor."""
+        if not self._frame_open:
+            raise RuntimeError("no frame is open")
+        if self._current_slot is None:
+            raise RuntimeError("open frame has no collecting slot")
+        slot_idx = self._current_slot
+        slot = self._ring[slot_idx]
+        self._frame_open = False
+        if slot.filled_l0 == 0:
+            slot.abort_empty_batch()
+            self._current_slot = None
+            self._next_slot_hint = slot_idx
+
+    def _raise_if_failed(self) -> None:
+        if self._failure is not None:
+            raise RuntimeError("writer cannot continue after a pipeline failure") from self._failure
 
     def close(self) -> None:
         """Flush the final (often partial) batch, harvest every in-flight flush, finish uploads, then
         release this writer's own resources (the upload pool). The ring is left untouched — every slot
         IDLE — for reuse by its owner. Raises if a flush or upload failed."""
-        slot = self._ring[self._current_slot]
-        if slot.filled_l0 > 0 and slot.stage == SlotStage.COLLECTING:  # the final partial batch
-            self._flush_current()
+        if self._frame_open:
+            raise RuntimeError("cannot close writer while a frame is open")
+        flush_error = self._failure
+        if self._current_slot is not None:
+            slot = self._ring[self._current_slot]
+            try:
+                if slot.filled_l0 > 0 and slot.stage == SlotStage.COLLECTING:  # the final partial batch
+                    self._flush_current()
+            except Exception as exc:
+                self._failure = self._failure or exc
+                flush_error = flush_error or exc
+            self._current_slot = None
 
         # Harvest every outstanding flush (records metrics, queues its upload); collect the first failure
         # but always finish teardown. Uploads are all queued once the flushes settle, so drain them next.
-        flush_error: BaseException | None = None
         for slot_idx in list(self._inflight):
             try:
                 self._harvest(slot_idx)
@@ -464,6 +592,8 @@ class DatasetWriter:
     def _flush_current(self) -> None:
         """Close the current batch's `collecting` span and hand it to its slot's worker to downsample and
         write; track the flush future (by slot) for reuse/harvest."""
+        if self._current_slot is None:
+            raise RuntimeError("cannot flush without a collecting slot")
         slot = self._ring[self._current_slot]
         if slot.batch_idx is None:  # narrowing: the slot has been collecting a batch
             raise RuntimeError("cannot flush a slot with no batch assigned")
@@ -474,9 +604,13 @@ class DatasetWriter:
         """Wait for a slot's flush, record its metrics, and (when staging) queue its upload. Blocks until
         the worker's downsample+write is durable, after which the slot is IDLE (reusable)."""
         batch_idx, future = self._inflight.pop(slot_idx)
-        self._record(batch_idx, future.result())  # raises if the worker's downsample/write failed
-        if self._staging is not None:
-            self._queue_upload(batch_idx)
+        try:
+            self._record(batch_idx, future.result())  # raises if the worker's downsample/write failed
+            if self._staging is not None:
+                self._queue_upload(batch_idx)
+        except Exception as exc:
+            self._failure = self._failure or exc
+            raise
 
     def _reap(self) -> None:
         """Harvest every already-completed flush without blocking (metrics + uploads), surfacing failures.
@@ -538,7 +672,11 @@ class DatasetWriter:
         pending: list[Future[None]] = []
         for upload in self._uploads:
             if upload.done():
-                upload.result()  # re-raises a failed upload → aborts the acquisition
+                try:
+                    upload.result()  # re-raises a failed upload → aborts the acquisition
+                except Exception as exc:
+                    self._failure = self._failure or exc
+                    raise
             else:
                 pending.append(upload)
         self._uploads = pending
@@ -590,7 +728,8 @@ class OMEZarrWriter:
 
         writer = OMEZarrWriter(slots=5)
         writer.begin_stack(config, storage)
-        writer.add_frame(frame)
+        with writer.new_frame() as destination:
+            np.copyto(destination, frame)
         ...
         writer.end_stack()
         ...
@@ -607,6 +746,7 @@ class OMEZarrWriter:
         self._slots = slots
         self._ring: Ring | None = None
         self._active: DatasetWriter | None = None
+        self._ring_failed = False
 
     @property
     def ready_for_batch(self) -> bool:
@@ -643,7 +783,11 @@ class OMEZarrWriter:
         """
         if self._active is not None:
             raise RuntimeError("stack already open; call end_stack() first")
-        if self._ring is None or not self._ring.matches(config.batch_shape, config.max_level, config.dtype):
+        if (
+            self._ring is None
+            or self._ring_failed
+            or not self._ring.matches(config.batch_shape, config.max_level, config.dtype)
+        ):
             self._drop_ring()
             slots = sizer(config) if sizer is not None else self._slots
             if slots < MIN_SLOTS:  # a ring this shallow cannot overlap collect with flush
@@ -658,21 +802,30 @@ class OMEZarrWriter:
         self._active = DatasetWriter(config, storage, self._ring, backend=self._backend)
         return self._active
 
-    def add_frame(self, frame: np.ndarray) -> None:
-        """Add one frame to the open dataset."""
+    @contextmanager
+    def new_frame(self) -> Generator[np.ndarray]:
+        """Yield the next writable frame destination in the open dataset."""
         if self._active is None:
             raise RuntimeError("no stack open; call begin_stack() first")
-        self._active.add_frame(frame)
+        with self._active.new_frame() as frame:
+            yield frame
+
+    def latest_frame(self) -> FrameLease:
+        """Retain read-only access to the latest committed frame in the open dataset."""
+        if self._active is None:
+            raise RuntimeError("no stack open; call begin_stack() first")
+        return self._active.latest_frame()
 
     def end_stack(self) -> None:
-        """Drain and close the open dataset, retaining the ring for the next volume. If the dataset's
-        close fails, the ring is released so that a slot left mid-processing is not reused."""
+        """Drain the open dataset, retaining a healthy ring for the next volume."""
         if self._active is None:
             raise RuntimeError("no stack open")
         try:
             self._active.close()
         except Exception:
-            self._drop_ring()
+            # Do not close the ring here: an external FrameLease may still pin it. Mark it unusable so
+            # begin_stack or close drops it only after the owner has had a chance to release readers.
+            self._ring_failed = True
             raise
         finally:
             self._active = None
@@ -688,6 +841,7 @@ class OMEZarrWriter:
 
     def _drop_ring(self) -> None:
         """Release the retained ring, if any."""
-        if self._ring is not None:
-            self._ring.close()
-            self._ring = None
+        ring, self._ring = self._ring, None
+        self._ring_failed = False
+        if ring is not None:
+            ring.close()

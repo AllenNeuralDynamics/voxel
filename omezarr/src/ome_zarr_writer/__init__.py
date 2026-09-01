@@ -15,8 +15,9 @@ is added by the writer, so pass a bare base path):
     ... )
     >>> writer = OMEZarrWriter(slots=6)  # coordinator: owns a reusable ring across stacks
     >>> writer.begin_stack(config, Local(target="/path/to/experiment"))
-    >>> for frame in camera.stream():
-    ...     writer.add_frame(frame)
+    >>> for source in camera.stream():
+    ...     with writer.new_frame() as frame:
+    ...         frame[...] = source
     >>> writer.end_stack()
     >>> writer.close()
 
@@ -41,7 +42,7 @@ from vxlib.vector import UIVec2D, UIVec3D, UVec3D
 
 from .dataset import Compression, DownscaleType, Dtype, ScaleLevel
 from .storage import DirectS3, Local, S3Store, StagedS3, StagingConfig, Storage
-from .writer import BatchMetrics, OMEZarrWriter, WriterConfig, WriterSettings
+from .writer import BatchMetrics, FrameLease, OMEZarrWriter, WriterConfig, WriterSettings
 
 __all__ = [
     "BatchMetrics",
@@ -49,6 +50,7 @@ __all__ = [
     "DirectS3",
     "DownscaleType",
     "Dtype",
+    "FrameLease",
     "Local",
     "OMEZarrWriter",
     "S3Store",
