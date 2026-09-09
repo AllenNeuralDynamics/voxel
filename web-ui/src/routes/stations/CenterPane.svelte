@@ -18,8 +18,8 @@
   const app = getVoxelStation();
   const previews = getPreviewContext();
   const preview = $derived(previews.current);
-  const previewModes: { mode: PreviewMode; label: string }[] = [
-    { mode: 'live', label: 'Live' },
+  const previewModes: { mode: PreviewMode; label: string; title?: string }[] = [
+    { mode: 'fov', label: 'FOV', title: 'Field of View' },
     { mode: 'stage', label: 'Stage' }
   ];
 
@@ -62,9 +62,11 @@
                 <div
                   class="flex h-ui-xs items-stretch divide-x divide-border overflow-hidden rounded-md border border-border bg-canvas/80 shadow-sm backdrop-blur-sm"
                 >
-                  {#each previewModes as { mode, label } (mode)}
+                  {#each previewModes as { mode, label, title } (mode)}
                     <button
                       type="button"
+                      {title}
+                      aria-label={title ?? label}
                       aria-pressed={app.viewMode.get() === mode}
                       onclick={() => app.viewMode.set(mode)}
                       class={cn(

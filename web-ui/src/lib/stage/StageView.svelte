@@ -6,21 +6,20 @@
   import { watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
-  import { Button, ContextMenu } from '$lib/kit';
+  import { CenterFocus, Close, Crosshair, FitToScreen, Stop } from '$lib/icons';
+  import { ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelStation } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { formatSpatialDistance, formatSpatialValue } from '$lib/spatial-units';
-  import { displayName, pref, toastError } from '$lib/utils';
+  import { displayName, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
   import { getStageScene, provideStageScene, type StageHit } from './scene.svelte';
-  import StageLayersSidebar from './StageLayersSidebar.svelte';
+  import StageLayerControls from './StageLayerControls.svelte';
 
   let { viewport = $bindable<StageViewport>({ mode: 'auto' }) }: { viewport?: StageViewport } = $props();
 
   const app = getVoxelStation();
-  const stageLayersCollapsed = pref('stage:sidebar-collapsed', false);
   provideStageScene();
   const scene = getStageScene();
   const stage = $derived(app.instrument?.stage ?? null);
@@ -407,7 +406,7 @@
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 overflow-hidden">
-  <div class="relative min-w-0 flex-1 overflow-hidden">
+  <div class="@container/stage-view relative min-w-0 flex-1 overflow-hidden">
     <ContextMenu.Root bind:open={menuOpen}>
       <ContextMenu.Trigger>
         {#snippet child({ props })}
@@ -439,18 +438,6 @@
                 <div class="h-1 rounded-full bg-fg-muted" style:width="{scaleBar.barPx}px"></div>
               </div>
             {/if}
-            <div class="pointer-events-none absolute top-3 right-3 z-10">
-              <Button
-                variant="secondary"
-                size="icon-lg"
-                aria-expanded={!stageLayersCollapsed.get()}
-                title={stageLayersCollapsed.get() ? 'Show layers' : 'Hide layers'}
-                class="pointer-events-auto rounded-md border-border bg-elevated shadow-sm"
-                onclick={() => stageLayersCollapsed.set(!stageLayersCollapsed.get())}
-              >
-                <PanelRight width="20" height="20" class="text-fg/75" />
-              </Button>
-            </div>
           </div>
         {/snippet}
       </ContextMenu.Trigger>
@@ -535,22 +522,13 @@
         {/if}
       </ContextMenu.Content>
     </ContextMenu.Root>
-  </div>
-  <aside
-    class="shrink-0 overflow-hidden bg-surface transition-[width] duration-200 {stageLayersCollapsed.get()
-      ? 'w-0'
-      : 'w-64 border-l border-border'}"
-  >
+    <!-- Keep controls outside the canvas event target so they cannot pan, zoom, or select the stage. -->
     <div
-      class="flex h-full min-h-0 w-full flex-col transition-opacity {stageLayersCollapsed.get()
-        ? 'invisible opacity-0'
-        : 'opacity-100'}"
+      class="pointer-events-none absolute inset-x-3 top-12 bottom-12 z-10 flex flex-col items-end @min-[32rem]/stage-view:top-3"
     >
-      <div class="min-h-0 flex-1 overflow-y-auto py-1.5">
-        <StageLayersSidebar />
-      </div>
+      <StageLayerControls />
     </div>
-  </aside>
+  </div>
 </div>
 
 <style>

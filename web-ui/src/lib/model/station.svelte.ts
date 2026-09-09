@@ -659,8 +659,8 @@ export class Instrument {
   }
 }
 
-/** Top-level view mode. Snaps and Inpaint hold their own item selection (on their stores); Live is the stream. */
-export type PreviewMode = 'live' | 'stage';
+/** Top-level view mode: camera field of view or spatial stage map. */
+export type PreviewMode = 'fov' | 'stage';
 
 export class Station {
   readonly #client: Client;
@@ -691,9 +691,7 @@ export class Station {
   /** App-lifetime in-paint mosaics (live-painted per-channel MIP maps). */
   readonly inpaint = new Inpainter();
 
-  // /** Center viewer's top-level mode (Live / Snaps / Inpaint); item selection lives on the stores. */
-  // readonly view = new PreviewView(this.snaps);
-  readonly viewMode = pref<PreviewMode>('preview:mode', 'live');
+  readonly viewMode = pref<PreviewMode>('preview:mode', 'fov');
 
   #unsubs: Unsub[] = [];
   #desired = $state<string | null | undefined>(undefined);
@@ -708,6 +706,8 @@ export class Station {
 
   constructor(options: ClientOptions = {}) {
     this.#client = new Client(options);
+    // Normalize older persisted mode values while preserving the stage selection.
+    if (this.viewMode.get() !== 'fov' && this.viewMode.get() !== 'stage') this.viewMode.set('fov');
   }
 
   get client(): Client {
@@ -916,7 +916,7 @@ export class Station {
       this.#openName = null;
       this.snaps.scope = null;
       this.inpaint.scope = null;
-      this.viewMode.set('live');
+      this.viewMode.set('fov');
       return;
     }
     if (this.instrument?.sessionId === session.info.id) {

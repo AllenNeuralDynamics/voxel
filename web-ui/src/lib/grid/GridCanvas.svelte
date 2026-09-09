@@ -3,8 +3,8 @@
 
   import { GridLines, PathLight, StackLight } from '$lib/icons';
   import { type Instrument } from '$lib/model';
-  import StencilControls from '$lib/StencilControls.svelte';
 
+  import StencilControls from './StencilControls.svelte';
   import type { LayerVisibility } from './XYPlane.svelte';
   import XYPlane from './XYPlane.svelte';
   import ZPlane from './ZPlane.svelte';

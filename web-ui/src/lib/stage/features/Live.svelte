@@ -95,7 +95,7 @@
     },
     draw,
     hitTest,
-    onActivate: () => app.viewMode.set('live'), // double-click the live tile → full live view
+    onActivate: () => app.viewMode.set('fov'), // double-click the live tile → field-of-view display
     menu: liveMenu,
     maxScale: nativeScale // zoom in to the camera's native resolution, no further
   };
@@ -111,21 +111,22 @@
 </script>
 
 {#snippet liveMenu()}
-  <ContextMenu.Item onSelect={() => app.viewMode.set('live')}>
+  <ContextMenu.Item onSelect={() => app.viewMode.set('fov')}>
     <VideoCamera width="14" height="14" />
-    Open live view
+    Open field of view
   </ContextMenu.Item>
 {/snippet}
 
-<div class="flex flex-col gap-0.5">
+<div class="pointer-events-auto flex w-full shrink-0 flex-col overflow-hidden overlay-panel">
   <canvas bind:this={liveCanvas} class="hidden"></canvas>
-  <div class="flex items-center gap-1 px-3 py-1">
-    <span class="flex-1 text-sm tracking-wide text-fg-muted uppercase">Live</span>
+  <div class="flex items-center gap-2 px-2.5 py-1">
+    <span class="flex-1 text-sm text-fg-muted">Live</span>
     <button
       type="button"
       title={show.get() ? 'Hide live' : 'Show live'}
       aria-label={show.get() ? 'Hide live' : 'Show live'}
-      class="focus-visible:ring-focused inline-flex size-ui-xs shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:text-fg focus:outline-none focus-visible:ring-2"
+      aria-pressed={show.get()}
+      class="focus-visible:ring-focused flex h-6 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg focus:outline-none focus-visible:ring-2"
       onclick={() => show.set(!show.get())}
     >
       {#if show.get()}<Eye width="14" height="14" />{:else}<EyeOff width="14" height="14" />{/if}

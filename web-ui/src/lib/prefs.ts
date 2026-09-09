@@ -1,7 +1,7 @@
 import { pref } from '$lib/utils/helpers';
 
 export type SpatialUnit = 'mm' | 'um';
-export type ViewerMode = 'live' | 'stage';
+export type ViewerMode = 'fov' | 'stage';
 export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
 
 /**
@@ -19,7 +19,7 @@ export const prefs = {
   spatialUnit: pref<SpatialUnit>('ui:spatial-unit', 'mm'),
 
   viewer: {
-    mode: pref<ViewerMode>('ui:viewer:mode', 'live'),
+    mode: pref<ViewerMode>('ui:viewer:mode', 'fov'),
     channelsVisible: pref('ui:viewer:channels-visible', true),
     navigatorVisible: pref('ui:viewer:navigator-visible', true)
   },
