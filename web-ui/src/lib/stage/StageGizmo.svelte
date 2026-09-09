@@ -1,9 +1,7 @@
 <script lang="ts">
   import { watch } from 'runed';
 
-  import { Button } from '$lib/kit';
   import type { Stage } from '$lib/model';
-  import { SpinBox } from '$lib/prop/numeric';
   import { cn, toastError } from '$lib/utils';
 
   import { type Axis3, Camera3D } from './draw';
@@ -23,11 +21,6 @@
     y: 'bg-success/15 text-success',
     z: 'bg-primary/15 text-primary'
   };
-  const AXIS_SPINS: [Axis3, number][] = [
-    ['x', 0.01],
-    ['y', 0.01],
-    ['z', 0.001]
-  ];
 
   // Which axes are shown; the on-set drives the projection (2 → ortho of that plane, 3 → iso).
   let shown = $state<Record<Axis3, boolean>>({ x: true, y: true, z: true });
@@ -335,20 +328,24 @@
       ] as const,
     () => draw()
   );
-
-  function axisModel(a: Axis3, step: number) {
-    return {
-      value: stage.position(a) / 1000,
-      onChange: (v: number) => toastError(stage.axis(a)?.move(v * 1000)),
-      min: (stage.axis(a)?.lowerLimit?.value ?? 0) / 1000,
-      max: (stage.axis(a)?.upperLimit?.value ?? 1) / 1000,
-      step
-    };
-  }
 </script>
 
-<div class={cn('flex h-full flex-col gap-0', className)}>
-  <div class="flex items-center justify-between gap-2">
+<div class={cn('flex h-full flex-col gap-2', className)}>
+  <div class="flex min-h-0 flex-1 items-center justify-center py-0">
+    <div bind:this={box} class="relative aspect-square h-full">
+      <canvas
+        bind:this={canvasEl}
+        class="absolute inset-0 h-full w-full touch-none"
+        style="width:100%;height:100%"
+        style:cursor
+        onpointerdown={pointerDown}
+        onpointermove={pointerMove}
+        onpointerup={pointerUp}
+      ></canvas>
+    </div>
+  </div>
+
+  <footer class="flex shrink-0 items-center justify-between gap-2">
     <span class=" font-medium tracking-wide text-fg-muted uppercase">Stage</span>
     <div class="flex overflow-hidden rounded border border-border">
       {#each AXES as a (a)}
@@ -364,42 +361,5 @@
         </button>
       {/each}
     </div>
-  </div>
-
-  <div class="flex min-h-0 flex-1 items-center justify-center py-0">
-    <div bind:this={box} class="relative aspect-square h-full">
-      <canvas
-        bind:this={canvasEl}
-        class="absolute inset-0 h-full w-full touch-none"
-        style="width:100%;height:100%"
-        style:cursor
-        onpointerdown={pointerDown}
-        onpointermove={pointerMove}
-        onpointerup={pointerUp}
-      ></canvas>
-    </div>
-  </div>
-
-  <div class="flex flex-wrap gap-2">
-    {#each AXIS_SPINS as [a, step] (a)}
-      <SpinBox
-        model={axisModel(a, step)}
-        decimals={3}
-        size="xs"
-        align="right"
-        prefix={a.toUpperCase()}
-        suffix="mm"
-        class={stage.moving(a) ? 'min-w-32 flex-1 text-danger' : 'min-w-32 flex-1'}
-      />
-    {/each}
-    <Button
-      variant={stage.anyMoving ? 'danger' : 'secondary'}
-      size="xs"
-      class="min-w-32 flex-1 disabled:opacity-100"
-      onclick={() => toastError(stage.halt())}
-      disabled={!stage.anyMoving}
-    >
-      Halt
-    </Button>
-  </div>
+  </footer>
 </div>

@@ -189,7 +189,7 @@
     <PreviewNavigationControls {previewer} />
   </div>
 
-  <div class="pointer-events-none absolute bottom-4 left-4 z-10 w-62">
+  <div class="pointer-events-none absolute bottom-3 left-3 z-10 w-58">
     <PreviewChannels {previewer} />
   </div>
 

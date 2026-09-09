@@ -3,41 +3,26 @@
   import { Pane, PaneGroup } from 'paneforge';
   import { useEventListener, watch } from 'runed';
   import { onDestroy, onMount, untrack } from 'svelte';
-  import { SvelteMap } from 'svelte/reactivity';
   import { toast } from 'svelte-sonner';
 
   import { goto, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import type { ResolvedPathname } from '$app/types';
-  import {
-    activateDashboardWindow,
-    DASHBOARD_WINDOW_NAME,
-    getDashboardOpener,
-    isStationWindowRequest,
-    sendStationWindowRequest,
-    stationWindowName,
-    stationWindowRequest
-  } from '$lib/app-windows';
-  import CamerasMonitor from '$lib/devices/CamerasMonitor.svelte';
-  import FilterWheelsMonitor from '$lib/devices/FilterWheelsMonitor.svelte';
-  import LasersMonitor from '$lib/devices/LasersMonitor.svelte';
-  import RoutingMonitor from '$lib/devices/RoutingMonitor.svelte';
+  import { activateDashboardWindow, isStationWindowRequest, stationWindowName } from '$lib/app-windows';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import { Logout, Power } from '$lib/icons';
-  import { Button, Dialog, Spinner } from '$lib/kit';
+  import { Power } from '$lib/icons';
+  import { Button, Dialog, Sidebar, Spinner } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import { type PreviewMode, setVoxelStation, Station } from '$lib/model';
+  import { setVoxelStation, Station } from '$lib/model';
   import { PreviewSession, providePreviewContext } from '$lib/preview/session.svelte';
-  import ProfileSelector from '$lib/ProfileSelector.svelte';
-  import { instrumentPath, instrumentTargetPath, stationPath } from '$lib/routes';
-  import RunButton from '$lib/RunButton.svelte';
-  import StageGizmo from '$lib/stage/StageGizmo.svelte';
-  import { cn, createPaneSize, displayName, toastError } from '$lib/utils';
+  import { createPaneSize, displayName, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
+  import CenterPane from './CenterPane.svelte';
   import ConnectionSplash from './ConnectionSplash.svelte';
-  import InstrumentSelector from './InstrumentSelector.svelte';
-  import WorkspaceViewer from './WorkspaceViewer.svelte';
+  import InstrumentNavigation from './InstrumentNavigation.svelte';
+  import MonitorsPane from './MonitorsPane.svelte';
+  import StationMenu from './StationMenu.svelte';
 
   const { children } = $props();
 
@@ -121,36 +106,23 @@
 
   // --- Shell nav ---
 
-  type Route = { id: string; label: string };
-  type Segment = {
-    key: string;
-    label: string;
-    highlighted: boolean;
-    select: () => void;
-  };
-
-  const inspectRoute: Route = { id: '/', label: 'Inspect' };
-  const workflowRoutes: Route[] = [
-    { id: '/sync', label: 'Sync' },
-    { id: '/configure', label: 'Configure' },
-    { id: '/plan', label: 'Plan' },
-    { id: '/run', label: 'Run' }
-  ];
-  const selectedInstrumentId = $derived(page.params.instrumentId ?? '');
+  const workflowRoutes = ['/plan'] as const;
+  let lastSelection = $state<{ stationId: string; instrumentId: string } | null>(null);
+  const selectedInstrumentId = $derived(
+    page.params.instrumentId ?? (lastSelection?.stationId === stationId ? lastSelection.instrumentId : '')
+  );
   const instrumentId = $derived(app.activeName ?? selectedInstrumentId);
+  const routeParams = $derived({ stationId, instrumentId });
   const stationName = $derived(app.discovery.station.name || displayName(stationId));
   const windowTitle = $derived(`Voxel — ${stationName}`);
+  const instrumentTransition = $derived(
+    app.openingName !== null || app.stationStatus === 'opening' || app.stationStatus === 'closing'
+  );
   const instrumentInspection = $derived(instrumentId ? app.discovery.instruments[instrumentId] : undefined);
   const instrumentHasIssue = $derived(
     instrumentInspection
       ? instrumentInspection.config.status !== 'loaded' || instrumentInspection.violations.length > 0
       : false
-  );
-  const instrumentTransition = $derived(
-    app.openingName !== null || app.stationStatus === 'opening' || app.stationStatus === 'closing'
-  );
-  const instrumentTransitionLabel = $derived(
-    app.stationStatus === 'closing' ? 'Closing instrument' : 'Opening instrument'
   );
   const canOpenInstrument = $derived(
     app.stationStatus === 'idle' && !!instrumentInspection && !instrumentHasIssue && app.openingName === null
@@ -164,7 +136,7 @@
           ? 'The station is closed'
           : 'Open instrument'
   );
-  const operateRoot = $derived(instrumentPath(stationId, instrumentId));
+  const operateRoot = $derived(resolve('/stations/[stationId]/instruments/[instrumentId]', routeParams));
 
   function operateRelativePath(pathname: string): string | null {
     if (pathname === operateRoot) return '/';
@@ -172,19 +144,26 @@
   }
 
   const currentPath = $derived(operateRelativePath(page.url.pathname) ?? '');
-  const inspectActive = $derived(page.route.id?.includes('/(inspect)') ?? false);
-  const activeWorkflow = $derived(workflowRoutes.find((route) => currentPath.startsWith(route.id))?.id ?? null);
-  const inspectPaths = new SvelteMap<string, ResolvedPathname>();
+  const activeWorkflow = $derived(workflowRoutes.find((route) => currentPath.startsWith(route)) ?? null);
 
-  function inspectPathKey(station: string, instrument: string): string {
-    return `${station}\u0000${instrument}`;
+  function lastInstrumentKey(station: string): string {
+    return `voxel:last-instrument:${station}`;
+  }
+
+  function rememberInstrument(station: string, instrument: string): void {
+    try {
+      window.localStorage.setItem(lastInstrumentKey(station), instrument);
+    } catch {
+      // Selection still works when browser storage is unavailable.
+    }
   }
 
   watch(
-    () => [inspectActive, stationId, page.params.instrumentId, page.url.pathname] as const,
-    ([active, station, routeInstrumentId, pathname]) => {
-      if (active && routeInstrumentId) {
-        inspectPaths.set(inspectPathKey(station, routeInstrumentId), pathname as ResolvedPathname);
+    () => [stationId, page.params.instrumentId] as const,
+    ([station, routeInstrumentId]) => {
+      if (routeInstrumentId) {
+        lastSelection = { stationId: station, instrumentId: routeInstrumentId };
+        rememberInstrument(station, routeInstrumentId);
       }
     }
   );
@@ -194,7 +173,13 @@
       await app.initialize(stationId);
       const shouldOpen = page.url.searchParams.get('open') === '1';
       if (shouldOpen) {
-        replaceState(instrumentPath(stationId, selectedInstrumentId), page.state);
+        replaceState(
+          resolve('/stations/[stationId]/instruments/[instrumentId]', {
+            stationId,
+            instrumentId: selectedInstrumentId
+          }),
+          page.state
+        );
       }
       if (deferredSelection) {
         const request = deferredSelection;
@@ -223,20 +208,6 @@
     }
   );
 
-  function selectView(id: string) {
-    const selected = id === inspectRoute.id ? inspectActive : activeWorkflow === id;
-    if (selected || !instrumentId) return;
-    const target =
-      id === inspectRoute.id
-        ? (inspectPaths.get(inspectPathKey(stationId, instrumentId)) ?? operateRoot)
-        : instrumentTargetPath(stationId, instrumentId, id);
-    goto(target, { keepFocus: true, noScroll: true });
-  }
-
-  function instrumentInspectPath(name: string): ResolvedPathname {
-    return inspectPaths.get(inspectPathKey(stationId, name)) ?? instrumentPath(stationId, name);
-  }
-
   async function requestInstrumentSelection(name: string, open: boolean): Promise<void> {
     if (instrumentTransition) return;
     if (app.activeName && app.activeName !== name) {
@@ -245,35 +216,42 @@
       return;
     }
 
-    const target = open ? instrumentPath(stationId, name) : instrumentInspectPath(name);
+    const target = resolve('/stations/[stationId]/instruments/[instrumentId]', { stationId, instrumentId: name });
     await goto(target, { keepFocus: true, noScroll: true });
     if (open && !app.activeName) await app.launch(name);
   }
 
   function selectInstrument(targetStationId: string, name: string): void {
+    if (instrumentTransition) return;
     if (targetStationId === stationId) {
+      if (app.activeName && app.activeName !== name) {
+        toast.error('Close the current instrument before selecting another one.');
+        return;
+      }
       toastError(requestInstrumentSelection(name, false));
       return;
     }
 
-    const target = instrumentPath(targetStationId, name);
-    const controlWindow = window.open('', stationWindowName(targetStationId));
+    rememberInstrument(targetStationId, name);
+    const target = resolve('/stations/[stationId]/instruments/[instrumentId]', {
+      stationId: targetStationId,
+      instrumentId: name
+    });
+    const controlWindow = window.open(target, stationWindowName(targetStationId));
     if (!controlWindow) {
       toast.error('The station window was blocked by the browser.');
       return;
     }
-    if (controlWindow.location.href === 'about:blank') controlWindow.location.href = target;
-    else sendStationWindowRequest(controlWindow, stationWindowRequest(targetStationId, name, false));
     controlWindow.focus();
   }
 
-  function resolveDashboardWindow(): Window | null {
-    return getDashboardOpener() ?? window.open(stationPath(stationId), DASHBOARD_WINDOW_NAME);
+  function showDashboard(): void {
+    if (activateDashboardWindow(resolve('/(dashboard)/stations/[stationId]', { stationId }))) return;
+    void goto(resolve('/(dashboard)/stations/[stationId]', { stationId }), { keepFocus: true, noScroll: true });
   }
 
-  function showDashboard(): void {
-    if (activateDashboardWindow(stationPath(stationId))) return;
-    void goto(stationPath(stationId), { keepFocus: true, noScroll: true });
+  function showSettings(): void {
+    void goto(resolve('/stations/[stationId]/settings', { stationId }), { keepFocus: true, noScroll: true });
   }
 
   function openInstrument(): void {
@@ -291,28 +269,15 @@
     pendingSwitch = null;
   }
 
-  async function closeInstrument(exit: boolean): Promise<void> {
+  async function closeInstrument(): Promise<void> {
     const name = app.activeName;
     if (!name) return;
-    const instrumentOverview = instrumentPath(stationId, name);
-    if (!exit) {
-      await app.close();
-      await goto(instrumentOverview, { keepFocus: true, noScroll: true });
-      return;
-    }
-
-    const dashboardPath = stationPath(stationId);
-    // Resolve the named dashboard while the confirmation click still carries user activation.
-    const dashboardWindow = resolveDashboardWindow();
+    const instrumentOverview = resolve('/stations/[stationId]/instruments/[instrumentId]', {
+      stationId,
+      instrumentId: name
+    });
     await app.close();
-    if (!dashboardWindow) {
-      await goto(dashboardPath, { keepFocus: true, noScroll: true });
-      return;
-    }
-    dashboardWindow.focus();
-    window.close();
-    if (window.closed) return;
-    await goto(dashboardPath, { keepFocus: true, noScroll: true });
+    await goto(instrumentOverview, { keepFocus: true, noScroll: true });
   }
 
   async function confirmClose(): Promise<void> {
@@ -322,12 +287,15 @@
       if (pendingSwitch) {
         const target = pendingSwitch;
         await app.close();
-        await goto(instrumentInspectPath(target.instrumentId), { keepFocus: true, noScroll: true });
+        await goto(
+          resolve('/stations/[stationId]/instruments/[instrumentId]', { stationId, instrumentId: target.instrumentId }),
+          { keepFocus: true, noScroll: true }
+        );
         closeDialogOpen = false;
         pendingSwitch = null;
         if (target.open) await app.launch(target.instrumentId);
       } else {
-        await closeInstrument(false);
+        await closeInstrument();
         closeDialogOpen = false;
       }
     } catch (error) {
@@ -337,68 +305,24 @@
     }
   }
 
-  async function confirmCloseAndExit(): Promise<void> {
-    if (closingInstrument) return;
-    closingInstrument = true;
-    try {
-      await closeInstrument(true);
-      closeDialogOpen = false;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      closingInstrument = false;
-    }
-  }
-
-  const inspectSegment = $derived<Segment>({
-    key: inspectRoute.id,
-    label: inspectRoute.label,
-    highlighted: inspectActive,
-    select: () => selectView(inspectRoute.id)
-  });
-  const workflowSegments = $derived<Segment[]>(
-    workflowRoutes.map((route) => ({
-      key: route.id,
-      label: route.label,
-      highlighted: activeWorkflow === route.id,
-      select: () => selectView(route.id)
-    }))
-  );
-  /** True when the current view is a workflow step — used to brighten the nav border. */
-  const workflowActive = $derived(activeWorkflow !== null);
-  const instrumentNavActive = $derived(!!app.instrument && inspectSegment.highlighted);
-
-  const previewModes: { mode: PreviewMode; label: string }[] = [
-    { mode: 'live', label: 'Live' },
-    { mode: 'stage', label: 'Stage' }
-  ];
-
   // Pane sizes
-  let shellRef = $state<HTMLElement | null>(null);
-  const contentPane = createPaneSize(() => shellRef, {
-    min: 45,
-    default: 45,
+  let frameRef = $state<HTMLElement | null>(null);
+  const contentPane = createPaneSize(() => frameRef, {
+    min: 32,
+    max: 48,
+    default: 32,
     fallback: { min: 30, default: 30 }
   });
-  const viewerPane = createPaneSize(() => shellRef, {
+  const viewerPane = createPaneSize(() => frameRef, {
     min: 60,
     fallback: { min: 40 }
   });
 
-  const monitorsPane = createPaneSize(() => shellRef, {
+  const monitorsPane = createPaneSize(() => frameRef, {
     min: 28,
     default: 28,
     max: 28,
     fallback: { min: 15, max: 15 }
-  });
-
-  // Vertical split inside the monitors pane: telemetry (top) over the stage gizmo (bottom).
-  let monitorsSplitEl = $state<HTMLElement | null>(null);
-  const gizmoPane = createPaneSize(() => monitorsSplitEl, {
-    default: 22,
-    min: 18,
-    max: 28,
-    fallback: { min: 28, max: 40, default: 32 }
   });
 
   // --- Dialog state ---
@@ -418,170 +342,96 @@
 {#if !app.client.isConnected || !app.ready}
   <ConnectionSplash {app} />
 {:else}
-  {#snippet routeLink(segment: Segment)}
-    <button
-      type="button"
-      title={segment.label}
-      onclick={segment.select}
-      class={cn(
-        'inline-flex h-full cursor-pointer items-center justify-center px-2 text-lg font-normal whitespace-nowrap transition-colors',
-        segment.highlighted ? 'bg-element-selected text-fg' : 'text-fg hover:bg-element-hover/80 hover:text-fg'
-      )}
-    >
-      {segment.label}
-    </button>
-  {/snippet}
-  {#snippet viewModeSelector()}
-    <div class="ml-auto flex h-ui-md shrink-0 items-center rounded-md border border-input bg-canvas/50 p-0.5">
-      {#each previewModes as { mode, label } (mode)}
-        <button
-          type="button"
-          title={label}
-          onclick={() => app.viewMode.set(mode)}
-          class={cn(
-            'inline-flex h-full min-w-16 cursor-pointer items-center justify-center rounded-sm px-3 text-lg whitespace-nowrap transition-colors',
-            app.viewMode.get() === mode ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
-          )}
-        >
-          {label}
-        </button>
-      {/each}
-    </div>
-  {/snippet}
-  {#snippet dashboardButton()}
-    <button
-      type="button"
-      onclick={showDashboard}
-      class="ml-auto flex h-ui-md shrink-0 items-center gap-2 rounded-md border border-border px-2 text-fg transition-colors hover:bg-element-hover"
-      title="Open dashboard"
-      aria-label="Open dashboard"
-    >
-      <span class="text-2xl font-normal tracking-wide uppercase">Voxel</span>
-      <VoxelLogo class="size-6 shrink-0" />
-    </button>
-  {/snippet}
-  <main bind:this={shellRef} class="h-screen w-screen text-fg">
-    <PaneGroup direction="horizontal" autoSaveId="shell:frame" class="h-full w-full bg-surface text-fg">
-      <Pane {...contentPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
-        <header class="pane-header">
-          <div
-            class={cn(
-              '-ml-1 flex h-ui-md shrink items-stretch divide-x divide-border overflow-hidden rounded-md border transition-colors',
-              instrumentNavActive ? 'border-border bg-element-selected' : 'border-border-faint'
-            )}
-          >
-            <InstrumentSelector
-              {stationId}
-              instrumentId={instrumentId || null}
-              active={instrumentNavActive}
-              disabled={instrumentTransition}
-              oninspect={inspectSegment.select}
-              onselect={selectInstrument}
-            />
-            {#if instrumentId}
-              {#if instrumentTransition}
-                <span
-                  class="flex w-7 shrink-0 items-center justify-center text-fg-muted"
-                  title={instrumentTransitionLabel}
-                >
-                  <Spinner class="size-3.5" aria-label={instrumentTransitionLabel} />
-                </span>
-              {:else if app.instrument}
-                <button
-                  type="button"
-                  title="Close instrument"
-                  aria-label="Close instrument"
-                  onclick={showCloseDialog}
-                  class="flex w-7 shrink-0 cursor-pointer items-center justify-center text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-danger"
-                >
-                  <Logout width="14" height="14" />
-                </button>
-              {:else}
-                <button
-                  type="button"
-                  title={openInstrumentTitle}
-                  aria-label={openInstrumentTitle}
-                  disabled={!canOpenInstrument}
-                  onclick={openInstrument}
-                  class="flex w-7 shrink-0 cursor-pointer items-center justify-center text-fg-muted transition-colors hover:bg-element-hover/80 hover:text-success disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted"
-                >
-                  <Power width="14" height="14" />
-                </button>
-              {/if}
-            {/if}
-          </div>
-          <!-- Stricter: the workflow steps need a loaded instrument, not just a name. -->
-          {#if app.instrument}
-            <div
-              class={cn(
-                'ml-auto flex h-ui-md items-stretch overflow-hidden rounded-md border',
-                workflowActive ? 'border-border' : 'border-border-faint'
-              )}
+  <main class="h-screen w-screen text-fg">
+    <Sidebar.Provider class="h-full min-h-0 overflow-hidden">
+      <Sidebar.Root
+        collapsible="none"
+        class="w-56 shrink-0 overflow-hidden border-r border-border"
+        role="navigation"
+        aria-label="Instrument navigation"
+      >
+        <Sidebar.Header class="py-2">
+          <StationMenu
+            {stationId}
+            {stationName}
+            selectedInstrumentId={selectedInstrumentId || app.activeName}
+            disabled={instrumentTransition}
+            onselectinstrument={selectInstrument}
+            onclose={showCloseDialog}
+            onsettings={showSettings}
+            ondashboard={showDashboard}
+          />
+        </Sidebar.Header>
+        <Sidebar.Content>
+          <InstrumentNavigation instrumentId={selectedInstrumentId || app.activeName || undefined} />
+        </Sidebar.Content>
+        <Sidebar.Footer class="gap-1 border-t border-border-faint bg-element-bg/40 p-2">
+          {#if !app.instrument && instrumentId && app.stationStatus !== 'closing'}
+            <Button
+              variant="default"
+              size="sm"
+              class="justify-start text-base font-normal"
+              title={openInstrumentTitle}
+              disabled={!canOpenInstrument}
+              onclick={openInstrument}
             >
-              <nav aria-label="Instrument workflow" class="grid h-full grid-flow-col divide-x divide-border">
-                {#each workflowSegments as segment (segment.key)}
-                  {@render routeLink(segment)}
-                {/each}
-              </nav>
-            </div>
+              {#if instrumentTransition}
+                <Spinner class="size-3.5" />
+                <span>Opening instrument…</span>
+              {:else}
+                <Power />
+                <span>Open instrument</span>
+              {/if}
+            </Button>
           {/if}
-        </header>
-        <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          {@render children()}
-        </div>
-      </Pane>
-      <PaneDivider direction="vertical" />
-      <Pane {...viewerPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)] ">
-        <header class="pane-header">
-          {#if app.instrument}
-            <ProfileSelector instrument={app.instrument} size="md" class="w-64 min-w-36 shrink" />
-            {@render viewModeSelector()}
-          {:else}
-            {@render dashboardButton()}
-          {/if}
-        </header>
-        <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <WorkspaceViewer />
-        </div>
-      </Pane>
-      {#if app.instrument}
-        {@const instrument = app.instrument}
-        <PaneDivider direction="vertical" />
-        <Pane {...monitorsPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
-          <header class="pane-header justify-end">
-            <RunButton {app} class="min-w-0 flex-1 justify-center" />
-            {@render dashboardButton()}
-          </header>
-          <PaneGroup direction="vertical" bind:ref={monitorsSplitEl} autoSaveId="shell:monitors" class="min-h-0 flex-1">
-            <Pane class="min-h-0">
-              <div class="flex h-full flex-col divide-y divide-border overflow-y-auto">
-                {#if instrument.cameras.size > 0}
-                  <CamerasMonitor {instrument} />
-                {/if}
-                {#if instrument.lasers.size > 0}
-                  <LasersMonitor {instrument} />
-                {/if}
-                {#if instrument.filterWheels.length > 0}
-                  <FilterWheelsMonitor {instrument} />
-                {/if}
-                {#if Object.keys(instrument.hal.optical_routing).length > 0}
-                  <RoutingMonitor {instrument} />
-                {/if}
-              </div>
-            </Pane>
-            <PaneDivider direction="horizontal" />
-            <Pane defaultSize={32} {...gizmoPane} class="min-h-0">
-              <StageGizmo stage={instrument.stage} class="border-t border-border p-3" />
-            </Pane>
-          </PaneGroup>
+          <a
+            href={resolve('/(dashboard)/stations/[stationId]', { stationId })}
+            onclick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              showDashboard();
+            }}
+            class="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-2 text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-border-focused"
+            aria-label="Voxel dashboard"
+            title="Go to dashboard"
+          >
+            <VoxelLogo class="size-6 shrink-0" />
+            <span class="truncate text-xl leading-none font-normal tracking-wide uppercase">Voxel</span>
+          </a>
+        </Sidebar.Footer>
+      </Sidebar.Root>
+      <PaneGroup
+        direction="horizontal"
+        bind:ref={frameRef}
+        autoSaveId="shell:frame"
+        class="h-full min-w-0 flex-1 bg-surface text-fg"
+      >
+        <Pane {...contentPane} class="grid min-w-0 grid-rows-[minmax(0,1fr)]">
+          <div class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-canvas">
+            {@render children()}
+          </div>
         </Pane>
-      {/if}
-    </PaneGroup>
+        <PaneDivider direction="vertical" />
+        <Pane {...viewerPane} class="grid min-w-0 grid-rows-[minmax(0,1fr)]">
+          <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+            <CenterPane />
+          </div>
+        </Pane>
+        {#if app.instrument}
+          <PaneDivider direction="vertical" />
+          <Pane {...monitorsPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+            <MonitorsPane instrument={app.instrument} />
+          </Pane>
+        {/if}
+      </PaneGroup>
+    </Sidebar.Provider>
   </main>
   <Dialog.Root bind:open={closeDialogOpen}>
     <Dialog.Content size="sm" showCloseButton={false}>
       <Dialog.Header>
-        <Dialog.Title>{pendingSwitch ? 'Switch instrument?' : 'Close instrument'}</Dialog.Title>
+        <Dialog.Title>
+          {pendingSwitch ? 'Switch instrument?' : 'Close instrument?'}
+        </Dialog.Title>
       </Dialog.Header>
       <p class="text-lg text-fg-muted">
         {#if pendingSwitch}
@@ -598,26 +448,9 @@
       <Dialog.Footer>
         <Button variant="ghost" disabled={closingInstrument} onclick={cancelClose}>Cancel</Button>
         <Button variant="danger" disabled={closingInstrument} onclick={confirmClose}>
-          {closingInstrument ? 'Closing…' : pendingSwitch ? 'Close and switch' : 'Close'}
+          {closingInstrument ? 'Closing…' : pendingSwitch ? 'Close and switch' : 'Close instrument'}
         </Button>
-        {#if !pendingSwitch}
-          <Button variant="danger" disabled={closingInstrument} onclick={confirmCloseAndExit}>Close & Exit</Button>
-        {/if}
       </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Root>
 {/if}
-
-<style>
-  /* Shared header bar for the three shell columns. */
-  .pane-header {
-    display: flex;
-    height: calc(var(--spacing) * 12);
-    flex-shrink: 0;
-    align-items: center;
-    gap: calc(var(--spacing) * 3);
-    padding-inline: calc(var(--spacing) * 3);
-    border-bottom: 1px solid var(--border);
-    background-color: var(--elevated);
-  }
-</style>

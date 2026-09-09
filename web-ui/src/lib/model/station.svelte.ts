@@ -487,7 +487,18 @@ export class Instrument {
       preview_revision: session.instrument.preview_revision,
       fov: session.instrument.fov,
       routing_targets: session.instrument.routing_targets,
-      state: session.instrument,
+      // Keep persisted state separate from the session's hardware and runtime fields.
+      state: {
+        imaging: session.instrument.imaging,
+        routing: session.instrument.routing,
+        metadata_cls: session.instrument.metadata_cls,
+        output: session.instrument.output,
+        stencil: session.instrument.stencil,
+        traversal: session.instrument.traversal,
+        tasks: session.instrument.tasks,
+        metadata: session.instrument.metadata,
+        last_modified: session.instrument.last_modified
+      },
       task_tiles: session.instrument.task_tiles
     };
   }
@@ -835,6 +846,12 @@ export class Station {
   fetchPresets(instrumentName: string): Promise<PresetRecord[]> {
     return this.#client.get<PresetRecord[]>(
       `${this.#stationBase}/instruments/${encodeURIComponent(instrumentName)}/presets`
+    );
+  }
+
+  fetchPreset(instrumentName: string, presetId: string): Promise<PresetRecord> {
+    return this.#client.get<PresetRecord>(
+      `${this.#stationBase}/instruments/${encodeURIComponent(instrumentName)}/presets/${encodeURIComponent(presetId)}`
     );
   }
 

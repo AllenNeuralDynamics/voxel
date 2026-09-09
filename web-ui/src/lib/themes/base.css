@@ -16,17 +16,6 @@
 	 * canvas < surface < elevated < floating
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --canvas: oklch(0.9 0.005 56.366);
-  /* ~stone-250 — warm gray app base, lightened from stone-300 (0.869) so the center stage isn't too heavy
-	 * App-level base. Body background, empty areas. */
-
-  --surface: oklch(0.935 0.003 48.717);
-  /* ~stone-150 — panels; lightened from stone-200 (0.923) to keep a clear step above the lifted canvas
-	 * Panels, content panes. Where most UI lives. */
-
-  --panel: var(--surface);
-  /* Secondary panels. Falls back to surface; override per-theme. */
-
   --elevated: oklch(0.97 0.001 106.424);
   /* stone-100 — cards, a soft warm gray above surface (was zinc-50 0.985)
 	 * Cards, headers, toolbars, detail panels. */
@@ -35,6 +24,16 @@
   /* stone-50 — near-white, pops as an overlay (was white)
 	 * Popovers, dropdowns, dialog panels. */
 
+  --canvas: oklch(0.9 0.005 56.366); /* ~stone-250 */
+  --surface: oklch(0.935 0.003 48.717); /* ~stone-150 */
+
+  --canvas: oklch(0.937 0.003 286.32); /* between zinc-200 and zinc-100 */
+  --surface: oklch(0.967 0.001 286.375); /* zinc-100 — unchanged */
+  --elevated: oklch(0.983 0.001 286); /* between zinc-50 and zinc-100 */
+  --floating: oklch(0.997 0 0); /* near-white */
+
+  --panel: var(--surface);
+  /* Secondary panels. Falls back to surface; override per-theme. */
   --backdrop: oklch(0 0 0 / 50%);
   /* No Zed equivalent.
 	 * Modal/dialog scrim overlay. */

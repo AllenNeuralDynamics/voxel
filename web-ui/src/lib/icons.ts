@@ -3,6 +3,7 @@ export { default as ChevronsUpDown } from '~icons/lucide/chevrons-up-down';
 export { default as CircleDashed } from '~icons/lucide/circle-dashed';
 export { default as Crosshair } from '~icons/lucide/crosshair';
 export { default as EllipsisVertical } from '~icons/lucide/ellipsis-vertical';
+export { default as ExternalLink } from '~icons/lucide/external-link';
 export { default as Eye } from '~icons/lucide/eye';
 export { default as EyeOff } from '~icons/lucide/eye-off';
 export { default as GripVertical } from '~icons/lucide/grip-vertical';
@@ -11,6 +12,7 @@ export { default as Play } from '~icons/lucide/play';
 export { default as WrapText } from '~icons/lucide/wrap-text';
 
 // Material Design Icons
+export { default as Cog } from '~icons/lucide/settings-2';
 export { default as Alert } from '~icons/mdi/alert';
 export { default as AlertCircleOutline } from '~icons/mdi/alert-circle-outline';
 export { default as AlertOutline } from '~icons/mdi/alert-outline';
@@ -25,7 +27,6 @@ export { default as ChevronUp } from '~icons/mdi/chevron-up';
 export { default as ChevronUpDown } from '~icons/mdi/chevron-up-down';
 export { default as CircleSmall } from '~icons/mdi/circle-small';
 export { default as Close } from '~icons/mdi/close';
-export { default as Cog } from '~icons/mdi/cog';
 export { default as ContentSaveOutline } from '~icons/mdi/content-save-outline';
 export { default as DeleteOutline } from '~icons/mdi/delete-outline';
 export { default as DotsHorizontal } from '~icons/mdi/dots-horizontal';

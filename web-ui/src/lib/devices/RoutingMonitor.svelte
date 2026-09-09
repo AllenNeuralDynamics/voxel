@@ -3,7 +3,9 @@
 
   import { Button, Select } from '$lib/kit';
   import { type Instrument, type OpticalRoutingPolicy } from '$lib/model';
-  import { cn, displayName, toastError, trimFloat } from '$lib/utils';
+  import { prefs } from '$lib/prefs';
+  import { formatSpatialDistance } from '$lib/spatial-units';
+  import { cn, displayName, toastError } from '$lib/utils';
 
   interface Props {
     instrument: Instrument;
@@ -49,7 +51,7 @@
 
   function policySummary(policy: OpticalRoutingPolicy): string {
     if (policy.type === 'fixed') return `Fixed to ${displayName(policy.route)}`;
-    return `${policy.axis.toUpperCase()} split at ${trimFloat(policy.threshold / 1000, 4)} mm · ${displayName(
+    return `${policy.axis.toUpperCase()} split at ${formatSpatialDistance(policy.threshold, prefs.spatialUnit.get())} · ${displayName(
       policy.lower
     )} → ${displayName(policy.upper)}`;
   }

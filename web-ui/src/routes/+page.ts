@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 
-import { stationsPath } from '$lib/routes';
+import { resolve } from '$app/paths';
 
 export function load(): never {
-  redirect(307, stationsPath());
+  redirect(307, resolve('/(dashboard)/stations'));
 }

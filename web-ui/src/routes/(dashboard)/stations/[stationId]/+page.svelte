@@ -3,18 +3,18 @@
   import { onMount } from 'svelte';
 
   import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { sendStationWindowRequest, stationWindowRequest } from '$lib/app-windows';
-  import { AlertCircleOutline, ChevronRight } from '$lib/icons';
-  import { resolveInstrumentView, violationLocation } from '$lib/instruments/instrument-view';
-  import OverviewDevices from '$lib/instruments/overview/OverviewDevices.svelte';
-  import OverviewImaging from '$lib/instruments/overview/OverviewImaging.svelte';
+  import { sendStationWindowRequest, stationWindowName, stationWindowRequest } from '$lib/app-windows';
+  import { AlertCircleOutline, ChevronRight, ExternalLink } from '$lib/icons';
+  import { resolveInstrumentView, violationLocation } from '$lib/instrument-view';
   import { Button, Field, TextInput } from '$lib/kit';
   import { errorMessage } from '$lib/model';
-  import { dashboardInstrumentPath, instrumentPath, stationPath } from '$lib/routes';
   import { displayName, toastError } from '$lib/utils';
 
   import { getDashboardState } from '../../state.svelte';
+  import OverviewDevices from './OverviewDevices.svelte';
+  import OverviewImaging from './OverviewImaging.svelte';
 
   const dashboard = getDashboardState();
   const stationId = $derived(page.params.stationId ?? '');
@@ -58,14 +58,30 @@
   );
 
   function instrumentTarget(name: string) {
-    return instrumentPath(stationId, name);
+    return resolve('/stations/[stationId]/instruments/[instrumentId]', { stationId, instrumentId: name });
   }
 
   function sanitize(value: string): string {
     return value.trim().toLowerCase().replace(/\s+/g, '-');
   }
 
+  function goToControls(): void {
+    if (!activeInstrument) return;
+    actionError = null;
+    try {
+      if (!dashboard.acquireStationWindow(stationId, instrumentTarget(activeInstrument))) {
+        actionError = 'The control window was blocked by the browser.';
+      }
+    } catch (error) {
+      actionError = errorMessage(error);
+    }
+  }
+
   async function openInstrument(name: string): Promise<void> {
+    if (activeInstrument) {
+      goToControls();
+      return;
+    }
     actionName = name;
     actionError = null;
     const target = instrumentTarget(name);
@@ -110,7 +126,10 @@
       const target = instrumentTarget(name);
       if (controlWindow.created) controlWindow.ref.location.href = `${target}?open=1`;
       else sendStationWindowRequest(controlWindow.ref, stationWindowRequest(stationId, name, true));
-      await goto(dashboardInstrumentPath(stationId, name), { replaceState: true });
+      const dashboardTarget = resolve(`/(dashboard)/stations/[stationId]?instrument=${encodeURIComponent(name)}`, {
+        stationId
+      });
+      await goto(dashboardTarget, { replaceState: true });
     } catch (error) {
       if (controlWindow.created) {
         controlWindow.ref.close();
@@ -127,7 +146,7 @@
   <header class="flex h-14 shrink-0 items-center gap-4 border-b border-border px-6">
     <nav class="flex min-w-0 flex-1 items-center gap-1.5" aria-label="Breadcrumb">
       <a
-        href={stationPath(stationId)}
+        href={resolve('/(dashboard)/stations/[stationId]', { stationId })}
         class="max-w-[45%] truncate text-fg-muted transition-colors hover:text-fg"
         title={station?.name}
       >
@@ -150,22 +169,35 @@
         {actionName === selection.name ? 'Creating…' : 'Create and open'}
       </Button>
     {:else if selection?.kind === 'instrument'}
-      {@const invalid = !selected?.config || selected.errorSource === 'config'}
-      <Button
-        class="shrink-0"
-        size="sm"
-        variant={activeInstrument === selection.name ? 'outline' : 'default'}
-        disabled={invalid || actionName !== null}
-        onclick={() => openInstrument(selection.name)}
-      >
-        {actionName === selection.name
-          ? 'Opening…'
-          : activeInstrument === selection.name
-            ? 'Open control'
-            : activeInstrument
-              ? 'Switch instrument'
-              : 'Open instrument'}
-      </Button>
+      {#if activeInstrument}
+        <a
+          href={instrumentTarget(activeInstrument)}
+          target={stationWindowName(stationId)}
+          class="flex max-w-[50%] min-w-0 items-center gap-2 rounded text-right text-base text-fg-muted underline-offset-4 hover:text-fg hover:underline focus-visible:outline-2 focus-visible:outline-border-focused"
+          onclick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            goToControls();
+          }}
+        >
+          <span>
+            {activeInstrument !== selection.name
+              ? `${displayName(activeInstrument)} is open. Go to controls`
+              : 'Go to controls'}
+          </span>
+          <ExternalLink class="size-4 shrink-0" aria-hidden="true" />
+        </a>
+      {:else}
+        {@const invalid = !selected?.config || selected.errorSource === 'config'}
+        <Button
+          class="shrink-0"
+          size="sm"
+          disabled={invalid || actionName !== null}
+          onclick={() => openInstrument(selection.name)}
+        >
+          {actionName === selection.name ? 'Opening…' : 'Open instrument'}
+        </Button>
+      {/if}
     {/if}
   </header>
 
@@ -198,10 +230,6 @@
           </p>
         {/if}
       </section>
-    {:else if selection?.kind === 'instrument' && activeInstrument && activeInstrument !== selection.name}
-      <div class="mb-5 rounded-lg border border-border bg-element-bg/40 p-3 text-fg-muted">
-        The control window will ask before closing {displayName(activeInstrument)} and switching instruments.
-      </div>
     {/if}
 
     {#if dashboard.stationErrors.has(stationId) && !discovery}

@@ -4,41 +4,28 @@
   import { watch } from 'runed';
   import type { Component } from 'svelte';
 
+  import { page } from '$app/state';
   import { GridCanvas } from '$lib/grid';
   import { getTaskSelection } from '$lib/grid/selection.svelte';
   import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, TrashCanOutline } from '$lib/icons';
   import { Button, Checkbox, Dialog, Select } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { getVoxelStation, type TaskPatch, type TileOrder } from '$lib/model';
+  import { prefs } from '$lib/prefs';
   import { Input, SpinBox } from '$lib/prop/numeric';
-  import { cn, displayName, pref, toastError } from '$lib/utils';
+  import { getSpatialUnit } from '$lib/spatial-units';
+  import { cn, displayName, toastError } from '$lib/utils';
+
+  import PageHeader from '../../../PageHeader.svelte';
 
   const app = getVoxelStation();
-  const instrument = $derived(app.instrument);
+  const instrument = $derived(app.instrument?.id === page.params.instrumentId ? app.instrument : null);
   const selection = getTaskSelection();
 
   // Stored in µm, like task positions; displayed/entered through the active unit.
   let nudgeStep = $state(100);
 
-  // --- Space units: a display/entry lens over µm-stored values ---
-
-  interface SpaceUnit {
-    value: 'mm' | 'um';
-    label: string;
-    scale: number; // µm per unit
-    step: number; // fine step (0.1 µm resolution)
-    bigStep: number; // coarse step (10 µm)
-    decimals: number; // display precision
-  }
-
-  const SPACE_UNITS: SpaceUnit[] = [
-    { value: 'mm', label: 'mm', scale: 1000, step: 0.0001, bigStep: 0.01, decimals: 4 },
-    { value: 'um', label: 'µm', scale: 1, step: 0.1, bigStep: 10, decimals: 1 }
-  ];
-  const SPACE_UNIT_OPTIONS = SPACE_UNITS.map((u) => ({ value: u.value, label: u.label }));
-
-  const spaceUnit = pref<SpaceUnit['value']>('plan:space-unit', 'mm');
-  const unit = $derived(SPACE_UNITS.find((u) => u.value === spaceUnit.get()) ?? SPACE_UNITS[0]);
+  const unit = $derived(getSpatialUnit(prefs.spatialUnit.get()));
 
   const TILE_ORDER_OPTIONS: { value: TileOrder; label: string }[] = [
     { value: 'sweep_row', label: 'Sweep Row' },
@@ -254,62 +241,64 @@
       </button>
     </span>
     <span class="cell justify-end text-fg-faint tabular-nums">#{row.order}</span>
-    <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <Input
-        model={{
-          value: row.x / unit.scale,
-          onChange: (v) => setField(row, 'x', v),
-          step: unit.step,
-          bigStep: unit.bigStep
-        }}
-        decimals={unit.decimals}
-        numCharacters={8}
-        align="right"
-        class="px-0.5 text-base leading-none"
-      />
-    </span>
-    <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <Input
-        model={{
-          value: row.y / unit.scale,
-          onChange: (v) => setField(row, 'y', v),
-          step: unit.step,
-          bigStep: unit.bigStep
-        }}
-        decimals={unit.decimals}
-        numCharacters={8}
-        align="right"
-        class="px-0.5 text-base leading-none"
-      />
-    </span>
-    <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <Input
-        model={{
-          value: row.start / unit.scale,
-          onChange: (v) => setField(row, 'start', v),
-          step: unit.step,
-          bigStep: unit.bigStep
-        }}
-        decimals={unit.decimals}
-        numCharacters={8}
-        align="right"
-        class="px-0.5 text-base leading-none"
-      />
-    </span>
-    <span data-cell-edit class="cell justify-end focus-within:text-fg">
-      <Input
-        model={{
-          value: row.end / unit.scale,
-          onChange: (v) => setField(row, 'end', v),
-          step: unit.step,
-          bigStep: unit.bigStep
-        }}
-        decimals={unit.decimals}
-        numCharacters={8}
-        align="right"
-        class="px-0.5 text-base leading-none"
-      />
-    </span>
+    {#key unit.value}
+      <span data-cell-edit class="cell justify-end focus-within:text-fg">
+        <Input
+          model={{
+            value: row.x / unit.scale,
+            onChange: (v) => setField(row, 'x', v),
+            step: unit.step,
+            bigStep: unit.bigStep
+          }}
+          decimals={unit.decimals}
+          numCharacters={8}
+          align="right"
+          class="px-0.5 text-base leading-none"
+        />
+      </span>
+      <span data-cell-edit class="cell justify-end focus-within:text-fg">
+        <Input
+          model={{
+            value: row.y / unit.scale,
+            onChange: (v) => setField(row, 'y', v),
+            step: unit.step,
+            bigStep: unit.bigStep
+          }}
+          decimals={unit.decimals}
+          numCharacters={8}
+          align="right"
+          class="px-0.5 text-base leading-none"
+        />
+      </span>
+      <span data-cell-edit class="cell justify-end focus-within:text-fg">
+        <Input
+          model={{
+            value: row.start / unit.scale,
+            onChange: (v) => setField(row, 'start', v),
+            step: unit.step,
+            bigStep: unit.bigStep
+          }}
+          decimals={unit.decimals}
+          numCharacters={8}
+          align="right"
+          class="px-0.5 text-base leading-none"
+        />
+      </span>
+      <span data-cell-edit class="cell justify-end focus-within:text-fg">
+        <Input
+          model={{
+            value: row.end / unit.scale,
+            onChange: (v) => setField(row, 'end', v),
+            step: unit.step,
+            bigStep: unit.bigStep
+          }}
+          decimals={unit.decimals}
+          numCharacters={8}
+          align="right"
+          class="px-0.5 text-base leading-none"
+        />
+      </span>
+    {/key}
     <div data-cell-edit class="cell justify-end">
       <Popover.Root>
         <Popover.Trigger
@@ -372,110 +361,110 @@
   </button>
 {/snippet}
 
-<PaneGroup direction="vertical" autoSaveId="plan:grid" class="h-full">
-  <Pane defaultSize={60} minSize={30}>
-    <div class="flex h-full flex-col gap-2 overflow-hidden">
-      <div class="flex flex-wrap items-center gap-3 border-b border-border px-3 py-4">
-        {#if instrument}
-          <Select
-            size="xs"
-            class="w-51"
-            prefix="Traversal"
-            value={instrument.state.traversal}
-            options={TILE_ORDER_OPTIONS}
-            onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
-          />
-        {/if}
-        <Select
-          size="xs"
-          class="w-24"
-          prefix="Units"
-          value={spaceUnit.get()}
-          options={SPACE_UNIT_OPTIONS}
-          onchange={(v) => spaceUnit.set(v as SpaceUnit['value'])}
-        />
-        <div class="flex items-center gap-1.5">
-          <SpinBox
-            model={{
-              value: nudgeStep / unit.scale,
-              onChange: (v) => (nudgeStep = v * unit.scale),
-              min: unit.step,
-              step: unit.bigStep
-            }}
-            decimals={unit.decimals}
-            numCharacters={6}
-            size="xs"
-            steppers={false}
-            prefix="Nudge"
-            suffix={unit.label}
-          />
-          <div class="flex items-center gap-1">
-            {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
-            {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
-            {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
-            {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
+<div class="flex h-full min-h-0 min-w-0 flex-col">
+  <PageHeader items={[{ label: 'Plan' }]} class="px-4 pt-3 pb-2" />
+  <div class="min-h-0 flex-1 overflow-hidden">
+    <PaneGroup direction="vertical" autoSaveId="plan:grid" class="h-full">
+      <Pane defaultSize={60} minSize={30}>
+        <div class="flex h-full flex-col gap-2 overflow-hidden">
+          <div class="flex flex-wrap items-center gap-3 border-b border-border px-3 py-4">
+            {#if instrument}
+              <Select
+                size="xs"
+                class="w-51"
+                prefix="Traversal"
+                value={instrument.state.traversal}
+                options={TILE_ORDER_OPTIONS}
+                onchange={(v) => toastError(instrument.setTraversal(v as TileOrder))}
+              />
+            {/if}
+
+            <div class="flex items-center gap-1.5">
+              {#key unit.value}
+                <SpinBox
+                  model={{
+                    value: nudgeStep / unit.scale,
+                    onChange: (v) => (nudgeStep = v * unit.scale),
+                    min: unit.step,
+                    step: unit.bigStep
+                  }}
+                  decimals={unit.decimals}
+                  numCharacters={6}
+                  size="xs"
+                  steppers={false}
+                  prefix="Nudge"
+                  suffix={unit.label}
+                />
+              {/key}
+              <div class="flex items-center gap-1">
+                {@render nudgeButton(ChevronLeft, 'Nudge −X', () => applyNudge(-nudgeStep, 0))}
+                {@render nudgeButton(ChevronRight, 'Nudge +X', () => applyNudge(nudgeStep, 0))}
+                {@render nudgeButton(ChevronUp, 'Nudge +Y', () => applyNudge(0, nudgeStep))}
+                {@render nudgeButton(ChevronDown, 'Nudge −Y', () => applyNudge(0, -nudgeStep))}
+              </div>
+            </div>
+            {#if selectedRows.length > 0}
+              <span class="text-base text-nowrap text-fg-muted tabular-nums">
+                {selectedRows.length}/{rows.length} tasks selected
+              </span>
+              <Button
+                variant="secondary"
+                size="xs"
+                title="Delete selected tasks"
+                class="ml-auto"
+                disabled={!hasSelection}
+                onclick={() => (deleteDialogOpen = true)}
+              >
+                <TrashCanOutline width="14" height="14" />
+              </Button>
+            {/if}
+          </div>
+
+          <!-- Rows -->
+          <div
+            role="grid"
+            aria-label="Task list"
+            class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_auto_auto_auto_1fr] content-start overflow-y-auto px-2"
+          >
+            {#if rows.length === 0}
+              <div class="col-span-full flex min-h-32 items-center justify-center p-4">
+                <p class="text-lg text-fg-faint">No tasks — add tasks from the grid</p>
+              </div>
+            {:else}
+              <!-- Column header -->
+              <div class="col-span-full grid grid-cols-subgrid text-lg font-medium text-fg-muted">
+                <span class="cell cell-first cell-head justify-center">
+                  <Checkbox
+                    size="xs"
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    disabled={rows.length === 0}
+                    onchange={toggleAll}
+                  />
+                </span>
+                <span class="cell cell-head justify-end">#</span>
+                <span class="cell cell-head justify-between">{@render headerMatch('x')}X ({unit.label})</span>
+                <span class="cell cell-head justify-between">{@render headerMatch('y')}Y ({unit.label})</span>
+                <span class="cell cell-head justify-between">{@render headerMatch('start')}Z Start ({unit.label})</span>
+                <span class="cell cell-head justify-between">{@render headerMatch('end')}Z End ({unit.label})</span>
+                <span class="cell cell-head justify-end"><span class="pr-2">Profiles</span></span>
+              </div>
+              {#each rows as row (row.taskId)}
+                {@render taskRow(row, selection.has(row.taskId))}
+              {/each}
+            {/if}
           </div>
         </div>
-        {#if selectedRows.length > 0}
-          <span class="text-base text-nowrap text-fg-muted tabular-nums">
-            {selectedRows.length}/{rows.length} tasks selected
-          </span>
-          <Button
-            variant="secondary"
-            size="xs"
-            title="Delete selected tasks"
-            class="ml-auto"
-            disabled={!hasSelection}
-            onclick={() => (deleteDialogOpen = true)}
-          >
-            <TrashCanOutline width="14" height="14" />
-          </Button>
+      </Pane>
+      <PaneDivider direction="horizontal" />
+      <Pane defaultSize={40} minSize={20} class="min-w-0 overflow-hidden">
+        {#if instrument}
+          <GridCanvas {instrument} />
         {/if}
-      </div>
-
-      <!-- Rows -->
-      <div
-        role="grid"
-        aria-label="Task list"
-        class="grid flex-1 auto-rows-min grid-cols-[auto_auto_auto_auto_auto_auto_1fr] content-start overflow-y-auto px-2"
-      >
-        {#if rows.length === 0}
-          <div class="col-span-full flex min-h-32 items-center justify-center p-4">
-            <p class="text-lg text-fg-faint">No tasks — add tasks from the grid</p>
-          </div>
-        {:else}
-          <!-- Column header -->
-          <div class="col-span-full grid grid-cols-subgrid text-lg font-medium text-fg-muted">
-            <span class="cell cell-first cell-head justify-center">
-              <Checkbox
-                size="xs"
-                checked={allSelected}
-                indeterminate={someSelected}
-                disabled={rows.length === 0}
-                onchange={toggleAll}
-              />
-            </span>
-            <span class="cell cell-head justify-end">#</span>
-            <span class="cell cell-head justify-between">{@render headerMatch('x')}X</span>
-            <span class="cell cell-head justify-between">{@render headerMatch('y')}Y</span>
-            <span class="cell cell-head justify-between">{@render headerMatch('start')}Z Start</span>
-            <span class="cell cell-head justify-between">{@render headerMatch('end')}Z End</span>
-            <span class="cell cell-head justify-end"><span class="pr-2">Profiles</span></span>
-          </div>
-          {#each rows as row (row.taskId)}
-            {@render taskRow(row, selection.has(row.taskId))}
-          {/each}
-        {/if}
-      </div>
-    </div>
-  </Pane>
-  <PaneDivider direction="horizontal" />
-  <Pane defaultSize={40} minSize={20} class="min-w-0 overflow-hidden">
-    {#if instrument}
-      <GridCanvas {instrument} />
-    {/if}
-  </Pane>
-</PaneGroup>
+      </Pane>
+    </PaneGroup>
+  </div>
+</div>
 
 <Dialog.Root bind:open={deleteDialogOpen}>
   <Dialog.Portal>

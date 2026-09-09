@@ -5,7 +5,7 @@
   import { cn, type WithElementRef } from '$lib/utils';
 
   export const buttonVariants = tv({
-    base: "group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded border border-transparent font-medium transition-[color,background-color,border-color,transform] outline-none select-none focus-visible:ring-2 focus-visible:ring-focused focus-visible:ring-offset-2 focus-visible:ring-offset-canvas active:not-aria-[haspopup]:scale-[0.98] disabled:pointer-events-none disabled:opacity-80 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+    base: "group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded border border-transparent font-normal transition-[color,background-color,border-color,transform] outline-none select-none focus-visible:ring-2 focus-visible:ring-focused focus-visible:ring-offset-2 focus-visible:ring-offset-canvas active:not-aria-[haspopup]:scale-[0.98] disabled:pointer-events-none disabled:opacity-80 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
     variants: {
       variant: {
         default: 'border-primary bg-primary text-primary-fg hover:bg-primary/90 active:bg-primary/80',

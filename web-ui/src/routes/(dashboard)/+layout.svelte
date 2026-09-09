@@ -2,11 +2,11 @@
   import { onDestroy, onMount } from 'svelte';
 
   import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { DASHBOARD_WINDOW_NAME } from '$lib/app-windows';
   import { Cog, Plus } from '$lib/icons';
   import { DropdownMenu } from '$lib/kit';
-  import { dashboardInstrumentPath, newInstrumentPath, settingsPath, stationPath, stationsPath } from '$lib/routes';
   import { cn, displayName, toastError } from '$lib/utils';
   import VoxelLogo from '$lib/VoxelLogo.svelte';
 
@@ -62,7 +62,7 @@
       >
         <div class="flex h-14 items-center border-b border-border px-3">
           <a
-            href={stationsPath()}
+            href={resolve('/(dashboard)/stations')}
             class="flex h-ui-lg flex-1 items-center gap-2 rounded-md px-2 transition-colors hover:bg-element-hover"
             aria-label="Voxel stations"
           >
@@ -70,7 +70,7 @@
             <span class="text-2xl font-normal tracking-wide uppercase">Voxel</span>
           </a>
           <a
-            href={settingsPath()}
+            href={resolve('/(dashboard)/settings')}
             class={cn(
               'flex size-ui-lg shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-element-hover hover:text-fg',
               settingsSelected && 'bg-element-selected text-fg'
@@ -99,7 +99,7 @@
                 <section class="space-y-0.5">
                   <div class="flex min-h-ui-md items-center gap-2 px-2">
                     <a
-                      href={stationPath(station.id)}
+                      href={resolve('/(dashboard)/stations/[stationId]', { stationId: station.id })}
                       class={cn(
                         'min-w-0 flex-1 truncate text-sm font-medium tracking-wide uppercase transition-colors',
                         stationUnavailable ? 'text-fg-faint' : 'text-fg-muted hover:text-fg'
@@ -127,7 +127,11 @@
                       {#if discovery}
                         <DropdownMenu.Content align="end" class="w-64">
                           {#each Object.keys(discovery.templates).sort( (left, right) => left.localeCompare(right) ) as template (template)}
-                            <DropdownMenu.Item onclick={() => goto(newInstrumentPath(station.id, template))}>
+                            {@const href = resolve(
+                              `/(dashboard)/stations/[stationId]?template=${encodeURIComponent(template)}`,
+                              { stationId: station.id }
+                            )}
+                            <DropdownMenu.Item onclick={() => goto(href)}>
                               <span class="truncate text-base">{displayName(template)}</span>
                             </DropdownMenu.Item>
                           {/each}
@@ -142,8 +146,12 @@
                     {#each Object.entries(discovery.instruments).sort( ([left], [right]) => left.localeCompare(right) ) as [name, inspection] (name)}
                       {@const active = stationActiveInstrument === name}
                       {@const invalid = inspection.config.status !== 'loaded' || inspection.violations.length > 0}
+                      {@const href = resolve(
+                        `/(dashboard)/stations/[stationId]?instrument=${encodeURIComponent(name)}`,
+                        { stationId: station.id }
+                      )}
                       <a
-                        href={dashboardInstrumentPath(station.id, name)}
+                        {href}
                         class={cn(
                           'flex min-h-ui-md items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
                           selectedInstrument(station.id) === name

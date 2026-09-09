@@ -9,6 +9,8 @@
   import { CenterFocus, Close, Crosshair, FitToScreen, PanelRight, Stop } from '$lib/icons';
   import { Button, ContextMenu } from '$lib/kit';
   import { DEFAULT_STAGE_ORIENTATION, getVoxelStation } from '$lib/model';
+  import { prefs } from '$lib/prefs';
+  import { formatSpatialDistance, formatSpatialValue } from '$lib/spatial-units';
   import { displayName, pref, toastError } from '$lib/utils';
 
   import { type Layer, type Painter, Surface } from './draw';
@@ -422,8 +424,8 @@
                   ? 'text-fg-muted'
                   : 'text-fg-faint'}"
               >
-                <span>X {Math.round(cursor[0])}</span>
-                <span>Y {Math.round(cursor[1])} µm</span>
+                <span>X {formatSpatialValue(cursor[0], prefs.spatialUnit.get())}</span>
+                <span>Y {formatSpatialDistance(cursor[1], prefs.spatialUnit.get())}</span>
                 {#if !cursorInBounds}
                   <span>· out of range</span>
                 {/if}

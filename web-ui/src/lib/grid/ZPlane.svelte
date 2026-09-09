@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
 
   import type { Instrument } from '$lib/model';
+  import { prefs } from '$lib/prefs';
+  import { formatSpatialDistance } from '$lib/spatial-units';
 
   import { getTaskSelection } from './selection.svelte';
 
@@ -110,7 +112,7 @@
       stroke-width="1"
       stroke={zMoving ? 'var(--color-danger)' : 'var(--color-success)'}
     >
-      <title>Z: {(zPos / 1000).toFixed(3)} mm</title>
+      <title>Z: {formatSpatialDistance(zPos, prefs.spatialUnit.get())}</title>
     </line>
   </svg>
 </div>

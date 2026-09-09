@@ -2,7 +2,7 @@
   import { watch } from 'runed';
 
   import { goto } from '$app/navigation';
-  import { dashboardInstrumentPath } from '$lib/routes';
+  import { resolve } from '$app/paths';
 
   import { getDashboardState } from '../state.svelte';
 
@@ -23,7 +23,10 @@
         const active = dashboard.snapshots.get(station.id)?.session?.info.instrument_name;
         const first = active && active in instruments ? active : Object.keys(instruments).sort()[0];
         if (first) {
-          void goto(dashboardInstrumentPath(station.id, first), { replaceState: true });
+          const target = resolve(`/(dashboard)/stations/[stationId]?instrument=${encodeURIComponent(first)}`, {
+            stationId: station.id
+          });
+          void goto(target, { replaceState: true });
           return;
         }
       }

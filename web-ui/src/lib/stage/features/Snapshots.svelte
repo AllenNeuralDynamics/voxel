@@ -6,7 +6,9 @@
   import { Crosshair, FitToScreen, FolderMoveOutline, ImageMultiple, Layers, Plus, TrashCanOutline } from '$lib/icons';
   import { ContextMenu, HoverCard, Rename } from '$lib/kit';
   import { getVoxelStation, type Snapshot, type SnapshotGroup } from '$lib/model';
+  import { prefs } from '$lib/prefs';
   import { resolveColormapColor } from '$lib/preview/render';
+  import { formatSpatialDistance, formatSpatialValue, getSpatialUnit } from '$lib/spatial-units';
   import { cn, toastError, trimFloat } from '$lib/utils';
 
   import type { Bounds, Painter } from '../draw';
@@ -217,9 +219,10 @@
       lo = Math.min(lo, t.stageZ);
       hi = Math.max(hi, t.stageZ);
     }
-    const l = Math.round(lo);
-    const h = Math.round(hi);
-    return l === h ? `${l} µm` : `${l} – ${h} µm`;
+    const l = formatSpatialValue(lo, prefs.spatialUnit.get());
+    const h = formatSpatialValue(hi, prefs.spatialUnit.get());
+    const label = getSpatialUnit(prefs.spatialUnit.get()).label;
+    return l === h ? `${l} ${label}` : `${l} – ${h} ${label}`;
   }
 
   // Distinct channels across a group's tiles, each with its resolved colormap color.
@@ -303,7 +306,7 @@
         </div>
         <div class="flex flex-col">
           <span class="text-fg-faint">Z</span>
-          <span class="text-fg">{Math.round(snap.stageZ)}</span>
+          <span class="text-fg">{formatSpatialDistance(snap.stageZ, prefs.spatialUnit.get())}</span>
         </div>
       </div>
     </div>
@@ -455,7 +458,9 @@
                   class="min-w-0 flex-1"
                   textClass="block cursor-pointer truncate {isSelected ? 'text-fg' : 'text-fg-muted'}"
                 />
-                <span class="shrink-0 font-mono text-base text-fg-faint tabular-nums">z{Math.round(snap.stageZ)}</span>
+                <span class="shrink-0 font-mono text-base text-fg-faint tabular-nums"
+                  >z{formatSpatialDistance(snap.stageZ, prefs.spatialUnit.get())}</span
+                >
               </div>
             {/snippet}
           </HoverCard.Trigger>

@@ -3,7 +3,7 @@
   import { toast } from 'svelte-sonner';
 
   import { Button, Checkbox, Dialog, Field, Label, Select, TextInput, Tooltip } from '$lib/kit';
-  import MetadataPanel from '$lib/MetadataPanel.svelte';
+  import MetadataEditor from '$lib/MetadataEditor.svelte';
   import { type Compression, type DownscaleType, type ScaleLevel, type Station } from '$lib/model';
   import { SpinBox } from '$lib/prop/numeric';
   import { toastError } from '$lib/utils';
@@ -241,7 +241,7 @@
         <!-- Metadata -->
         <section class="flex flex-col gap-2">
           <h3 class="font-medium tracking-wide text-fg-muted uppercase">Metadata</h3>
-          <MetadataPanel {instrument} class="flex flex-col gap-2" />
+          <MetadataEditor {instrument} class="flex flex-col gap-2" />
         </section>
       </div>
 

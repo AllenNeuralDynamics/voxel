@@ -32,10 +32,11 @@
     logs: LogEntry[];
     expanded?: boolean;
     ontoggle?: () => void;
+    showFooter?: boolean;
     class?: string;
   }
 
-  const { logs, expanded = true, ontoggle, class: className }: Props = $props();
+  const { logs, expanded = true, ontoggle, showFooter = true, class: className }: Props = $props();
 
   const filtered = $derived(logs.filter((log) => log.level >= LEVEL_VALUES[minLevel.get()]));
   const warnings = $derived(logs.filter((log) => log.level >= 30 && log.level < 40).length);
@@ -108,10 +109,36 @@
 
 <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', className)}>
   {#if expanded}
-    <div class="min-h-0 flex-1 overflow-hidden p-2">
+    <header class="flex h-8 shrink-0 items-center justify-between bg-transparent px-1 text-base">
+      <button
+        type="button"
+        aria-pressed={wrap.get()}
+        onclick={() => wrap.set(!wrap.get())}
+        class={cn(
+          'flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 transition-colors',
+          wrap.get()
+            ? 'border-border bg-element-selected text-fg shadow-sm'
+            : 'border-transparent text-fg-muted hover:text-fg'
+        )}
+      >
+        <WrapText width="14" height="14" />
+        Wrap
+      </button>
+
+      <Select
+        size="xs"
+        class="w-36 border-transparent bg-transparent hover:bg-element-hover"
+        value={minLevel.get()}
+        options={LEVEL_OPTIONS}
+        onchange={(value) => minLevel.set(value as Level)}
+        prefix="Level ≥"
+      />
+    </header>
+
+    <div class="min-h-0 flex-1 overflow-hidden px-2 pt-0 pb-2">
       <div
         bind:this={container}
-        class="log-container h-full overflow-y-auto rounded-sm border border-border bg-canvas font-mono text-sm"
+        class="log-container h-full overflow-y-auto rounded-sm border border-border-faint/50 bg-canvas font-mono text-sm"
       >
         {#if filtered.length === 0}
           <div class="flex h-full items-center justify-center text-fg-muted">
@@ -142,62 +169,32 @@
     </div>
   {/if}
 
-  <footer class="flex h-7 shrink-0 items-center border-t border-border bg-elevated text-base">
-    {#if ontoggle}
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onclick={ontoggle}
-        class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 text-fg-muted transition-colors hover:text-fg"
-      >
-        {@render summary()}
-      </button>
-    {:else}
-      <div class="flex h-full min-w-0 flex-1 items-center gap-3 px-3">
-        {@render summary()}
-      </div>
-    {/if}
-
-    <button
-      type="button"
-      aria-pressed={wrap.get()}
-      onclick={() => wrap.set(!wrap.get())}
-      class={cn(
-        'mx-1 flex h-full cursor-pointer items-center gap-1.5 rounded border px-2 transition-colors',
-        wrap.get()
-          ? 'border-border bg-element-selected text-fg shadow-sm'
-          : 'border-transparent text-fg-muted hover:text-fg'
-      )}
-    >
-      <WrapText width="14" height="14" />
-      Wrap
-    </button>
-
-    <Select
-      size="xs"
-      class="mx-2 w-30 border-transparent bg-transparent hover:bg-element-hover"
-      value={minLevel.get()}
-      options={LEVEL_OPTIONS}
-      onchange={(value) => minLevel.set(value as Level)}
-      prefix="Level ≥"
-    />
-
-    {#if ontoggle}
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onclick={ontoggle}
-        class="flex h-full min-w-26 cursor-pointer items-center justify-end gap-1.5 px-3 text-fg-muted transition-colors hover:text-fg"
-      >
-        {expanded ? 'Collapse' : 'Expand'}
-        {#if expanded}
-          <ChevronDown width="14" height="14" />
-        {:else}
-          <ChevronUp width="14" height="14" />
-        {/if}
-      </button>
-    {/if}
-  </footer>
+  {#if showFooter}
+    <footer class="flex h-7 shrink-0 items-center border-t border-border bg-elevated text-base">
+      {#if ontoggle}
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onclick={ontoggle}
+          class="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 text-fg-muted transition-colors hover:text-fg"
+        >
+          {@render summary()}
+          <span class="ml-auto flex items-center gap-1.5">
+            {expanded ? 'Collapse' : 'Expand'}
+            {#if expanded}
+              <ChevronDown width="14" height="14" />
+            {:else}
+              <ChevronUp width="14" height="14" />
+            {/if}
+          </span>
+        </button>
+      {:else}
+        <div class="flex h-full min-w-0 flex-1 items-center gap-3 px-3">
+          {@render summary()}
+        </div>
+      {/if}
+    </footer>
+  {/if}
 </div>
 
 <style>
