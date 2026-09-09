@@ -10,6 +10,7 @@
     type StationInfo
   } from '$lib/model';
   import { cn, displayName } from '$lib/utils';
+  import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   interface StationDetails {
     discovery: StationDiscovery;
@@ -163,9 +164,12 @@
       ? `Station and instrument menu: ${selectedInstrumentLabel}, ${selectedInstrumentOpen ? 'open' : 'closed'}`
       : 'Select an instrument'}
   >
+    <span class="shrink-0" aria-hidden="true">
+      <VoxelLogo class="size-7" />
+    </span>
     <span class="flex min-w-0 flex-1 flex-col">
       <span
-        class={cn('min-w-0 truncate text-lg leading-tight', selectedInstrumentId ? 'text-fg' : 'text-fg-muted')}
+        class={cn('min-w-0 truncate text-base leading-tight', selectedInstrumentId ? 'text-fg' : 'text-fg-muted')}
         title={selectedInstrumentLabel}
       >
         {selectedInstrumentLabel}

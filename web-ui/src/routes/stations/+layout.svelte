@@ -16,7 +16,6 @@
   import { setVoxelStation, Station } from '$lib/model';
   import { PreviewSession, providePreviewContext } from '$lib/preview/session.svelte';
   import { createPaneSize, displayName, toastError } from '$lib/utils';
-  import VoxelLogo from '$lib/VoxelLogo.svelte';
 
   import CenterPane from './CenterPane.svelte';
   import ConnectionSplash from './ConnectionSplash.svelte';
@@ -365,8 +364,8 @@
         <Sidebar.Content>
           <InstrumentNavigation instrumentId={selectedInstrumentId || app.activeName || undefined} />
         </Sidebar.Content>
-        <Sidebar.Footer class="gap-1 border-t border-border-faint bg-element-bg/40 p-2">
-          {#if !app.instrument && instrumentId && app.stationStatus !== 'closing'}
+        {#if !app.instrument && instrumentId && app.stationStatus !== 'closing'}
+          <Sidebar.Footer class="gap-1 border-t border-border-faint bg-element-bg/40 p-2">
             <Button
               variant="default"
               size="sm"
@@ -383,22 +382,8 @@
                 <span>Open instrument</span>
               {/if}
             </Button>
-          {/if}
-          <a
-            href={resolve('/(dashboard)/stations/[stationId]', { stationId })}
-            onclick={(event) => {
-              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              event.preventDefault();
-              showDashboard();
-            }}
-            class="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-2 text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-border-focused"
-            aria-label="Voxel dashboard"
-            title="Go to dashboard"
-          >
-            <VoxelLogo class="size-6 shrink-0" />
-            <span class="truncate text-xl leading-none font-normal tracking-wide uppercase">Voxel</span>
-          </a>
-        </Sidebar.Footer>
+          </Sidebar.Footer>
+        {/if}
       </Sidebar.Root>
       <PaneGroup
         direction="horizontal"
