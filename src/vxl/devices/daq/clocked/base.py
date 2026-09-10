@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from typing import ClassVar, Literal
 
 import numpy as np
+from pydantic import TypeAdapter
+from rigup.device.handle import Adapter, DeviceProperty
 from vxlib.quantity import QuantityRange, VoltageRange
 
 from rigup import Device, DeviceController, DeviceHandle, describe
@@ -12,6 +14,7 @@ from vxl.devices.base import DeviceType
 from .waveform import Signals
 
 GeneratorState = Literal["fresh", "ready", "running"]
+_PORTS_ADAPTER = TypeAdapter(dict[str, str])
 
 
 class SignalGeneratorController(DeviceController["SignalGenerator"]):
@@ -227,6 +230,10 @@ class SignalGenerator(Device):
 
 
 class SignalGeneratorHandle(DeviceHandle["SignalGenerator"]):
+    def __init__(self, adapter: Adapter[SignalGenerator]) -> None:
+        super().__init__(adapter)
+        self.ports: DeviceProperty[dict[str, str]] = self.props.property("ports", _PORTS_ADAPTER.validate_python)
+
     async def load(self, signals: Signals) -> None:
         """Bring the signal generator to ``signals``. On success both hardware and the
         streamed ``loaded`` property reflect the new config."""
@@ -253,8 +260,7 @@ class SignalGeneratorHandle(DeviceHandle["SignalGenerator"]):
         return await self.props.get_value("state")
 
     async def get_ports(self) -> dict[str, str]:
-        val = await self.props.get_value("ports")
-        return dict(val) if val else {}
+        return await self.ports.get()
 
     async def get_voltage_range(self) -> VoltageRange:
         val = await self.props.get_value("voltage_range")

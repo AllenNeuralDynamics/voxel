@@ -19,6 +19,8 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
     def __init__(self, adapter: Adapter[ContinuousAxis]) -> None:
         super().__init__(adapter)
         self.position: DeviceProperty[float] = self.props.property("position", _FLOAT_ADAPTER.validate_python)
+        self.lower_limit: DeviceProperty[float] = self.props.property("lower_limit", _FLOAT_ADAPTER.validate_python)
+        self.upper_limit: DeviceProperty[float] = self.props.property("upper_limit", _FLOAT_ADAPTER.validate_python)
 
     # Property accessors
 
@@ -26,10 +28,10 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
         return await self.position.get()
 
     async def get_lower_limit(self) -> float:
-        return await self.props.get_value("lower_limit")
+        return await self.lower_limit.get()
 
     async def get_upper_limit(self) -> float:
-        return await self.props.get_value("upper_limit")
+        return await self.upper_limit.get()
 
     async def get_speed(self) -> float | None:
         return await self.props.get_value("speed")

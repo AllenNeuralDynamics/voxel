@@ -164,20 +164,14 @@ class _FakeStore:
 
 
 class _FakeSignalGenerator:
-    async def get_ports(self) -> dict[str, str]:
-        return {"camera_1": "ao0", "aotf_1": "ao1"}
+    def __init__(self) -> None:
+        self.ports = Cell({"camera_1": "ao0", "aotf_1": "ao1"})
 
 
 class _FakeAxis:
     def __init__(self, lower: float, upper: float) -> None:
-        self.lower = lower
-        self.upper = upper
-
-    async def get_lower_limit(self) -> float:
-        return self.lower
-
-    async def get_upper_limit(self) -> float:
-        return self.upper
+        self.lower_limit = Cell(lower)
+        self.upper_limit = Cell(upper)
 
 
 class _FakeStage:
@@ -189,6 +183,7 @@ class _FakeStage:
 
 class _FakeInstrumentHAL:
     def __init__(self, interfaces: dict[str, DeviceInterface]) -> None:
+        self.device_interfaces = interfaces
         self.devices = {
             uid: cast("Any", _InterfaceHandle(uid, interface.type)) for uid, interface in interfaces.items()
         }

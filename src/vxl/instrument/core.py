@@ -286,17 +286,11 @@ class Instrument:
             raise StartupError(violations)
 
     async def _startup_violations(self) -> list[Violation]:
-        """Collect runtime constraints that span live devices and persisted instrument state."""
-        device_items = list(self._hal.devices.items())
-        interfaces = await asyncio.gather(*(handle.interface() for _, handle in device_items))
-        signal_violations, stage_violations = await asyncio.gather(
-            self._signal_port_violations(),
-            self._stage_limit_violations(),
-        )
+        """Validate persisted state against hardware capabilities established by HAL."""
         return [
-            *self._profile_interface_violations(dict(zip((uid for uid, _ in device_items), interfaces, strict=True))),
-            *signal_violations,
-            *stage_violations,
+            *self._profile_interface_violations(self._hal.device_interfaces),
+            *self._signal_port_violations(),
+            *self._stage_position_violations(),
         ]
 
     def _profile_interface_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
@@ -366,36 +360,18 @@ class Instrument:
                         )
         return violations
 
-    async def _signal_port_violations(self) -> list[Violation]:
+    def _signal_port_violations(self) -> list[Violation]:
+        """Check profile waveforms against ports discovered by HAL."""
         profiles = self._store.value.imaging.profiles
-        uids = sorted(
-            {uid for profile in profiles.values() for uid in profile.sync} & self._hal.signal_generators.keys()
-        )
-        results = await asyncio.gather(
-            *(self._hal.signal_generators[uid].get_ports() for uid in uids),
-            return_exceptions=True,
-        )
-        ports_by_uid: dict[str, set[str]] = {}
         violations = []
-        for uid, result in zip(uids, results, strict=True):
-            if isinstance(result, BaseException):
-                if not isinstance(result, Exception):
-                    raise result
-                violations.append(
-                    Violation(
-                        code="hal.signal_generator.ports",
-                        msg=f"Unable to read ports for signal generator '{uid}': {result}",
-                        loc=("hal", "devices", uid, "ports"),
-                    )
-                )
-            else:
-                ports_by_uid[uid] = set(result)
-
         for profile_id, profile in profiles.items():
             for uid, signals in profile.sync.items():
-                if (ports := ports_by_uid.get(uid)) is None:
+                if (generator := self._hal.signal_generators.get(uid)) is None:
                     continue
-                for port in sorted(set(signals.waveforms) - ports):
+                ports = generator.ports.value
+                if ports is None:
+                    raise RuntimeError(f"HAL has not initialized ports for signal generator '{uid}'")
+                for port in sorted(signals.waveforms.keys() - ports.keys()):
                     violations.append(
                         Violation(
                             code="imaging.profile.sync.port_missing",
@@ -414,52 +390,20 @@ class Instrument:
                     )
         return violations
 
-    async def _stage_limit_violations(self) -> list[Violation]:
+    def _stage_position_violations(self) -> list[Violation]:
+        """Check task and stencil positions against the stage bounds validated by HAL."""
         stage = self._hal.stage
-        requests = [
-            ("x", "lower", stage.x.get_lower_limit()),
-            ("x", "upper", stage.x.get_upper_limit()),
-            ("y", "lower", stage.y.get_lower_limit()),
-            ("y", "upper", stage.y.get_upper_limit()),
-            ("z", "lower", stage.z.get_lower_limit()),
-            ("z", "upper", stage.z.get_upper_limit()),
-        ]
-        results = await asyncio.gather(*(request for _, _, request in requests), return_exceptions=True)
-        limits: dict[str, dict[str, float]] = {}
+        limits: dict[str, tuple[float, float]] = {}
+        for axis, handle in (("x", stage.x), ("y", stage.y), ("z", stage.z)):
+            lower, upper = handle.lower_limit.value, handle.upper_limit.value
+            if lower is None or upper is None:
+                raise RuntimeError(f"HAL has not initialized the {axis}-axis limits")
+            limits[axis] = (lower, upper)
         violations = []
-        for (axis, bound, _), result in zip(requests, results, strict=True):
-            if isinstance(result, BaseException):
-                if not isinstance(result, Exception):
-                    raise result
-                violations.append(
-                    Violation(
-                        code="hal.stage.limit_unavailable",
-                        msg=f"Unable to read the {axis}-axis {bound} limit: {result}",
-                        loc=("hal", "stage", axis, bound),
-                    )
-                )
-            else:
-                limits.setdefault(axis, {})[bound] = result
-
-        valid_limits: dict[str, tuple[float, float]] = {}
-        for axis, bounds in limits.items():
-            if "lower" not in bounds or "upper" not in bounds:
-                continue
-            lower, upper = bounds["lower"], bounds["upper"]
-            if lower > upper:
-                violations.append(
-                    Violation(
-                        code="hal.stage.limits_invalid",
-                        msg=f"The {axis}-axis lower limit ({lower}) exceeds its upper limit ({upper}).",
-                        loc=("hal", "stage", axis),
-                    )
-                )
-            else:
-                valid_limits[axis] = (lower, upper)
 
         def check(value: float, axis: str, loc: tuple[str, ...], label: str) -> None:
-            if axis in valid_limits and not (valid_limits[axis][0] <= value <= valid_limits[axis][1]):
-                lower, upper = valid_limits[axis]
+            lower, upper = limits[axis]
+            if not lower <= value <= upper:
                 violations.append(
                     Violation(
                         code="state.stage_position.out_of_bounds",

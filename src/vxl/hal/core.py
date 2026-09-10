@@ -78,7 +78,13 @@ class HAL:
             violations.extend(interface_violations)
             unavailable = set(self.rig.build_errors) | interface_unavailable
             violations.extend(self._compatibility_violations(unavailable))
-            violations.extend(await self._camera_geometry_violations())
+            property_violations = await asyncio.gather(
+                self._camera_geometry_violations(),
+                self._stage_limit_violations(),
+                self._signal_port_violations(),
+            )
+            for group in property_violations:
+                violations.extend(group)
             if not violations:
                 self._resolve_stage()
         except BaseException:
@@ -199,6 +205,66 @@ class HAL:
                             loc=("hal", "devices", uid, property_name),
                         )
                     )
+        return violations
+
+    async def _stage_limit_violations(self) -> list[Violation]:
+        """Read and validate assigned stage bounds without depending on instrument state."""
+        stage = self._topology.stage
+        requests = []
+        for axis, uid in (("x", stage.x), ("y", stage.y), ("z", stage.z)):
+            # Build, interface, and role validation already report unavailable/incorrect axes.
+            if (handle := self.continuous_axes.get(uid)) is not None:
+                requests.extend(((axis, "lower", handle.get_lower_limit()), (axis, "upper", handle.get_upper_limit())))
+        results = await asyncio.gather(*(request for _, _, request in requests), return_exceptions=True)
+        limits: dict[str, dict[str, float]] = {}
+        violations = []
+        for (axis, bound, _), result in zip(requests, results, strict=True):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                violations.append(
+                    Violation(
+                        code="hal.stage.limit_unavailable",
+                        msg=f"Unable to read the {axis}-axis {bound} limit: {result}",
+                        loc=("hal", "stage", axis, bound),
+                    )
+                )
+            else:
+                limits.setdefault(axis, {})[bound] = result
+
+        for axis, bounds in limits.items():
+            if "lower" not in bounds or "upper" not in bounds:
+                continue
+            lower, upper = bounds["lower"], bounds["upper"]
+            if lower > upper:
+                violations.append(
+                    Violation(
+                        code="hal.stage.limits_invalid",
+                        msg=f"The {axis}-axis lower limit ({lower}) exceeds its upper limit ({upper}).",
+                        loc=("hal", "stage", axis),
+                    )
+                )
+        return violations
+
+    async def _signal_port_violations(self) -> list[Violation]:
+        """Discover every signal generator's ports into its shared property cache."""
+        uids = sorted(self.signal_generators)
+        results = await asyncio.gather(
+            *(self.signal_generators[uid].get_ports() for uid in uids),
+            return_exceptions=True,
+        )
+        violations = []
+        for uid, result in zip(uids, results, strict=True):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                violations.append(
+                    Violation(
+                        code="hal.signal_generator.ports",
+                        msg=f"Unable to read ports for signal generator '{uid}': {result}",
+                        loc=("hal", "devices", uid, "ports"),
+                    )
+                )
         return violations
 
     def _compatibility_violations(self, unavailable: set[str]) -> list[Violation]:
