@@ -199,6 +199,7 @@ export class PreviewSession {
   readonly #stream: PreviewStream;
   readonly #preferenceStore = pref<StoredPreviewPreferences>('preview:channels', {});
   #displayAspect = 1;
+  #fov = $state.raw<[number, number] | null>(null);
   #unsubscribers: Array<() => void> = [];
   #previewRevision = -1;
   #previewStateCursor: StreamCursor;
@@ -248,7 +249,11 @@ export class PreviewSession {
 
   get boundingBoxAspect(): number {
     const { maxW, maxH } = channelBoundingBox(this.channels);
-    return maxW > 0 && maxH > 0 ? maxW / maxH : 4 / 3;
+    if (maxW > 0 && maxH > 0) return maxW / maxH;
+    const [width, height] = this.#fov ?? [0, 0];
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) return width / height;
+    // Neutral navigation geometry only; an unknown physical FOV cannot produce a scale bar.
+    return 4 / 3;
   }
 
   /** Apply status after it has been ordered and reconciled by the Instrument model. */
@@ -536,6 +541,7 @@ export class PreviewSession {
 
   #applyStatus = (status: InstrumentStatus, stateCursor = this.#previewStateCursor): void => {
     this.#latestStateCursor = stateCursor;
+    this.#fov = status.fov;
     const imaging = status.state.imaging;
     const activeProfile = imaging.profiles[status.active_profile_id];
     const names = (activeProfile?.channels ?? []).slice(0, MAX_CHANNELS);
@@ -551,6 +557,7 @@ export class PreviewSession {
         channel.resolvedColormap = resolved;
       }
       if (changed) this.redrawGeneration++;
+      this.zoomModel.value = 1 / this.#zoomExtent(this.viewport);
       return;
     }
 
@@ -581,6 +588,7 @@ export class PreviewSession {
       channel.resolvedColormap = resolveColormap(channel.preferences.colormap, channel.config);
       if (!channel.name) continue;
     }
+    this.zoomModel.value = 1 / this.#zoomExtent(this.viewport);
     this.redrawGeneration++;
   };
 
@@ -621,6 +629,7 @@ export class PreviewSession {
       }
       channel.viewportFrame = frame.source;
     }
+    this.zoomModel.value = 1 / this.#zoomExtent(this.viewport);
     this.redrawGeneration++;
   }
 }

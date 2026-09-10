@@ -6,7 +6,6 @@
 
   import PreviewChannels from './PreviewChannels.svelte';
   import PreviewNavigationControls from './PreviewNavigationControls.svelte';
-  import { channelBoundingBox } from './render';
   import { type PreviewSession, wheelZoomFactor } from './session.svelte';
 
   interface Props {
@@ -146,16 +145,16 @@
   const NICE_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
 
   const scaleBar = $derived.by(() => {
-    const { maxW, maxH } = channelBoundingBox(previewer.channels);
     const [fovW, fovH] = fov ?? [0, 0];
-    if (maxW <= 0 || maxH <= 0 || fovW <= 0 || fovH <= 0) return null;
+    if (!Number.isFinite(fovW) || !Number.isFinite(fovH) || fovW <= 0 || fovH <= 0) return null;
 
     const cw = viewW;
     const ch = viewH;
     if (cw <= 0 || ch <= 0) return null;
 
     const vp = previewer.viewport;
-    const vpAspect = (vp.w * maxW) / (vp.h * maxH);
+    // Use the same frame-or-FOV geometry as the navigation controls, including before streaming.
+    const vpAspect = (vp.w / vp.h) * previewer.boundingBoxAspect;
     const canvasAspect = cw / ch;
     const drawW = canvasAspect > vpAspect ? ch * vpAspect : cw;
 
