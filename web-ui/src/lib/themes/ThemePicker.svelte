@@ -74,14 +74,14 @@
   </Select.Root>
 {/snippet}
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4">
   <!-- Density -->
-  <div class="flex items-center justify-between">
-    <span class="text-lg font-medium text-fg">Density</span>
-    <div class="flex gap-1">
+  <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-4">
+    <span class="text-base font-normal text-fg">Density</span>
+    <div class="grid min-w-0 grid-cols-3 gap-1">
       {#each densities as d (d)}
         <button
-          class="h-ui-sm w-20 cursor-pointer rounded-md border px-2 text-base capitalize transition-colors hover:bg-element-hover {pillClass(
+          class="h-ui-sm min-w-0 cursor-pointer rounded-md border px-2 text-base capitalize transition-colors hover:bg-element-hover {pillClass(
             themes.prefs.get().density === d
           )}"
           onclick={() => themes.setDensity(d)}
@@ -93,12 +93,12 @@
   </div>
 
   <!-- Mode -->
-  <div class="flex items-center justify-between">
-    <span class="text-lg font-medium text-fg">Mode</span>
-    <div class="flex gap-1">
+  <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-4">
+    <span class="text-base font-normal text-fg">Mode</span>
+    <div class="grid min-w-0 grid-cols-3 gap-1">
       {#each modes as m (m)}
         <button
-          class="h-ui-sm w-20 cursor-pointer rounded-md border px-2 text-base capitalize transition-colors hover:bg-element-hover {pillClass(
+          class="h-ui-sm min-w-0 cursor-pointer rounded-md border px-2 text-base capitalize transition-colors hover:bg-element-hover {pillClass(
             themes.prefs.get().mode === m
           )}"
           onclick={() => themes.setMode(m)}
@@ -109,16 +109,16 @@
     </div>
   </div>
 
-  <div class="flex items-center justify-between gap-2">
-    <Label for="light-theme" class="text-lg font-medium text-fg">Light Theme</Label>
-    <div class="w-62 min-w-0 shrink-0">
+  <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-4">
+    <Label for="light-theme" class="text-base font-normal text-fg">Light Theme</Label>
+    <div class="min-w-0">
       {@render themeSelect('light')}
     </div>
   </div>
 
-  <div class="flex items-center justify-between gap-2">
-    <Label for="dark-theme" class="text-lg font-medium text-fg">Dark Theme</Label>
-    <div class="w-62 min-w-0 shrink-0">
+  <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-4">
+    <Label for="dark-theme" class="text-base font-normal text-fg">Dark Theme</Label>
+    <div class="min-w-0">
       {@render themeSelect('dark')}
     </div>
   </div>

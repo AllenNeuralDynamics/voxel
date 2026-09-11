@@ -488,7 +488,6 @@
         },
         { label: displayName(selectedGeneratorUid) }
       ]}
-      class="px-4 pt-3 pb-2"
     >
       {#snippet trailing()}
         <Select
@@ -502,7 +501,7 @@
       {/snippet}
     </PageHeader>
 
-    <main class="sync-viewport min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
+    <main class="sync-viewport min-h-0 flex-1 overflow-y-auto px-4 pb-4">
       <div class="mx-auto flex w-full max-w-7xl flex-col gap-3">
         {#each groups as group (group.id)}
           {@const colors = group.waveformIds.map((id) => waveformColors[id] ?? '#888')}

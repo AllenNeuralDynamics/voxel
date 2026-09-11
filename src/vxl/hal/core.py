@@ -7,11 +7,12 @@ from dataclasses import dataclass
 
 from rigup import DeviceHandle, DeviceInterface, Rig
 from vxl.devices.axes import ContinuousAxisHandle
+from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.camera import CameraHandle
 from vxl.devices.daq.clocked import SignalGeneratorHandle
 
-from .errors import HALStartupError, Violation, ViolationLoc
-from .topology import HardwareTopology
+from .errors import HALError, HALStartupError, Violation, ViolationLoc
+from .topology import HardwareTopology, OpticalRouteDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,68 @@ class Stage:
         return self.z
 
 
+@dataclass(frozen=True)
+class RouteDimension:
+    """Observe and select hardware routes; rule evaluation and acquisition belong to Instrument."""
+
+    uid: str
+    selectors: Mapping[str, DiscreteAxisHandle]
+    _definitions: Mapping[str, OpticalRouteDefinition]
+
+    async def select(self, route: str) -> None:
+        """Select and verify a route, awaiting every selector and reporting all ordinary failures."""
+        definition = self._definitions.get(route)
+        if definition is None:
+            raise HALError(f"No optical route '{self.uid}.{route}'")
+        # Resolve every handle before issuing any movement.
+        selections = [(uid, self.selectors[uid], position) for uid, position in definition.root.items()]
+
+        async def select_and_verify(handle: DiscreteAxisHandle, position: str) -> None:
+            await handle.select(position, wait=True)
+            actual = await self._read_position(handle)
+            if actual != position:
+                raise HALError(f"Selector did not settle at {position!r}; settled label is {actual!r}")
+
+        results = await asyncio.gather(
+            *(select_and_verify(handle, position) for _, handle, position in selections),
+            return_exceptions=True,
+        )
+        errors: list[Exception] = []
+        for (uid, _, _), result in zip(selections, results, strict=True):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                result.add_note(f"Routing dimension '{self.uid}', selector '{uid}'")
+                errors.append(result)
+        if errors:
+            raise ExceptionGroup(f"Routing selection failed for '{self.uid}'", errors)
+
+    async def current_route(self) -> str | None:
+        """Read selectors now; return a route only when stationary and uniquely matched.
+
+        Moving or unlabeled selectors and ambiguous/unmatched positions return
+        ``None``. Read failures propagate instead of using stale cached values.
+        """
+        labels = await asyncio.gather(*(self._read_position(handle) for handle in self.selectors.values()))
+        if any(label is None for label in labels):
+            return None
+        positions = dict(zip(self.selectors, labels, strict=True))
+        matches = [
+            name
+            for name, route in self._definitions.items()
+            if all(positions[uid] == position for uid, position in route.root.items())
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
+    async def _read_position(handle: DiscreteAxisHandle) -> str | None:
+        """Read movement before label in one device request; expose only a settled label."""
+        props = await handle.props.get("is_moving", "label")
+        moving = props["is_moving"].unwrap().value
+        label = props["label"].unwrap().value
+        return label if moving is False and isinstance(label, str) else None
+
+
 class HAL:
     """Runtime hardware abstraction: opens the rig and exposes typed device handles."""
 
@@ -40,8 +103,9 @@ class HAL:
         self.lasers: dict[str, DeviceHandle] = {}
         self.aotfs: dict[str, DeviceHandle] = {}
         self.continuous_axes: dict[str, ContinuousAxisHandle] = {}
-        self.discrete_axes: dict[str, DeviceHandle] = {}
-        self.fws: dict[str, DeviceHandle] = {}
+        self.discrete_axes: dict[str, DiscreteAxisHandle] = {}
+        self.fws: dict[str, DiscreteAxisHandle] = {}
+        self.routing: dict[str, RouteDimension] = {}
         self.signal_generators: dict[str, SignalGeneratorHandle] = {}
         self._device_interfaces: dict[str, DeviceInterface] = {}
         self._stage: Stage | None = None
@@ -87,6 +151,7 @@ class HAL:
                 violations.extend(group)
             if not violations:
                 self._resolve_stage()
+                self._resolve_routing()
         except BaseException:
             await self.close()
             raise
@@ -96,6 +161,7 @@ class HAL:
 
     async def close(self) -> None:
         self._stage = None
+        self.routing.clear()
         self._device_interfaces = {}
         await asyncio.gather(*(camera.close_preview_updates() for camera in self.cameras.values()))
         self.cameras.clear()
@@ -154,11 +220,13 @@ class HAL:
                 case "continuous_axis":
                     self.continuous_axes[uid] = ContinuousAxisHandle.wrap(handle)
                 case "discrete_axis":
-                    self.discrete_axes[uid] = handle
+                    self.discrete_axes[uid] = DiscreteAxisHandle.wrap(handle)
                 case _:
                     logger.debug("Uncategorized device '%s' of type '%s'", uid, interface.type)
 
-        self.fws.update((uid, self.rig.devices[uid]) for uid in self._topology.filter_wheels if uid in self.rig.devices)
+        self.fws.update(
+            (uid, self.discrete_axes[uid]) for uid in self._topology.filter_wheels if uid in self.discrete_axes
+        )
         return violations, unavailable
 
     async def _camera_geometry_violations(self) -> list[Violation]:
@@ -285,6 +353,18 @@ class HAL:
             y=self.continuous_axes[self._topology.stage.y],
             z=self.continuous_axes[self._topology.stage.z],
         )
+
+    def _resolve_routing(self) -> None:
+        self.routing = {
+            uid: RouteDimension(
+                uid=uid,
+                selectors={
+                    selector: self.discrete_axes[selector] for route in definitions.values() for selector in route.root
+                },
+                _definitions=definitions,
+            )
+            for uid, definitions in self._topology.optical_routing.root.items()
+        }
 
     def _camera_path_violations(self, unavailable: set[str]) -> list[Violation]:
         violations = []

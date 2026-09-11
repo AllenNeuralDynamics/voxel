@@ -33,10 +33,8 @@
   });
 </script>
 
-<div class="flex h-full min-h-0 min-w-0 flex-col gap-1 bg-canvas">
-  <div class="shrink-0 px-4 pt-3">
-    <PageHeader items={breadcrumbItems} />
-  </div>
+<div class="flex h-full min-h-0 min-w-0 flex-col bg-canvas">
+  <PageHeader items={breadcrumbItems} />
   <div class="min-h-0 flex-1 overflow-y-auto">
     {@render children()}
   </div>

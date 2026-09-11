@@ -5,10 +5,10 @@ import { pref } from '$lib/utils';
 const registry = [
   {
     id: 'base',
-    name: 'Zinc',
+    name: 'Default',
     swatches: {
-      light: ['#ffffff', '#fafafa', '#3b82f6', '#22c55e'],
-      dark: ['#18181b', '#27272a', '#0369a1', '#22c55e']
+      light: ['#e5e3de', '#efede8', '#3183d8', '#22c55e'],
+      dark: ['#191919', '#262626', '#3183d8', '#22c55e']
     }
   },
   {

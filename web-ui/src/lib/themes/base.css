@@ -1,6 +1,6 @@
 /*
- * Voxel Theme: Base (Zinc)
- * The default theme — neutral zinc palette with blue primary.
+ * Voxel Theme: Default
+ * The base theme — Notion surfaces and blue accent with pronounced controls.
  * Provides both light and dark mode variants.
  *
  * Token naming follows the Voxel design system with Zed theme equivalents
@@ -16,25 +16,15 @@
 	 * canvas < surface < elevated < floating
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --elevated: oklch(0.97 0.001 106.424);
-  /* stone-100 — cards, a soft warm gray above surface (was zinc-50 0.985)
-	 * Cards, headers, toolbars, detail panels. */
-
-  --floating: oklch(0.985 0.001 106.423);
-  /* stone-50 — near-white, pops as an overlay (was white)
-	 * Popovers, dropdowns, dialog panels. */
-
-  --canvas: oklch(0.9 0.005 56.366); /* ~stone-250 */
-  --surface: oklch(0.935 0.003 48.717); /* ~stone-150 */
-
-  --canvas: oklch(0.937 0.003 286.32); /* between zinc-200 and zinc-100 */
-  --surface: oklch(0.967 0.001 286.375); /* zinc-100 — unchanged */
-  --elevated: oklch(0.983 0.001 286); /* between zinc-50 and zinc-100 */
-  --floating: oklch(0.997 0 0); /* near-white */
+  /* Notion Light's warm surface tiers. */
+  --canvas: #e5e3de;
+  --surface: #efede8;
+  --elevated: #f7f6f3;
+  --floating: #ffffff;
 
   --panel: var(--surface);
   /* Secondary panels. Falls back to surface; override per-theme. */
-  --backdrop: oklch(0 0 0 / 50%);
+  --backdrop: #37352f66;
   /* No Zed equivalent.
 	 * Modal/dialog scrim overlay. */
 
@@ -60,9 +50,8 @@
 	 * Flat hierarchy. Icons inherit text color.
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --fg: oklch(0.147 0.004 49.25);
-  /* stone-950 — warm near-black (was zinc-950 0.141)
-	 * Primary text. Body copy, headings, values. */
+  --fg: #292722;
+  /* Darkened Notion brown-gray (#37352f) for body text, headings, and values. */
 
   --fg-muted: oklch(0.553 0.013 58.071);
   /* stone-500 — warm (was zinc-500 0.552)
@@ -72,9 +61,8 @@
   /* stone-400 — warm (was zinc-400 0.705)
 	 * Tertiary. Placeholders, disabled text, subtle hints. */
 
-  --fg-accent: oklch(0.623 0.214 259.815);
-  /* zed: text.accent — blue-500
-	 * Emphasized. Active items, links, matched search characters. */
+  --fg-accent: #3183d8;
+  /* Notion blue — emphasized text and links. */
 
   /* ── Borders ───────────────────────────────────────────────────────
 	 * ─────────────────────────────────────────────────────────────────── */
@@ -90,13 +78,11 @@
   --border-faint: oklch(0.709 0.01 56.259 / 0.7);
   /* faint guide line — grid plane outlines, subtle rules */
 
-  --border-focused: oklch(0.623 0.214 259.815);
-  /* zed: border.focused — blue-500
-	 * Focus rings on inputs, buttons, interactive elements. */
+  --border-focused: #3183d8;
+  /* Notion blue — focus rings. */
 
-  --border-selected: oklch(0.546 0.216 262);
-  /* deeper blue than the focus ring so selection reads distinct from focus (was == border-focused blue-500)
-	 * Selected element borders. */
+  --border-selected: #3183d8;
+  /* Notion blue — selected borders. */
 
   --border-disabled: oklch(0.84 0.006 56);
   /* warm, faint (was 0.895)
@@ -105,12 +91,11 @@
   /* ── Interactive ───────────────────────────────────────────────────
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --primary: oklch(0.623 0.214 259.815);
-  /* zed: (derived from text.accent) — blue-500
-	 * Main action color. CTA buttons, links. */
+  --primary: #3183d8;
+  /* Notion blue — primary actions. */
 
-  --primary-soft: oklch(0.623 0.118 259.815);
-  /* softer primary (~half chroma) — slider/track fills */
+  --primary-soft: #6796c6;
+  /* Desaturated Notion blue — slider and track fills. */
 
   --primary-fg: oklch(0.97 0.014 254.604);
   /* zed: (light text on accent) — blue-50
@@ -131,50 +116,42 @@
 
   /* ── Semantic: Success ─────────────────────────────────────────── */
 
-  --success: oklch(0.596 0.145 163.225);
-  /* zed: success — emerald-600
-	 * Positive state. Text, icons, enabled toggles. */
+  --success: #008635;
+  /* Success color from the adapted OpenAI palette. */
 
-  --success-bg: oklch(0.962 0.044 166.519);
-  /* zed: success.background — emerald-50
-	 * Subtle fill. Success containers. */
+  --success-bg: #edfaf2;
+  /* Success fill for status containers. */
 
-  --success-fg: oklch(0.985 0 0);
-  /* Text on solid success backgrounds. — zinc-50 */
+  --success-fg: #ffffff;
+  /* Success label on solid fills. */
 
   /* ── Semantic: Warning ─────────────────────────────────────────── */
 
-  --warning: oklch(0.555 0.163 48.998);
-  /* amber-700 — darkened from amber-500 so warning text/icons read on the light surfaces
-	 * Caution. Text, icons, solid fills. */
+  --warning: #923b0f;
+  /* Warning color from the adapted OpenAI palette. */
 
-  --warning-bg: oklch(0.987 0.057 82.669);
-  /* zed: warning.background — amber-50
-	 * Subtle fill. Warning containers. */
+  --warning-bg: #fff5f0;
+  /* Warning fill for status containers. */
 
-  --warning-fg: oklch(0.141 0.005 285.823);
-  /* Dark text on bright yellow — contrast. — zinc-950 */
+  --warning-fg: #ffffff;
+  /* Warning label on solid fills. */
 
   /* ── Semantic: Info ────────────────────────────────────────────── */
 
-  --info: oklch(0.623 0.214 259.815);
-  /* zed: info — blue-500
-	 * Informational. Text, icons, planned status. */
+  --info: #246fbb;
+  /* Information color from the adapted OpenAI palette. */
 
-  --info-bg: oklch(0.97 0.014 254.604);
-  /* zed: info.background — blue-50
-	 * Subtle fill. Info containers. */
+  --info-bg: #e5f3ff;
+  /* Information fill for status containers. */
 
-  --info-fg: oklch(0.985 0 0);
-  /* Text on solid info backgrounds. — zinc-50 */
+  --info-fg: #ffffff;
+  /* Information label on solid fills. */
 
   /* ── Scrollbar ─────────────────────────────────────────────────── */
 
-  --scrollbar-thumb: var(--border);
-  /* zed: scrollbar.thumb.background */
+  --scrollbar-thumb: #37352f26;
 
-  --scrollbar-thumb-hover: var(--fg-muted);
-  /* zed: scrollbar.thumb.hover_background */
+  --scrollbar-thumb-hover: #37352f40;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -184,21 +161,15 @@
 .dark {
   /* ── Surfaces ─────────────────────────────────────────────────────── */
 
-  --canvas: oklch(0.21 0.006 285.885);
-  /* zinc-900 — lifted base, less harsh than the old near-black (was zinc-950 0.141) */
-
-  --surface: oklch(0.274 0.006 286.033);
-  /* zinc-800 — panels one zinc step above canvas (was ~zinc-920 0.185) */
+  /* Notion Dark's neutral surface tiers. */
+  --canvas: #191919;
+  --surface: #262626;
 
   /* --panel: var(--surface); — inherited from :root */
 
-  --elevated: oklch(0.322 0.0095 285.9);
-  /* ~zinc-750 (interpolated 700↔800) — cards/headers/toolbars (was zinc-900 0.21) */
-
-  --floating: oklch(0.37 0.013 285.805);
-  /* zinc-700 — brightest tier, popovers/dialogs (was zinc-900 0.21) */
-
-  --backdrop: oklch(0 0 0 / 60%);
+  --elevated: #323232;
+  --floating: #3f3f3f;
+  --backdrop: #000000aa;
 
   /* ── Element ──────────────────────────────────────────────────────── */
 
@@ -225,8 +196,8 @@
   --fg-faint: oklch(0.62 0.015 286);
   /* zed: text.placeholder — lifted above zinc-500 for better dark-mode legibility */
 
-  --fg-accent: oklch(0.623 0.214 259.815);
-  /* zed: text.accent — blue-500 */
+  --fg-accent: #3183d8;
+  /* Notion blue — emphasized text and links. */
 
   /* ── Borders ──────────────────────────────────────────────────────── */
 
@@ -239,22 +210,22 @@
   --border-faint: oklch(0.62 0.015 286 / 0.6);
   /* faint guide line — grid plane outlines, subtle rules */
 
-  --border-focused: oklch(0.488 0.243 264.376);
-  /* zed: border.focused — blue-600 */
+  --border-focused: #3183d8;
+  /* Notion blue — focus rings. */
 
-  --border-selected: oklch(0.57 0.2 262);
-  /* lighter blue than the focus ring so selection pops on dark (was == border-focused blue-600) */
+  --border-selected: #3183d8;
+  /* Notion blue — selected borders. */
 
   --border-disabled: oklch(1 0 0 / 8%);
   /* white/8 — faint but present (was white/5) */
 
   /* ── Interactive ──────────────────────────────────────────────────── */
 
-  --primary: oklch(0.528 0.132 234.76);
-  /* sky-700 */
+  --primary: #3183d8;
+  /* Notion blue — primary actions. */
 
-  --primary-soft: oklch(0.528 0.073 234.76);
-  /* softer primary (~half chroma) — slider/track fills */
+  --primary-soft: #6796c6;
+  /* Desaturated Notion blue — slider and track fills. */
 
   --primary-fg: oklch(0.985 0 0);
   /* white */
@@ -271,37 +242,39 @@
 
   /* ── Semantic: Success ───────────────────────────────────────────── */
 
-  --success: oklch(0.596 0.145 163.225);
-  /* zed: success — emerald-600 */
+  --success: #66d492;
+  /* Success color from the adapted OpenAI palette. */
 
-  --success-bg: oklch(0.214 0.051 163.357);
-  /* zed: success.background — ~emerald-950/80 */
+  --success-bg: #66d4921a;
+  /* Success fill for status containers. */
 
-  --success-fg: oklch(0.985 0 0);
+  --success-fg: #191919;
+  /* Success label on solid fills. */
 
   /* ── Semantic: Warning ───────────────────────────────────────────── */
 
-  --warning: oklch(0.769 0.188 70.08);
-  /* zed: warning — amber-500 */
+  --warning: #ff9e6c;
+  /* Warning color from the adapted OpenAI palette. */
 
-  --warning-bg: oklch(0.306 0.066 53.813);
-  /* zed: warning.background — ~amber-950/80 */
+  --warning-bg: #ff9e6c1a;
+  /* Warning fill for status containers. */
 
-  --warning-fg: oklch(0.141 0.005 285.823);
-  /* zinc-950 — dark text on bright yellow */
+  --warning-fg: #191919;
+  /* Warning label on solid fills. */
 
   /* ── Semantic: Info ──────────────────────────────────────────────── */
 
-  --info: oklch(0.623 0.214 259.815);
-  /* zed: info — blue-500 */
+  --info: #66b5ff;
+  /* Information color from the adapted OpenAI palette. */
 
-  --info-bg: oklch(0.257 0.065 261.395);
-  /* zed: info.background — ~blue-950/80 */
+  --info-bg: #3183d81a;
+  /* Information fill for status containers. */
 
-  --info-fg: oklch(0.985 0 0);
+  --info-fg: #191919;
+  /* Information label on solid fills. */
 
   /* ── Scrollbar ───────────────────────────────────────────────────── */
 
-  --scrollbar-thumb: var(--border);
-  --scrollbar-thumb-hover: var(--fg-muted);
+  --scrollbar-thumb: #ffffff26;
+  --scrollbar-thumb-hover: #ffffff40;
 }

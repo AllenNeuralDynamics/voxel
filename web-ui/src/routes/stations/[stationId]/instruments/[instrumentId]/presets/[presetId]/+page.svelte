@@ -104,14 +104,14 @@
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
-  <div class="shrink-0 overflow-x-auto px-4 pt-3 pb-2">
+  <div class="shrink-0 overflow-x-auto">
     <PageHeader items={breadcrumbItems} />
     {#if selected}
-      <p class="mt-1 text-sm text-fg-muted">Created {dateFormat.format(new Date(selected.created_at))}</p>
+      <p class="px-4 pb-3 text-sm text-fg-muted">Created {dateFormat.format(new Date(selected.created_at))}</p>
     {/if}
   </div>
 
-  <div class="min-h-0 flex-1 overflow-auto p-4">
+  <div class="min-h-0 flex-1 overflow-auto px-4 pb-4">
     {#if loading}
       <p class="py-8 text-center text-fg-muted" role="status">Loading preset…</p>
     {:else if loadError}

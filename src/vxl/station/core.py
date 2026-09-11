@@ -172,7 +172,6 @@ class Station:
                 self._session_teardowns.append(instrument.active_profile_id.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.preview_revision.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.fov.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.routing_targets.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.state.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.task_tiles.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.acquisition.subscribe(self._refresh_session_view))
@@ -355,7 +354,6 @@ class Station:
                     "active_profile_id": instrument.active_profile_id.value,
                     "preview_revision": instrument.preview_revision.value,
                     "fov": instrument.fov.cache,
-                    "routing_targets": instrument.routing_targets.value,
                     "task_tiles": instrument.task_tiles.value,
                     "devices": {
                         device_id: DeviceState(

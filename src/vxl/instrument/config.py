@@ -83,12 +83,12 @@ class ProfilePatch(Patch):
     label: str | None = None
 
 
-class FixedOpticalRoutingPolicy(FrozenModel):
+class FixedRoutingRule(FrozenModel):
     type: Literal["fixed"]
     route: str
 
 
-class SplitOpticalRoutingPolicy(FrozenModel):
+class SplitRoutingRule(FrozenModel):
     type: Literal["split"]
     axis: Literal["x", "y"]
     threshold: float = Field(allow_inf_nan=False)
@@ -112,8 +112,8 @@ class SplitOpticalRoutingPolicy(FrozenModel):
         return self.lower if coordinate < self.threshold else self.upper
 
 
-type OpticalRoutingPolicy = Annotated[
-    FixedOpticalRoutingPolicy | SplitOpticalRoutingPolicy,
+type RoutingRule = Annotated[
+    FixedRoutingRule | SplitRoutingRule,
     Field(discriminator="type"),
 ]
 
@@ -377,7 +377,7 @@ class WriterPatch(Patch):
 
 class InstrumentDefaults(FrozenModel):  # everything that can live in config.default
     imaging: ImagingProtocol
-    routing: dict[str, OpticalRoutingPolicy] = Field(default_factory=dict)
+    routing: dict[str, RoutingRule] = Field(default_factory=dict)
     metadata_cls: MetadataCls = ExperimentMetadata
     output: WriterSettings = Field(default_factory=WriterSettings)
     stencil: Stencil = Field(default_factory=Stencil)
@@ -398,9 +398,9 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
         routes = {}
         for dimension, policy in self.routing.items():
             match policy:
-                case FixedOpticalRoutingPolicy(route=route):
+                case FixedRoutingRule(route=route):
                     routes[dimension] = route
-                case SplitOpticalRoutingPolicy(axis=axis):
+                case SplitRoutingRule(axis=axis):
                     routes[dimension] = policy.resolve(
                         coordinates[axis],
                         previous=previous.get(dimension),
@@ -439,9 +439,9 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
 
             selected: list[tuple[str, str]]
             match policy:
-                case FixedOpticalRoutingPolicy(route=route):
+                case FixedRoutingRule(route=route):
                     selected = [("route", route)]
-                case SplitOpticalRoutingPolicy(lower=lower, upper=upper):
+                case SplitRoutingRule(lower=lower, upper=upper):
                     selected = [("lower", lower), ("upper", upper)]
 
             for field, route in selected:

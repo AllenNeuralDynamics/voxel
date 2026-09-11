@@ -1,5 +1,5 @@
 /* ── Theme imports ─────────────────────────────────────────────────────
- * base.css provides the default (zinc) theme with :root (light) and .dark variants.
+ * base.css provides the Default theme with :root (light) and .dark variants.
  * Additional themes use [data-theme="name"] selectors and only apply when active.
  * ───────────────────────────────────────────────────────────────────── */
 

@@ -6,7 +6,7 @@
   import { displayName } from '$lib/utils';
 
   import PageHeader from '../../../PageHeader.svelte';
-  import RoutingPolicyEditor from './RoutingPolicyEditor.svelte';
+  import RoutingRuleEditor from './RoutingRuleEditor.svelte';
 
   const app = getVoxelStation();
   const id = $derived(page.params.instrumentId);
@@ -18,17 +18,21 @@
 </script>
 
 <section class="flex h-full min-h-0 min-w-0 flex-col">
-  <PageHeader items={[{ label: 'Optical routing' }]} class="px-4 pt-3 pb-2" />
-  <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-2 pb-5">
+  <PageHeader items={[{ label: 'Optical routing' }]} />
+  <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-5">
     {#if instrument}
       {#key instrument}
         <div class="divide-y divide-border-faint">
           {#each instrument.routingDimensions as dimension (dimension.id)}
-            <section class="py-4 first:pt-0" aria-label={displayName(dimension.id)}>
-              <RoutingPolicyEditor {instrument} {dimension} />
+            <section
+              id={`routing-${dimension.id}`}
+              class="scroll-mt-4 py-4 first:pt-0"
+              aria-label={displayName(dimension.id)}
+            >
+              <RoutingRuleEditor {instrument} {dimension} />
             </section>
           {:else}
-            <p class="text-base text-fg-muted">This instrument has no optical routing policies.</p>
+            <p class="text-base text-fg-muted">This instrument has no optical routing rules.</p>
           {/each}
         </div>
       {/key}
@@ -60,10 +64,10 @@
           </section>
         {/if}
         {#if state}
-          <section class="space-y-2" aria-labelledby="routing-policies-heading">
-            <h3 id="routing-policies-heading" class="text-sm text-fg-muted">Policies</h3>
+          <section class="space-y-2" aria-labelledby="routing-rules-heading">
+            <h3 id="routing-rules-heading" class="text-sm text-fg-muted">Rules</h3>
             <!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard users need to scroll wide configuration values.) -->
-            <div class="overflow-x-auto" role="region" aria-label="Routing policies" tabindex="0">
+            <div class="overflow-x-auto" role="region" aria-label="Routing rules" tabindex="0">
               <JsonView data={state.routing} expandDepth={1} />
             </div>
           </section>

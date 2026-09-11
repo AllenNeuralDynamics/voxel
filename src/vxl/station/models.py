@@ -48,7 +48,6 @@ class InstrumentView(InstrumentState):
     active_profile_id: str = Field(min_length=1)
     preview_revision: int = Field(ge=0)
     fov: tuple[float, float] | None
-    routing_targets: dict[str, str]
 
     task_tiles: list[TaskTile]
     devices: dict[str, DeviceState]

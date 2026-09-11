@@ -138,14 +138,11 @@
 {/snippet}
 
 <div class="flex h-full min-h-0 min-w-0 flex-col bg-canvas">
-  <PageHeader
-    items={[{ label: 'Devices' }, { label: deviceId ? displayName(deviceId) : 'Device' }]}
-    class="px-4 pt-3 pb-2"
-  />
+  <PageHeader items={[{ label: 'Devices' }, { label: deviceId ? displayName(deviceId) : 'Device' }]} />
   <div class="min-h-0 flex-1 overflow-y-auto">
     {#if id && deviceId && hal}
       {#if entry && config}
-        <div class="w-full max-w-4xl space-y-8 p-4">
+        <div class="w-full max-w-4xl space-y-8 px-4 pb-4">
           {#if device?.connected}
             <DeviceControls {device} />
           {:else}

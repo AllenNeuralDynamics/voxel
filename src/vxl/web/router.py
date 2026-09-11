@@ -29,8 +29,8 @@ from vxl.instrument import (
 )
 from vxl.instrument.config import (
     ChannelPatch,
-    OpticalRoutingPolicy,
     ProfilePatch,
+    RoutingRule,
     StencilPatch,
     TaskPatch,
     WriterPatch,
@@ -143,7 +143,7 @@ class _ExecuteCommand(BaseModel):
     kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
-class _OpticalRouteOverride(BaseModel):
+class _SelectRoute(BaseModel):
     route: str
 
 
@@ -475,27 +475,28 @@ async def save_settings(instrument: InstrumentDep) -> None:
     await instrument.save_settings()
 
 
-@instrument_router.post("/optical-routing/apply", status_code=204)
-async def apply_optical_routing(instrument: InstrumentDep) -> None:
-    await instrument.apply_optical_routing()
+@instrument_router.post("/routing/apply", status_code=204)
+async def apply_routing_rule(instrument: InstrumentDep, dimension: str | None = None) -> None:
+    """Apply the rule for one dimension, or all dimensions when omitted."""
+    await instrument.apply_routing_rule(dimension)
 
 
-@instrument_router.put("/optical-routing/{dimension}/policy", status_code=204)
-async def update_optical_routing_policy(
+@instrument_router.put("/routing/{dimension}/rule", status_code=204)
+async def set_routing_rule(
     dimension: str,
-    policy: OpticalRoutingPolicy,
+    rule: RoutingRule,
     instrument: InstrumentDep,
 ) -> None:
-    await instrument.update_optical_routing_policy(dimension, policy)
+    await instrument.set_routing_rule(dimension, rule)
 
 
-@instrument_router.post("/optical-routing/{dimension}/override", status_code=204)
-async def override_optical_route(
+@instrument_router.post("/routing/{dimension}/select", status_code=204)
+async def select_route(
     dimension: str,
-    body: _OpticalRouteOverride,
+    body: _SelectRoute,
     instrument: InstrumentDep,
 ) -> None:
-    await instrument.override_optical_route(dimension, body.route)
+    await instrument.select_route(dimension, body.route)
 
 
 @instrument_router.post("/default/save", status_code=204)

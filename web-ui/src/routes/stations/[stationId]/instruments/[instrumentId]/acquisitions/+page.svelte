@@ -119,7 +119,7 @@
   </span>
 {/snippet}
 
-<section class="flex min-h-full flex-col gap-5 p-4">
+<section class="flex min-h-full flex-col gap-5 px-4 pb-4">
   <section aria-labelledby="current-acquisition-heading">
     <h2 id="current-acquisition-heading" class="mb-2 text-sm font-medium tracking-wide text-fg-muted uppercase">
       Current acquisition

@@ -170,10 +170,7 @@
 {/snippet}
 
 <section class="flex h-full min-h-0 min-w-0 flex-col">
-  <PageHeader
-    items={[{ label: 'Profiles' }, { label: profile?.label || displayName(profileId ?? '') }]}
-    class="px-4 pt-3 pb-2"
-  >
+  <PageHeader items={[{ label: 'Profiles' }, { label: profile?.label || displayName(profileId ?? '') }]}>
     {#snippet trailing()}
       {#if profile && activeInstrument}
         {#if instrument && !activating}
@@ -197,7 +194,7 @@
   </PageHeader>
 
   {#if profile}
-    <main class="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-5">
+    <main class="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
       <div class="space-y-6">
         <section aria-labelledby="channels-heading" class="space-y-2.5">
           <h2 id="channels-heading" class="flex items-baseline gap-2 text-base text-fg">

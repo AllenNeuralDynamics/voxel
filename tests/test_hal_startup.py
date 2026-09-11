@@ -30,7 +30,7 @@ from vxl.hal import (
     StageAxes,
 )
 from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState, InstrumentStore
-from vxl.instrument.config import AcquisitionTask, FixedOpticalRoutingPolicy, SplitOpticalRoutingPolicy
+from vxl.instrument.config import AcquisitionTask, FixedRoutingRule, SplitRoutingRule
 from vxl.instrument.core import Channel
 from vxl.instrument.errors import StartupError, Violation
 from vxl.preview import PreviewFrame, PreviewLayer, PreviewViewport
@@ -546,7 +546,7 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
 
         await instrument.update_optical_routing_policy(
             "excitation_side",
-            SplitOpticalRoutingPolicy(
+            SplitRoutingRule(
                 type="split",
                 axis="x",
                 threshold=1,
@@ -559,7 +559,7 @@ async def test_simulated_instrument_passes_runtime_startup_validation(tmp_path: 
 
         await instrument.update_optical_routing_policy(
             "excitation_side",
-            FixedOpticalRoutingPolicy(type="fixed", route="right"),
+            FixedRoutingRule(type="fixed", route="right"),
         )
         assert instrument.routing_targets.value == {"excitation_side": "right"}
         await instrument.apply_optical_routing()
@@ -577,7 +577,7 @@ async def test_instrument_close_awaits_coalescer_workers(tmp_path: Path) -> None
 
     await instrument.open()
     try:
-        instrument._routing_updates.update({})
+        instrument._routing_updates.update(set())
         await asyncio.sleep(0)
         workers = [
             task
@@ -656,7 +656,7 @@ async def test_live_split_routing_uses_fov_hysteresis(tmp_path: Path) -> None:
     default = config.default.model_copy(
         update={
             "routing": {
-                "excitation_side": SplitOpticalRoutingPolicy(
+                "excitation_side": SplitRoutingRule(
                     type="split",
                     axis="x",
                     threshold=10_000,

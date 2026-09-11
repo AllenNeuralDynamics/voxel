@@ -2,13 +2,13 @@
   import { watch } from 'runed';
 
   import { Button, Select } from '$lib/kit';
-  import type { Instrument, OpticalRoutingPolicy, RoutingDimension, SplitOpticalRoutingPolicy } from '$lib/model';
+  import type { Instrument, RoutingDimension, RoutingRule, SplitRoutingRule } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { SpinBox } from '$lib/prop/numeric';
   import { getSpatialUnit } from '$lib/spatial-units';
   import { cn, displayName, toastError } from '$lib/utils';
 
-  import { asFixedPolicy, asSplitPolicy, clonePolicy } from './policy';
+  import { asFixedRule, asSplitRule, cloneRule } from './rule';
 
   interface Props {
     instrument: Instrument;
@@ -18,54 +18,60 @@
   let { instrument, dimension }: Props = $props();
 
   const unit = $derived(getSpatialUnit(prefs.spatialUnit.get()));
-  let draft = $state<OpticalRoutingPolicy>({ type: 'fixed', route: '' });
+  let draft = $state<RoutingRule>({ type: 'fixed', route: '' });
   let sourceKey = $state('');
   let saving = $state(false);
+  let applying = $state(false);
 
-  const routes = $derived(dimension.policyRoutes);
+  const routes = $derived(dimension.ruleRoutes);
   const routeOptions = $derived(routes.map((route) => ({ value: route, label: displayName(route) })));
   const canSplit = $derived(routes.length >= 2);
-  const changed = $derived(JSON.stringify(draft) !== JSON.stringify(dimension.policy));
-  const disabled = $derived(instrument.mode === 'capture' || saving);
+  const changed = $derived(JSON.stringify(draft) !== JSON.stringify(dimension.rule));
+  const disabled = $derived(instrument.mode === 'capture' || saving || applying);
 
   watch(
-    () => `${dimension.id}:${JSON.stringify(dimension.policy)}`,
+    () => `${dimension.id}:${JSON.stringify(dimension.rule)}`,
     (key) => {
       if (key !== sourceKey) {
         sourceKey = key;
-        draft = clonePolicy(dimension.policy);
+        draft = cloneRule(dimension.rule);
       }
     }
   );
 
-  function selectType(type: OpticalRoutingPolicy['type']): void {
+  function selectType(type: RoutingRule['type']): void {
     if (type === draft.type) return;
     draft =
       type === 'fixed'
-        ? asFixedPolicy(draft, routes, dimension.target)
-        : asSplitPolicy(draft, routes, instrument.stage.position('x'));
+        ? asFixedRule(draft, routes, dimension.resolved)
+        : asSplitRule(draft, routes, instrument.stage.position('x'));
   }
 
-  function updateSplit(changes: Partial<Omit<SplitOpticalRoutingPolicy, 'type'>>): void {
+  function updateSplit(changes: Partial<Omit<SplitRoutingRule, 'type'>>): void {
     if (draft.type === 'split') draft = { ...draft, ...changes };
   }
 
   function reset(): void {
-    draft = clonePolicy(dimension.policy);
+    draft = cloneRule(dimension.rule);
+  }
+
+  function save(): void {
+    if (!changed || disabled) return;
+    saving = true;
+    toastError(
+      instrument.setRoutingRule(dimension.id, draft).finally(() => {
+        saving = false;
+      })
+    );
   }
 
   function apply(): void {
-    if (!changed || disabled) return;
-    saving = true;
-    const request = instrument.updateOpticalRoutingPolicy(dimension.id, draft);
-    toastError(request);
-    void request.then(
-      () => {
-        saving = false;
-      },
-      () => {
-        saving = false;
-      }
+    if (disabled || changed || dimension.moving || dimension.resolved == null) return;
+    applying = true;
+    toastError(
+      instrument.applyRoutingRule(dimension.id).finally(() => {
+        applying = false;
+      })
     );
   }
 
@@ -88,12 +94,12 @@
     {#if changed}
       <div class="ml-auto flex items-center gap-2">
         <Button variant="ghost" size="xs" {disabled} onclick={reset}>Cancel</Button>
-        <Button size="xs" loading={saving} {disabled} onclick={apply}>Apply policy</Button>
+        <Button size="xs" loading={saving} {disabled} onclick={save}>Save rule</Button>
       </div>
     {/if}
   </div>
   <div class="grid grid-cols-[5rem_minmax(0,1fr)_minmax(0,1fr)_auto] content-start items-center gap-x-2 gap-y-3 py-3">
-    <div class="self-center text-base text-fg-muted">Policy</div>
+    <div class="self-center text-base text-fg-muted">Rule</div>
     <div class="col-span-3">
       <div class="grid h-ui-sm w-full grid-cols-2 items-center rounded border border-input bg-canvas/50 p-0.5">
         <button
@@ -110,7 +116,7 @@
         <button
           type="button"
           disabled={disabled || !canSplit}
-          title={canSplit ? undefined : 'A split policy requires at least two supported routes'}
+          title={canSplit ? undefined : 'A split rule requires at least two supported routes'}
           class={cn(
             'h-full w-full rounded-sm px-3 text-base transition-colors disabled:cursor-not-allowed disabled:opacity-40',
             draft.type === 'split' ? 'bg-element-selected text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
@@ -197,7 +203,36 @@
     {/if}
   </div>
 
+  <div class="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
+    <span>
+      {#if dimension.moving || applying}
+        Switching…
+      {:else}
+        Current: {dimension.current != null ? displayName(dimension.current) : 'Unknown'}
+        · Saved rule: {dimension.resolved != null ? displayName(dimension.resolved) : 'Unknown'}
+        {#if dimension.current != null && dimension.current === dimension.resolved}
+          · Matches rule
+        {/if}
+      {/if}
+    </span>
+    <Button
+      variant="ghost"
+      size="xs"
+      class="ml-auto"
+      loading={applying}
+      disabled={disabled ||
+        changed ||
+        dimension.moving ||
+        dimension.resolved == null ||
+        dimension.current === dimension.resolved}
+      title={changed ? 'Save or cancel rule changes before applying' : undefined}
+      onclick={apply}
+    >
+      Apply rule
+    </Button>
+  </div>
+
   {#if instrument.mode === 'capture'}
-    <p class="text-base text-fg-muted">Routing policies cannot be changed during capture.</p>
+    <p class="text-base text-fg-muted">Routing rules cannot be changed during capture.</p>
   {/if}
 </div>

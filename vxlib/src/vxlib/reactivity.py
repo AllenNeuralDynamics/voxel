@@ -1,23 +1,24 @@
-"""Reactive primitives: Signal (events), Cell (values), Computed (multi-trigger), Derived (mapped).
+"""Reactive primitives for events, writable values, and derived state.
 
 Class hierarchy:
 
 * :class:`Subscribable` — shared base. Holds subscribers, dispatches emissions.
   Not typically instantiated directly; use one of the subclasses below.
-* :class:`Signal` — push-only event stream with a public ``emit``. Use for
+* :class:`Emitter` — push-only event stream with a public ``emit``. Use for
   discrete events that don't carry a persistent value.
 * :class:`Cell` — carries a current value. ``.value`` to read, ``.set(v)`` to
   update; emits to subscribers only on actual change.
 * :class:`Computed` — read-only value recomputed when any of its explicit
   ``triggers`` emit; the function reads whatever state it needs. Emits on change.
+  Supply ``initial`` to pass the previous result into the function instead.
 * :class:`ReactiveQuery` — async query recomputed explicitly via ``get`` and
   refreshed in the background when triggers emit. Emits completed changed values.
 * :class:`Derived` — read-only value mapped from a single source value via a
   function. Emits on change. A single-source convenience over :class:`Computed`.
 
-Signal, Cell, Computed, and Derived all inherit from :class:`Subscribable`, so any
-of them is a valid ``Subscribable[T]`` input wherever "something I can subscribe
-to" is the contract (e.g., ``Computed.triggers``).
+All these primitives inherit from :class:`Subscribable`, so any of them is a
+valid ``Subscribable[T]`` input wherever "something I can subscribe to" is the
+contract (e.g., ``Computed.triggers``).
 
 All handle sync OR async callbacks transparently. Callback exceptions are
 logged and never propagate up — one bad subscriber doesn't poison the others.
@@ -28,7 +29,7 @@ import contextlib
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, final
+from typing import Any, Protocol, cast, final, overload
 
 from vxlib.lifecycle import Teardown
 
@@ -86,7 +87,7 @@ class Emitter[T](Subscribable[T]):
 
 
 class Readable[T](Protocol):
-    """A subscribable that also carries a current value (Cell, Computed, Derived)."""
+    """A subscribable that also carries a current value."""
 
     @property
     def value(self) -> T: ...
@@ -126,7 +127,7 @@ class Cell[T](Subscribable[T]):
     plus react to changes).
 
     For discrete "something happened" events where consumers re-query fresh
-    state, prefer :class:`Signal` instead.
+    state, prefer :class:`Emitter` instead.
 
     Typical use::
 
@@ -163,7 +164,38 @@ class Cell[T](Subscribable[T]):
         return f"Cell({self._value!r}, subs={len(self._subs)})"
 
 
-class Computed[T](Subscribable[T]):
+class _Computed[T](Subscribable[T]):
+    """Shared storage, refresh, and subscription lifecycle for computed values."""
+
+    def __init__(self, *triggers: Subscribable[Any] | Readable[Any], initial: T, fn: Callable[[T], T]) -> None:
+        super().__init__()
+        self._fn = fn
+        self._value = initial
+        self._unsubs: list[Teardown] = [trigger.subscribe(lambda _: self.refresh()) for trigger in triggers]
+
+    async def refresh(self) -> None:
+        """Recompute now; emit if the value changed."""
+        new = self._fn(self._value)
+        if new != self._value:
+            self._value = new
+            await self._notify(new)
+
+    @property
+    def value(self) -> T:
+        """Current computed value."""
+        return self._value
+
+    def close(self) -> None:
+        """Detach from all triggers. Idempotent."""
+        for unsub in self._unsubs:
+            unsub()
+        self._unsubs = []
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._value!r}, subs={len(self._subs)})"
+
+
+class Computed[T](_Computed[T]):
     """Read-only value recomputed when any of its explicit triggers emit.
 
     Emits to its own subscribers only if the recomputed value differs from the
@@ -172,9 +204,16 @@ class Computed[T](Subscribable[T]):
 
     Triggers are declared explicitly — no auto-tracking — which keeps the
     implementation simple and the trigger graph legible at the call site. Any
-    :class:`Subscribable` is a valid trigger (Signal, Cell, Computed, or Derived);
+    :class:`Subscribable` is a valid trigger (Emitter, Cell, Computed, or Derived);
     ``fn`` reads whatever state it needs. For a pure map of a single source value,
     prefer :class:`Derived`.
+
+    Without ``initial``, calls ``fn()`` immediately and on each refresh. With
+    ``initial``, calls ``fn(initial)`` immediately, then passes the current retained
+    result to ``fn`` on each refresh. ``initial=None`` is valid when the value type
+    permits it. Computations run inline, without coalescing trigger emissions.
+    ``fn`` must not mutate its argument or other state; return a new value when
+    the result changes.
 
     Typical use::
 
@@ -198,34 +237,34 @@ class Computed[T](Subscribable[T]):
 
         # Consumer: react to changes
         mode.subscribe(lambda m: print(f"mode → {m}"))
+
+        # Retain the peak across input changes.
+        count = Cell[int](0)
+        peak = Computed[int](
+            count,
+            initial=count.value,
+            fn=lambda previous: max(previous, count.value),
+        )
     """
 
-    def __init__(self, *triggers: Subscribable[Any] | Readable[Any], fn: Callable[[], T]) -> None:
-        super().__init__()
-        self._fn = fn
-        self._value: T = fn()
-        self._unsubs: list[Teardown] = [trigger.subscribe(lambda _: self.refresh()) for trigger in triggers]
+    @overload
+    def __init__(self, *triggers: Subscribable[Any] | Readable[Any], fn: Callable[[], T]) -> None: ...
 
-    async def refresh(self) -> None:
-        """Recompute now; emit if the value changed."""
-        new = self._fn()
-        if new != self._value:
-            self._value = new
-            await self._notify(new)
+    @overload
+    def __init__(self, *triggers: Subscribable[Any] | Readable[Any], initial: T, fn: Callable[[T], T]) -> None: ...
 
-    @property
-    def value(self) -> T:
-        """Current computed value."""
-        return self._value
-
-    def close(self) -> None:
-        """Detach from all triggers. Idempotent."""
-        for unsub in self._unsubs:
-            unsub()
-        self._unsubs = []
-
-    def __repr__(self) -> str:
-        return f"Computed({self._value!r}, subs={len(self._subs)})"
+    def __init__(
+        self,
+        *triggers: Subscribable[Any] | Readable[Any],
+        fn: Callable[[], T] | Callable[[T], T],
+        initial: T | _UnsetType = _UNSET,
+    ) -> None:
+        if initial is _UNSET:
+            compute = cast("Callable[[], T]", fn)
+            super().__init__(*triggers, initial=compute(), fn=lambda _: compute())
+        else:
+            step = cast("Callable[[T], T]", fn)
+            super().__init__(*triggers, initial=step(cast("T", initial)), fn=step)
 
 
 class ReactiveQuery[T](Subscribable[T]):

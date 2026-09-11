@@ -64,7 +64,7 @@
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
-  <PageHeader items={[{ label: 'Presets' }]} class="px-4 pt-3 pb-2">
+  <PageHeader items={[{ label: 'Presets' }]}>
     {#snippet trailing()}
       {#if activeInstrument}
         <Button variant="outline" size="xs" onclick={() => (saveDialogOpen = true)}>Save current…</Button>
@@ -74,7 +74,7 @@
   <div class="min-h-0 flex-1 overflow-y-auto">
     {#if id}
       {#key id}
-        <div class="flex min-h-full flex-col gap-3 p-4">
+        <div class="flex min-h-full flex-col gap-3 px-4 pb-4">
           {#if loading}
             <p class="py-8 text-center text-fg-muted" role="status">Loading presets…</p>
           {:else if loadError}

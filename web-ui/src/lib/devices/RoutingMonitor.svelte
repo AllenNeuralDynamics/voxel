@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { watch } from 'runed';
-
+  import { resolve } from '$app/paths';
+  import { Check } from '$lib/icons';
   import { Button, Select } from '$lib/kit';
-  import { type Instrument, type OpticalRoutingPolicy } from '$lib/model';
+  import { type Instrument, type RoutingDimension, type RoutingRule } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { formatSpatialDistance } from '$lib/spatial-units';
   import { cn, displayName, toastError } from '$lib/utils';
@@ -12,104 +12,52 @@
     class?: string;
   }
 
-  interface RoutingDimension {
-    id: string;
-    routes: string[];
-    current?: string;
-    target?: string;
-    moving: boolean;
-    policy?: OpticalRoutingPolicy;
-  }
-
   let { instrument, class: className }: Props = $props();
 
-  // Keep a user-selected destination stable while its selectors move through intermediate positions.
-  let optimistic = $state<Record<string, string>>({});
+  // Requests track loading; the dropdown value comes from observed hardware state.
+  let pending = $state<Record<string, string>>({});
+  let applying = $state<string | null>(null);
 
-  const dimensions = $derived.by<RoutingDimension[]>(() =>
-    Object.entries(instrument.hal.optical_routing).map(([id, routes]) => {
-      const selectors = new Set(Object.values(routes).flatMap((positions) => Object.keys(positions)));
-      const moving = [...selectors].some((selector) => instrument.discreteAxes.get(selector)?.isMoving?.value === true);
-      const current = Object.entries(routes).find(([, positions]) =>
-        Object.entries(positions).every(
-          ([selector, position]) => instrument.discreteAxes.get(selector)?.label === position
-        )
-      )?.[0];
-      return {
-        id,
-        routes: Object.keys(routes),
-        current,
-        target: instrument.routingTargets[id],
-        moving,
-        policy: instrument.state.routing[id]
-      };
-    })
+  const dimensions = $derived(instrument.routingDimensions);
+  const disabled = $derived(
+    instrument.mode === 'capture' ||
+      applying != null ||
+      Object.keys(pending).length > 0 ||
+      dimensions.some((d) => d.moving)
   );
 
-  const displayedRoute = (dimension: RoutingDimension): string | undefined =>
-    optimistic[dimension.id] ?? (dimension.moving ? dimension.target : dimension.current);
-
-  function policySummary(policy: OpticalRoutingPolicy): string {
-    if (policy.type === 'fixed') return `Fixed to ${displayName(policy.route)}`;
-    return `${policy.axis.toUpperCase()} split at ${formatSpatialDistance(policy.threshold, prefs.spatialUnit.get())} · ${displayName(
-      policy.lower
-    )} → ${displayName(policy.upper)}`;
+  function ruleSummary(rule: RoutingRule): string {
+    if (rule.type === 'fixed') return `Fixed to ${displayName(rule.route)}`;
+    return `${rule.axis.toUpperCase()}: ${displayName(rule.lower)} < ${formatSpatialDistance(
+      rule.threshold,
+      prefs.spatialUnit.get()
+    )} ≤ ${displayName(rule.upper)}`;
   }
 
-  const canRevert = $derived(
-    dimensions.some((dimension) => dimension.target != null && displayedRoute(dimension) !== dimension.target)
-  );
-
-  function override(dimension: string, route: string): void {
-    optimistic[dimension] = route;
-    const request = instrument.overrideOpticalRoute(dimension, route);
-    request.catch(() => delete optimistic[dimension]);
-    toastError(request);
+  function select(dimension: string, route: string): void {
+    if (disabled) return;
+    pending[dimension] = route;
+    toastError(
+      instrument.selectRoute(dimension, route).finally(() => {
+        delete pending[dimension];
+      })
+    );
   }
 
-  function revert(): void {
-    for (const dimension of dimensions) {
-      if (dimension.target != null) optimistic[dimension.id] = dimension.target;
-    }
-    const request = instrument.applyOpticalRouting();
-    request.catch(() => {
-      optimistic = {};
-    });
-    toastError(request);
+  function apply(dimension: RoutingDimension): void {
+    if (disabled || dimension.resolved == null || dimension.current === dimension.resolved) return;
+    applying = dimension.id;
+    toastError(
+      instrument.applyRoutingRule(dimension.id).finally(() => {
+        applying = null;
+      })
+    );
   }
-
-  // Once hardware reaches the optimistic destination—or finishes without reaching it—return to live state.
-  const wasMoving: Record<string, boolean> = {};
-  watch(
-    () => dimensions.map(({ id, current, moving }) => `${id}:${current ?? ''}:${moving ? 1 : 0}`).join(','),
-    () => {
-      for (const dimension of dimensions) {
-        if (
-          optimistic[dimension.id] != null &&
-          (dimension.current === optimistic[dimension.id] || (wasMoving[dimension.id] && !dimension.moving))
-        ) {
-          delete optimistic[dimension.id];
-        }
-        wasMoving[dimension.id] = dimension.moving;
-      }
-    }
-  );
 </script>
 
 <div class={cn('flex w-full min-w-68 flex-col py-2', className)}>
   <div class="flex shrink-0 items-center gap-2 px-3 py-1">
     <span class="font-medium tracking-wide text-fg-muted uppercase">Routing</span>
-    <div class="flex-1"></div>
-    <Button
-      variant="ghost"
-      size="xs"
-      disabled={!canRevert}
-      class={cn(canRevert ? 'text-danger' : 'opacity-50')}
-      onclick={revert}
-    >
-      Revert
-    </Button>
-    <span class="font-mono text-[10px] text-fg-faint tabular-nums">{dimensions.length}</span>
   </div>
 
   <div class="flex flex-col gap-2 px-3 py-2">
@@ -117,36 +65,53 @@
       {@const options = dimension.routes.map((route) => ({ value: route, label: displayName(route) }))}
       <div class="flex flex-col gap-1 rounded-xs border border-border bg-card px-2.5 py-1.5">
         <div class="flex items-center gap-2">
-          <span class="min-w-0 flex-1 truncate text-base font-medium text-fg">
-            {displayName(dimension.id)}
-          </span>
+          <a
+            href={resolve(
+              `/stations/[stationId]/instruments/[instrumentId]/routing#${encodeURIComponent(`routing-${dimension.id}`)}`,
+              { stationId: instrument.stationId, instrumentId: instrument.id }
+            )}
+            class="flex min-w-0 flex-1 items-center gap-1 rounded-sm text-base font-medium text-fg hover:text-fg-accent focus-visible:outline-2 focus-visible:outline-border-focused"
+            title={`Edit routing rule · ${ruleSummary(dimension.rule)}`}
+          >
+            <span class="truncate">{displayName(dimension.id)}</span>
+          </a>
           <Select
             variant="ghost"
             size="xs"
             side="top"
             class="ml-auto w-42 tabular-nums"
-            value={displayedRoute(dimension) ?? ''}
+            value={dimension.current ?? ''}
             {options}
-            placeholder="Mixed"
-            loading={dimension.moving}
-            onchange={(route) => override(dimension.id, route)}
+            {disabled}
+            placeholder={dimension.moving ? 'Switching…' : 'Unknown'}
+            loading={dimension.moving || pending[dimension.id] != null || applying === dimension.id}
+            onchange={(route) => select(dimension.id, route)}
           >
             {#snippet trailing(option)}
-              {#if option.value === dimension.target}
+              {#if option.value === dimension.resolved}
                 <span
-                  class="inline-block size-1.5 shrink-0 rounded-full bg-fg-muted align-middle"
-                  title="Routing target"
+                  class="inline-block size-2 shrink-0 rounded-full bg-primary align-middle"
+                  role="img"
+                  aria-label="Selected by rule"
+                  title="Selected by rule"
                 ></span>
               {/if}
             {/snippet}
           </Select>
+          <Button
+            variant="outline"
+            size="icon-xs"
+            disabled={disabled || dimension.resolved == null || dimension.current === dimension.resolved}
+            loading={applying === dimension.id}
+            title={dimension.resolved == null
+              ? 'Rule choice unavailable'
+              : `Apply rule: ${displayName(dimension.resolved)}`}
+            aria-label={`Apply rule for ${displayName(dimension.id)}`}
+            onclick={() => apply(dimension)}
+          >
+            <Check class="size-3" />
+          </Button>
         </div>
-        {#if dimension.policy}
-          <div class="truncate text-sm text-fg-muted" title={policySummary(dimension.policy)}>
-            <span class="mr-1.5 text-fg-faint">Policy</span>
-            {policySummary(dimension.policy)}
-          </div>
-        {/if}
       </div>
     {/each}
   </div>

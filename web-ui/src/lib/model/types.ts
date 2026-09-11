@@ -176,12 +176,12 @@ export interface ImagingProtocol {
   profiles: Record<string, ProfileConfig>;
 }
 
-export interface FixedOpticalRoutingPolicy {
+export interface FixedRoutingRule {
   type: 'fixed';
   route: string;
 }
 
-export interface SplitOpticalRoutingPolicy {
+export interface SplitRoutingRule {
   type: 'split';
   axis: 'x' | 'y';
   threshold: number;
@@ -189,7 +189,7 @@ export interface SplitOpticalRoutingPolicy {
   upper: string;
 }
 
-export type OpticalRoutingPolicy = FixedOpticalRoutingPolicy | SplitOpticalRoutingPolicy;
+export type RoutingRule = FixedRoutingRule | SplitRoutingRule;
 
 /** Mosaic + z-range defaults prefilled into new tasks (µm). */
 export interface Stencil {
@@ -249,7 +249,7 @@ export interface WriterSettings {
 /** Baseline fields that can live in `config.default` (mirrors `InstrumentDefaults` in src/vxl/instrument.py). */
 export interface InstrumentDefaults {
   imaging: ImagingProtocol;
-  routing: Record<string, OpticalRoutingPolicy>;
+  routing: Record<string, RoutingRule>;
   metadata_cls: string;
   output: WriterSettings;
   stencil: Stencil;
@@ -555,7 +555,6 @@ export interface InstrumentStatus {
   active_profile_id: string;
   preview_revision: number;
   fov: [number, number] | null;
-  routing_targets: Record<string, string>;
   state: InstrumentState;
   task_tiles: TaskTile[];
 }
@@ -635,7 +634,6 @@ export interface InstrumentView extends InstrumentState {
   active_profile_id: string;
   preview_revision: number;
   fov: [number, number] | null;
-  routing_targets: Record<string, string>;
   task_tiles: TaskTile[];
   devices: Record<string, DeviceState>;
   acquisition: ActiveAcquisitionState | null;

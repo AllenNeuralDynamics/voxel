@@ -433,14 +433,14 @@
 {/snippet}
 
 <section class="flex h-full min-h-0 min-w-0 flex-col">
-  <PageHeader items={[{ label: 'Channels' }, { label: channelLabel || 'Channel' }]} class="px-4 pt-3 pb-2">
+  <PageHeader items={[{ label: 'Channels' }, { label: channelLabel || 'Channel' }]}>
     {#snippet trailing()}
       {#if channelDefinition?.emission != null}
         <span class="text-sm text-fg-muted tabular-nums">{channelDefinition.emission} nm</span>
       {/if}
     {/snippet}
   </PageHeader>
-  <main class="min-h-0 flex-1 overflow-auto px-4 pt-2 pb-5">
+  <main class="min-h-0 flex-1 overflow-auto px-4 pb-5">
     {#if channelDefinition}
       {#if activeInstrument}
         <section class="space-y-4" aria-labelledby={instrument && channel ? 'operating-controls-heading' : undefined}>

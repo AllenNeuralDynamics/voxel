@@ -30,9 +30,9 @@ import type {
   InstrumentStatus,
   JsonSchema,
   LogEntry,
-  OpticalRoutingPolicy,
   PresetRecord,
   ProfilePatch,
+  RoutingRule,
   SensorROI,
   SessionView,
   Signals,
@@ -76,13 +76,17 @@ export interface DeviceDivergence {
   roiDirty: boolean;
 }
 
-/** One optical-routing dimension joined across immutable topology, editable policy, and live target. */
+/** One routing dimension derived from topology, its saved rule, and hardware observations. */
 export interface RoutingDimension {
   id: string;
   routes: string[];
-  policyRoutes: string[];
-  policy: OpticalRoutingPolicy;
-  target?: string;
+  ruleRoutes: string[];
+  rule: RoutingRule;
+  /** Rule choice; split rules require a known stage position. */
+  resolved?: string;
+  /** Uniquely matched, settled hardware route; absent for missing or ambiguous readback. */
+  current?: string;
+  moving: boolean;
 }
 
 /** Compare two property values; treats floating-point near-equality as equal. */
@@ -271,7 +275,6 @@ export class Instrument {
 
   readonly mode = $derived(this.status.mode);
   readonly fov = $derived(this.status.fov);
-  readonly routingTargets = $derived(this.status.routing_targets);
   readonly state = $derived(this.status.state);
   readonly taskTiles = $derived(this.status.task_tiles);
   readonly imaging = $derived(this.state.imaging);
@@ -289,19 +292,40 @@ export class Instrument {
   readonly routingDimensions = $derived.by<RoutingDimension[]>(() => {
     const assemblies = [...Object.values(this.hal.detection), ...Object.values(this.hal.illumination)];
     return Object.entries(this.hal.optical_routing).flatMap(([id, routes]) => {
-      const policy = this.state.routing[id];
-      if (!policy) return [];
+      const rule = this.state.routing[id];
+      if (!rule) return [];
       const participants = assemblies.filter((assembly) => id in assembly.routing);
       const routeNames = Object.keys(routes);
+      const selectors = [...new SvelteSet(Object.values(routes).flatMap((positions) => Object.keys(positions)))].map(
+        (uid) => this.discreteAxes.get(uid)
+      );
+      const moving = selectors.some((selector) => selector?.isMoving?.value === true);
+      const settled = selectors.every((selector) => selector?.isMoving?.value === false && selector.label !== null);
+      const matches = settled
+        ? routeNames.filter((route) =>
+            Object.entries(routes[route]).every(([uid, label]) => this.discreteAxes.get(uid)?.label === label)
+          )
+        : [];
+      let resolved: string | undefined;
+      if (rule.type === 'fixed') resolved = rule.route;
+      else {
+        // Do not use Stage.position(): its zero fallback is for display, not rule evaluation.
+        const position = this.stage.axis(rule.axis).position?.value;
+        if (position != null && Number.isFinite(position)) {
+          resolved = position < rule.threshold ? rule.lower : rule.upper;
+        }
+      }
       return [
         {
           id,
           routes: routeNames,
-          policyRoutes: routeNames.filter((route) =>
+          ruleRoutes: routeNames.filter((route) =>
             participants.every((assembly) => assembly.routing[id]?.includes(route) === true)
           ),
-          policy,
-          target: this.routingTargets[id]
+          rule,
+          resolved,
+          current: matches.length === 1 ? matches[0] : undefined,
+          moving
         }
       ];
     });
@@ -486,7 +510,6 @@ export class Instrument {
       active_profile_id: session.instrument.active_profile_id,
       preview_revision: session.instrument.preview_revision,
       fov: session.instrument.fov,
-      routing_targets: session.instrument.routing_targets,
       // Keep persisted state separate from the session's hardware and runtime fields.
       state: {
         imaging: session.instrument.imaging,
@@ -551,16 +574,17 @@ export class Instrument {
     return this.#client.post(`${this.#base}/settings/save`);
   }
 
-  applyOpticalRouting(): Promise<void> {
-    return this.#client.post(`${this.#base}/optical-routing/apply`);
+  applyRoutingRule(dimension?: string): Promise<void> {
+    const query = dimension === undefined ? '' : `?dimension=${encodeURIComponent(dimension)}`;
+    return this.#client.post(`${this.#base}/routing/apply${query}`);
   }
 
-  updateOpticalRoutingPolicy(dimension: string, policy: OpticalRoutingPolicy): Promise<void> {
-    return this.#client.put(`${this.#base}/optical-routing/${encodeURIComponent(dimension)}/policy`, policy);
+  setRoutingRule(dimension: string, rule: RoutingRule): Promise<void> {
+    return this.#client.put(`${this.#base}/routing/${encodeURIComponent(dimension)}/rule`, rule);
   }
 
-  overrideOpticalRoute(dimension: string, route: string): Promise<void> {
-    return this.#client.post(`${this.#base}/optical-routing/${encodeURIComponent(dimension)}/override`, { route });
+  selectRoute(dimension: string, route: string): Promise<void> {
+    return this.#client.post(`${this.#base}/routing/${encodeURIComponent(dimension)}/select`, { route });
   }
 
   saveAsDefault(): Promise<void> {

@@ -27,7 +27,7 @@
 </script>
 
 <header
-  class={cn('min-w-0 shrink-0', trailing && 'flex flex-wrap items-center gap-x-3 gap-y-1.5', className)}
+  class={cn('min-w-0 shrink-0 px-4 py-4', trailing && 'flex flex-wrap items-center gap-x-3 gap-y-1.5', className)}
   {...restProps}
 >
   <h1 class="sr-only">{pageTitle}</h1>

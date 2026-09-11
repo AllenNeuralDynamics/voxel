@@ -22,7 +22,7 @@
   }
 </script>
 
-<div class="flex min-h-full flex-col gap-2 p-4">
+<div class="flex min-h-full flex-col gap-2 px-4 pb-4">
   {#if manifest}
     <div class="flex shrink-0 items-center justify-end gap-2">
       <span class="rounded-full bg-element-bg px-1.5 py-px text-sm text-fg-muted">{manifest.status}</span>

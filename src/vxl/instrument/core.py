@@ -21,7 +21,6 @@ from vxl_records import (
     StorageSpec,
     VoxelRecords,
 )
-from vxlib.coalescer import Coalescer
 from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 from vxlib.reactivity import Cell, Computed, Emitter, ReactiveQuery, Readable, Subscribable
 
@@ -41,9 +40,9 @@ from .config import (
     InstrumentDefaults,
     InstrumentPreset,
     InstrumentState,
-    OpticalRoutingPolicy,
     ProfileConfig,
     ProfilePatch,
+    RoutingRule,
     StencilPatch,
     TaskPatch,
     WriterPatch,
@@ -56,10 +55,6 @@ from .store import PROMOTABLE_FIELDS, InstrumentStore
 from .traversal import TileOrder
 
 logger = logging.getLogger(__name__)
-
-
-def _merge_route_updates(current: dict[str, str], update: dict[str, str]) -> dict[str, str]:
-    return current | update
 
 
 @dataclass(frozen=True)
@@ -122,12 +117,6 @@ class Instrument:
         self._acquisition = Cell[ActiveAcquisitionState | None](None)
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
-        self._routing_targets = Cell[dict[str, str]]({})
-        self._routing_unsubs: list[Teardown] = []
-        self._routing_updates = Coalescer[dict[str, str]](
-            drain=self._apply_automatic_routes,
-            reducer=_merge_route_updates,
-        )
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
         self.task_tiles: Computed[list[TaskTile]] = Computed(self._store, fn=self._compute_task_tiles)
 
@@ -197,11 +186,6 @@ class Instrument:
         return self._active_profile_id
 
     @property
-    def routing_targets(self) -> Readable[dict[str, str]]:
-        """Routes currently resolved by the routing policies and live stage position."""
-        return self._routing_targets
-
-    @property
     def active_profile(self) -> ProfileConfig:
         """The current active profile config."""
         return self._store.value.imaging.profiles[self._active_profile_id.value]
@@ -249,7 +233,6 @@ class Instrument:
                 for camera in self._hal.cameras.values():
                     self.fov.add_triggers(camera.frame_area_um)
                 await self._apply_profile(self._active_profile_id.value)
-                await self._start_optical_routing()
                 for cam_id, camera in self._hal.cameras.items():
                     await self._subscribe_camera(cam_id, camera)
                 await self.task_tiles.refresh()
@@ -423,107 +406,71 @@ class Instrument:
         check(stencil.z_end, "z", ("state", "stencil", "z_end"), "Stencil z_end")
         return violations
 
-    async def _start_optical_routing(self) -> None:
-        """Resolve and apply the initial routes, then watch their live inputs."""
-        if not self._store.value.routing:
+    async def _ensure_routes(self, routes: Mapping[str, str]) -> None:
+        """Under the Instrument lock, select only unsettled or different routes."""
+        if not routes:
             return
-        stage = self._hal.stage
-        await asyncio.gather(stage.x.position.get(), stage.y.position.get(), self.fov.get())
-        routes = self._resolve_live_routes()
-        if routes is None:
-            raise RuntimeError("Optical routing requires current stage positions and field of view")
-        await self._routing_targets.set(routes)
-        await self._move_optical_routes(routes)
-        self._routing_unsubs = [
-            stage.x.position.subscribe(self._refresh_routing_targets),
-            stage.y.position.subscribe(self._refresh_routing_targets),
-            self.fov.subscribe(self._refresh_routing_targets),
-            self._store.subscribe(self._refresh_routing_targets),
-        ]
-
-    def _resolve_live_routes(self) -> dict[str, str] | None:
-        x = self._hal.stage.x.position.value
-        y = self._hal.stage.y.position.value
-        fov = self.fov.cache
-        if x is None or y is None or fov is None:
-            return None
-        return self._store.value.resolve_routes(
-            x=x,
-            y=y,
-            previous=self._routing_targets.value,
-            margins={"x": fov[0] / 2, "y": fov[1] / 2},
-        )
-
-    async def _refresh_routing_targets(self, _value: object = None) -> None:
-        routes = self._resolve_live_routes()
-        if routes is None:
-            return
-        previous = self._routing_targets.value
-        changed = {dimension: route for dimension, route in routes.items() if previous.get(dimension) != route}
-        await self._routing_targets.set(routes)
-        if changed and self._mode.value != AcquisitionMode.CAPTURE:
-            self._routing_updates.update(changed)
-
-    async def _apply_automatic_routes(self, routes: dict[str, str]) -> None:
-        async with self._lock:
-            if self._mode.value != AcquisitionMode.CAPTURE:
-                await self._move_optical_routes(routes)
-
-    async def _move_optical_routes(self, routes: Mapping[str, str]) -> None:
-        positions: dict[str, str] = {}
-        topology = self._hal.topology.optical_routing.root
-        for dimension, route_name in routes.items():
-            dimension_routes = topology.get(dimension)
-            if dimension_routes is None or route_name not in dimension_routes:
-                raise OperationRejectedError(f"No optical route '{dimension}.{route_name}'")
-            positions.update(dimension_routes[route_name].root)
-        if not positions:
+        requested = list(routes.items())
+        current = await asyncio.gather(*(self._hal.routing[uid].current_route() for uid, _ in requested))
+        routes = {uid: route for (uid, route), actual in zip(requested, current, strict=True) if actual != route}
+        if not routes:
             return
 
         preview_channels = list(self._preview_channels) if self._mode.value == AcquisitionMode.PREVIEW else []
         if preview_channels:
             await asyncio.gather(*(channel.disable_laser() for channel in preview_channels))
-        # Re-enable preview illumination only after every selector reaches a known position.
-        await asyncio.gather(
-            *(
-                self._hal.discrete_axes[selector].call("select", position, wait=True)
-                for selector, position in positions.items()
-            )
+        # Await every dimension before reporting failure or restoring illumination.
+        results = await asyncio.gather(
+            *(self._hal.routing[uid].select(route) for uid, route in routes.items()),
+            return_exceptions=True,
         )
+        errors: list[Exception] = []
+        for result in results:
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                errors.append(result)
+        if errors:
+            raise ExceptionGroup("Optical routing failed", errors)
         if preview_channels:
             await asyncio.gather(*(channel.enable_laser() for channel in preview_channels))
 
-    async def apply_optical_routing(self) -> None:
-        """Restore every optical-routing dimension to its current policy target."""
-        async with self._lock:
-            self._ensure_mode(
-                "apply optical routing",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
-            await self._move_optical_routes(self._routing_targets.value)
+    def _routing_scope(self, dimension: str | None) -> list[str]:
+        if dimension is None:
+            return list(self._hal.routing)
+        if dimension not in self._hal.routing:
+            raise OperationRejectedError(f"No routing dimension '{dimension}'")
+        return [dimension]
 
-    async def update_optical_routing_policy(self, dimension: str, policy: OpticalRoutingPolicy) -> None:
-        """Persist one complete routing policy; live routing reacts through the state subscription."""
+    async def apply_routing_rule(self, dimension: str | None = None) -> None:
+        """Read the current XY position and apply one dimension's rule, or all rules, once."""
         async with self._lock:
-            self._ensure_mode(
-                "update optical routing policy",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
-            if dimension not in self._hal.topology.optical_routing.root:
-                raise OperationRejectedError(f"No optical-routing dimension '{dimension}'")
-            await self._store.update(routing={**self._store.value.routing, dimension: policy})
+            self._ensure_mode("apply routing rule", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            dimensions = self._routing_scope(dimension)
+            if not dimensions:
+                return
+            stage = self._hal.stage
+            x, y = await asyncio.gather(stage.x.position.get(), stage.y.position.get())
+            routes = self._store.value.resolve_routes(x=x, y=y)
+            if missing := [uid for uid in dimensions if uid not in routes]:
+                raise OperationRejectedError(f"No routing rule for: {', '.join(missing)}")
+            await self._ensure_routes({uid: routes[uid] for uid in dimensions})
 
-    async def override_optical_route(self, dimension: str, route: str) -> None:
-        """Temporarily move one routing dimension without changing its persisted policy target."""
+    async def set_routing_rule(self, dimension: str, rule: RoutingRule) -> None:
+        """Persist a routing rule without moving hardware."""
         async with self._lock:
-            self._ensure_mode(
-                "override optical routing",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
-            await self._move_optical_routes({dimension: route})
+            self._ensure_mode("set routing rule", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._routing_scope(dimension)
+            await self._store.update(routing={**self._store.value.routing, dimension: rule})
+
+    async def select_route(self, dimension: str, route: str) -> None:
+        """Select a route without changing the persisted rule."""
+        async with self._lock:
+            self._ensure_mode("select route", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._routing_scope(dimension)
+            if route not in self._hal.topology.optical_routing.root[dimension]:
+                raise OperationRejectedError(f"No optical route '{dimension}.{route}'")
+            await self._ensure_routes({dimension: route})
 
     async def close(self) -> None:
         """Stop preview, drop the feed, close hardware, and keep the logical active profile id."""
@@ -531,10 +478,6 @@ class Instrument:
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
-        for unsub in self._routing_unsubs:
-            unsub()
-        self._routing_unsubs = []
-        await self._routing_updates.close()
         await self.stop_preview()
         for unsub in self._preview_unsubs:
             unsub()
@@ -690,6 +633,12 @@ class Instrument:
         chans = list(all_chans if channel_ids is None else [channels[ch] for ch in channel_ids if ch in channels])
         if not chans:
             raise OperationRejectedError("No channels to preview")
+        routing = self._hal.routing
+        current = await asyncio.gather(*(dimension.current_route() for dimension in routing.values()))
+        if unsettled := [uid for uid, route in zip(routing, current, strict=True) if route is None]:
+            raise OperationRejectedError(
+                f"Select a known, settled route before starting preview: {', '.join(unsettled)}"
+            )
         self._accept_preview = False
         self._preview_channels = chans
 
@@ -1205,9 +1154,8 @@ class Instrument:
                 self._hal.stage.z.move_abs(stack.start, wait=True),
             )
             routes = self._store.value.resolve_routes(x=stack.x, y=stack.y)
-            await self._routing_targets.set(routes)
             async with self._lock:
-                await self._move_optical_routes(routes)
+                await self._ensure_routes(routes)
             await scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
             await scanning_axis.queue_relative_move(z_step)
             init_coros = []
@@ -1359,7 +1307,7 @@ class Instrument:
         desired: dict[str, str] = {}
         for ch_id in self.active_channels:
             desired.update(self._channel_config(ch_id).filters)
-        await asyncio.gather(*(self._hal.fws[fw_id].call("select", slot, wait=True) for fw_id, slot in desired.items()))
+        await asyncio.gather(*(self._hal.fws[fw_id].select(label, wait=True) for fw_id, label in desired.items()))
 
     async def _apply_signals(self) -> None:
         for uid, signals in self.active_profile.sync.items():

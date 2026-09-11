@@ -68,10 +68,10 @@
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
-  <PageHeader items={[{ label: 'Instrument' }]} class="px-4 pt-3 pb-2" />
+  <PageHeader items={[{ label: 'Instrument' }]} />
   <div class="min-h-0 flex-1 overflow-y-auto">
     {#if hal}
-      <div class="max-w-6xl space-y-6 px-4 pt-2 pb-5">
+      <div class="max-w-6xl space-y-6 px-4 pb-5">
         <section class="space-y-2.5" aria-labelledby="instrument-state-heading">
           <div class="flex flex-wrap items-center gap-2">
             <h2 id="instrument-state-heading" class="text-base text-fg">
@@ -110,13 +110,13 @@
         </section>
       </div>
     {:else if historical}
-      <div class="p-4 text-fg-muted">
+      <div class="px-4 pb-4 text-fg-muted">
         This instrument is no longer in the catalog. Its recorded acquisitions remain available.
       </div>
     {:else if selected?.errorSource === 'config'}
-      <div class="p-4 text-fg-muted">Resolve the configuration issues above to inspect this instrument.</div>
+      <div class="px-4 pb-4 text-fg-muted">Resolve the configuration issues above to inspect this instrument.</div>
     {:else}
-      <div class="p-4 text-fg-muted">The configuration could not be parsed.</div>
+      <div class="px-4 pb-4 text-fg-muted">The configuration could not be parsed.</div>
     {/if}
   </div>
   {#if activeInstrument}

@@ -362,12 +362,12 @@
 {/snippet}
 
 <div class="flex h-full min-h-0 min-w-0 flex-col">
-  <PageHeader items={[{ label: 'Plan' }]} class="px-4 pt-3 pb-2" />
+  <PageHeader items={[{ label: 'Plan' }]} />
   <div class="min-h-0 flex-1 overflow-hidden">
     <PaneGroup direction="vertical" autoSaveId="plan:grid" class="h-full">
       <Pane defaultSize={60} minSize={30}>
         <div class="flex h-full flex-col gap-2 overflow-hidden">
-          <div class="flex flex-wrap items-center gap-3 border-b border-border px-3 py-4">
+          <div class="flex flex-wrap items-center gap-3 border-b border-border px-3 pb-4">
             {#if instrument}
               <Select
                 size="xs"
