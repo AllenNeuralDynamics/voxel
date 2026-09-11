@@ -100,6 +100,7 @@ testpaths = [
     "omezarr/tests",
     "records/tests",
     "rigup/tests",
+    "vxlib/tests",
 ]
 markers = [
     "slow: integration-flavored tests (ZMQ networking, zarr I/O); excluded from pre-push, run in CI",

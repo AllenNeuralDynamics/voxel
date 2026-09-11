@@ -123,6 +123,7 @@
         model={{
           value: Number(values[key] ?? 0),
           onChange: (v) => setField(key, v),
+          onEditStart: () => instrument.edits.hold(),
           step: prop.type === 'number' ? 0.01 : 1
         }}
         decimals={prop.type === 'number' ? 3 : 0}

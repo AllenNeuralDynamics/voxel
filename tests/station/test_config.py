@@ -3,26 +3,8 @@ from uuid import UUID
 
 import pytest
 
-from vxl import system as system_module
 from vxl.station.errors import StationNotConfiguredError
 from vxl.system import StationConfig, System
-
-
-@pytest.fixture(autouse=True)
-def voxel_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    home = tmp_path / ".voxel"
-    monkeypatch.setattr(system_module, "_voxel_home", lambda: home)
-    for name in (
-        "VOXEL_STORE",
-        "VOXEL_SCRATCH",
-        "VOXEL_MAX_RAM_FRACTION",
-        "VOXEL_REMOTES",
-        "VOXEL_SCHEMA_VERSION",
-        "VOXEL_ID",
-        "VOXEL_NAME",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    return home
 
 
 def test_system_uses_env_over_whole_station_file_over_system_file(

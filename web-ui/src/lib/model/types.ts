@@ -549,6 +549,12 @@ export function isLoaded<T>(inspected: Inspected<T>): inspected is Loaded<T> {
 
 export type AcquisitionMode = 'idle' | 'preview' | 'capture';
 
+/** Next undo/redo labels; null means the corresponding stack is empty. */
+export interface HistoryState {
+  undo_label: string | null;
+  redo_label: string | null;
+}
+
 /** The active session's lightweight values, replaced together in every complete Station view. */
 export interface InstrumentStatus {
   mode: AcquisitionMode;
@@ -557,6 +563,7 @@ export interface InstrumentStatus {
   fov: [number, number] | null;
   state: InstrumentState;
   task_tiles: TaskTile[];
+  history: HistoryState;
 }
 
 /** Transient captured-frame progress for one task/profile volume. */
@@ -637,6 +644,7 @@ export interface InstrumentView extends InstrumentState {
   task_tiles: TaskTile[];
   devices: Record<string, DeviceState>;
   acquisition: ActiveAcquisitionState | null;
+  history: HistoryState;
   remote_stores: Record<string, Remote>;
 }
 

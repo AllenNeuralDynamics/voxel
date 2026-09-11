@@ -420,6 +420,18 @@ async def station_logs_websocket(websocket: WebSocket, station_id: UUID) -> None
     await websocket.app.state.realtime.serve_logs(websocket)
 
 
+@instrument_router.post("/undo", status_code=204)
+async def undo(instrument: InstrumentDep) -> None:
+    """Undo the most recent recorded edit in this instrument session."""
+    await instrument.undo()
+
+
+@instrument_router.post("/redo", status_code=204)
+async def redo(instrument: InstrumentDep) -> None:
+    """Redo the most recently undone edit in this instrument session."""
+    await instrument.redo()
+
+
 @instrument_router.post("/profile/active")
 async def activate_profile(body: _ActivateProfile, instrument: InstrumentDep) -> dict[str, str]:
     return {"active": await instrument.set_active_profile(body.profile_id)}
@@ -486,8 +498,9 @@ async def set_routing_rule(
     dimension: str,
     rule: RoutingRule,
     instrument: InstrumentDep,
+    edit_id: UUID | None = None,
 ) -> None:
-    await instrument.set_routing_rule(dimension, rule)
+    await instrument.set_routing_rule(dimension, rule, edit_id=edit_id)
 
 
 @instrument_router.post("/routing/{dimension}/select", status_code=204)

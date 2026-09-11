@@ -1,15 +1,14 @@
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import cast
-from uuid import UUID
 
 import pytest
 from vxl_records import VoxelRecords
+from vxlib.history import HistoryState
 from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
 from rigup import DeviceInterface, DeviceProps
-from vxl import system as system_module
-from vxl._utils.files import load_yaml
 from vxl.instrument import (
     AcquisitionMode,
     ActiveAcquisitionState,
@@ -22,40 +21,28 @@ from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
 
-TEMPLATE = Path(__file__).parents[1] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
-INSTRUMENT_CONFIG = load_yaml(TEMPLATE, InstrumentConfig)
-STATE = InstrumentState(**INSTRUMENT_CONFIG.default.model_dump())
-
 
 class FakeInstrument:
-    def __init__(
-        self,
-        events: list[str],
-        *,
-        open_error: Exception | None = None,
-        close_error: Exception | None = None,
-        open_started: asyncio.Event | None = None,
-        open_release: asyncio.Event | None = None,
-    ) -> None:
-        self.events = events
-        self.open_error = open_error
-        self.close_error = close_error
-        self.open_started = open_started
-        self.open_release = open_release
-        self.state = Cell(STATE)
-        self.default = Cell(INSTRUMENT_CONFIG.default)
+    def __init__(self, config: InstrumentConfig) -> None:
+        self.events: list[str] = []
+        self.open_error: Exception | None = None
+        self.close_error: Exception | None = None
+        self.open_started: asyncio.Event | None = None
+        self.open_release: asyncio.Event | None = None
+        self.state = Cell(InstrumentState(**config.default.model_dump()))
+        self.default = Cell(config.default)
         self.mode = Cell(AcquisitionMode.IDLE)
         self.acquisition = Cell[ActiveAcquisitionState | None](None)
-        self.active_profile_id = Cell(next(iter(STATE.imaging.profiles)))
-        self.routing_targets = Cell[dict[str, str]]({})
+        self.active_profile_id = Cell(next(iter(self.state.value.imaging.profiles)))
+        self.history = Cell(HistoryState())
         self.device_interfaces: dict[str, DeviceInterface] = {}
         self.device_props: dict[str, DeviceProps] = {}
         self.remote_stores = {}
         self.device_props_updates = Emitter[tuple[str, DeviceProps]]()
         self.preview = Emitter[PreviewSourceEmission]()
         self.preview_revision = Cell(0)
-        self.config = INSTRUMENT_CONFIG
-        self.hardware_config = INSTRUMENT_CONFIG.hal
+        self.config = config
+        self.hardware_config = config.hal
         self.fov = ReactiveQuery(fn=self._get_fov)
         self.task_tiles = Cell[list[TaskTile]]([])
 
@@ -78,33 +65,34 @@ class FakeInstrument:
 
 
 @pytest.fixture
-def station_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> StationConfig:
-    home = tmp_path / ".voxel"
-    monkeypatch.setattr(system_module, "_voxel_home", lambda: home)
-    return StationConfig(
-        id=UUID("12345678-1234-5678-1234-567812345678"),
-        name="scope",
-    )
+def instrument(instrument_config: InstrumentConfig) -> FakeInstrument:
+    return FakeInstrument(instrument_config)
 
 
-def _installed(station: Station, name: str = "instrument") -> Path:
-    home = station.instruments_dir / f"{name}.voxel"
-    home.mkdir()
-    return home
-
-
-async def test_open_and_close_publish_one_coherent_session_lifecycle(station_config: StationConfig) -> None:
-    events: list[str] = []
-    open_started = asyncio.Event()
-    open_release = asyncio.Event()
-    instrument = FakeInstrument(events, open_started=open_started, open_release=open_release)
-
-    def create(home: Path, records: VoxelRecords) -> Instrument:
-        del home, records
+@pytest.fixture
+async def station(station_config: StationConfig, instrument: FakeInstrument) -> AsyncIterator[Station]:
+    def create(_home: Path, _records: VoxelRecords) -> Instrument:
         return cast("Instrument", instrument)
 
     station = Station(station_config, instrument_factory=create)
-    _installed(station)
+    (station.instruments_dir / "instrument.voxel").mkdir()
+    try:
+        yield station
+    finally:
+        if station.state.value.status is StationStatus.FAULTED:
+            await station.feed.close()
+        else:
+            await station.close()
+
+
+async def test_open_and_close_publish_one_coherent_session_lifecycle(
+    station: Station, instrument: FakeInstrument
+) -> None:
+    events = instrument.events
+    open_started = asyncio.Event()
+    open_release = asyncio.Event()
+    instrument.open_started = open_started
+    instrument.open_release = open_release
 
     async with station.feed.connect() as connection:
         opening = asyncio.create_task(station.open_session("instrument"))
@@ -129,16 +117,9 @@ async def test_open_and_close_publish_one_coherent_session_lifecycle(station_con
     assert updates[-1].wire_dict()["session"] is None
 
 
-async def test_close_ends_the_active_session_and_station_feed(station_config: StationConfig) -> None:
-    events: list[str] = []
-    instrument = FakeInstrument(events)
+async def test_close_ends_the_active_session_and_station_feed(station: Station, instrument: FakeInstrument) -> None:
+    events = instrument.events
 
-    def create(home: Path, records: VoxelRecords) -> Instrument:
-        del home, records
-        return cast("Instrument", instrument)
-
-    station = Station(station_config, instrument_factory=create)
-    _installed(station)
     await station.open_session("instrument")
 
     async with station.feed.connect() as connection:
@@ -153,16 +134,11 @@ async def test_close_ends_the_active_session_and_station_feed(station_config: St
         await station.open_session("instrument")
 
 
-async def test_session_open_failure_returns_to_idle_only_after_cleanup(station_config: StationConfig) -> None:
-    events: list[str] = []
-    instrument = FakeInstrument(events, open_error=ValueError("open failed"))
-
-    def create(home: Path, records: VoxelRecords) -> Instrument:
-        del home, records
-        return cast("Instrument", instrument)
-
-    station = Station(station_config, instrument_factory=create)
-    _installed(station)
+async def test_session_open_failure_returns_to_idle_only_after_cleanup(
+    station: Station, instrument: FakeInstrument
+) -> None:
+    events = instrument.events
+    instrument.open_error = ValueError("open failed")
 
     with pytest.raises(ValueError, match="open failed"):
         await station.open_session("instrument")
@@ -174,19 +150,9 @@ async def test_session_open_failure_returns_to_idle_only_after_cleanup(station_c
     assert snapshot.error == "ValueError: open failed"
 
 
-async def test_session_open_cleanup_failure_faults_the_station(station_config: StationConfig) -> None:
-    instrument = FakeInstrument(
-        [],
-        open_error=ValueError("open failed"),
-        close_error=OSError("cleanup failed"),
-    )
-
-    def create(home: Path, records: VoxelRecords) -> Instrument:
-        del home, records
-        return cast("Instrument", instrument)
-
-    station = Station(station_config, instrument_factory=create)
-    _installed(station)
+async def test_session_open_cleanup_failure_faults_the_station(station: Station, instrument: FakeInstrument) -> None:
+    instrument.open_error = ValueError("open failed")
+    instrument.close_error = OSError("cleanup failed")
 
     with pytest.raises(OSError, match="cleanup failed"):
         await station.open_session("instrument")
@@ -199,15 +165,9 @@ async def test_session_open_cleanup_failure_faults_the_station(station_config: S
         await station.open_session("instrument")
 
 
-async def test_close_failure_faults_station_and_retains_session_identity(station_config: StationConfig) -> None:
-    instrument = FakeInstrument([])
-
-    def create(home: Path, records: VoxelRecords) -> Instrument:
-        del home, records
-        return cast("Instrument", instrument)
-
-    station = Station(station_config, instrument_factory=create)
-    _installed(station)
+async def test_close_failure_faults_station_and_retains_session_identity(
+    station: Station, instrument: FakeInstrument
+) -> None:
     delivered: list[tuple[str, PreviewLayer, bytes]] = []
     unsubscribe = station.feed.frames.subscribe(delivered.append)
     session = await station.open_session("instrument")
@@ -233,3 +193,42 @@ async def test_close_failure_faults_station_and_retains_session_identity(station
     await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"ignored"))
     assert len(delivered) == 1
     unsubscribe()
+
+
+async def test_history_updates_reach_feed_and_unsubscribe_on_session_close(
+    station: Station, instrument: FakeInstrument
+) -> None:
+    await instrument.history.set(HistoryState(undo_label="Edit metadata"))
+
+    session = await station.open_session("instrument")
+    async with station.feed.connect() as connection:
+        initial = connection.initial
+        assert initial.session is not None
+        assert initial.session.instrument.history == instrument.history.value
+        sequence = initial.cursor.seq
+        for history in (
+            HistoryState(redo_label="Edit metadata"),
+            HistoryState(undo_label="Edit metadata"),
+            HistoryState(),
+        ):
+            await instrument.history.set(history)
+            update = await asyncio.wait_for(anext(connection), timeout=1)
+            assert update.session is not None
+            assert update.session.info == session
+            assert update.session.instrument.history == history
+            assert update.session.instrument.imaging == instrument.state.value.imaging
+            assert update.cursor.seq == sequence + 1
+            sequence = update.cursor.seq
+
+    async with station.feed.connect() as reconnected:
+        assert reconnected.initial.session is not None
+        assert reconnected.initial.session.instrument.history == HistoryState()
+        assert reconnected.initial.cursor.seq == sequence
+
+    await station.close_session(session.id)
+    assert instrument.history.subs == 0
+    closed = await station.feed.snapshot()
+    await instrument.history.set(HistoryState(undo_label="Detached edit"))
+    snapshot = await station.feed.snapshot()
+    assert snapshot.cursor == closed.cursor
+    assert snapshot.session is None

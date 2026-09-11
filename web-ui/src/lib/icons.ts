@@ -9,6 +9,8 @@ export { default as EyeOff } from '~icons/lucide/eye-off';
 export { default as GripVertical } from '~icons/lucide/grip-vertical';
 export { default as Microscope } from '~icons/lucide/microscope';
 export { default as Play } from '~icons/lucide/play';
+export { default as Redo } from '~icons/lucide/redo-2';
+export { default as Undo } from '~icons/lucide/undo-2';
 export { default as WrapText } from '~icons/lucide/wrap-text';
 
 // Material Design Icons

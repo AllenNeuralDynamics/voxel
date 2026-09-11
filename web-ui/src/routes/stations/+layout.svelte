@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
+  import { createHotkey, createHotkeySequence, detectPlatform } from '@tanstack/svelte-hotkeys';
   import { Pane, PaneGroup } from 'paneforge';
   import { useEventListener, watch } from 'runed';
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -10,7 +10,7 @@
   import { page } from '$app/state';
   import { activateDashboardWindow, isStationWindowRequest, stationWindowName } from '$lib/app-windows';
   import { provideTaskSelection } from '$lib/grid/selection.svelte';
-  import { Power } from '$lib/icons';
+  import { Power, Redo, Undo } from '$lib/icons';
   import { Button, Dialog, Sidebar, Spinner } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { setVoxelStation, Station } from '$lib/model';
@@ -103,6 +103,26 @@
     if (app.instrument) showCloseDialog();
   });
 
+  for (const [hotkey, action] of [
+    ['Mod+Z', 'undo'],
+    ['Mod+Shift+Z', 'redo'],
+    ['Control+Y', 'redo']
+  ] as const) {
+    createHotkey(
+      hotkey,
+      (event) => {
+        if (event.defaultPrevented || event.isComposing || event.repeat) return;
+        if (hotkey === 'Control+Y' && detectPlatform() === 'mac') return;
+        const instrument = app.instrument;
+        if (!instrument || !canReplayHistory || instrument.history[`${action}_label`] === null) return;
+        event.preventDefault();
+        void replayHistory(action);
+      },
+      // Preserve native editing and only consume shortcuts that pass our guards.
+      { ignoreInputs: true, preventDefault: false, stopPropagation: false }
+    );
+  }
+
   // --- Shell nav ---
 
   const workflowRoutes = ['/plan'] as const;
@@ -126,6 +146,23 @@
   const canOpenInstrument = $derived(
     app.stationStatus === 'idle' && !!instrumentInspection && !instrumentHasIssue && app.openingName === null
   );
+  const canReplayHistory = $derived(
+    app.client.isConnected &&
+      app.stationStatus === 'active' &&
+      app.instrument?.mode !== 'capture' &&
+      !app.instrument?.edits.busy
+  );
+
+  async function replayHistory(action: 'undo' | 'redo'): Promise<void> {
+    const instrument = app.instrument;
+    if (!instrument || !canReplayHistory || instrument.history[`${action}_label`] === null) return;
+    try {
+      await instrument[action]();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const openInstrumentTitle = $derived(
     instrumentHasIssue
       ? 'Resolve the instrument configuration before opening it'
@@ -364,7 +401,32 @@
         <Sidebar.Content>
           <InstrumentNavigation instrumentId={selectedInstrumentId || app.activeName || undefined} />
         </Sidebar.Content>
-        {#if !app.instrument && instrumentId && app.stationStatus !== 'closing'}
+        {#if app.instrument}
+          <Sidebar.Footer class="flex-row gap-1 border-t border-border-faint bg-element-bg/40 p-2">
+            {#each ['undo', 'redo'] as const as action (action)}
+              {@const label = action === 'undo' ? 'Undo' : 'Redo'}
+              {@const edit = app.instrument.history[`${action}_label`]}
+              {@const title = edit === null ? `Nothing to ${action}` : `${label}: ${edit}`}
+              <span class="min-w-0 flex-1" {title}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="w-full text-base disabled:opacity-40"
+                  aria-label={title}
+                  disabled={!canReplayHistory || edit === null}
+                  onclick={() => replayHistory(action)}
+                >
+                  {#if action === 'undo'}
+                    <Undo />
+                  {:else}
+                    <Redo />
+                  {/if}
+                  {label}
+                </Button>
+              </span>
+            {/each}
+          </Sidebar.Footer>
+        {:else if instrumentId && app.stationStatus !== 'closing'}
           <Sidebar.Footer class="gap-1 border-t border-border-faint bg-element-bg/40 p-2">
             <Button
               variant="default"

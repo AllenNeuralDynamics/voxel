@@ -173,6 +173,7 @@ class Station:
                 self._session_teardowns.append(instrument.preview_revision.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.fov.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.state.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.history.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.task_tiles.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.acquisition.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.default.subscribe(self._refresh_session_view))
@@ -363,6 +364,7 @@ class Station:
                         for device_id, interface in instrument.device_interfaces.items()
                     },
                     "acquisition": instrument.acquisition.value,
+                    "history": instrument.history.value,
                     "remote_stores": dict(instrument.remote_stores),
                 }
             ),

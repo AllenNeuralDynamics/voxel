@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
 import pytest
-from vxlib.reactivity import Cell
 
+from rigup import Result
 from vxl.hal.core import RouteDimension
 from vxl.hal.errors import HALError
 from vxl.hal.topology import OpticalRouteDefinition
@@ -15,11 +15,21 @@ if TYPE_CHECKING:
     from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 
 
+def _selector(label, moving):
+    props = {
+        "label": Result.ok(SimpleNamespace(value=label)),
+        "is_moving": Result.ok(SimpleNamespace(value=moving)),
+    }
+    return SimpleNamespace(props=SimpleNamespace(get=AsyncMock(return_value=props)))
+
+
 @pytest.mark.parametrize(
     ("label", "moving", "expected"),
     [("left", False, "left"), ("left", True, None), ("left", None, None), (None, False, None), ("right", False, None)],
 )
-def test_observed_route_requires_all_selectors_to_match_and_be_stationary(label, moving, expected) -> None:
+async def test_current_route_reads_all_selectors_and_requires_a_unique_stationary_match(
+    label, moving, expected
+) -> None:
     routes = {
         "left": OpticalRouteDefinition({"a": "left", "b": "left"}),
         "right": OpticalRouteDefinition({"a": "right", "b": "right"}),
@@ -27,15 +37,14 @@ def test_observed_route_requires_all_selectors_to_match_and_be_stationary(label,
     dimension = RouteDimension(
         uid="side",
         selectors={
-            "a": cast("DiscreteAxisHandle", SimpleNamespace(label=Cell("left"), is_moving=Cell(False))),
-            "b": cast("DiscreteAxisHandle", SimpleNamespace(label=Cell(label), is_moving=Cell(moving))),
+            "a": cast("DiscreteAxisHandle", _selector("left", False)),
+            "b": cast("DiscreteAxisHandle", _selector(label, moving)),
         },
         _definitions=routes,
     )
-    assert dimension.observed_route() == expected
-    assert dimension.is_moving is (moving is True)
+    assert await dimension.current_route() == expected
     if expected is not None:
-        assert replace(dimension, _definitions={**routes, "alias": routes[expected]}).observed_route() is None
+        assert await replace(dimension, _definitions={**routes, "alias": routes[expected]}).current_route() is None
 
 
 async def test_selection_waits_for_all_failures_and_identifies_the_selectors() -> None:

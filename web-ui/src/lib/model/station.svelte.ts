@@ -17,7 +17,9 @@ import {
   LaserHandle,
   SignalGeneratorHandle
 } from './device.svelte';
+import { createEditQueue } from './edit-queue.svelte';
 import { Inpainter } from './inpaint.svelte';
+import type { EditContext } from './prop.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionManifest,
@@ -277,6 +279,8 @@ export class Instrument {
   readonly fov = $derived(this.status.fov);
   readonly state = $derived(this.status.state);
   readonly taskTiles = $derived(this.status.task_tiles);
+  readonly history = $derived(this.status.history);
+  readonly edits = createEditQueue();
   readonly imaging = $derived(this.state.imaging);
   readonly activeProfileId = $derived(this.status.active_profile_id);
   readonly activeProfile = $derived(this.activeProfileId ? this.imaging.profiles[this.activeProfileId] : undefined);
@@ -522,7 +526,8 @@ export class Instrument {
         metadata: session.instrument.metadata,
         last_modified: session.instrument.last_modified
       },
-      task_tiles: session.instrument.task_tiles
+      task_tiles: session.instrument.task_tiles,
+      history: session.instrument.history
     };
   }
 
@@ -543,8 +548,20 @@ export class Instrument {
   // State edits apply server-side; the resulting complete session arrives on the Station feed —
   // no local mutation here, so derived reads converge automatically. Callers handle thrown ApiErrors.
 
+  undo(): Promise<void> {
+    if (this.edits.busy) return Promise.reject(new Error('Wait for edits to finish saving'));
+    return this.edits.run(() => this.#client.post(`${this.#base}/undo`));
+  }
+
+  redo(): Promise<void> {
+    if (this.edits.busy) return Promise.reject(new Error('Wait for edits to finish saving'));
+    return this.edits.run(() => this.#client.post(`${this.#base}/redo`));
+  }
+
   setActiveProfile(profileId: string): Promise<{ active: string }> {
-    return this.#client.post<{ active: string }>(`${this.#base}/profile/active`, { profile_id: profileId });
+    return this.edits.run(() =>
+      this.#client.post<{ active: string }>(`${this.#base}/profile/active`, { profile_id: profileId })
+    );
   }
 
   /** Shift the stencil mosaic offset so `edge` aligns to a stage position (default: current). µm. */
@@ -559,7 +576,7 @@ export class Instrument {
   }
 
   updateProfile(patch: ProfilePatch): Promise<void> {
-    return this.#client.patch(`${this.#base}/profile`, patch);
+    return this.edits.run(() => this.#client.patch(`${this.#base}/profile`, patch));
   }
 
   updateSignals(generatorUid: string, signals: Signals): Promise<void> {
@@ -579,8 +596,11 @@ export class Instrument {
     return this.#client.post(`${this.#base}/routing/apply${query}`);
   }
 
-  setRoutingRule(dimension: string, rule: RoutingRule): Promise<void> {
-    return this.#client.put(`${this.#base}/routing/${encodeURIComponent(dimension)}/rule`, rule);
+  setRoutingRule(dimension: string, rule: RoutingRule, { editId }: EditContext = {}): Promise<void> {
+    const query = editId ? `?edit_id=${encodeURIComponent(editId)}` : '';
+    return this.edits.run(() =>
+      this.#client.put(`${this.#base}/routing/${encodeURIComponent(dimension)}/rule${query}`, rule)
+    );
   }
 
   selectRoute(dimension: string, route: string): Promise<void> {
@@ -592,7 +612,7 @@ export class Instrument {
   }
 
   restoreDefault(): Promise<void> {
-    return this.#client.post(`${this.#base}/default/restore`, {});
+    return this.edits.run(() => this.#client.post(`${this.#base}/default/restore`, {}));
   }
 
   savePreset(name: string): Promise<PresetRecord> {
@@ -600,15 +620,15 @@ export class Instrument {
   }
 
   applyPreset(presetId: string): Promise<void> {
-    return this.#client.post(`${this.#base}/presets/${encodeURIComponent(presetId)}/apply`);
+    return this.edits.run(() => this.#client.post(`${this.#base}/presets/${encodeURIComponent(presetId)}/apply`));
   }
 
   updateChannel(channelId: string, patch: ChannelPatch): Promise<void> {
-    return this.#client.patch(`${this.#base}/channels/${encodeURIComponent(channelId)}`, patch);
+    return this.edits.run(() => this.#client.patch(`${this.#base}/channels/${encodeURIComponent(channelId)}`, patch));
   }
 
   updateOutput(patch: WriterPatch): Promise<void> {
-    return this.#client.patch(`${this.#base}/output`, patch);
+    return this.edits.run(() => this.#client.patch(`${this.#base}/output`, patch));
   }
 
   updateStencil(patch: StencilPatch): Promise<void> {
@@ -616,11 +636,11 @@ export class Instrument {
   }
 
   updateMetadata(fields: Record<string, unknown>): Promise<void> {
-    return this.#client.patch(`${this.#base}/metadata`, fields);
+    return this.edits.run(() => this.#client.patch(`${this.#base}/metadata`, fields));
   }
 
   setMetadataSchema(target: string): Promise<void> {
-    return this.#client.put(`${this.#base}/metadata/schema`, { target });
+    return this.edits.run(() => this.#client.put(`${this.#base}/metadata/schema`, { target }));
   }
 
   /** The discovered metadata schema registry (display name → target identifier). */
@@ -629,22 +649,22 @@ export class Instrument {
   }
 
   setTraversal(order: TileOrder): Promise<void> {
-    return this.#client.put(`${this.#base}/traversal`, { order });
+    return this.edits.run(() => this.#client.put(`${this.#base}/traversal`, { order }));
   }
 
   addTasks(xy: [number, number][], profileIds?: string[]): Promise<void> {
-    return this.#client.post(`${this.#base}/tasks`, { xy, profile_ids: profileIds ?? null });
+    return this.edits.run(() => this.#client.post(`${this.#base}/tasks`, { xy, profile_ids: profileIds ?? null }));
   }
 
   /** Apply a per-task patch to one or more tasks in a single request. */
   updateTasks(patches: Record<string, TaskPatch>): Promise<void> {
-    return this.#client.patch(`${this.#base}/tasks`, { patches });
+    return this.edits.run(() => this.#client.patch(`${this.#base}/tasks`, { patches }));
   }
 
   /** Delete one or more tasks in a single request. */
   removeTasks(taskIds: string[]): Promise<void> {
     const query = taskIds.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
-    return this.#client.del(`${this.#base}/tasks?${query}`);
+    return this.edits.run(() => this.#client.del(`${this.#base}/tasks?${query}`));
   }
 
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
@@ -659,7 +679,7 @@ export class Instrument {
   }
 
   dispose(): void {
-    // Instrument owns no transport subscriptions; VoxelApp applies complete Station views.
+    this.edits.dispose();
   }
 
   /** Re-fetch the resolved schema when `metadata_cls` changes; no-op otherwise. */

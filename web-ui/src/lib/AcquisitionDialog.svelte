@@ -199,6 +199,7 @@
                 model={{
                   value: instrument.state.output.shard_z_chunks,
                   onChange: (value) => toastError(instrument.updateOutput({ shard_z_chunks: value })),
+                  onEditStart: () => instrument.edits.hold(),
                   min: 1,
                   step: 1
                 }}
@@ -212,6 +213,7 @@
                 model={{
                   value: instrument.state.output.batch_z_shards,
                   onChange: (value) => toastError(instrument.updateOutput({ batch_z_shards: value })),
+                  onEditStart: () => instrument.edits.hold(),
                   min: 1,
                   step: 1
                 }}
@@ -225,6 +227,7 @@
                 model={{
                   value: instrument.state.output.target_shard_gb,
                   onChange: (value) => toastError(instrument.updateOutput({ target_shard_gb: value })),
+                  onEditStart: () => instrument.edits.hold(),
                   min: 0.1,
                   step: 0.05,
                   bigStep: 0.25

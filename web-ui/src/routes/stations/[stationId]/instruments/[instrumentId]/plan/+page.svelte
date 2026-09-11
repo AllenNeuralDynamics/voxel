@@ -247,6 +247,7 @@
           model={{
             value: row.x / unit.scale,
             onChange: (v) => setField(row, 'x', v),
+            onEditStart: () => instrument?.edits.hold() ?? (() => {}),
             step: unit.step,
             bigStep: unit.bigStep
           }}
@@ -261,6 +262,7 @@
           model={{
             value: row.y / unit.scale,
             onChange: (v) => setField(row, 'y', v),
+            onEditStart: () => instrument?.edits.hold() ?? (() => {}),
             step: unit.step,
             bigStep: unit.bigStep
           }}
@@ -275,6 +277,7 @@
           model={{
             value: row.start / unit.scale,
             onChange: (v) => setField(row, 'start', v),
+            onEditStart: () => instrument?.edits.hold() ?? (() => {}),
             step: unit.step,
             bigStep: unit.bigStep
           }}
@@ -289,6 +292,7 @@
           model={{
             value: row.end / unit.scale,
             onChange: (v) => setField(row, 'end', v),
+            onEditStart: () => instrument?.edits.hold() ?? (() => {}),
             step: unit.step,
             bigStep: unit.bigStep
           }}

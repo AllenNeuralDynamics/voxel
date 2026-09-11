@@ -5,6 +5,7 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
+from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
 
 from rigup import DeviceInterface, PropertyModel
@@ -52,6 +53,7 @@ class InstrumentView(InstrumentState):
     task_tiles: list[TaskTile]
     devices: dict[str, DeviceState]
     acquisition: ActiveAcquisitionState | None
+    history: HistoryState
     remote_stores: dict[str, Remote]
 
 

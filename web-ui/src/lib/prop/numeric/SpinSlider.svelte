@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+
   import type { NumericModel } from '$lib/model';
   import { cn } from '$lib/utils';
 
@@ -41,14 +43,32 @@
   const effectiveDisabled = $derived(disabled || model.disabled);
 
   const fillPct = $derived(((model.value - sliderMin) / (sliderMax - sliderMin)) * 100);
+  let editing = false;
+
+  onDestroy(() => {
+    if (editing) model.dispose();
+  });
 
   function handleInput(e: Event) {
     const v = parseFloat((e.currentTarget as HTMLInputElement).value);
-    if (!isNaN(v)) model.patch(v, { throttled: true });
+    if (isNaN(v) || effectiveDisabled) return;
+    if (!editing) {
+      model.beginEdit();
+      editing = true;
+    }
+    model.patch(v, { throttled: true });
   }
   function handleChange(e: Event) {
     const v = parseFloat((e.currentTarget as HTMLInputElement).value);
-    if (!isNaN(v)) model.patch(v);
+    if (!isNaN(v)) {
+      if (editing) model.endEdit(v);
+      else model.patch(v);
+    }
+    editing = false;
+  }
+  function finishEdit() {
+    if (editing) model.endEdit();
+    editing = false;
   }
 </script>
 
@@ -81,6 +101,8 @@
     value={model.value}
     oninput={handleInput}
     onchange={handleChange}
+    onblur={finishEdit}
+    onpointercancel={finishEdit}
     style="--fill-percentage: {fillPct}%"
   />
 </div>

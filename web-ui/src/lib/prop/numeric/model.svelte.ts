@@ -1,8 +1,13 @@
-import { NumericModel } from '$lib/model';
+import { onDestroy } from 'svelte';
+
+import { type EditContext, NumericModel } from '$lib/model';
 
 export interface RawNumeric {
   value?: number;
-  onChange?: (value: number) => void;
+  onChange?: (value: number, context: EditContext) => void;
+  onEditStart?: () => () => void;
+  disabled?: boolean;
+  throttleMs?: number;
   min?: number;
   max?: number;
   step?: number;
@@ -29,8 +34,12 @@ export function useNumericModel(source: () => NumericSource): NumericModel {
     step: r0.step,
     bigStep: r0.bigStep,
     home: r0.home,
-    onPatch: (v) => raw().onChange?.(v)
+    throttleMs: r0.throttleMs,
+    onEditStart: () => raw().onEditStart?.() ?? (() => {}),
+    disabled: () => raw().disabled ?? false,
+    onPatch: (v, context) => raw().onChange?.(v, context)
   });
+  onDestroy(() => local.dispose());
 
   // update() is an authoritative sync (no publish), so pulling props in never re-fires onChange.
   $effect(() => {
@@ -38,6 +47,7 @@ export function useNumericModel(source: () => NumericSource): NumericModel {
     local.update({ kind: 'float', value: r.value ?? local.value, minimum: r.min, maximum: r.max, step: r.step });
     local.bigStep = r.bigStep ?? null;
     local.home = r.home ?? null;
+    local.throttleMs = r.throttleMs ?? 100;
   });
 
   return local;

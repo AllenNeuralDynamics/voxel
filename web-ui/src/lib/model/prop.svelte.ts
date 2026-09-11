@@ -40,9 +40,14 @@ export interface PropertyInfo {
 /** Wire-format discriminator emitted by the backend on every PropertyModel payload. */
 export type PropertyKind = 'integer' | 'float' | 'string' | 'bool' | 'generic';
 
+/** Identifies consecutive replacements of one target during a continuous edit. */
+export interface EditContext {
+  editId?: string;
+}
+
 export interface PropOptions<T> {
   /** Callback invoked when patch() publishes upstream (e.g. backend write). */
-  onPatch?: (value: T) => void;
+  onPatch?: (value: T, context: EditContext) => void;
   /** Read live whenever mutation or rendering needs to know whether this model is writable. */
   disabled?: () => boolean;
 }
@@ -82,7 +87,7 @@ export abstract class BasePropModel<T> {
    */
   group: LinkGroup<this> | undefined = $state(undefined);
 
-  #onPatch?: (value: T) => void;
+  #onPatch?: (value: T, context: EditContext) => void;
   #disabled: () => boolean;
 
   constructor(value: T, opts: PropOptions<T> = {}) {
@@ -125,9 +130,9 @@ export abstract class BasePropModel<T> {
   }
 
   /** Notify upstream without mutating local state. Subclasses use this when value was set some other way. */
-  protected publish(value: T): void {
+  protected publish(value: T, context: EditContext = {}): void {
     if (this.disabled) return;
-    this.#onPatch?.(value);
+    this.#onPatch?.(value, context);
   }
 }
 
@@ -210,8 +215,10 @@ export interface NumericOptions extends PropOptions<number> {
   bigStep?: number | null;
   /** Double-click target for the `scrubber` attachment. Number, function, or null to disable. */
   home?: number | (() => number) | null;
-  /** Throttle interval in ms for `patch(value, { throttled: true })`. Defaults to 100. */
+  /** Continuous update interval in ms; 0 publishes immediately. Defaults to 100. */
   throttleMs?: number;
+  /** Mark an unfinished edit; the returned callback releases it after submission or cancellation. */
+  onEditStart?: () => () => void;
 }
 
 const DRAG_THRESHOLD_PX = 3;
@@ -295,8 +302,12 @@ export class NumericModel extends BasePropModel<number> {
     this.#rawBigStep = value;
   }
 
-  #throttleMs: number;
+  throttleMs: number;
   #throttleTimer: ReturnType<typeof setTimeout> | null = null;
+  #pending: { value: number; context: EditContext } | null = null;
+  #editId = $state<string | undefined>(undefined);
+  #onEditStart?: () => () => void;
+  #releaseEdit: (() => void) | undefined;
 
   constructor(value: number, opts: NumericOptions = {}) {
     super(value, opts);
@@ -305,7 +316,8 @@ export class NumericModel extends BasePropModel<number> {
     this.#rawStep = opts.step ?? null;
     this.#rawBigStep = opts.bigStep ?? null;
     this.home = opts.home ?? null;
-    this.#throttleMs = opts.throttleMs ?? 100;
+    this.throttleMs = opts.throttleMs ?? 100;
+    this.#onEditStart = opts.onEditStart;
   }
 
   /** Pure: what `raw` would resolve to after clamping to [min,max] and snapping to step. */
@@ -351,24 +363,77 @@ export class NumericModel extends BasePropModel<number> {
   #setAndPublish(value: number, opts: { throttled?: boolean }): void {
     if (this.disabled) return;
     this.value = value;
-    if (opts.throttled) {
+    const context: EditContext = this.#editId ? { editId: this.#editId } : {};
+    if (opts.throttled && this.throttleMs > 0) {
+      this.#releaseEdit ??= this.#onEditStart?.();
+      this.#pending = { value, context };
       if (this.#throttleTimer !== null) return;
       this.#throttleTimer = setTimeout(() => {
         this.#throttleTimer = null;
-        this.publish(this.value);
-      }, this.#throttleMs);
+        const pending = this.#pending;
+        this.#pending = null;
+        try {
+          if (pending) this.publish(pending.value, pending.context);
+        } finally {
+          if (!this.#editId) {
+            this.#releaseEdit?.();
+            this.#releaseEdit = undefined;
+          }
+        }
+      }, this.throttleMs);
     } else {
       if (this.#throttleTimer !== null) {
         clearTimeout(this.#throttleTimer);
         this.#throttleTimer = null;
       }
-      this.publish(this.value);
+      this.#pending = null;
+      try {
+        this.publish(value, context);
+      } finally {
+        if (!this.#editId) {
+          this.#releaseEdit?.();
+          this.#releaseEdit = undefined;
+        }
+      }
     }
   }
 
-  /** Sync value, min, max, step from authoritative source (e.g. backend echo). */
+  /** Start an edit; linked peers get separate IDs because they publish separate operations. */
+  beginEdit(): void {
+    for (const peer of this.group?.members ?? [this]) {
+      if (!peer.disabled && !peer.#editId) {
+        if (peer.#pending) peer.#setAndPublish(peer.#pending.value, {});
+        peer.#releaseEdit ??= peer.#onEditStart?.();
+        peer.#editId = crypto.randomUUID();
+      }
+    }
+  }
+
+  /** Flush a drag or delayed wheel update, retaining its edit ID when present. */
+  endEdit(value = this.value): void {
+    if (!this.#editId && !this.#pending) return;
+    try {
+      this.patch(value);
+    } finally {
+      this.dispose();
+    }
+  }
+
+  /** Cancel delayed publications when the owning control is removed. */
+  dispose(): void {
+    for (const peer of this.group?.members ?? [this]) {
+      if (peer.#throttleTimer !== null) clearTimeout(peer.#throttleTimer);
+      peer.#throttleTimer = null;
+      peer.#pending = null;
+      peer.#editId = undefined;
+      peer.#releaseEdit?.();
+      peer.#releaseEdit = undefined;
+    }
+  }
+
+  /** Sync authoritative bounds without replacing the value under an active drag. */
   update(snapshot: PropSnapshot<unknown>): void {
-    super.update(snapshot);
+    if (!this.#editId && !this.#pending) super.update(snapshot);
     if (snapshot.minimum !== undefined) this.#rawMin = snapshot.minimum;
     if (snapshot.maximum !== undefined) this.#rawMax = snapshot.maximum;
     if (snapshot.step !== undefined) this.#rawStep = snapshot.step;
@@ -380,7 +445,7 @@ export class NumericModel extends BasePropModel<number> {
       if (!e.altKey) return;
       e.preventDefault();
       const direction = e.deltaY < 0 ? 1 : -1;
-      this.patch(this.value + direction * (this.step ?? 1));
+      this.patch(this.value + direction * (this.step ?? 1), { throttled: true });
     };
     node.addEventListener('wheel', onWheel, { passive: false });
     return () => node.removeEventListener('wheel', onWheel);
@@ -398,6 +463,7 @@ export class NumericModel extends BasePropModel<number> {
       const delta = e.clientX - dragStartX;
       if (!isDragging && Math.abs(delta) > DRAG_THRESHOLD_PX) {
         isDragging = true;
+        this.beginEdit();
         document.body.style.cursor = 'ew-resize';
         e.preventDefault();
       }
@@ -406,21 +472,23 @@ export class NumericModel extends BasePropModel<number> {
     };
 
     const onMouseUp = () => {
-      if (isDragging) this.patch(this.value);
+      if (isDragging) this.endEdit();
       isDragging = false;
       isPotentialDrag = false;
       document.body.style.cursor = '';
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onMouseUp);
     };
 
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || this.disabled) return;
       isPotentialDrag = true;
       dragStartX = e.clientX;
       dragStartValue = this.value;
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('blur', onMouseUp);
     };
 
     const onDblClick = () => {
@@ -438,6 +506,11 @@ export class NumericModel extends BasePropModel<number> {
       node.removeEventListener('dblclick', onDblClick);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onMouseUp);
+      if (isDragging) {
+        document.body.style.cursor = '';
+        this.dispose();
+      }
       node.style.cursor = '';
     };
   };
