@@ -74,12 +74,13 @@ export class DeviceHandle {
 
   /** Replace the property cache from a complete instrument feed view. */
   replaceProperties(results?: PropResults): void {
-    if (!results) {
-      this.props.clear();
-      return;
+    for (const [name, prop] of this.props) {
+      if (results && Object.hasOwn(results.results, name)) continue;
+      prop.model.dispose();
+      this.props.delete(name);
     }
+    if (!results) return;
     const changed: PropResults = { results: {} };
-    for (const name of this.props.keys()) if (!Object.hasOwn(results.results, name)) this.props.delete(name);
     for (const [name, result] of Object.entries(results.results)) {
       if (!result.ok) continue;
       if (!Object.is(this.props.get(name)?.value, result.value.value)) changed.results[name] = result;
@@ -105,6 +106,12 @@ export class DeviceHandle {
 
   runCommand(name: string, args: unknown[] = [], kwargs: Record<string, unknown> = {}): Promise<unknown> {
     return this.#client.post<unknown>(`${this.#base}/commands/${encodeURIComponent(name)}`, { args, kwargs });
+  }
+
+  /** Release property models when the device handle is removed. */
+  dispose(): void {
+    for (const prop of this.props.values()) prop.model.dispose();
+    this.props.clear();
   }
 
   #upsert(name: string, snapshot: PropSnapshot<unknown>): void {

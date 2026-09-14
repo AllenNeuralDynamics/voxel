@@ -46,7 +46,7 @@
   let editing = false;
 
   onDestroy(() => {
-    if (editing) model.dispose();
+    if (editing) model.cancelEdit();
   });
 
   function handleInput(e: Event) {

@@ -129,6 +129,9 @@ export abstract class BasePropModel<T> {
     }
   }
 
+  /** Release model resources; subclasses override when cleanup is needed. */
+  dispose(): void {}
+
   /** Notify upstream without mutating local state. Subclasses use this when value was set some other way. */
   protected publish(value: T, context: EditContext = {}): void {
     if (this.disabled) return;
@@ -415,12 +418,12 @@ export class NumericModel extends BasePropModel<number> {
     try {
       this.patch(value);
     } finally {
-      this.dispose();
+      this.cancelEdit();
     }
   }
 
-  /** Cancel delayed publications when the owning control is removed. */
-  dispose(): void {
+  /** Discard delayed publications and release edit holds without reverting values or submitted writes. */
+  cancelEdit(): void {
     for (const peer of this.group?.members ?? [this]) {
       if (peer.#throttleTimer !== null) clearTimeout(peer.#throttleTimer);
       peer.#throttleTimer = null;
@@ -429,6 +432,11 @@ export class NumericModel extends BasePropModel<number> {
       peer.#releaseEdit?.();
       peer.#releaseEdit = undefined;
     }
+  }
+
+  /** Cancel unfinished edits when the model owner is disposed. */
+  dispose(): void {
+    this.cancelEdit();
   }
 
   /** Sync authoritative bounds without replacing the value under an active drag. */
@@ -509,7 +517,7 @@ export class NumericModel extends BasePropModel<number> {
       window.removeEventListener('blur', onMouseUp);
       if (isDragging) {
         document.body.style.cursor = '';
-        this.dispose();
+        this.cancelEdit();
       }
       node.style.cursor = '';
     };

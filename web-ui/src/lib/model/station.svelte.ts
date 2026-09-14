@@ -487,7 +487,11 @@ export class Instrument {
     this.hal = session.instrument.config.hal;
     this.default = session.instrument.config.default;
     this.remoteStores = session.instrument.remote_stores;
-    for (const id of this.devices.keys()) if (!Object.hasOwn(session.instrument.devices, id)) this.devices.delete(id);
+    for (const [id, device] of this.devices) {
+      if (Object.hasOwn(session.instrument.devices, id)) continue;
+      device.dispose();
+      this.devices.delete(id);
+    }
     for (const [id, state] of Object.entries(session.instrument.devices)) {
       const device = this.devices.get(id);
       const snapshot = this.#snapshotFrom(id, state);
@@ -679,6 +683,8 @@ export class Instrument {
   }
 
   dispose(): void {
+    for (const device of this.devices.values()) device.dispose();
+    this.devices.clear();
     this.edits.dispose();
   }
 
