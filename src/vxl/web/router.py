@@ -15,6 +15,7 @@ from vxl_records import (
     PresetNotFoundError,
     PresetRecord,
 )
+from vxlib.history import Change
 
 from rigup import PropResults, Result
 from vxl._utils.color import ColormapGroup, get_colormap_catalog
@@ -28,6 +29,7 @@ from vxl.instrument import (
     InstrumentPreset,
 )
 from vxl.instrument.config import (
+    AcquisitionTask,
     ChannelPatch,
     ProfilePatch,
     RoutingRule,
@@ -467,9 +469,9 @@ async def apply_preset(
     await instrument.apply_preset(_parse_preset(preset.value))
 
 
-@instrument_router.patch("/profile", status_code=204)
-async def update_profile(patch: ProfilePatch, instrument: InstrumentDep) -> None:
-    await instrument.update_profile(patch)
+@instrument_router.patch("/profile", response_model_exclude_unset=True)
+async def update_profile(patch: ProfilePatch, instrument: InstrumentDep) -> Change[tuple[str, ProfilePatch]]:
+    return await instrument.update_profile(patch)
 
 
 @instrument_router.patch("/profile/sync/{generator_uid}", status_code=204)
@@ -493,14 +495,14 @@ async def apply_routing_rule(instrument: InstrumentDep, dimension: str | None = 
     await instrument.apply_routing_rule(dimension)
 
 
-@instrument_router.put("/routing/{dimension}/rule", status_code=204)
+@instrument_router.put("/routing/{dimension}/rule")
 async def set_routing_rule(
     dimension: str,
     rule: RoutingRule,
     instrument: InstrumentDep,
     edit_id: UUID | None = None,
-) -> None:
-    await instrument.set_routing_rule(dimension, rule, edit_id=edit_id)
+) -> Change[RoutingRule | None]:
+    return await instrument.set_routing_rule(dimension, rule, edit_id=edit_id)
 
 
 @instrument_router.post("/routing/{dimension}/select", status_code=204)
@@ -528,14 +530,14 @@ async def restore_default(body: _DefaultScope, instrument: InstrumentDep) -> Non
         await instrument.restore_default(body.include)
 
 
-@instrument_router.patch("/channels/{channel_id}", status_code=204)
-async def update_channel(channel_id: str, patch: ChannelPatch, instrument: InstrumentDep) -> None:
-    await instrument.update_channel(channel_id, patch)
+@instrument_router.patch("/channels/{channel_id}", response_model_exclude_unset=True)
+async def update_channel(channel_id: str, patch: ChannelPatch, instrument: InstrumentDep) -> Change[ChannelPatch]:
+    return await instrument.update_channel(channel_id, patch)
 
 
-@instrument_router.patch("/output", status_code=204)
-async def update_output(patch: WriterPatch, instrument: InstrumentDep) -> None:
-    await instrument.update_output(patch)
+@instrument_router.patch("/output", response_model_exclude_unset=True)
+async def update_output(patch: WriterPatch, instrument: InstrumentDep) -> Change[WriterPatch]:
+    return await instrument.update_output(patch)
 
 
 @instrument_router.patch("/stencil", status_code=204)
@@ -543,9 +545,9 @@ async def update_stencil(patch: StencilPatch, instrument: InstrumentDep) -> None
     await instrument.update_stencil(patch)
 
 
-@instrument_router.patch("/metadata", status_code=204)
-async def update_metadata(fields: dict[str, Any], instrument: InstrumentDep) -> None:
-    await instrument.update_metadata(**fields)
+@instrument_router.patch("/metadata")
+async def update_metadata(fields: dict[str, Any], instrument: InstrumentDep) -> Change[dict[str, Any]]:
+    return await instrument.update_metadata(**fields)
 
 
 @instrument_router.put("/metadata/schema", status_code=204)
@@ -553,24 +555,30 @@ async def set_metadata_schema(body: _MetadataSchema, instrument: InstrumentDep) 
     await instrument.set_metadata_schema(body.target)
 
 
-@instrument_router.put("/traversal", status_code=204)
-async def set_traversal(body: _Traversal, instrument: InstrumentDep) -> None:
-    await instrument.set_traversal(body.order)
+@instrument_router.put("/traversal")
+async def set_traversal(body: _Traversal, instrument: InstrumentDep) -> Change[TileOrder]:
+    return await instrument.set_traversal(body.order)
 
 
-@instrument_router.post("/tasks", status_code=204)
-async def add_tasks(body: _AddTasks, instrument: InstrumentDep) -> None:
-    await instrument.add_tasks(body.xy, profile_ids=body.profile_ids)
+@instrument_router.post("/tasks")
+async def add_tasks(
+    body: _AddTasks, instrument: InstrumentDep
+) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
+    return await instrument.add_tasks(body.xy, profile_ids=body.profile_ids)
 
 
-@instrument_router.patch("/tasks", status_code=204)
-async def update_tasks(body: _UpdateTasks, instrument: InstrumentDep) -> None:
-    await instrument.update_tasks(body.patches)
+@instrument_router.patch("/tasks")
+async def update_tasks(
+    body: _UpdateTasks, instrument: InstrumentDep
+) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
+    return await instrument.update_tasks(body.patches)
 
 
-@instrument_router.delete("/tasks", status_code=204)
-async def remove_tasks(instrument: InstrumentDep, ids: Annotated[list[str], Query()]) -> None:
-    await instrument.remove_tasks(ids)
+@instrument_router.delete("/tasks")
+async def remove_tasks(
+    instrument: InstrumentDep, ids: Annotated[list[str], Query()]
+) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
+    return await instrument.remove_tasks(ids)
 
 
 @instrument_router.post("/preview/start", status_code=204)

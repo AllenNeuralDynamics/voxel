@@ -8,6 +8,8 @@
   type OwnProps = {
     model: NumericSource;
     decimals?: number;
+    /** Model units per displayed unit. */
+    displayScale?: number;
     numCharacters?: number;
     align?: 'left' | 'right';
     class?: string;
@@ -18,7 +20,15 @@
   > &
     OwnProps;
 
-  let { model: source, decimals, numCharacters = 4, align = 'left', class: className = '', ...rest }: Props = $props();
+  let {
+    model: source,
+    decimals,
+    displayScale = 1,
+    numCharacters = 4,
+    align = 'left',
+    class: className = '',
+    ...rest
+  }: Props = $props();
 
   const model = useNumericModel(() => source);
 
@@ -29,9 +39,10 @@
   let inputValue = $derived.by(() => {
     if (isEditing) return editingText;
     if (model.value === undefined || Number.isNaN(model.value)) return '';
-    if (decimals !== undefined) return model.value.toFixed(decimals);
-    if (!Number.isFinite(model.value)) return String(model.value);
-    return parseFloat(model.value.toPrecision(15)).toString();
+    const value = model.value / displayScale;
+    if (decimals !== undefined) return value.toFixed(decimals);
+    if (!Number.isFinite(value)) return String(value);
+    return parseFloat(value.toPrecision(15)).toString();
   });
 
   function handleInput(e: Event) {
@@ -44,7 +55,7 @@
     isEditing = false;
     const parsed = parseFloat(editingText);
     if (isNaN(parsed)) return;
-    model.patch(parsed);
+    model.patch(parsed * displayScale);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -63,7 +74,7 @@
       let base = model.value;
       if (isEditing) {
         const parsed = parseFloat(editingText);
-        if (!isNaN(parsed)) base = model.resolve(parsed);
+        if (!isNaN(parsed)) base = model.resolve(parsed * displayScale);
         isEditing = false;
       }
       const delta = e.key === 'ArrowUp' ? 1 : -1;

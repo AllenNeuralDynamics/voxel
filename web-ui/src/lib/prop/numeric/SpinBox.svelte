@@ -14,6 +14,8 @@
   interface Props {
     model: NumericSource;
     decimals?: number;
+    /** Model units per displayed unit. */
+    displayScale?: number;
     numCharacters?: number;
     align?: 'left' | 'right';
     prefix?: string;
@@ -27,6 +29,7 @@
   let {
     model: source,
     decimals,
+    displayScale = 1,
     numCharacters = 8,
     align = 'left',
     prefix,
@@ -64,6 +67,7 @@
   <Input
     {model}
     {decimals}
+    {displayScale}
     {numCharacters}
     {align}
     disabled={effectiveDisabled}

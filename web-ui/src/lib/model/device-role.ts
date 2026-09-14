@@ -44,8 +44,8 @@ export function assignDeviceRoles(hal: HALConfig, imaging: ImagingProtocol): Rea
     for (const deviceId of path.aux_devices ?? []) tag(deviceId, 'aux');
   }
   for (const deviceId of [hal.stage.x, hal.stage.y, hal.stage.z]) tag(deviceId, 'stage');
-  for (const routes of Object.values(hal.optical_routing)) {
-    for (const selectors of Object.values(routes)) {
+  for (const definition of Object.values(hal.optical_routing)) {
+    for (const { selectors } of Object.values(definition.routes)) {
       for (const deviceId of Object.keys(selectors)) tag(deviceId, 'routing');
     }
   }

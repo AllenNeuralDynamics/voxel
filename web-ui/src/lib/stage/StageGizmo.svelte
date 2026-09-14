@@ -4,7 +4,7 @@
   import type { Stage } from '$lib/model';
   import { cn, toastError } from '$lib/utils';
 
-  import { type Axis3, Camera3D } from './draw';
+  import { type Axis3, Camera3D } from './camera3d';
 
   interface Props {
     stage: Stage;

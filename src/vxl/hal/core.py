@@ -44,7 +44,7 @@ class RouteDimension:
         if definition is None:
             raise HALError(f"No optical route '{self.uid}.{route}'")
         # Resolve every handle before issuing any movement.
-        selections = [(uid, self.selectors[uid], position) for uid, position in definition.root.items()]
+        selections = [(uid, self.selectors[uid], position) for uid, position in definition.selectors.items()]
 
         async def select_and_verify(handle: DiscreteAxisHandle, position: str) -> None:
             await handle.select(position, wait=True)
@@ -79,7 +79,7 @@ class RouteDimension:
         matches = [
             name
             for name, route in self._definitions.items()
-            if all(positions[uid] == position for uid, position in route.root.items())
+            if all(positions[uid] == position for uid, position in route.selectors.items())
         ]
         return matches[0] if len(matches) == 1 else None
 
@@ -359,11 +359,13 @@ class HAL:
             uid: RouteDimension(
                 uid=uid,
                 selectors={
-                    selector: self.discrete_axes[selector] for route in definitions.values() for selector in route.root
+                    selector: self.discrete_axes[selector]
+                    for route in definition.routes.values()
+                    for selector in route.selectors
                 },
-                _definitions=definitions,
+                _definitions=definition.routes,
             )
-            for uid, definitions in self._topology.optical_routing.root.items()
+            for uid, definition in self._topology.optical_routing.root.items()
         }
 
     def _camera_path_violations(self, unavailable: set[str]) -> list[Violation]:
@@ -434,9 +436,9 @@ class HAL:
     def _routing_selector_violations(self, unavailable: set[str]) -> list[Violation]:
         selectors = {
             selector_uid
-            for routes in self._topology.optical_routing.root.values()
-            for route in routes.values()
-            for selector_uid in route.root
+            for definition in self._topology.optical_routing.root.values()
+            for route in definition.routes.values()
+            for selector_uid in route.selectors
         }
         return self._discrete_axis_role_violations(
             selectors,

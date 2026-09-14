@@ -31,8 +31,8 @@ async def test_current_route_reads_all_selectors_and_requires_a_unique_stationar
     label, moving, expected
 ) -> None:
     routes = {
-        "left": OpticalRouteDefinition({"a": "left", "b": "left"}),
-        "right": OpticalRouteDefinition({"a": "right", "b": "right"}),
+        "left": OpticalRouteDefinition(selectors={"a": "left", "b": "left"}),
+        "right": OpticalRouteDefinition(selectors={"a": "right", "b": "right"}),
     }
     dimension = RouteDimension(
         uid="side",
@@ -62,7 +62,7 @@ async def test_selection_waits_for_all_failures_and_identifies_the_selectors() -
             "a": cast("DiscreteAxisHandle", SimpleNamespace(select=AsyncMock(side_effect=ValueError("first failure")))),
             "b": cast("DiscreteAxisHandle", SimpleNamespace(select=AsyncMock(side_effect=delayed_failure))),
         },
-        _definitions={"left": OpticalRouteDefinition({"a": "left", "b": "left"})},
+        _definitions={"left": OpticalRouteDefinition(selectors={"a": "left", "b": "left"})},
     )
     selection = asyncio.create_task(dimension.select("left"))
     try:
@@ -84,7 +84,7 @@ async def test_selection_preserves_cancellation() -> None:
         selectors={
             "a": cast("DiscreteAxisHandle", SimpleNamespace(select=AsyncMock(side_effect=asyncio.CancelledError))),
         },
-        _definitions={"left": OpticalRouteDefinition({"a": "left"})},
+        _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )
     with pytest.raises(asyncio.CancelledError):
         await dimension.select("left")
@@ -95,7 +95,7 @@ async def test_unknown_route_is_rejected_without_moving_selectors() -> None:
     dimension = RouteDimension(
         uid="side",
         selectors={"a": cast("DiscreteAxisHandle", SimpleNamespace(select=select))},
-        _definitions={"left": OpticalRouteDefinition({"a": "left"})},
+        _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )
     with pytest.raises(HALError, match=r"No optical route 'side\.missing'"):
         await dimension.select("missing")

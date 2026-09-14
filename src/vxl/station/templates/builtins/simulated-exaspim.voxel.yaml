@@ -26,6 +26,10 @@ hal:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
       init:
         slots: {"0": "BP525", "1": "BP600", "2": "BP700"}
+    detection_path_selector:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": "specimen", "1": "calibration"}
     excitation_side_axis:
       target: vxl.devices.axes.simulated.SimulatedContinuousAxis
       init: {lower_limit: 0, upper_limit: 100, has_ttl_stepper: false}
@@ -83,6 +87,7 @@ hal:
       filter_wheels: [fw_emission]
       magnification: 5.0
       rotation_deg: 90
+      routing: [detection_path]
 
   illumination:
     laser_488:
@@ -96,20 +101,33 @@ hal:
       routing: [excitation_side]
 
   optical_routing:
+    detection_path:
+      type: select
+      routes:
+        specimen:
+          selectors:
+            detection_path_selector: specimen
+        calibration:
+          selectors:
+            detection_path_selector: calibration
     excitation_side:
-      left:
-        excitation_side_selector: left
-      right:
-        excitation_side_selector: right
+      type: split-x
+      routes:
+        lower:
+          label: Left illumination
+          selectors:
+            excitation_side_selector: left
+        upper:
+          label: Right illumination
+          selectors:
+            excitation_side_selector: right
 
 default:
   routing:
+    detection_path:
+      selected: specimen
     excitation_side:
-      type: split
-      axis: x
       threshold: 20000
-      lower: left
-      upper: right
 
   imaging:
     channels:

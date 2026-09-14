@@ -7,7 +7,7 @@
   import RoutingMonitor from '$lib/devices/RoutingMonitor.svelte';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { getVoxelStation, type Instrument } from '$lib/model';
-  import StageGizmo from '$lib/stage/StageGizmo.svelte';
+  import { StageGizmo } from '$lib/stage';
   import { createPaneSize } from '$lib/utils';
 
   import RunButton from './RunButton.svelte';

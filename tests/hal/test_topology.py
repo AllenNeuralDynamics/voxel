@@ -52,16 +52,19 @@ def test_topology_rejects_unknown_fields() -> None:
         HardwareTopology.model_validate({**topology.model_dump(), "stgae": topology.stage})
 
 
-def test_optical_routing_config_uses_direct_dimension_and_route_maps() -> None:
+def test_optical_routing_config_uses_named_routes_with_selector_assignments() -> None:
     payload = {
         "excitation_side": {
-            "left": {
-                "excitation_selector": "left",
-                "beam_selector": "sample",
-            },
-            "right": {
-                "excitation_selector": "right",
-                "beam_selector": "sample",
+            "type": "split-x",
+            "routes": {
+                "lower": {
+                    "label": "Left illumination",
+                    "selectors": {"excitation_selector": "left", "beam_selector": "sample"},
+                },
+                "upper": {
+                    "label": "Right illumination",
+                    "selectors": {"excitation_selector": "right", "beam_selector": "sample"},
+                },
             },
         }
     }
@@ -72,14 +75,14 @@ def test_optical_routing_config_uses_direct_dimension_and_route_maps() -> None:
 
 
 def test_optical_routing_dimension_must_define_a_route() -> None:
-    message = "Optical routing dimensions must define at least one route: excitation_side"
+    message = "at least 1 item"
     with pytest.raises(ValidationError, match=message):
-        OpticalRouting.model_validate({"excitation_side": {}})
+        OpticalRouting.model_validate({"excitation_side": {"type": "select", "routes": {}}})
 
 
 def test_optical_route_must_define_a_selector() -> None:
-    with pytest.raises(ValidationError, match="Optical routes must define at least one selector"):
-        OpticalRouting.model_validate({"excitation_side": {"left": {}}})
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        OpticalRouting.model_validate({"excitation_side": {"type": "select", "routes": {"left": {"selectors": {}}}}})
 
 
 def test_empty_optical_routing_config_is_valid() -> None:
@@ -124,7 +127,7 @@ def test_discrete_axis_positions_are_checked_against_device_slots() -> None:
 
 
 def test_optical_routes_validate_their_discrete_axis_positions() -> None:
-    routing = {"excitation_side": {"left": {"route_selector": "missing"}}}
+    routing = {"excitation_side": {"type": "select", "routes": {"left": {"selectors": {"route_selector": "missing"}}}}}
 
     violations = _hal_config(
         optical_routing=routing,
@@ -134,7 +137,7 @@ def test_optical_routes_validate_their_discrete_axis_positions() -> None:
     assert [(violation.code, violation.loc) for violation in violations] == [
         (
             "discrete_axis.position_missing",
-            ("hal", "optical_routing", "excitation_side", "left", "route_selector"),
+            ("hal", "optical_routing", "excitation_side", "routes", "left", "selectors", "route_selector"),
         )
     ]
 
@@ -142,8 +145,11 @@ def test_optical_routes_validate_their_discrete_axis_positions() -> None:
 def test_optical_routes_must_use_the_same_selectors() -> None:
     routing = {
         "excitation_side": {
-            "left": {"route_selector": "left", "ni_selector": "sample"},
-            "right": {"route_selector": "right"},
+            "type": "select",
+            "routes": {
+                "left": {"selectors": {"route_selector": "left", "ni_selector": "sample"}},
+                "right": {"selectors": {"route_selector": "right"}},
+            },
         }
     }
     hal = _hal_config(
@@ -154,13 +160,13 @@ def test_optical_routes_must_use_the_same_selectors() -> None:
     assert [(violation.code, violation.loc) for violation in hal.semantic_violations()] == [
         (
             "hal.optical_routing.route.selector.missing",
-            ("hal", "optical_routing", "excitation_side", "right", "ni_selector"),
+            ("hal", "optical_routing", "excitation_side", "routes", "right", "selectors", "ni_selector"),
         )
     ]
 
 
 def test_assemblies_must_reference_configured_routing_dimensions_and_routes() -> None:
-    routing = {"excitation_side": {"left": {"route_selector": "left"}}}
+    routing = {"excitation_side": {"type": "select", "routes": {"left": {"selectors": {"route_selector": "left"}}}}}
     hal = _hal_config(
         optical_routing=routing,
         illumination_routing={"missing_dimension"},
@@ -180,8 +186,8 @@ def test_assemblies_must_reference_configured_routing_dimensions_and_routes() ->
 
 def test_routing_selectors_have_exclusive_ownership() -> None:
     routing = {
-        "excitation_side": {"left": {"route_selector": "left"}},
-        "detection_view": {"primary": {"route_selector": "right"}},
+        "excitation_side": {"type": "select", "routes": {"left": {"selectors": {"route_selector": "left"}}}},
+        "detection_view": {"type": "select", "routes": {"primary": {"selectors": {"route_selector": "right"}}}},
     }
     payload = _hal_config(
         optical_routing=routing,
@@ -191,13 +197,13 @@ def test_routing_selectors_have_exclusive_ownership() -> None:
     assert [(violation.code, violation.loc) for violation in payload.semantic_violations()] == [
         (
             "hal.optical_routing.selector_shared",
-            ("hal", "optical_routing", "detection_view", "primary", "route_selector"),
+            ("hal", "optical_routing", "detection_view", "routes", "primary", "selectors", "route_selector"),
         )
     ]
 
 
 def test_routing_selector_cannot_also_be_a_filter_wheel() -> None:
-    routing = {"excitation_side": {"left": {"selector": "left"}}}
+    routing = {"excitation_side": {"type": "select", "routes": {"left": {"selectors": {"selector": "left"}}}}}
     hal = _hal_config(
         optical_routing=routing,
         illumination_routing={"excitation_side"},
@@ -206,6 +212,6 @@ def test_routing_selector_cannot_also_be_a_filter_wheel() -> None:
     assert [(violation.code, violation.loc) for violation in hal.semantic_violations()] == [
         (
             "hal.optical_routing.selector_is_filter_wheel",
-            ("hal", "optical_routing", "excitation_side", "left", "selector"),
+            ("hal", "optical_routing", "excitation_side", "routes", "left", "selectors", "selector"),
         )
     ]

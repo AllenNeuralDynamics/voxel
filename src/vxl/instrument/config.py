@@ -1,6 +1,6 @@
 import datetime
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
 from pydantic import Field, ValidationInfo, field_validator, model_validator
@@ -11,6 +11,7 @@ from vxl._utils.color import Color
 from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import DiscreteAxisPositions, HardwareTopology
+from vxl.hal.topology import SelectRoutingDefinition, SplitRoutingDefinition
 
 from .errors import Violation, ViolationLoc, assignment_violations
 from .metadata import ExperimentMetadata, MetadataCls
@@ -83,39 +84,25 @@ class ProfilePatch(Patch):
     label: str | None = None
 
 
-class FixedRoutingRule(FrozenModel):
-    type: Literal["fixed"]
-    route: str
+class SelectRoutingRule(FrozenModel):
+    selected: str
 
 
 class SplitRoutingRule(FrozenModel):
-    type: Literal["split"]
-    axis: Literal["x", "y"]
     threshold: float = Field(allow_inf_nan=False)
-    lower: str
-    upper: str
-
-    @model_validator(mode="after")
-    def validate_distinct_routes(self) -> Self:
-        if self.lower == self.upper:
-            raise ValueError("Split optical-routing policies must use different lower and upper routes")
-        return self
 
     def resolve(self, coordinate: float, *, previous: str | None = None, margin: float = 0) -> str:
         """Resolve one side, retaining ``previous`` within the symmetric hysteresis margin."""
         if margin < 0:
             raise ValueError("margin must be non-negative")
-        if previous == self.lower:
-            return self.upper if coordinate >= self.threshold + margin else self.lower
-        if previous == self.upper:
-            return self.lower if coordinate < self.threshold - margin else self.upper
-        return self.lower if coordinate < self.threshold else self.upper
+        if previous == "lower":
+            return "upper" if coordinate >= self.threshold + margin else "lower"
+        if previous == "upper":
+            return "lower" if coordinate < self.threshold - margin else "upper"
+        return "lower" if coordinate < self.threshold else "upper"
 
 
-type RoutingRule = Annotated[
-    FixedRoutingRule | SplitRoutingRule,
-    Field(discriminator="type"),
-]
+type RoutingRule = SelectRoutingRule | SplitRoutingRule
 
 
 class ImagingProtocol(FrozenModel):
@@ -385,27 +372,31 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
 
     def resolve_routes(
         self,
+        hal: HardwareTopology,
         *,
         x: float,
         y: float,
         previous: Mapping[str, str] | None = None,
         margins: Mapping[str, float] | None = None,
     ) -> dict[str, str]:
-        """Resolve every optical-routing policy for an XY position."""
+        """Resolve configured routing dimensions using their current settings and an XY position."""
         coordinates = {"x": x, "y": y}
         previous = previous or {}
         margins = margins or {}
         routes = {}
-        for dimension, policy in self.routing.items():
-            match policy:
-                case FixedRoutingRule(route=route):
+        for dimension, rule in self.routing.items():
+            definition = hal.optical_routing.root[dimension]
+            match definition, rule:
+                case SelectRoutingDefinition(), SelectRoutingRule(selected=route):
                     routes[dimension] = route
-                case SplitRoutingRule(axis=axis):
-                    routes[dimension] = policy.resolve(
-                        coordinates[axis],
+                case SplitRoutingDefinition(), SplitRoutingRule():
+                    routes[dimension] = rule.resolve(
+                        coordinates[definition.axis],
                         previous=previous.get(dimension),
-                        margin=margins.get(axis, 0),
+                        margin=margins.get(definition.axis, 0),
                     )
+                case _:
+                    raise ValueError(f"Routing settings do not match dimension '{dimension}'")
         return routes
 
     def semantic_violations(self, hal: HardwareTopology, *, loc: ViolationLoc) -> list[Violation]:
@@ -429,30 +420,29 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
             expected=participating,
             assigned=self.routing,
             loc=loc,
-            code="optical_routing.policy",
-            label="routing-policy",
+            code="optical_routing.rule",
+            label="routing rule",
         )
-        for dimension, policy in self.routing.items():
-            routes = hal.optical_routing.root.get(dimension)
-            if routes is None or dimension not in participating:
+        for dimension, rule in self.routing.items():
+            definition = hal.optical_routing.root.get(dimension)
+            if definition is None or dimension not in participating:
                 continue
-
-            selected: list[tuple[str, str]]
-            match policy:
-                case FixedRoutingRule(route=route):
-                    selected = [("route", route)]
-                case SplitRoutingRule(lower=lower, upper=upper):
-                    selected = [("lower", lower), ("upper", upper)]
-
-            for field, route in selected:
-                if route not in routes:
-                    violations.append(
-                        Violation(
-                            code="optical_routing.policy.route_missing",
-                            msg=f"Route '{route}' is not defined for routing dimension '{dimension}'.",
-                            loc=(*loc, dimension, field),
-                        )
+            if isinstance(definition, SelectRoutingDefinition) != isinstance(rule, SelectRoutingRule):
+                violations.append(
+                    Violation(
+                        code="optical_routing.rule.type_mismatch",
+                        msg=f"Routing settings must match configured type '{definition.type}'.",
+                        loc=(*loc, dimension),
                     )
+                )
+            elif isinstance(rule, SelectRoutingRule) and rule.selected not in definition.routes:
+                violations.append(
+                    Violation(
+                        code="optical_routing.rule.route_missing",
+                        msg=f"Route '{rule.selected}' is not defined for routing dimension '{dimension}'.",
+                        loc=(*loc, dimension, "selected"),
+                    )
+                )
         return violations
 
 

@@ -75,16 +75,19 @@ hal:
 
   optical_routing:
     excitation_side:
-      left:
-        illumination_side_selector: left
-      right:
-        illumination_side_selector: right
+      type: select
+      routes:
+        left:
+          selectors:
+            illumination_side_selector: left
+        right:
+          selectors:
+            illumination_side_selector: right
 
 default:
   routing:
     excitation_side:
-      type: fixed
-      route: left
+      selected: left
 
   imaging:
     channels:

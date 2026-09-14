@@ -13,6 +13,7 @@ from vxl.hal.topology import (
     IlluminationAssembly,
     OpticalRouteDefinition,
     OpticalRouting,
+    SelectRoutingDefinition,
     StageAxes,
 )
 
@@ -80,10 +81,13 @@ def _routed_hal_config() -> HardwareTopology:
             "illumination": {"laser": IlluminationAssembly(routing={"excitation_side"})},
             "optical_routing": OpticalRouting(
                 {
-                    "excitation_side": {
-                        "left": OpticalRouteDefinition({"selector": "left"}),
-                        "right": OpticalRouteDefinition({"selector": "right"}),
-                    }
+                    "excitation_side": SelectRoutingDefinition(
+                        type="select",
+                        routes={
+                            "left": OpticalRouteDefinition(selectors={"selector": "left"}),
+                            "right": OpticalRouteDefinition(selectors={"selector": "right"}),
+                        },
+                    )
                 }
             ),
         }

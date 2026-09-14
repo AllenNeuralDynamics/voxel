@@ -121,19 +121,21 @@ hal:
 
   optical_routing:
     illumination_end:
-      front:
-        illumination_end_selector: front
-      rear:
-        illumination_end_selector: rear
+      type: split-y
+      routes:
+        lower:
+          label: Front illumination
+          selectors:
+            illumination_end_selector: front
+        upper:
+          label: Rear illumination
+          selectors:
+            illumination_end_selector: rear
 
 default:
   routing:
     illumination_end:
-      type: split
-      axis: y
       threshold: 11500
-      lower: front
-      upper: rear
 
   imaging:
     channels:

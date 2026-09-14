@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Mapping
-from typing import Self
+from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
 from vxlib.schema import FrozenModel
@@ -53,41 +53,47 @@ type RouteByDimension = dict[str, str]
 type RoutingSelectorOwners = dict[str, RouteByDimension]
 
 
-class OpticalRouteDefinition(RootModel[DiscreteAxisPositions]):
-    """One named optical route: discrete-axis UID to selected position label."""
+class OpticalRouteDefinition(FrozenModel):
+    """Selector assignments and an optional display label for one optical route."""
 
-    model_config = ConfigDict(frozen=True)
+    selectors: DiscreteAxisPositions = Field(min_length=1)
+    label: str | None = None
+
+
+class SelectRoutingDefinition(FrozenModel):
+    """A dimension whose route is selected explicitly in instrument state."""
+
+    type: Literal["select"]
+    routes: dict[str, OpticalRouteDefinition] = Field(min_length=1)
+
+
+class SplitRoutingDefinition(FrozenModel):
+    """A spatial split with configuration-owned axis and selector assignments."""
+
+    type: Literal["split-x", "split-y"]
+    routes: dict[str, OpticalRouteDefinition]
+
+    @property
+    def axis(self) -> Literal["x", "y"]:
+        """Stage axis used to resolve the split."""
+        return "x" if self.type == "split-x" else "y"
 
     @model_validator(mode="after")
-    def validate_has_selectors(self) -> Self:
-        if not self.root:
-            raise ValueError("Optical routes must define at least one selector")
+    def validate_distinct_sides(self) -> Self:
+        if self.routes.keys() != {"lower", "upper"}:
+            raise ValueError("Split routing must define exactly 'lower' and 'upper' routes")
+        if self.routes["lower"].selectors == self.routes["upper"].selectors:
+            raise ValueError("Split routing sides must define different selector positions")
         return self
 
 
-class OpticalRouting(RootModel[dict[str, dict[str, OpticalRouteDefinition]]]):
-    """Routing dimensions keyed directly to their named routes.
+type RoutingDefinition = Annotated[SelectRoutingDefinition | SplitRoutingDefinition, Field(discriminator="type")]
 
-    Example:
-        ```yaml
-         excitation_side:
-             left:
-                 excitation_side_selector_1: left
-                 excitation_side_selector_2: left
-             right:
-                 excitation_side_selector_1: right
-                 excitation_side_selector_2: right
-        ```
-    """
+
+class OpticalRouting(RootModel[dict[str, RoutingDefinition]]):
+    """Configured selection strategies and selector positions, keyed by dimension."""
 
     model_config = ConfigDict(frozen=True)
-
-    @model_validator(mode="after")
-    def validate_dimensions_have_routes(self) -> Self:
-        empty = [dimension for dimension, routes in self.root.items() if not routes]
-        if empty:
-            raise ValueError(f"Optical routing dimensions must define at least one route: {', '.join(empty)}")
-        return self
 
 
 class HardwareTopology(RigConfig, frozen=True):
@@ -279,7 +285,8 @@ class HardwareTopology(RigConfig, frozen=True):
     ) -> tuple[list[Violation], RoutingSelectorOwners]:
         violations = []
         selector_owners: RoutingSelectorOwners = {}
-        for dimension, routes in self.optical_routing.root.items():
+        for dimension, definition in self.optical_routing.root.items():
+            routes = definition.routes
             if dimension not in referenced_dimensions:
                 violations.append(
                     Violation(
@@ -290,25 +297,26 @@ class HardwareTopology(RigConfig, frozen=True):
                 )
 
             first_route, first_positions = next(iter(routes.items()))
-            expected_selectors = first_positions.root.keys()
+            expected_selectors = first_positions.selectors.keys()
+            routes_loc = (*loc, "optical_routing", dimension, "routes")
             for route, positions in routes.items():
                 if route != first_route:
                     violations.extend(
                         assignment_violations(
                             expected=expected_selectors,
-                            assigned=positions.root,
-                            loc=(*loc, "optical_routing", dimension, route),
+                            assigned=positions.selectors,
+                            loc=(*routes_loc, route, "selectors"),
                             code="hal.optical_routing.route.selector",
                             label="selector",
                         )
                     )
                 violations.extend(
                     self.check_discrete_axis_positions(
-                        positions.root,
-                        loc=(*loc, "optical_routing", dimension, route),
+                        positions.selectors,
+                        loc=(*routes_loc, route, "selectors"),
                     )
                 )
-                for selector_uid in positions.root:
+                for selector_uid in positions.selectors:
                     selector_owners.setdefault(selector_uid, {}).setdefault(dimension, route)
         return violations, selector_owners
 
@@ -321,6 +329,7 @@ class HardwareTopology(RigConfig, frozen=True):
         for selector_uid, owners in selector_owners.items():
             first_dimension = next(iter(owners))
             for dimension, route in list(owners.items())[1:]:
+                routes_loc = (*loc, "optical_routing", dimension, "routes")
                 violations.append(
                     Violation(
                         code="hal.optical_routing.selector_shared",
@@ -328,16 +337,17 @@ class HardwareTopology(RigConfig, frozen=True):
                             f"Selector '{selector_uid}' is also used by routing dimension "
                             f"'{first_dimension}'; selectors may belong to only one dimension."
                         ),
-                        loc=(*loc, "optical_routing", dimension, route, selector_uid),
+                        loc=(*routes_loc, route, "selectors", selector_uid),
                     )
                 )
             if selector_uid in self.filter_wheels:
                 for dimension, route in owners.items():
+                    routes_loc = (*loc, "optical_routing", dimension, "routes")
                     violations.append(
                         Violation(
                             code="hal.optical_routing.selector_is_filter_wheel",
                             msg=f"Selector '{selector_uid}' is already assigned as a filter wheel.",
-                            loc=(*loc, "optical_routing", dimension, route, selector_uid),
+                            loc=(*routes_loc, route, "selectors", selector_uid),
                         )
                     )
         return violations

@@ -32,7 +32,7 @@
 >
   <h1 class="sr-only">{pageTitle}</h1>
   <Breadcrumb.Root class="min-w-0">
-    <Breadcrumb.List class="gap-2 text-lg font-normal">
+    <Breadcrumb.List class="gap-2 text-xl font-normal">
       {#each items as item, index (`${item.href ?? ''}:${item.label}:${index}`)}
         {@const current = index === items.length - 1}
         <Breadcrumb.Item class={current ? 'min-w-0 shrink-0' : 'min-w-0 shrink'}>

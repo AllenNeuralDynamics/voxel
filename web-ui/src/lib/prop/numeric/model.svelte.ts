@@ -8,8 +8,8 @@ export interface RawNumeric {
   onEditStart?: () => () => void;
   disabled?: boolean;
   throttleMs?: number;
-  min?: number;
-  max?: number;
+  min?: number | null;
+  max?: number | null;
   step?: number;
   bigStep?: number;
   home?: number | (() => number);

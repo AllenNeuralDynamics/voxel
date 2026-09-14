@@ -60,9 +60,11 @@
     "@fontsource-variable/lilex": "^5.3.0",
     "@tanstack/svelte-hotkeys": "^0.9.1",
     "@thisux/sveltednd": "^0.0.20",
+    "konva": "^10.5.0",
     "msgpackr": "^1.12.1",
     "paneforge": "^1.0.2",
     "runed": "^0.37.1",
+    "svelte-konva": "^1.0.1",
     "tailwind-merge": "^3.6.0",
     "uplot": "^1.6.32"
   },

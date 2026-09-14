@@ -4,7 +4,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { browser } from '$app/environment';
 import { assignDeviceRoles, type DeviceRoleAssignment } from '$lib/model/device-role';
-import { displayName, pref } from '$lib/utils';
+import { displayName, pref, toastError } from '$lib/utils';
 import { decodeMsgpack } from '$lib/utils/msgpack';
 
 import { Client, type ClientOptions, errorMessage, resolveWebSocketUrl, type Unsub } from './client.svelte';
@@ -19,12 +19,13 @@ import {
 } from './device.svelte';
 import { createEditQueue } from './edit-queue.svelte';
 import { Inpainter } from './inpaint.svelte';
-import type { EditContext } from './prop.svelte';
+import { type EditContext, EnumeratedModel, NumericModel } from './prop.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionManifest,
   AcquisitionRequest,
   ActiveAcquisitionState,
+  Change,
   ChannelPatch,
   DeviceState,
   HALConfig,
@@ -32,8 +33,10 @@ import type {
   InstrumentStatus,
   JsonSchema,
   LogEntry,
+  OpticalRouteConfig,
   PresetRecord,
   ProfilePatch,
+  RoutingDimensionConfig,
   RoutingRule,
   SensorROI,
   SessionView,
@@ -45,6 +48,7 @@ import type {
   StationStatus,
   StencilPatch,
   TaskPatch,
+  TaskValues,
   TileOrder,
   WriterPatch
 } from './types';
@@ -78,17 +82,18 @@ export interface DeviceDivergence {
   roiDirty: boolean;
 }
 
-/** One routing dimension derived from topology, its saved rule, and hardware observations. */
+/** A stable routing editor with derived rule choice and hardware observations. */
 export interface RoutingDimension {
-  id: string;
-  routes: string[];
-  ruleRoutes: string[];
-  rule: RoutingRule;
+  readonly id: string;
+  readonly model: NumericModel | EnumeratedModel<string>;
+  readonly axis: 'x' | 'y' | undefined;
+  readonly routes: readonly string[];
+  routeLabel(route: string): string;
   /** Rule choice; split rules require a known stage position. */
-  resolved?: string;
+  readonly resolved: string | undefined;
   /** Uniquely matched, settled hardware route; absent for missing or ambiguous readback. */
-  current?: string;
-  moving: boolean;
+  readonly current: string | undefined;
+  readonly moving: boolean;
 }
 
 /** Compare two property values; treats floating-point near-equality as equal. */
@@ -271,6 +276,8 @@ export class Instrument {
   default = $state.raw<InstrumentDefaults>(undefined as unknown as InstrumentDefaults);
 
   readonly devices = new SvelteMap<string, DeviceHandle>();
+  /** Session-owned rule editors; numeric values and bounds are in micrometres. */
+  readonly routingDimensions = new SvelteMap<string, RoutingDimension>();
 
   /** Retained manifest and current-volume progress for the active run. */
   acquisition = $state.raw<ActiveAcquisitionState | null>(null);
@@ -291,49 +298,6 @@ export class Instrument {
   readonly axes = $derived.by(() => this.#devicesOfType(AxisHandle));
   readonly discreteAxes = $derived.by(() => this.#devicesOfType(DiscreteAxisHandle));
   readonly signalGenerators = $derived.by(() => this.#devicesOfType(SignalGeneratorHandle));
-
-  /** Optical-routing dimensions with route choices valid for both the topology and every participant. */
-  readonly routingDimensions = $derived.by<RoutingDimension[]>(() => {
-    const assemblies = [...Object.values(this.hal.detection), ...Object.values(this.hal.illumination)];
-    return Object.entries(this.hal.optical_routing).flatMap(([id, routes]) => {
-      const rule = this.state.routing[id];
-      if (!rule) return [];
-      const participants = assemblies.filter((assembly) => id in assembly.routing);
-      const routeNames = Object.keys(routes);
-      const selectors = [...new SvelteSet(Object.values(routes).flatMap((positions) => Object.keys(positions)))].map(
-        (uid) => this.discreteAxes.get(uid)
-      );
-      const moving = selectors.some((selector) => selector?.isMoving?.value === true);
-      const settled = selectors.every((selector) => selector?.isMoving?.value === false && selector.label !== null);
-      const matches = settled
-        ? routeNames.filter((route) =>
-            Object.entries(routes[route]).every(([uid, label]) => this.discreteAxes.get(uid)?.label === label)
-          )
-        : [];
-      let resolved: string | undefined;
-      if (rule.type === 'fixed') resolved = rule.route;
-      else {
-        // Do not use Stage.position(): its zero fallback is for display, not rule evaluation.
-        const position = this.stage.axis(rule.axis).position?.value;
-        if (position != null && Number.isFinite(position)) {
-          resolved = position < rule.threshold ? rule.lower : rule.upper;
-        }
-      }
-      return [
-        {
-          id,
-          routes: routeNames,
-          ruleRoutes: routeNames.filter((route) =>
-            participants.every((assembly) => assembly.routing[id]?.includes(route) === true)
-          ),
-          rule,
-          resolved,
-          current: matches.length === 1 ? matches[0] : undefined,
-          moving
-        }
-      ];
-    });
-  });
 
   // Discrete axes any detection path declares as a filter wheel — config-authoritative, across all profiles.
   readonly filterWheels = $derived.by<DiscreteAxisHandle[]>(() => {
@@ -476,6 +440,7 @@ export class Instrument {
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
+    this.#syncRoutingDimensions();
     void this.#syncMetadataSchema();
   }
 
@@ -509,6 +474,7 @@ export class Instrument {
         );
       this.devices.get(id)?.replaceProperties(this.#resultsFrom(state));
     }
+    this.#syncRoutingDimensions();
     void this.#syncMetadataSchema();
   }
 
@@ -579,8 +545,8 @@ export class Instrument {
     return this.updateStencil({ x_offset: x, y_offset: y });
   }
 
-  updateProfile(patch: ProfilePatch): Promise<void> {
-    return this.edits.run(() => this.#client.patch(`${this.#base}/profile`, patch));
+  updateProfile(patch: ProfilePatch): Promise<Change<[string, ProfilePatch]>> {
+    return this.edits.run(() => this.#client.patch<Change<[string, ProfilePatch]>>(`${this.#base}/profile`, patch));
   }
 
   updateSignals(generatorUid: string, signals: Signals): Promise<void> {
@@ -600,10 +566,17 @@ export class Instrument {
     return this.#client.post(`${this.#base}/routing/apply${query}`);
   }
 
-  setRoutingRule(dimension: string, rule: RoutingRule, { editId }: EditContext = {}): Promise<void> {
+  #setRoutingRule(
+    dimension: string,
+    rule: RoutingRule,
+    { editId }: EditContext = {}
+  ): Promise<Change<RoutingRule | null>> {
     const query = editId ? `?edit_id=${encodeURIComponent(editId)}` : '';
     return this.edits.run(() =>
-      this.#client.put(`${this.#base}/routing/${encodeURIComponent(dimension)}/rule${query}`, rule)
+      this.#client.put<Change<RoutingRule | null>>(
+        `${this.#base}/routing/${encodeURIComponent(dimension)}/rule${query}`,
+        rule
+      )
     );
   }
 
@@ -627,20 +600,22 @@ export class Instrument {
     return this.edits.run(() => this.#client.post(`${this.#base}/presets/${encodeURIComponent(presetId)}/apply`));
   }
 
-  updateChannel(channelId: string, patch: ChannelPatch): Promise<void> {
-    return this.edits.run(() => this.#client.patch(`${this.#base}/channels/${encodeURIComponent(channelId)}`, patch));
+  updateChannel(channelId: string, patch: ChannelPatch): Promise<Change<ChannelPatch>> {
+    return this.edits.run(() =>
+      this.#client.patch<Change<ChannelPatch>>(`${this.#base}/channels/${encodeURIComponent(channelId)}`, patch)
+    );
   }
 
-  updateOutput(patch: WriterPatch): Promise<void> {
-    return this.edits.run(() => this.#client.patch(`${this.#base}/output`, patch));
+  updateOutput(patch: WriterPatch): Promise<Change<WriterPatch>> {
+    return this.edits.run(() => this.#client.patch<Change<WriterPatch>>(`${this.#base}/output`, patch));
   }
 
   updateStencil(patch: StencilPatch): Promise<void> {
     return this.#client.patch(`${this.#base}/stencil`, patch);
   }
 
-  updateMetadata(fields: Record<string, unknown>): Promise<void> {
-    return this.edits.run(() => this.#client.patch(`${this.#base}/metadata`, fields));
+  updateMetadata(fields: Record<string, unknown>): Promise<Change<Record<string, unknown>>> {
+    return this.edits.run(() => this.#client.patch<Change<Record<string, unknown>>>(`${this.#base}/metadata`, fields));
   }
 
   setMetadataSchema(target: string): Promise<void> {
@@ -652,23 +627,25 @@ export class Instrument {
     return Promise.resolve(this.metadataSchemas);
   }
 
-  setTraversal(order: TileOrder): Promise<void> {
-    return this.edits.run(() => this.#client.put(`${this.#base}/traversal`, { order }));
+  setTraversal(order: TileOrder): Promise<Change<TileOrder>> {
+    return this.edits.run(() => this.#client.put<Change<TileOrder>>(`${this.#base}/traversal`, { order }));
   }
 
-  addTasks(xy: [number, number][], profileIds?: string[]): Promise<void> {
-    return this.edits.run(() => this.#client.post(`${this.#base}/tasks`, { xy, profile_ids: profileIds ?? null }));
+  addTasks(xy: [number, number][], profileIds?: string[]): Promise<Change<TaskValues>> {
+    return this.edits.run(() =>
+      this.#client.post<Change<TaskValues>>(`${this.#base}/tasks`, { xy, profile_ids: profileIds ?? null })
+    );
   }
 
   /** Apply a per-task patch to one or more tasks in a single request. */
-  updateTasks(patches: Record<string, TaskPatch>): Promise<void> {
-    return this.edits.run(() => this.#client.patch(`${this.#base}/tasks`, { patches }));
+  updateTasks(patches: Record<string, TaskPatch>): Promise<Change<TaskValues>> {
+    return this.edits.run(() => this.#client.patch<Change<TaskValues>>(`${this.#base}/tasks`, { patches }));
   }
 
   /** Delete one or more tasks in a single request. */
-  removeTasks(taskIds: string[]): Promise<void> {
+  removeTasks(taskIds: string[]): Promise<Change<TaskValues>> {
     const query = taskIds.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
-    return this.edits.run(() => this.#client.del(`${this.#base}/tasks?${query}`));
+    return this.edits.run(() => this.#client.del<Change<TaskValues>>(`${this.#base}/tasks?${query}`));
   }
 
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
@@ -683,9 +660,94 @@ export class Instrument {
   }
 
   dispose(): void {
+    for (const dimension of this.routingDimensions.values()) dimension.model.dispose();
+    this.routingDimensions.clear();
     for (const device of this.devices.values()) device.dispose();
     this.devices.clear();
     this.edits.dispose();
+  }
+
+  #createRoutingDimension(id: string, definition: RoutingDimensionConfig, rule: RoutingRule): RoutingDimension {
+    const assignments: Record<string, OpticalRouteConfig> = definition.routes;
+    const routes = Object.keys(assignments);
+    const axis = definition.type === 'select' ? undefined : definition.type === 'split-x' ? 'x' : 'y';
+    const disabled = () => this.mode === 'capture';
+    let model: NumericModel | EnumeratedModel<string>;
+    if (definition.type === 'select' && 'selected' in rule) {
+      model = new EnumeratedModel(rule.selected, routes, {
+        disabled,
+        onPatch: (selected, context) => toastError(this.#setRoutingRule(id, { selected }, context))
+      });
+    } else if (axis && 'threshold' in rule) {
+      model = new NumericModel(rule.threshold, {
+        disabled,
+        step: 100,
+        throttleMs: 100,
+        onEditStart: () => this.edits.hold(),
+        onPatch: (threshold, context) => toastError(this.#setRoutingRule(id, { threshold }, context))
+      });
+    } else {
+      throw new Error(`Routing rule does not match dimension '${id}'`);
+    }
+
+    const selectorIds = [...new SvelteSet(Object.values(assignments).flatMap((route) => Object.keys(route.selectors)))];
+    const selector = (uid: string) => this.discreteAxes.get(uid);
+    const position = () => (axis ? this.stage.axis(axis).position?.value : undefined);
+    return {
+      id,
+      model,
+      axis,
+      routes,
+      routeLabel: (route) => assignments[route]?.label ?? displayName(route),
+      get resolved() {
+        if (model instanceof EnumeratedModel) return model.value;
+        const value = position();
+        return value != null && Number.isFinite(value) ? (value < model.value ? 'lower' : 'upper') : undefined;
+      },
+      get current() {
+        const settled = selectorIds.every((uid) => {
+          const handle = selector(uid);
+          return handle?.isMoving?.value === false && handle.label !== null;
+        });
+        if (!settled) return undefined;
+        const matches = routes.filter((route) =>
+          Object.entries(assignments[route].selectors).every(([uid, label]) => selector(uid)?.label === label)
+        );
+        return matches.length === 1 ? matches[0] : undefined;
+      },
+      get moving() {
+        return selectorIds.some((uid) => selector(uid)?.isMoving?.value === true);
+      }
+    };
+  }
+
+  /** Synchronize dimension models from the current session without publishing edits. */
+  #syncRoutingDimensions(): void {
+    for (const [id, dimension] of this.routingDimensions) {
+      if (this.hal.optical_routing[id] && this.state.routing[id]) continue;
+      dimension.model.dispose();
+      this.routingDimensions.delete(id);
+    }
+    for (const [id, definition] of Object.entries(this.hal.optical_routing)) {
+      const rule = this.state.routing[id];
+      if (!rule) continue;
+      let dimension = this.routingDimensions.get(id);
+      if (!dimension) {
+        dimension = this.#createRoutingDimension(id, definition, rule);
+        this.routingDimensions.set(id, dimension);
+      }
+      if (dimension.model instanceof NumericModel && dimension.axis && 'threshold' in rule) {
+        const axis = this.stage.axis(dimension.axis);
+        dimension.model.update({
+          kind: 'float',
+          value: rule.threshold,
+          minimum: axis.lowerLimit?.value ?? null,
+          maximum: axis.upperLimit?.value ?? null
+        });
+      } else if (dimension.model instanceof EnumeratedModel && 'selected' in rule) {
+        dimension.model.update({ kind: 'string', value: rule.selected });
+      }
+    }
   }
 
   /** Re-fetch the resolved schema when `metadata_cls` changes; no-op otherwise. */
@@ -756,8 +818,7 @@ export class Station {
 
   constructor(options: ClientOptions = {}) {
     this.#client = new Client(options);
-    // Normalize older persisted mode values while preserving the stage selection.
-    if (this.viewMode.get() !== 'fov' && this.viewMode.get() !== 'stage') this.viewMode.set('fov');
+    if (!['fov', 'stage'].includes(this.viewMode.get())) this.viewMode.set('fov');
   }
 
   get client(): Client {

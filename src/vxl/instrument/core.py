@@ -334,10 +334,15 @@ class Instrument:
             ]
             await asyncio.gather(*moves)
 
-    async def set_routing_rule(self, dimension: str, rule: RoutingRule, *, edit_id: uuid.UUID | None = None) -> None:
+    async def set_routing_rule(
+        self, dimension: str, rule: RoutingRule, *, edit_id: uuid.UUID | None = None
+    ) -> Change[RoutingRule | None]:
         """Persist a rule without moving hardware; edit_id groups consecutive replacements of this dimension."""
-        await self._undoable_edit(
-            "Set routing rule", lambda: rule, partial(self._write_routing_rule, dimension), edit_id=edit_id
+        return await self._undoable_edit(
+            "Set routing rule",
+            lambda: rule,
+            partial(self._write_routing_rule, dimension),
+            edit_id=edit_id,
         )
 
     async def select_route(self, dimension: str, route: str) -> None:
@@ -345,7 +350,7 @@ class Instrument:
         async with self._lock:
             self._ensure_mode("select route", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
             self._routing_scope(dimension)
-            if route not in self._hal.topology.optical_routing.root[dimension]:
+            if route not in self._hal.topology.optical_routing.root[dimension].routes:
                 raise OperationRejectedError(f"No optical route '{dimension}.{route}'")
             await self._ensure_routes({dimension: route})
 
@@ -358,7 +363,7 @@ class Instrument:
                 return
             stage = self._hal.stage
             x, y = await asyncio.gather(stage.x.position.get(), stage.y.position.get())
-            routes = self._store.value.resolve_routes(x=x, y=y)
+            routes = self._store.value.resolve_routes(self._hal.topology, x=x, y=y)
             if missing := [uid for uid in dimensions if uid not in routes]:
                 raise OperationRejectedError(f"No routing rule for: {', '.join(missing)}")
             await self._ensure_routes({uid: routes[uid] for uid in dimensions})
@@ -436,24 +441,32 @@ class Instrument:
                 self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_uid: signals}})
             )
 
-    async def update_profile(self, patch: ProfilePatch) -> None:
-        """Persist the active profile's editable fields."""
-        await self._undoable_edit(
-            "Update the active profile", lambda: (self._active_profile_id.value, patch), self._write_profile
+    async def update_profile(self, patch: ProfilePatch) -> Change[tuple[str, ProfilePatch]]:
+        """Persist active-profile fields and return their change with the profile ID."""
+        return await self._undoable_edit(
+            "Update the active profile",
+            lambda: (self._active_profile_id.value, patch),
+            self._write_profile,
         )
 
-    async def update_channel(self, channel_id: str, patch: ChannelPatch) -> None:
-        """Persist a channel's editable fields."""
-        await self._undoable_edit("Update a channel", lambda: patch, partial(self._write_channel, channel_id))
+    async def update_channel(self, channel_id: str, patch: ChannelPatch) -> Change[ChannelPatch]:
+        """Persist channel fields and return their committed change."""
+        return await self._undoable_edit(
+            "Update a channel",
+            lambda: patch,
+            partial(self._write_channel, channel_id),
+        )
 
-    async def update_output(self, patch: WriterPatch) -> None:
-        """Persist acquisition output settings."""
-        await self._undoable_edit("Update output settings", lambda: patch, self._write_output)
+    async def update_output(self, patch: WriterPatch) -> Change[WriterPatch]:
+        """Persist output settings and return their committed change."""
+        return await self._undoable_edit("Update output settings", lambda: patch, self._write_output)
 
-    async def update_metadata(self, **fields: Any) -> None:
-        """Merge metadata fields and validate them against the current schema."""
-        await self._undoable_edit(
-            "Update metadata", lambda: {**self._store.value.metadata, **fields}, self._write_metadata
+    async def update_metadata(self, **fields: Any) -> Change[dict[str, Any]]:
+        """Merge metadata fields and return the schema-validated change."""
+        return await self._undoable_edit(
+            "Update metadata",
+            lambda: {**self._store.value.metadata, **fields},
+            self._write_metadata,
         )
 
     async def set_metadata_schema(self, schema: type[ExperimentMetadata] | str) -> None:
@@ -531,12 +544,14 @@ class Instrument:
             stencil = self._store.value.stencil.model_copy(update=patch.changes())
             await self._store.update(stencil=stencil)
 
-    async def set_traversal(self, order: TileOrder) -> None:
-        """Set the acquisition task traversal order."""
-        await self._undoable_edit("Change the traversal order", lambda: order, self._write_traversal)
+    async def set_traversal(self, order: TileOrder) -> Change[TileOrder]:
+        """Set the acquisition task traversal order and return its change."""
+        return await self._undoable_edit("Change the traversal order", lambda: order, self._write_traversal)
 
-    async def add_tasks(self, xy: Sequence[tuple[float, float]], *, profile_ids: Sequence[str] | None = None) -> None:
-        """Add tasks as one undoable edit, using the current stencil depth and defaulting to the active profile."""
+    async def add_tasks(
+        self, xy: Sequence[tuple[float, float]], *, profile_ids: Sequence[str] | None = None
+    ) -> Change[_TaskValues]:
+        """Add tasks as one undoable edit and return their indexed before/after values."""
 
         def prepare() -> _TaskValues:
             state = self._store.value
@@ -553,10 +568,10 @@ class Instrument:
                 for index, (x, y) in enumerate(xy)
             }
 
-        await self._undoable_edit("Add tasks", prepare, self._write_tasks)
+        return await self._undoable_edit("Add tasks", prepare, self._write_tasks)
 
-    async def remove_tasks(self, task_ids: Sequence[str]) -> None:
-        """Remove tasks as one undoable edit."""
+    async def remove_tasks(self, task_ids: Sequence[str]) -> Change[_TaskValues]:
+        """Remove tasks as one undoable edit and return their indexed before/after values."""
 
         def prepare() -> _TaskValues:
             tasks = self._store.value.tasks
@@ -564,10 +579,10 @@ class Instrument:
                 raise OperationRejectedError("; ".join(f"No such task '{tid}'" for tid in unknown))
             return dict.fromkeys(task_ids)
 
-        await self._undoable_edit("Remove tasks", prepare, self._write_tasks)
+        return await self._undoable_edit("Remove tasks", prepare, self._write_tasks)
 
-    async def update_tasks(self, patches: Mapping[str, TaskPatch]) -> None:
-        """Apply task patches as one undoable edit."""
+    async def update_tasks(self, patches: Mapping[str, TaskPatch]) -> Change[_TaskValues]:
+        """Apply task patches as one undoable edit and return their indexed before/after values."""
 
         def prepare() -> _TaskValues:
             tasks = self._store.value.tasks
@@ -579,7 +594,7 @@ class Instrument:
                 if tid in patches
             }
 
-        await self._undoable_edit("Update tasks", prepare, self._write_tasks)
+        return await self._undoable_edit("Update tasks", prepare, self._write_tasks)
 
     async def undo(self) -> None:
         """Undo the last recorded edit without driving hardware."""
@@ -1102,8 +1117,8 @@ class Instrument:
         write: Callable[[T], Awaitable[Change[T]]],
         *,
         edit_id: uuid.UUID | None = None,
-    ) -> None:
-        """Prepare, persist, and record under the same lock used by undo/redo.
+    ) -> Change[T]:
+        """Prepare, persist, and record under the undo/redo lock; return the writer's change.
 
         Writers return committed values and never record history or reacquire the lock.
         """
@@ -1111,6 +1126,7 @@ class Instrument:
             self._ensure_mode(label.lower(), AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
             change = await write(prepare())
             await self._history.record(label, change, write, merge_key=edit_id)
+            return change
 
     async def _write_routing_rule(self, dimension: str, rule: RoutingRule | None) -> Change[RoutingRule | None]:
         self._routing_scope(dimension)
@@ -1258,7 +1274,7 @@ class Instrument:
                     y=task.y,
                     w=w,
                     h=h,
-                    routes=state.resolve_routes(x=task.x, y=task.y),
+                    routes=state.resolve_routes(self._hal.topology, x=task.x, y=task.y),
                 )
             )
         return list(state.traversal(tiles))
@@ -1413,7 +1429,7 @@ class Instrument:
                 self._hal.stage.y.move_abs(stack.y, wait=True),
                 self._hal.stage.z.move_abs(stack.start, wait=True),
             )
-            routes = self._store.value.resolve_routes(x=stack.x, y=stack.y)
+            routes = self._store.value.resolve_routes(self._hal.topology, x=stack.x, y=stack.y)
             async with self._lock:
                 await self._ensure_routes(routes)
             await scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))

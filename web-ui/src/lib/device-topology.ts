@@ -86,8 +86,8 @@ export function buildDeviceUsageIndex(hal: HALConfig): DeviceUsageIndex {
     add(pathId, 'Illumination source');
     for (const deviceId of path.aux_devices ?? []) add(deviceId, `Illumination auxiliary · ${pathId}`);
   }
-  for (const [dimension, routes] of Object.entries(hal.optical_routing)) {
-    const deviceIds = new Set(Object.values(routes).flatMap((selectors) => Object.keys(selectors)));
+  for (const [dimension, definition] of Object.entries(hal.optical_routing)) {
+    const deviceIds = new Set(Object.values(definition.routes).flatMap((route) => Object.keys(route.selectors)));
     for (const deviceId of deviceIds) {
       add(deviceId, `Routing selector · ${dimension}`);
     }

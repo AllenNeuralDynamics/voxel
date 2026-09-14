@@ -93,16 +93,19 @@ hal:
 
   optical_routing:
     detection_mode:
-      widefield:
-        detection_mode_selector: widefield
-      confocal:
-        detection_mode_selector: confocal
+      type: select
+      routes:
+        widefield:
+          selectors:
+            detection_mode_selector: widefield
+        confocal:
+          selectors:
+            detection_mode_selector: confocal
 
 default:
   routing:
     detection_mode:
-      type: fixed
-      route: widefield
+      selected: widefield
 
   imaging:
     channels:

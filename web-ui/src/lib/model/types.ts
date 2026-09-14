@@ -17,7 +17,7 @@ export interface StageConfig {
 
 export interface OpticalAssemblyConfig {
   aux_devices?: string[];
-  routing: Record<string, string[]>;
+  routing: string[];
 }
 
 /** A detection assembly: filter wheels + optics on top of a camera device. */
@@ -33,10 +33,23 @@ export type IlluminationAssemblyConfig = OpticalAssemblyConfig;
 export type DiscreteAxisPositions = Record<string, string>;
 
 /** The selector positions that define one named optical route. */
-export type OpticalRouteConfig = DiscreteAxisPositions;
+export interface OpticalRouteConfig {
+  selectors: DiscreteAxisPositions;
+  label?: string | null;
+}
 
-/** Routing dimension → route name → selector positions. */
-export type OpticalRoutingConfig = Record<string, Record<string, OpticalRouteConfig>>;
+export interface SelectRoutingConfig {
+  type: 'select';
+  routes: Record<string, OpticalRouteConfig>;
+}
+
+export interface SplitRoutingConfig {
+  type: 'split-x' | 'split-y';
+  routes: Record<'lower' | 'upper', OpticalRouteConfig>;
+}
+
+export type RoutingDimensionConfig = SelectRoutingConfig | SplitRoutingConfig;
+export type OpticalRoutingConfig = Record<string, RoutingDimensionConfig>;
 
 /** Whether a node runs as a local subprocess or a remote (networked) process. */
 export type NodeKind = 'subprocess' | 'remote';
@@ -176,20 +189,15 @@ export interface ImagingProtocol {
   profiles: Record<string, ProfileConfig>;
 }
 
-export interface FixedRoutingRule {
-  type: 'fixed';
-  route: string;
+export interface SelectRoutingRule {
+  selected: string;
 }
 
 export interface SplitRoutingRule {
-  type: 'split';
-  axis: 'x' | 'y';
   threshold: number;
-  lower: string;
-  upper: string;
 }
 
-export type RoutingRule = FixedRoutingRule | SplitRoutingRule;
+export type RoutingRule = SelectRoutingRule | SplitRoutingRule;
 
 /** Mosaic + z-range defaults prefilled into new tasks (µm). */
 export interface Stencil {
@@ -278,6 +286,15 @@ export interface InstrumentState extends InstrumentPreset {
 }
 
 // ---- instrument-state mutation payloads ----
+
+/** Values before and after a committed edit. */
+export interface Change<T> {
+  before: T;
+  after: T;
+}
+
+/** Affected tasks with insertion positions; null means the task is absent. */
+export type TaskValues = Record<string, [index: number, task: AcquisitionTask] | null>;
 
 /** Edit a profile's top-level fields. */
 export interface ProfilePatch {

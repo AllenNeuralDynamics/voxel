@@ -1,8 +1,7 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { Check } from '$lib/icons';
-  import { Button, Select } from '$lib/kit';
-  import { type Instrument, type RoutingDimension, type RoutingRule } from '$lib/model';
+  import { Select } from '$lib/kit';
+  import { EnumeratedModel, type Instrument, type RoutingDimension } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { formatSpatialDistance } from '$lib/spatial-units';
   import { cn, displayName, toastError } from '$lib/utils';
@@ -18,7 +17,7 @@
   let pending = $state<Record<string, string>>({});
   let applying = $state<string | null>(null);
 
-  const dimensions = $derived(instrument.routingDimensions);
+  const dimensions = $derived([...instrument.routingDimensions.values()]);
   const disabled = $derived(
     instrument.mode === 'capture' ||
       applying != null ||
@@ -26,12 +25,9 @@
       dimensions.some((d) => d.moving)
   );
 
-  function ruleSummary(rule: RoutingRule): string {
-    if (rule.type === 'fixed') return `Fixed to ${displayName(rule.route)}`;
-    return `${rule.axis.toUpperCase()}: ${displayName(rule.lower)} < ${formatSpatialDistance(
-      rule.threshold,
-      prefs.spatialUnit.get()
-    )} ≤ ${displayName(rule.upper)}`;
+  function ruleSummary({ model, axis }: RoutingDimension): string {
+    if (model instanceof EnumeratedModel) return `Selected: ${displayName(model.value)}`;
+    return `${axis?.toUpperCase()}: Lower < ${formatSpatialDistance(model.value, prefs.spatialUnit.get())} ≤ Upper`;
   }
 
   function select(dimension: string, route: string): void {
@@ -40,16 +36,6 @@
     toastError(
       instrument.selectRoute(dimension, route).finally(() => {
         delete pending[dimension];
-      })
-    );
-  }
-
-  function apply(dimension: RoutingDimension): void {
-    if (disabled || dimension.resolved == null || dimension.current === dimension.resolved) return;
-    applying = dimension.id;
-    toastError(
-      instrument.applyRoutingRule(dimension.id).finally(() => {
-        applying = null;
       })
     );
   }
@@ -62,7 +48,7 @@
 
   <div class="flex flex-col gap-2 px-3 py-2">
     {#each dimensions as dimension (dimension.id)}
-      {@const options = dimension.routes.map((route) => ({ value: route, label: displayName(route) }))}
+      {@const options = dimension.routes.map((route) => ({ value: route, label: dimension.routeLabel(route) }))}
       <div class="flex flex-col gap-1 rounded-xs border border-border bg-card px-2.5 py-1.5">
         <div class="flex items-center gap-2">
           <a
@@ -71,7 +57,7 @@
               { stationId: instrument.stationId, instrumentId: instrument.id }
             )}
             class="flex min-w-0 flex-1 items-center gap-1 rounded-sm text-base font-medium text-fg hover:text-fg-accent focus-visible:outline-2 focus-visible:outline-border-focused"
-            title={`Edit routing rule · ${ruleSummary(dimension.rule)}`}
+            title={`Edit routing rule · ${ruleSummary(dimension)}`}
           >
             <span class="truncate">{displayName(dimension.id)}</span>
           </a>
@@ -98,19 +84,6 @@
               {/if}
             {/snippet}
           </Select>
-          <Button
-            variant="outline"
-            size="icon-xs"
-            disabled={disabled || dimension.resolved == null || dimension.current === dimension.resolved}
-            loading={applying === dimension.id}
-            title={dimension.resolved == null
-              ? 'Rule choice unavailable'
-              : `Apply rule: ${displayName(dimension.resolved)}`}
-            aria-label={`Apply rule for ${displayName(dimension.id)}`}
-            onclick={() => apply(dimension)}
-          >
-            <Check class="size-3" />
-          </Button>
         </div>
       </div>
     {/each}

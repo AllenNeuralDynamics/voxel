@@ -6,6 +6,7 @@
     model: EnumeratedModel<T>;
     formatLabel?: (option: T) => string;
     placeholder?: string;
+    prefix?: string;
     disabled?: boolean;
     class?: string;
   }
@@ -14,6 +15,7 @@
     model,
     formatLabel = (o) => String(o),
     placeholder,
+    prefix,
     disabled,
     variant,
     size,
@@ -35,6 +37,7 @@
   {options}
   onchange={handleChange}
   {placeholder}
+  {prefix}
   disabled={effectiveDisabled}
   {variant}
   {size}

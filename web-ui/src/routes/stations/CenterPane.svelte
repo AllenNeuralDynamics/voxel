@@ -12,7 +12,7 @@
   import PreviewFrameInfo from '$lib/preview/PreviewFrameInfo.svelte';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { SPATIAL_UNIT_OPTIONS } from '$lib/spatial-units';
-  import { StageControls, StageView, type StageViewport } from '$lib/stage';
+  import { StageControls, StageView, type Viewport } from '$lib/stage';
   import { cn, createPaneSize } from '$lib/utils';
 
   const app = getVoxelStation();
@@ -23,7 +23,11 @@
     { mode: 'stage', label: 'Stage' }
   ];
 
-  let stageViewport = $state.raw<StageViewport>({ mode: 'auto' });
+  let stageViewport = $state.raw<Viewport | null>(null);
+  $effect(() => {
+    void app.instrument;
+    stageViewport = null;
+  });
 
   let logsPaneRef = $state<Pane | undefined>(undefined);
   const logsOpen = $derived(logsPaneRef ? !logsPaneRef.isCollapsed() : true);

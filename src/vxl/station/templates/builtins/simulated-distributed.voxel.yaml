@@ -128,18 +128,21 @@ hal:
 
   optical_routing:
     beam_path:
-      sample:
-        illumination_path_selector: sample
-        detection_path_selector: sample
-      calibration:
-        illumination_path_selector: calibration
-        detection_path_selector: calibration
+      type: select
+      routes:
+        sample:
+          selectors:
+            illumination_path_selector: sample
+            detection_path_selector: sample
+        calibration:
+          selectors:
+            illumination_path_selector: calibration
+            detection_path_selector: calibration
 
 default:
   routing:
     beam_path:
-      type: fixed
-      route: sample
+      selected: sample
 
   imaging:
     channels:

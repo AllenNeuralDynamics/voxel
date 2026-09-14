@@ -23,6 +23,9 @@ importers:
       '@thisux/sveltednd':
         specifier: ^0.0.20
         version: 0.0.20(svelte@5.56.7)
+      konva:
+        specifier: ^10.5.0
+        version: 10.5.0
       msgpackr:
         specifier: ^1.12.1
         version: 1.12.1
@@ -32,6 +35,9 @@ importers:
       runed:
         specifier: ^0.37.1
         version: 0.37.1(@sveltejs/kit@2.70.1(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.56.7)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)))(svelte@5.56.7)(typescript@5.9.3)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)))(svelte@5.56.7)
+      svelte-konva:
+        specifier: ^1.0.1
+        version: 1.0.1(konva@10.5.0)(svelte@5.56.7)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
@@ -1065,6 +1071,17 @@ packages:
   known-css-properties@0.37.0:
     resolution: {integrity: sha512-JCDrsP4Z1Sb9JwG0aJ8Eo2r7k4Ou5MwmThS/6lcIe1ICyb7UBJKGRIUUdqc2ASdE/42lgz6zFUnzAIhtXnBVrQ==}
 
+  konva@10.5.0:
+    resolution: {integrity: sha512-gTVQ12CVE2vCaP8g+Ag6lYf9LIo1s1lr7bXLNTbF5pcXbdRFCA3Oy1fFxDN/wK7RklJ9e8oqTiSsqmUtfQx91w==}
+    peerDependencies:
+      canvas: ^3.0.0
+      skia-canvas: ^3.0.0
+    peerDependenciesMeta:
+      canvas:
+        optional: true
+      skia-canvas:
+        optional: true
+
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
 
@@ -1429,6 +1446,12 @@ packages:
     peerDependenciesMeta:
       svelte:
         optional: true
+
+  svelte-konva@1.0.1:
+    resolution: {integrity: sha512-XfiSF9+J9phRupYGzMfbp46dnqsgZfN3Fwqei4YVAy0/9dr7k/qGtEucOqEcwgL1GEI2rxwSFXH0S5zbZqyMJQ==}
+    peerDependencies:
+      konva: 8 - 10
+      svelte: ^5.0.0
 
   svelte-sonner@1.1.1:
     resolution: {integrity: sha512-5cd3p7wa4cq0NsqslMwdlPb7x1JglEZ/GKrLePWNr5bCxR1nagAVrY01FRFrXfUGs41miLt3C327+8XJo5BzZw==}
@@ -2518,6 +2541,8 @@ snapshots:
 
   known-css-properties@0.37.0: {}
 
+  konva@10.5.0: {}
+
   levn@0.4.1:
     dependencies:
       prelude-ls: 1.2.1
@@ -2867,6 +2892,11 @@ snapshots:
       postcss-scss: 4.0.9(postcss@8.5.8)
       postcss-selector-parser: 7.1.1
       semver: 7.7.4
+      svelte: 5.56.7
+
+  svelte-konva@1.0.1(konva@10.5.0)(svelte@5.56.7):
+    dependencies:
+      konva: 10.5.0
       svelte: 5.56.7
 
   svelte-sonner@1.1.1(svelte@5.56.7):
