@@ -73,7 +73,7 @@
 
   function primitiveLayoutClass(value: unknown): string {
     return typeof value === 'string'
-      ? 'min-w-0 wrap-anywhere @max-[14rem]/json-row:ml-4 @max-[14rem]/json-row:basis-[calc(100%-1rem)]'
+      ? 'min-w-0 max-w-full whitespace-normal wrap-anywhere @max-[14rem]/json-row:ml-4 @max-[14rem]/json-row:basis-[calc(100%-1rem)]'
       : 'shrink-0 whitespace-nowrap';
   }
 
@@ -150,7 +150,7 @@
             >
               <path d="M6 4l4 4-4 4z" />
             </svg>
-            <span class="text-fg-muted">{key}:</span>
+            <span class="max-w-full min-w-0 wrap-anywhere whitespace-normal text-fg-muted">{key}:</span>
             <span class="text-base text-fg-faint">{summary(value)}</span>
           </summary>
           <div class="ml-2 min-w-0 border-l border-border/50 pl-2">
@@ -168,7 +168,7 @@
       {:else}
         <div class={cn(rowStyle, 'rounded', diverged(value, baselineValue) ? 'bg-warning/10' : '')}>
           <span aria-hidden="true" class={cn(caretSize, 'shrink-0')}></span>
-          <span class="shrink-0 text-fg-muted">{key}:</span>
+          <span class="max-w-full min-w-0 wrap-anywhere whitespace-normal text-fg-muted">{key}:</span>
           {@render primitive(value, entryPath)}
           {#if diverged(value, baselineValue)}
             <span
