@@ -13,7 +13,8 @@ export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
  *
  * Keep conversion/formatting logic and hardware state outside this module.
  * Pane sizes, navigation history, and per-channel preview settings stay with
- * their existing owners. Only spatial-unit callers have been migrated so far.
+ * their existing owners. Spatial units and stage live visibility use this module;
+ * the remaining preferences have not yet been migrated.
  */
 export const prefs = {
   spatialUnit: pref<SpatialUnit>('ui:spatial-unit', 'mm'),
@@ -26,7 +27,7 @@ export const prefs = {
 
   stage: {
     layersVisible: pref('ui:stage:layers-visible', true),
-    liveVisible: pref('ui:stage:live-visible', true)
+    liveVisible: pref('stage:live-visible', true)
   },
 
   logs: {

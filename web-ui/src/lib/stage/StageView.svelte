@@ -442,6 +442,28 @@
         {/snippet}
       </ContextMenu.Trigger>
       <ContextMenu.Content class="min-w-44">
+        {#if scene.layers.some((layer) => layer.visibility)}
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger>Layers</ContextMenu.SubTrigger>
+            <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
+              {#each scene.layers as layer (layer.id)}
+                {#if layer.visibility}
+                  <ContextMenu.CheckboxItem
+                    checked={layer.visibility.get()}
+                    onCheckedChange={(visible) => {
+                      layer.visibility?.set(visible);
+                      scene.invalidate();
+                    }}
+                    closeOnSelect={false}
+                  >
+                    {layer.label ?? displayName(layer.id)}
+                  </ContextMenu.CheckboxItem>
+                {/if}
+              {/each}
+            </ContextMenu.SubContent>
+          </ContextMenu.Sub>
+          <ContextMenu.Separator />
+        {/if}
         {#if menuMode === 'marquee'}
           {#if marqueeSections.length > 2}
             {#each marqueeSections as mh (mh.layer.id)}

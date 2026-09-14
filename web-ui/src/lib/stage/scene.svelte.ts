@@ -14,6 +14,8 @@ export interface StageLayer<H = unknown, M = H> {
   label?: string; // section heading for this layer's slice of the context menu; defaults to a capitalized id
   z: number; // draw + hit order (ascending). Chrome reserves bounds ≈ -1000, marker ≈ +1000; content ≥ 0.
   visible: boolean;
+  /** User preference, independent of whether the layer currently has content to draw. */
+  visibility?: { get(): boolean; set(visible: boolean): void };
   draw: (p: Painter) => void;
   hitTest?: (world: [number, number]) => H | null;
   hitMarquee?: (rect: Bounds) => M | null; // what of this layer's content a marquee region covers (items or area)

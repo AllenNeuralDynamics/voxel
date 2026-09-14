@@ -2,11 +2,11 @@
   import { watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { Eye, EyeOff, VideoCamera } from '$lib/icons';
+  import { VideoCamera } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import { getVoxelStation } from '$lib/model';
+  import { prefs } from '$lib/prefs';
   import { getPreviewContext } from '$lib/preview/session.svelte';
-  import { pref } from '$lib/utils';
 
   import type { Bounds, Painter } from '../draw';
   import { getStageScene, type StageLayer, useLayer } from '../scene.svelte';
@@ -22,7 +22,7 @@
   const active = $derived(preview !== null && instrument?.mode !== 'idle');
 
   // Manual show/hide, remembered across sessions; gates the layer while preview or capture is active.
-  const show = pref('stage:live-visible', true);
+  const show = prefs.stage.liveVisible;
   let liveCanvas: HTMLCanvasElement;
   let rendering = false;
   let renderAgain = false;
@@ -89,6 +89,8 @@
 
   const layer: StageLayer<LiveHit> = {
     id: 'live',
+    label: 'Live FOV',
+    visibility: show,
     z: 1, // "now" sits above snapshots (0) and inpaint (-1); the green pose marker is chrome above all
     get visible() {
       return active && show.get();
@@ -101,10 +103,14 @@
   };
   useLayer(layer);
 
-  // Repaint on every new frame / detail view / channel change, and whenever visibility flips.
+  // Repaint on every new frame / detail view / channel change.
   watch(
-    () => [preview?.redrawGeneration, active, show.get()] as const,
+    () => [preview?.redrawGeneration, active] as const,
     () => void renderLiveFrame()
+  );
+  watch(
+    () => show.get(),
+    () => scene.invalidate()
   );
 
   onMount(() => void renderLiveFrame());
@@ -117,19 +123,4 @@
   </ContextMenu.Item>
 {/snippet}
 
-<div class="pointer-events-auto flex w-full shrink-0 flex-col overflow-hidden overlay-panel">
-  <canvas bind:this={liveCanvas} class="hidden"></canvas>
-  <div class="flex items-center gap-2 px-2.5 py-1">
-    <span class="flex-1 text-sm text-fg-muted">Live</span>
-    <button
-      type="button"
-      title={show.get() ? 'Hide live' : 'Show live'}
-      aria-label={show.get() ? 'Hide live' : 'Show live'}
-      aria-pressed={show.get()}
-      class="focus-visible:ring-focused flex h-6 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-fg-muted transition-colors hover:bg-element-hover hover:text-fg focus:outline-none focus-visible:ring-2"
-      onclick={() => show.set(!show.get())}
-    >
-      {#if show.get()}<Eye width="14" height="14" />{:else}<EyeOff width="14" height="14" />{/if}
-    </button>
-  </div>
-</div>
+<canvas bind:this={liveCanvas} class="hidden"></canvas>
