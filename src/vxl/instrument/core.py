@@ -111,7 +111,6 @@ class Instrument:
         self._device_props_updates = Emitter[tuple[str, DeviceProps]]()
         self._preview = Emitter[PreviewSourceEmission]()
         self._preview_revision = Cell(0)
-        self._accept_preview = False
         self._preview_source_ids: dict[str, str] = {}
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
@@ -247,7 +246,7 @@ class Instrument:
 
     async def close(self) -> None:
         """Stop preview, close hardware, and clear history while retaining the selected profile."""
-        self._accept_preview = False
+        self._preview_source_ids.clear()
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
@@ -259,7 +258,6 @@ class Instrument:
         await self._hal.close()
         self._channels = {}
         self._remote_stores = {}
-        self._preview_source_ids = {}
         async with self._lock:
             await self._history.clear()
 
@@ -916,7 +914,7 @@ class Instrument:
             raise OperationRejectedError(
                 f"Select a known, settled route before starting preview: {', '.join(unsettled)}"
             )
-        self._accept_preview = False
+        self._preview_source_ids.clear()
         self._preview_channels = chans
 
         results = await asyncio.gather(*(ch.start_preview() for ch in chans), return_exceptions=True)
@@ -941,7 +939,7 @@ class Instrument:
         logger.info("Preview started (%d cameras)", started)
 
     async def _stop_preview(self) -> None:
-        """Stop active preview if it is running. Caller holds ``self._lock``.
+        """Stop capture while retaining valid cached preview sources. Caller holds ``self._lock``.
 
         Safe to call in any mode: _preview_channels is non-empty only while previewing (start_preview
         bails unless IDLE; acquisition stops preview before entering CAPTURE), so this early-returns
@@ -949,7 +947,6 @@ class Instrument:
         """
         if not self._preview_channels:
             return
-        self._accept_preview = False
         chans, self._preview_channels = self._preview_channels, []
 
         results = await asyncio.gather(*(ch.stop_preview() for ch in chans), return_exceptions=True)
@@ -963,12 +960,11 @@ class Instrument:
 
     async def _reset_preview(self) -> None:
         """Invalidate preview, establish every new camera source identity, then resume delivery."""
-        self._accept_preview = False
+        self._preview_source_ids.clear()
         await self._preview_revision.set(self._preview_revision.value + 1)
         cameras = {channel.camera.uid: channel.camera for channel in self.active_channels.values()}
         source_ids = await asyncio.gather(*(camera.reset_preview_stream() for camera in cameras.values()))
         self._preview_source_ids = dict(zip(cameras, source_ids, strict=True))
-        self._accept_preview = True
 
     def _apply_viewport(self, channels: Mapping[str, Channel]) -> None:
         for ch_id, ch in channels.items():
@@ -987,8 +983,6 @@ class Instrument:
 
     async def _emit_preview_frame(self, camera_id: str, layer: PreviewLayer, frame: bytes) -> None:
         """Reject stale camera streams, then map one packed source frame onto its active channel."""
-        if not self._accept_preview:
-            return
         try:
             source = preview_source_header(frame)
         except ValueError:
