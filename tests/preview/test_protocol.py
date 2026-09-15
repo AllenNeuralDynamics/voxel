@@ -18,6 +18,7 @@ from vxl.preview.protocol import (
     PreviewSourceHeader,
     PreviewViewport,
     SourceRectPx,
+    StagePosition,
     StreamCursor,
     ValidBits,
     VoxelPreviewPacket,
@@ -87,12 +88,14 @@ def test_packet_header_contains_only_source_owned_metadata() -> None:
     assert header["camera_id"] == "camera-1"
     assert header["source_rect_px"] == {"x": 0, "y": 0, "width": 4, "height": 3}
     assert "channel_id" not in header
+    assert "position_um" not in header
     assert "histogram" not in header
     assert "levels" not in header
     assert "bit_packing" not in header
 
 
-def test_delivery_packet_wraps_frame_without_modifying_it() -> None:
+@pytest.mark.parametrize("position", [None, StagePosition(x=1, y=-2, z=3.5)])
+def test_delivery_packet_wraps_frame_without_modifying_it(position: StagePosition | None) -> None:
     frame = _source_frame(np.arange(12, dtype=np.uint16).reshape(3, 4)).pack()
     delivery = VoxelPreviewPacket.wrap(
         frame,
@@ -100,6 +103,7 @@ def test_delivery_packet_wraps_frame_without_modifying_it() -> None:
         seq=9,
         state_cursor=StreamCursor(stream_id="state-1", seq=17),
         stamped_at_unix_us=1_234_567,
+        position_um=position,
     )
 
     packed = delivery.pack()
@@ -111,6 +115,8 @@ def test_delivery_packet_wraps_frame_without_modifying_it() -> None:
     assert parsed.header.seq == 9
     assert parsed.header.state_cursor == StreamCursor(stream_id="state-1", seq=17)
     assert parsed.header.stamped_at_unix_us == 1_234_567
+    assert parsed.header.position_um == position
+    assert parsed.header.model_dump()["position_um"] == (position.model_dump() if position else None)
     assert parsed.frame == frame
     assert PreviewFrame.from_packed(parsed.frame).header.camera_id == "camera-1"
 

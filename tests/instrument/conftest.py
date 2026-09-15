@@ -15,9 +15,14 @@ def instrument_template() -> Path:
 
 
 @pytest.fixture
-def instrument_config(instrument_template: Path) -> InstrumentConfig:
+def instrument_config(instrument_template: Path, request: pytest.FixtureRequest) -> InstrumentConfig:
     config = load_yaml(instrument_template, InstrumentConfig).model_dump()
     config["hal"]["devices"]["camera_1"]["init"]["frame_source"]["sensor_size_px"] = "64,64"
+    if routing_type := getattr(request, "param", None):
+        dimension = config["hal"]["optical_routing"]["excitation_side"]
+        dimension["type"] = routing_type
+        dimension["routes"] = {"lower": dimension["routes"]["left"], "upper": dimension["routes"]["right"]}
+        config["default"]["routing"]["excitation_side"] = {"threshold": 5}
     return InstrumentConfig.model_validate(config)
 
 

@@ -18,6 +18,7 @@ from vxl.instrument import (
 )
 from vxl.instrument.models import TaskTile
 from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
+from vxl.preview.protocol import StagePosition
 from vxl.station import Station, StationStatus
 from vxl.system import StationConfig
 
@@ -173,11 +174,13 @@ async def test_close_failure_faults_station_and_retains_session_identity(
     session = await station.open_session("instrument")
     await instrument.preview_revision.set(1)
     state_view = await station.feed.snapshot()
-    await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"VXPS"))
+    position = StagePosition(x=1, y=2, z=3)
+    await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"VXPS", position))
     await asyncio.sleep(0)
     frame = VoxelPreviewPacket.from_packed(delivered[-1][2])
     assert frame.header.seq == 0
     assert frame.header.state_cursor == state_view.cursor
+    assert frame.header.position_um == position
     instrument.close_error = OSError("close failed")
 
     with pytest.raises(OSError, match="close failed"):
@@ -190,7 +193,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(
     assert snapshot.session.info.instrument_name == session.instrument_name
     assert snapshot.session.instrument.preview_revision == 1
     assert snapshot.error == "OSError: close failed"
-    await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"ignored"))
+    await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"ignored", None))
     assert len(delivered) == 1
     unsubscribe()
 

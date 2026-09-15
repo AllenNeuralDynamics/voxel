@@ -8,7 +8,7 @@ import cv2
 import msgpack
 import numpy as np
 from numcodecs import Zstd
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, FiniteFloat, field_validator, model_validator
 from vxlib.schema import FrozenModel, SparseModel
 
 SOURCE_MAGIC = b"VXPS"
@@ -126,8 +126,16 @@ class PreviewLayer(StrEnum):
     VIEWPORT = "viewport"
 
 
+class StagePosition(FrozenModel):
+    """Best-known XYZ position in micrometers when a source frame was first observed."""
+
+    x: FiniteFloat
+    y: FiniteFloat
+    z: FiniteFloat
+
+
 type PreviewKey = tuple[str, PreviewLayer]
-type PreviewSourceEmission = tuple[str, PreviewLayer, bytes]
+type PreviewSourceEmission = tuple[str, PreviewLayer, bytes, StagePosition | None]
 type PreviewEmission = tuple[str, PreviewLayer, bytes]
 
 
@@ -218,6 +226,7 @@ class VoxelPreviewHeader(FrozenModel):
     state_cursor: StreamCursor
     stamped_at_unix_us: int = Field(ge=0)
     frame_byte_length: int = Field(gt=0)
+    position_um: StagePosition | None = None
 
 
 @dataclass(frozen=True)
@@ -327,6 +336,7 @@ class VoxelPreviewPacket:
         seq: int,
         state_cursor: StreamCursor,
         stamped_at_unix_us: int,
+        position_um: StagePosition | None = None,
     ) -> Self:
         """Wrap an already-packed VXPS frame without parsing or copying its payload twice."""
         packed_frame = bytes(frame)
@@ -337,6 +347,7 @@ class VoxelPreviewPacket:
                 state_cursor=state_cursor,
                 stamped_at_unix_us=stamped_at_unix_us,
                 frame_byte_length=len(packed_frame),
+                position_um=position_um,
             ),
             frame=packed_frame,
         )

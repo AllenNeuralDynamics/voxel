@@ -156,7 +156,6 @@
     <Fov
       {preview}
       bounds={liveBounds}
-      active={instrument.mode !== 'idle'}
       bind:visible={() => prefs.stage.liveVisible.get(), (value) => prefs.stage.liveVisible.set(value)}
       onactivate={() => app.viewMode.set('fov')}
     />

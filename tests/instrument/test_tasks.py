@@ -1,27 +1,26 @@
 import pytest
 
 from vxl.instrument import Instrument, InstrumentStore
-from vxl.instrument.config import FixedRoutingRule, SplitRoutingRule, TaskPatch
+from vxl.instrument.config import SplitRoutingRule, TaskPatch
 from vxl.instrument.errors import OperationRejectedError
 from vxl.instrument.traversal import TileOrder
 
 
+@pytest.mark.parametrize("instrument_config", ["split-x"], indirect=True)
 async def test_task_tiles_resolve_rules_at_task_positions(opened_instrument: Instrument) -> None:
     instrument = opened_instrument
     await instrument.set_traversal(TileOrder.CUSTOM)
-    await instrument.set_routing_rule(
-        "excitation_side", SplitRoutingRule(type="split", axis="x", threshold=5, lower="left", upper="right")
-    )
+    await instrument.set_routing_rule("excitation_side", SplitRoutingRule(threshold=5))
     await instrument.add_tasks([(4, 0), (5, 0)])
     assert [tile.routes for tile in instrument.task_tiles.value] == [
-        {"excitation_side": "left"},
-        {"excitation_side": "right"},
+        {"excitation_side": "lower"},
+        {"excitation_side": "upper"},
     ]
 
-    await instrument.set_routing_rule("excitation_side", FixedRoutingRule(type="fixed", route="right"))
+    await instrument.set_routing_rule("excitation_side", SplitRoutingRule(threshold=0))
     assert [tile.routes for tile in instrument.task_tiles.value] == [
-        {"excitation_side": "right"},
-        {"excitation_side": "right"},
+        {"excitation_side": "upper"},
+        {"excitation_side": "upper"},
     ]
 
 

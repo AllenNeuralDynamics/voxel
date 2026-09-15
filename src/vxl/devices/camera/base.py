@@ -245,6 +245,8 @@ class CameraController(DeviceController["Camera"]):
         try:
             while self._mode == CameraMode.PREVIEW:
                 frame = await self._run_sync(self.device.grab_frame_owned)
+                if self._mode != CameraMode.PREVIEW:
+                    break
                 self._previewer.submit_frame(
                     frame,
                     idx=self._frame_idx,
@@ -263,10 +265,10 @@ class CameraController(DeviceController["Camera"]):
             return
 
         self._mode = CameraMode.IDLE
-        self._previewer.cancel_pending()
         if self._preview_task:
             await self._preview_task
             self._preview_task = None
+        self._previewer.cancel_pending()
         await self._run_sync(self.device.stop)
         await self._run_sync(self.device.free_buffer)
 

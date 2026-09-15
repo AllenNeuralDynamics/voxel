@@ -142,7 +142,7 @@ class StationFeed:
 
     async def publish_preview(self, emission: PreviewSourceEmission) -> None:
         """Stamp and enqueue one source frame from the active station session."""
-        channel_id, layer, frame = emission
+        channel_id, layer, frame, position = emission
         async with self._lock:
             if self._closed or self._state.status is not StationStatus.ACTIVE or self._state.session is None:
                 return
@@ -154,6 +154,7 @@ class StationFeed:
                 seq=frame_seq,
                 state_cursor=self._cursor_unlocked(),
                 stamped_at_unix_us=_unix_time_us(),
+                position_um=position,
             ).pack()
             self._frame_queue.put((channel_id, layer), packet)
             if self._frame_task is None or self._frame_task.done():

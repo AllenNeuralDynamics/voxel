@@ -152,8 +152,9 @@
       width={fov.width}
       height={fov.height}
       {stroke}
-      strokeWidth={1.5}
+      strokeWidth={1}
       strokeScaleEnabled={false}
+      opacity={0.7}
     />
     <Group x={position.x} y={position.y} scaleX={1 / context.view.scale} scaleY={1 / context.view.scale}>
       <Line points={[-6, 0, 6, 0]} {stroke} strokeWidth={1.5} strokeScaleEnabled={false} />

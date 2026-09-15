@@ -14,7 +14,7 @@ Preview metadata is split at the boundary where it becomes known:
 - The camera owns `camera_id`, source-stream identity, capture sequence, pixel geometry, valid bit depth, and
   encoding details.
 - The `Instrument` rejects stale camera streams and maps `camera_id` to `channel_id`, then emits the packed source
-  frame without decoding or wrapping it.
+  frame with its first-observed stage position, without decoding or wrapping it.
 - `StationFeed` assigns the delivery sequence, stamps the frame against its current station-state cursor, and wraps
   the packed source frame without decoding it.
 - The client owns levels, color mapping, interpolation, layer composition, and other display state.
@@ -90,6 +90,17 @@ It identifies the latest materialized station state when `StationFeed` wrapped t
 records when that association was made. The delivery `seq` increases across wrapped frames. Sequence gaps are
 expected when latest-only queues replace frames. Camera-owned fields such as `layer` are not duplicated in this
 header.
+
+VXPD also carries nullable `position_um: {x, y, z}` from Instrument's cached stage readback when a source capture
+was first observed. This is not synchronized exposure-time positioning. Instrument retains the latest 16 observed
+frame positions per camera, reusing them for overview and regenerated viewport packets even after preview stops.
+Unknown axes, older uncached frames, and frames first observed while idle have no position. Stream resets and
+instrument close clear these associations. The camera-owned VXPS packet and delivery `state_cursor` are unchanged.
+
+The browser stage view keeps one image per visible channel, placed using its overview's `position_um` and the
+physical FOV recorded when that overview was accepted. Stopping preview preserves those images; stage movement
+does not reposition them. Restart/reset clears them through the existing preview revision. Frames without a
+known position remain usable in the FOV view but are not placed on the stage.
 
 `StationFeed.frames` emits the packed `VXPD` packets. Qt subscribes in process, while the web adapter forwards them
 over the dedicated preview WebSocket. Consumers correlate `state_cursor` with the reliable station-state stream,

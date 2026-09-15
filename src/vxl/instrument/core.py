@@ -32,6 +32,7 @@ from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
+from vxl.preview.protocol import StagePosition
 from vxl.system import Remote, System, remote_store_fingerprint
 
 from .config import (
@@ -112,6 +113,7 @@ class Instrument:
         self._preview = Emitter[PreviewSourceEmission]()
         self._preview_revision = Cell(0)
         self._preview_source_ids: dict[str, str] = {}
+        self._preview_positions: dict[str, dict[int, StagePosition | None]] = {}
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
         self._acquisition = Cell[ActiveAcquisitionState | None](None)
@@ -247,6 +249,7 @@ class Instrument:
     async def close(self) -> None:
         """Stop preview, close hardware, and clear history while retaining the selected profile."""
         self._preview_source_ids.clear()
+        self._preview_positions.clear()
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
@@ -915,6 +918,7 @@ class Instrument:
                 f"Select a known, settled route before starting preview: {', '.join(unsettled)}"
             )
         self._preview_source_ids.clear()
+        self._preview_positions.clear()
         self._preview_channels = chans
 
         results = await asyncio.gather(*(ch.start_preview() for ch in chans), return_exceptions=True)
@@ -961,6 +965,7 @@ class Instrument:
     async def _reset_preview(self) -> None:
         """Invalidate preview, establish every new camera source identity, then resume delivery."""
         self._preview_source_ids.clear()
+        self._preview_positions.clear()
         await self._preview_revision.set(self._preview_revision.value + 1)
         cameras = {channel.camera.uid: channel.camera for channel in self.active_channels.values()}
         source_ids = await asyncio.gather(*(camera.reset_preview_stream() for camera in cameras.values()))
@@ -992,7 +997,28 @@ class Instrument:
             return
         if (channel_id := self._channel_for_camera(camera_id)) is None:
             return
-        await self._preview.emit((channel_id, layer, frame))
+        position = self._preview_position(camera_id, source.frame_idx)
+        await self._preview.emit((channel_id, layer, frame, position))
+
+    def _preview_position(self, camera_id: str, frame_idx: int) -> StagePosition | None:
+        positions = self._preview_positions.setdefault(camera_id, {})
+        if frame_idx > max(positions, default=-1):
+            stage = self._hal.stage
+            x, y, z = stage.x.position.value, stage.y.position.value, stage.z.position.value
+            position = None
+            if (
+                self._mode.value != AcquisitionMode.IDLE
+                and x is not None
+                and y is not None
+                and z is not None
+                and all(math.isfinite(value) for value in (x, y, z))
+            ):
+                position = StagePosition(x=x, y=y, z=z)
+            positions[frame_idx] = position
+            # Retain recent captures for late detail packets; never re-anchor an older unknown frame.
+            if len(positions) > 16:
+                del positions[min(positions)]
+        return positions.get(frame_idx)
 
     def _routing_scope(self, dimension: str | None) -> list[str]:
         if dimension is None:

@@ -240,16 +240,18 @@ export class PreviewGpuRenderer {
   async renderFull(
     canvas: HTMLCanvasElement,
     channels: readonly PreviewRenderChannel[],
-    catalog: ColormapCatalog
+    catalog: ColormapCatalog,
+    channelName?: string
   ): Promise<void> {
-    await this.#render(canvas, channels, FULL_VIEWPORT, catalog);
+    await this.#render(canvas, channels, FULL_VIEWPORT, catalog, channelName);
   }
 
   async #render(
     canvas: HTMLCanvasElement,
     channels: readonly PreviewRenderChannel[],
     viewport: PreviewViewport,
-    catalog: ColormapCatalog
+    catalog: ColormapCatalog,
+    channelName?: string
   ): Promise<void> {
     if (canvas.width <= 0 || canvas.height <= 0) return;
     const resources = await this.#resourcesPromise;
@@ -279,6 +281,7 @@ export class PreviewGpuRenderer {
 
       for (const channel of visible) {
         const name = channel.name!;
+        if (channelName !== undefined && name !== channelName) continue;
         const stored = this.#channels.get(name)!;
         this.#updateLut(resources, stored, channel.resolvedColormap, catalog);
         const bindGroup = this.#bindGroup(resources, stored);

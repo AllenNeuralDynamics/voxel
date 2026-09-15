@@ -15,7 +15,7 @@ import { clampTopLeft, displayName, pref } from '$lib/utils';
 
 import type { Client } from '../model/client.svelte';
 import { NumericModel } from '../model/prop.svelte';
-import type { DecodedPreviewFrame, PreviewSourceHeader } from './protocol';
+import type { DecodedPreviewFrame, PreviewSourceHeader, StagePosition } from './protocol';
 import { channelBoundingBox, PreviewGpuRenderer } from './render';
 import { PreviewStream } from './stream';
 
@@ -141,6 +141,11 @@ export function wheelZoomFactor(e: WheelEvent): number {
   return Math.exp(dy * WHEEL_ZOOM_SPEED);
 }
 
+export interface PreviewFrameMetadata extends PreviewSourceHeader {
+  position_um: StagePosition | null;
+  fov: readonly [number, number] | null;
+}
+
 export class PreviewChannel {
   name: string | undefined = $state<string | undefined>(undefined);
   config = $state<ChannelConfig | undefined>(undefined);
@@ -158,9 +163,9 @@ export class PreviewChannel {
   sensorWidth = $state(0);
   sensorHeight = $state(0);
   /** Current overview metadata. Pixel planes live only in the shared GPU store. */
-  overviewFrame: PreviewSourceHeader | null = $state<PreviewSourceHeader | null>(null);
+  overviewFrame: PreviewFrameMetadata | null = $state<PreviewFrameMetadata | null>(null);
   /** Current coherent detail metadata. Geometry always comes from source_rect_px. */
-  viewportFrame: PreviewSourceHeader | null = $state<PreviewSourceHeader | null>(null);
+  viewportFrame: PreviewFrameMetadata | null = $state<PreviewFrameMetadata | null>(null);
 
   constructor(public readonly idx: number) {}
 }
@@ -265,8 +270,8 @@ export class PreviewSession {
     return this.#renderer.render(canvas, this.channels, viewport, this.catalog);
   }
 
-  renderFull(canvas: HTMLCanvasElement): Promise<void> {
-    return this.#renderer.renderFull(canvas, this.channels, this.catalog);
+  renderFull(canvas: HTMLCanvasElement, channel?: PreviewChannel): Promise<void> {
+    return this.#renderer.renderFull(canvas, this.channels, this.catalog, channel?.name);
   }
 
   dispose(): void {
@@ -613,10 +618,11 @@ export class PreviewSession {
       return;
     }
     if (this.#lastDeliverySequences.get(key) !== frame.delivery.seq) return;
+    const metadata = { ...frame.source, position_um: frame.delivery.position_um, fov: this.#fov };
     if (frame.source.layer === 'overview') {
       channel.sensorWidth = frame.source.sensor_width;
       channel.sensorHeight = frame.source.sensor_height;
-      channel.overviewFrame = frame.source;
+      channel.overviewFrame = metadata;
       if (frame.histogram) channel.latestHistogram = frame.histogram;
       if (channel.levelsAppliedDeliveryStreamId !== String(this.#previewRevision)) {
         if (channel.preferences.levels.mode === 'auto') this.autoLevel(frame.delivery.channel_id);
@@ -627,7 +633,7 @@ export class PreviewSession {
         channel.sensorWidth = frame.source.sensor_width;
         channel.sensorHeight = frame.source.sensor_height;
       }
-      channel.viewportFrame = frame.source;
+      channel.viewportFrame = metadata;
     }
     this.zoomModel.value = 1 / this.#zoomExtent(this.viewport);
     this.redrawGeneration++;

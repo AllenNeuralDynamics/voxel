@@ -43,6 +43,13 @@ export interface VoxelPreviewHeader {
   state_cursor: StreamCursor;
   stamped_at_unix_us: number;
   frame_byte_length: number;
+  position_um: StagePosition | null;
+}
+
+export interface StagePosition {
+  x: number;
+  y: number;
+  z: number;
 }
 
 export interface StreamCursor {
@@ -123,6 +130,10 @@ function validateDelivery(header: VoxelPreviewHeader, actualFrameLength: number)
   validateCursor(header.state_cursor, 'state_cursor');
   nonnegativeInteger(header.stamped_at_unix_us, 'stamped_at_unix_us');
   positiveInteger(header.frame_byte_length, 'frame_byte_length');
+  const position = header.position_um;
+  if (position !== null && (!position || ![position.x, position.y, position.z].every(Number.isFinite))) {
+    throw new Error('position_um must contain finite x, y, and z coordinates or be null');
+  }
   if (header.frame_byte_length !== actualFrameLength) {
     throw new Error(`preview frame is ${actualFrameLength} bytes; expected ${header.frame_byte_length}`);
   }
