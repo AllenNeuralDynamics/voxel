@@ -80,7 +80,7 @@
         <Button
           variant={active === 'preview' ? 'danger' : 'secondary'}
           size="md"
-          class={cn('w-full whitespace-nowrap', active === null && 'rounded-r-none border-border')}
+          class={cn('w-full whitespace-nowrap', active === null && 'rounded-r-none border-control-line')}
           disabled={!instrument || (active === null && !canPreview)}
           onclick={togglePreview}
         >
@@ -91,7 +91,7 @@
         <Button
           variant={active === 'acquire' ? 'danger' : 'secondary'}
           size="md"
-          class={cn('w-full whitespace-nowrap', active === null && 'rounded-l-none border-l-0 border-border')}
+          class={cn('w-full whitespace-nowrap', active === null && 'rounded-l-none border-l-0 border-control-line')}
           disabled={!instrument}
           onclick={toggleAcquire}
         >

@@ -115,7 +115,7 @@
             {#if sensorSize && roi}
               <svg
                 viewBox="0 0 {sensorWidth} {sensorHeight}"
-                class="w-full rounded border border-border bg-element-bg"
+                class="w-full rounded border border-line-faint bg-element-bg"
                 style="max-height: 280px;"
                 preserveAspectRatio="xMidYMid meet"
               >
@@ -124,7 +124,7 @@
                   y={strokeWidth / 2}
                   width={sensorWidth - strokeWidth}
                   height={sensorHeight - strokeWidth}
-                  class="fill-none stroke-border"
+                  class="fill-none stroke-line"
                   stroke-width={strokeWidth}
                 />
                 <rect x="0" y="0" width={sensorWidth} height={sensorHeight} class="fill-element-bg" />
@@ -138,7 +138,7 @@
                 />
               </svg>
             {:else}
-              <div class="flex aspect-4/3 items-center justify-center rounded border border-border bg-element-bg">
+              <div class="flex aspect-4/3 items-center justify-center rounded border border-line-faint bg-element-bg">
                 <span class="text-fg-muted">No region data</span>
               </div>
             {/if}

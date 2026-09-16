@@ -114,7 +114,8 @@
     {#if activeInstrument}
       {@render navigationItem({
         label: 'Plan',
-        href: resolve('/stations/[stationId]/instruments/[instrumentId]/plan', routeParams)
+        href: resolve('/stations/[stationId]/instruments/[instrumentId]/plan', routeParams),
+        includeChildren: true
       })}
     {/if}
   </Sidebar.Menu>
@@ -165,7 +166,7 @@
 {/if}
 
 {#if activeInstrument}
-  <Sidebar.Group class="border-b border-border-faint pt-2 pb-3">
+  <Sidebar.Group class="border-b border-line-muted pt-2 pb-3">
     <Sidebar.GroupLabel>Sync</Sidebar.GroupLabel>
     <Sidebar.Menu>
       {#each generatorNavigation as item (item.href)}

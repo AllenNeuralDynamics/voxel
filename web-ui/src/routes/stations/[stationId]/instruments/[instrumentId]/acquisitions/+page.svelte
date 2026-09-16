@@ -95,7 +95,7 @@
   function statusClass(status: AcquisitionStatus): string {
     if (status === 'failed') return 'border-danger/30 bg-danger/10 text-danger';
     if (status === 'interrupted') return 'border-warning/30 bg-warning/10 text-warning';
-    return 'border-border bg-element-bg text-fg-muted';
+    return 'border-line-muted bg-element-bg text-fg-muted';
   }
 </script>
 
@@ -161,9 +161,9 @@
           </div>
         {/if}
 
-        <section class="overflow-hidden rounded-sm border border-border bg-card/50">
-          <div class="grid grid-cols-2 border-b border-border">
-            <div class="border-r border-border px-3 py-2.5">
+        <section class="overflow-hidden rounded-sm border border-line-muted bg-card/50">
+          <div class="grid grid-cols-2 border-b border-line-faint">
+            <div class="border-r border-line-faint px-3 py-2.5">
               <p class="text-sm text-fg-faint">Started</p>
               <p class="mt-0.5 truncate text-base text-fg">
                 {manifest.started_at ? dateFormat.format(new Date(manifest.started_at)) : 'Preparing'}
@@ -187,7 +187,7 @@
         </section>
 
         {#if progress}
-          <section class="mt-4 rounded-sm border border-border bg-card/50 p-3">
+          <section class="mt-4 rounded-sm border border-line-muted bg-card/50 p-3">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <p class="text-sm font-medium tracking-wide text-fg-muted uppercase">Current volume</p>
@@ -238,13 +238,13 @@
             </span>
           </div>
 
-          <div class="overflow-hidden rounded-sm border border-border bg-card/50">
+          <div class="overflow-hidden rounded-sm border border-line-muted bg-card/50">
             {#each manifest.volumes as volume, index (`${volume.task}:${volume.profile}`)}
               {@const current = index === currentVolumeIndex}
               <div
                 class={cn(
                   'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2.5',
-                  index > 0 && 'border-t border-border',
+                  index > 0 && 'border-t border-line-faint',
                   current && 'bg-element-selected/40'
                 )}
               >
@@ -268,10 +268,7 @@
         </section>
       </div>
     {:else}
-      <div
-        class="rounded-sm border border-border-faint/50 bg-element-bg/30 px-3 py-2 text-sm text-fg-muted"
-        role="status"
-      >
+      <div class="rounded-sm border border-line-faint bg-element-bg/30 px-3 py-2 text-sm text-fg-muted" role="status">
         No acquisition running.
       </div>
     {/if}
@@ -286,7 +283,7 @@
     </div>
 
     {#if history.length > 0}
-      <div class="overflow-hidden rounded-sm border border-border bg-card/50">
+      <div class="overflow-hidden rounded-sm border border-line-muted bg-card/50">
         {#each history as recent, index (recent.id)}
           <a
             href={resolve('/stations/[stationId]/instruments/[instrumentId]/acquisitions/[acquisitionId]', {
@@ -296,7 +293,7 @@
             })}
             class={cn(
               'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-3 transition-colors hover:bg-element-hover',
-              index > 0 && 'border-t border-border'
+              index > 0 && 'border-t border-line-faint'
             )}
           >
             {@render statusIcon(recent.status)}
@@ -317,7 +314,7 @@
         {/each}
       </div>
     {:else}
-      <div class="rounded-sm border border-dashed border-border px-5 py-10 text-center">
+      <div class="rounded-sm border border-dashed border-line-muted px-5 py-10 text-center">
         <CircleDashed width="26" height="26" class="mx-auto text-fg-faint" />
         <p class="mt-3 text-base text-fg-muted">
           {manifest
@@ -327,7 +324,7 @@
         {#if instrument}
           <a
             href={resolve('/stations/[stationId]/instruments/[instrumentId]/plan', routeParams)}
-            class="mt-4 inline-flex h-ui-sm items-center rounded border border-border bg-element-bg px-3 text-base text-fg transition-colors hover:bg-element-hover"
+            class="mt-4 inline-flex h-ui-sm items-center rounded border border-control-line bg-element-bg px-3 text-base text-fg transition-colors hover:bg-element-hover"
           >
             Go to Plan
           </a>

@@ -17,7 +17,7 @@
     img.style.position = 'fixed';
     img.style.zIndex = '100';
     img.style.opacity = '0';
-    img.className = 'pointer-events-none rounded-sm border border-border/60 object-cover shadow-xl';
+    img.className = 'pointer-events-none rounded-sm border border-line-faint object-cover shadow-xl';
 
     img.onload = () => {
       const aspect = img.naturalWidth / img.naturalHeight || 1;

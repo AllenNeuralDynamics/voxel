@@ -66,7 +66,7 @@
           {#each group.deviceIds as deviceId (deviceId)}
             {@const entry = topology.get(deviceId)}
             {#if entry}
-              <div class="rounded-lg border border-border p-3 shadow-sm">
+              <div class="rounded-lg border border-line-muted p-3 shadow-sm">
                 {@render card(deviceId, entry)}
               </div>
             {/if}

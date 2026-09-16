@@ -6,13 +6,12 @@
   import { resolveInstrumentView } from '$lib/instrument-view';
   import { Button, JsonView, Select } from '$lib/kit';
   import { EnumeratedModel, getVoxelStation, NumericModel, type RoutingDimension } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import { prefs } from '$lib/prefs';
   import { Select as EnumeratedSelect } from '$lib/prop/enumerated';
   import { SpinBox } from '$lib/prop/numeric';
   import { getSpatialUnit } from '$lib/spatial-units';
   import { displayName, toastError } from '$lib/utils';
-
-  import PageHeader from '../../../PageHeader.svelte';
 
   const app = getVoxelStation();
   const id = $derived(page.params.instrumentId);
@@ -61,7 +60,7 @@
             {@const options = dimension.routes.map((route) => ({ value: route, label: dimension.routeLabel(route) }))}
             <section
               id={`routing-${dimension.id}`}
-              class="min-w-0 scroll-mt-4 space-y-3 rounded-lg border border-border-faint/50 p-3"
+              class="min-w-0 scroll-mt-4 space-y-3 rounded-lg border border-line-faint p-3"
               aria-labelledby={`routing-${dimension.id}-heading`}
             >
               <div class="flex flex-wrap items-center gap-2">
@@ -171,7 +170,7 @@
 
     {#if hal || state}
       <section
-        class="min-w-0 space-y-3 rounded-lg border border-border-faint/50 p-3"
+        class="min-w-0 space-y-3 rounded-lg border border-line-faint p-3"
         aria-labelledby="routing-configuration-heading"
       >
         <h2 id="routing-configuration-heading" class="text-sm text-fg-muted">Routing configuration</h2>

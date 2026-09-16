@@ -284,33 +284,6 @@ class ImagingProtocol(FrozenModel):
         return violations
 
 
-class Stencil(FrozenModel):
-    """Tile-mosaic and z-range defaults prefilled into newly-authored tasks. All positions in micrometers (µm)."""
-
-    x_offset: float = 0.0
-    y_offset: float = 0.0
-    overlap_x: float = Field(default=0.1, ge=0.0, lt=1.0)
-    overlap_y: float = Field(default=0.1, ge=0.0, lt=1.0)
-
-    z_start: float = 0.0
-    z_end: float = 511.0
-
-    @model_validator(mode="after")
-    def _check_z_range(self) -> Self:
-        if self.z_end < self.z_start:
-            raise ValueError(f"z_end ({self.z_end}) must be >= z_start ({self.z_start})")
-        return self
-
-
-class StencilPatch(Patch):
-    x_offset: float | None = None
-    y_offset: float | None = None
-    overlap_x: Annotated[float, Field(ge=0.0, lt=1.0)] | None = None
-    overlap_y: Annotated[float, Field(ge=0.0, lt=1.0)] | None = None
-    z_start: float | None = None
-    z_end: float | None = None
-
-
 class ZStack(FrozenModel):
     """A stage position and z-range. All coordinates are absolute stage positions in micrometers (µm)."""
 
@@ -367,7 +340,6 @@ class InstrumentDefaults(FrozenModel):  # everything that can live in config.def
     routing: dict[str, RoutingRule] = Field(default_factory=dict)
     metadata_cls: MetadataCls = ExperimentMetadata
     output: WriterSettings = Field(default_factory=WriterSettings)
-    stencil: Stencil = Field(default_factory=Stencil)
     traversal: TileOrder = TileOrder.SNAKE_ROW
 
     def resolve_routes(

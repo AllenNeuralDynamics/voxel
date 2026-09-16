@@ -125,7 +125,7 @@
 
   // --- Shell nav ---
 
-  const workflowRoutes = ['/plan'] as const;
+  const workflowRoutes = ['/plan', '/grid'] as const;
   let lastSelection = $state<{ stationId: string; instrumentId: string } | null>(null);
   const selectedInstrumentId = $derived(
     page.params.instrumentId ?? (lastSelection?.stationId === stationId ? lastSelection.instrumentId : '')
@@ -382,11 +382,11 @@
     <Sidebar.Provider class="h-full min-h-0 overflow-hidden">
       <Sidebar.Root
         collapsible="none"
-        class="w-56 shrink-0 overflow-hidden border-r border-border"
+        class="w-56 shrink-0 overflow-hidden border-r border-line"
         role="navigation"
         aria-label="Instrument navigation"
       >
-        <Sidebar.Header class="py-2">
+        <Sidebar.Header class="h-pane-header shrink-0 justify-center py-0">
           <StationMenu
             {stationId}
             {stationName}
@@ -402,7 +402,7 @@
           <InstrumentNavigation instrumentId={selectedInstrumentId || app.activeName || undefined} />
         </Sidebar.Content>
         {#if app.instrument}
-          <Sidebar.Footer class="flex-row gap-1 border-t border-border-faint bg-element-bg/40 p-2">
+          <Sidebar.Footer class="flex-row gap-1 border-t border-line-muted bg-element-bg/40 p-2">
             {#each ['undo', 'redo'] as const as action (action)}
               {@const label = action === 'undo' ? 'Undo' : 'Redo'}
               {@const edit = app.instrument.history[`${action}_label`]}
@@ -427,7 +427,7 @@
             {/each}
           </Sidebar.Footer>
         {:else if instrumentId && app.stationStatus !== 'closing'}
-          <Sidebar.Footer class="gap-1 border-t border-border-faint bg-element-bg/40 p-2">
+          <Sidebar.Footer class="gap-1 border-t border-line-muted bg-element-bg/40 p-2">
             <Button
               variant="default"
               size="sm"

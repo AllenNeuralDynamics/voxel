@@ -8,9 +8,9 @@
   import { resolveInstrumentView } from '$lib/instrument-view';
   import { Button, JsonView } from '$lib/kit';
   import { type DeviceHandle, getVoxelStation, type Instrument, type Prop } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import { displayName, toastError } from '$lib/utils';
 
-  import PageHeader from '../../../../../PageHeader.svelte';
   import ProfilePropertyRow from '../../ProfilePropertyRow.svelte';
 
   const app = getVoxelStation();
@@ -111,7 +111,7 @@
   });
   const numberFormat = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 6 });
   const cardClass =
-    'group flex min-w-0 flex-col gap-4 rounded-lg border border-border-faint/50 bg-elevated/60 p-3 transition-colors hover:border-border hover:bg-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focused';
+    'group flex min-w-0 flex-col gap-4 rounded-lg border border-line-faint bg-elevated/60 p-3 transition-colors hover:border-line hover:bg-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focused';
   const gridClass = 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-3';
   const profileActionClass = 'h-ui-xs w-20 rounded-md text-base';
 </script>
@@ -127,7 +127,7 @@
   )}
 
   <section
-    class="min-w-0 self-start rounded-lg border border-border-faint/50 bg-elevated/60 p-3"
+    class="min-w-0 self-start rounded-lg border border-line-faint bg-elevated/60 p-3"
     aria-label={displayName(deviceId)}
   >
     <button
@@ -239,7 +239,7 @@
                 {:else}<p class="text-sm text-fg-muted">Configuration unavailable</p>{/if}
               </a>
             {:else}
-              <p class="rounded-lg border border-dashed border-border-faint/40 p-4 text-sm text-fg-muted">
+              <p class="rounded-lg border border-dashed border-line-faint p-4 text-sm text-fg-muted">
                 No channels assigned.
               </p>
             {/each}
@@ -290,7 +290,7 @@
                   </dl>
                 </a>
               {:else}
-                <p class="rounded-lg border border-dashed border-border-faint/40 p-4 text-sm text-fg-muted">
+                <p class="rounded-lg border border-dashed border-line-faint p-4 text-sm text-fg-muted">
                   No synchronization configured.
                 </p>
               {/each}
@@ -305,7 +305,7 @@
               {#each otherDevices as deviceId (deviceId)}
                 {@render otherDeviceCard(instrument, deviceId, instrument.devices.get(deviceId))}
               {:else}
-                <p class="rounded-lg border border-dashed border-border-faint/40 p-4 text-sm text-fg-muted">
+                <p class="rounded-lg border border-dashed border-line-faint p-4 text-sm text-fg-muted">
                   No other devices referenced.
                 </p>
               {/each}
@@ -329,7 +329,7 @@
           {/if}
         {/if}
         <section
-          class="min-w-0 space-y-3 rounded-lg border border-border-faint/50 p-3"
+          class="min-w-0 space-y-3 rounded-lg border border-line-faint p-3"
           aria-labelledby="profile-configuration-heading"
         >
           <h2 id="profile-configuration-heading" class="text-sm text-fg-muted">Profile configuration</h2>
@@ -342,7 +342,7 @@
     </main>
 
     {#if instrument}
-      <footer class="flex h-10 shrink-0 items-center justify-end gap-1.5 border-t border-border px-4">
+      <footer class="flex h-10 shrink-0 items-center justify-end gap-1.5 border-t border-line-muted px-4">
         <Button variant="outline" size="xs" onclick={() => toastError(instrument.applySettings())}>Apply Saved</Button>
         <Button variant="outline" size="xs" onclick={() => toastError(instrument.saveSettings())}>Save Current</Button>
       </footer>

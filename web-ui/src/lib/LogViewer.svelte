@@ -117,7 +117,7 @@
         class={cn(
           'flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 transition-colors',
           wrap.get()
-            ? 'border-border bg-element-selected text-fg shadow-sm'
+            ? 'border-line-selected bg-element-selected text-fg shadow-sm'
             : 'border-transparent text-fg-muted hover:text-fg'
         )}
       >
@@ -138,7 +138,7 @@
     <div class="min-h-0 flex-1 overflow-hidden px-2 pt-0 pb-2">
       <div
         bind:this={container}
-        class="log-container h-full overflow-y-auto rounded-sm border border-border-faint/50 bg-canvas font-mono text-sm"
+        class="log-container h-full overflow-y-auto rounded-sm border border-line-faint bg-canvas font-mono text-sm"
       >
         {#if filtered.length === 0}
           <div class="flex h-full items-center justify-center text-fg-muted">
@@ -170,7 +170,7 @@
   {/if}
 
   {#if showFooter}
-    <footer class="flex h-7 shrink-0 items-center border-t border-border bg-elevated text-base">
+    <footer class="flex h-7 shrink-0 items-center border-t border-line-muted bg-elevated text-base">
       {#if ontoggle}
         <button
           type="button"
@@ -200,7 +200,7 @@
 <style>
   .log-container {
     scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
   .log-container::-webkit-scrollbar {
@@ -212,11 +212,11 @@
   }
 
   .log-container::-webkit-scrollbar-thumb {
-    background-color: var(--border);
+    background-color: var(--scrollbar-thumb);
     border-radius: 3px;
   }
 
   .log-container::-webkit-scrollbar-thumb:hover {
-    background-color: var(--fg-muted);
+    background-color: var(--scrollbar-thumb-hover);
   }
 </style>

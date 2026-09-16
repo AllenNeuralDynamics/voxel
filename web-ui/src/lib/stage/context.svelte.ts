@@ -9,6 +9,7 @@ export type MenuSelection = { point: Point; destination?: Point; hits: Konva.Sha
 export interface StageFeature {
   readonly id: string;
   readonly label: string;
+  readonly menuOrder?: number;
   readonly visible: boolean;
   setVisible(visible: boolean): void;
   menu?(selection: MenuSelection): Snippet<[MenuSelection]> | undefined;
@@ -24,6 +25,7 @@ export interface StageContext {
   readonly altHeld: boolean;
   readonly cursor: Point | null;
   readonly menuSelection: MenuSelection | null;
+  readonly menuPreview: Point | null;
   readonly interactionEnabled: boolean;
   project(point: Point): Point;
   unproject(point: Point): Point;

@@ -25,7 +25,7 @@
     bind:this={ref}
     data-slot={dataSlot}
     class={cn(
-      'focus-visible:border-focused focus-visible:ring-focused h-ui-xs w-full min-w-0 rounded border border-input bg-element-bg px-2 py-1 text-base text-fg transition-colors outline-none file:inline-flex file:h-ui-xs file:border-0 file:bg-transparent file:text-base file:font-medium file:text-fg placeholder:text-fg-muted focus-visible:ring-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-element-bg disabled:opacity-50 aria-invalid:border-danger aria-invalid:ring-danger/20',
+      'focus-visible:border-focused focus-visible:ring-focused h-ui-xs w-full min-w-0 rounded border border-control-line bg-element-bg px-2 py-1 text-base text-fg transition-colors outline-none file:inline-flex file:h-ui-xs file:border-0 file:bg-transparent file:text-base file:font-medium file:text-fg placeholder:text-fg-muted focus-visible:ring-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-element-bg disabled:opacity-50 aria-invalid:border-danger aria-invalid:ring-danger/20',
       className
     )}
     type="file"
@@ -38,7 +38,7 @@
     bind:this={ref}
     data-slot={dataSlot}
     class={cn(
-      'focus-visible:border-focused focus-visible:ring-focused h-ui-xs w-full min-w-0 rounded border border-input bg-element-bg px-2 py-1 text-base text-fg transition-colors outline-none file:inline-flex file:h-ui-xs file:border-0 file:bg-transparent file:text-base file:font-medium file:text-fg placeholder:text-fg-muted focus-visible:ring-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-element-bg disabled:opacity-50 aria-invalid:border-danger aria-invalid:ring-danger/20',
+      'focus-visible:border-focused focus-visible:ring-focused h-ui-xs w-full min-w-0 rounded border border-control-line bg-element-bg px-2 py-1 text-base text-fg transition-colors outline-none file:inline-flex file:h-ui-xs file:border-0 file:bg-transparent file:text-base file:font-medium file:text-fg placeholder:text-fg-muted focus-visible:ring-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-element-bg disabled:opacity-50 aria-invalid:border-danger aria-invalid:ring-danger/20',
       className
     )}
     {type}

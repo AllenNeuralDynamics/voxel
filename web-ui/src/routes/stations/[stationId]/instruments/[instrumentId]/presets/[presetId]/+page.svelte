@@ -8,8 +8,7 @@
   import { page } from '$app/state';
   import { Button, Dialog, JsonView } from '$lib/kit';
   import { ApiError, errorMessage, getVoxelStation, type PresetRecord } from '$lib/model';
-
-  import PageHeader from '../../../../PageHeader.svelte';
+  import PageHeader from '$lib/PageHeader.svelte';
 
   const app = getVoxelStation();
   const stationId = $derived(page.params.stationId ?? '');
@@ -127,7 +126,7 @@
   </div>
 
   {#if selected}
-    <footer class="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-4 py-3">
+    <footer class="flex shrink-0 flex-wrap items-center gap-2 border-t border-line-muted px-4 py-3">
       <Button variant="ghost" size="sm" class="mr-auto" disabled={busy} onclick={() => (deleteDialogOpen = true)}>
         Delete…
       </Button>

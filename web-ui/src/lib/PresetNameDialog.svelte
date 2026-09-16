@@ -48,7 +48,7 @@
     <Dialog.Header>
       <Dialog.Title>{title}</Dialog.Title>
     </Dialog.Header>
-    <hr class="-mx-4 border-border" />
+    <hr class="-mx-4 border-line-faint" />
 
     <div class="flex flex-col gap-4 py-2">
       <p class="text-lg text-fg-muted">{description}</p>
@@ -57,7 +57,7 @@
       </Field>
     </div>
 
-    <hr class="-mx-4 border-border" />
+    <hr class="-mx-4 border-line-faint" />
     <Dialog.Footer>
       <div class="flex-1"></div>
       <Button variant="outline" disabled={busy} onclick={() => (open = false)}>Cancel</Button>

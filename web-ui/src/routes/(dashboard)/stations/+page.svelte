@@ -40,11 +40,11 @@
   {:else if dashboard.error}
     <div class="max-w-lg rounded-lg border border-danger/40 bg-danger/5 p-4 text-danger">{dashboard.error}</div>
   {:else if dashboard.stations.length === 0}
-    <div class="rounded-lg border border-dashed border-border p-10 text-center text-fg-muted">
+    <div class="rounded-lg border border-dashed border-line-muted p-10 text-center text-fg-muted">
       No stations are available.
     </div>
   {:else}
-    <div class="max-w-lg rounded-lg border border-dashed border-border p-10 text-center text-fg-muted">
+    <div class="max-w-lg rounded-lg border border-dashed border-line-muted p-10 text-center text-fg-muted">
       No instruments are installed across the fleet.
     </div>
   {/if}

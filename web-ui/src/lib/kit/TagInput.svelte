@@ -4,11 +4,15 @@
   export const tagInputVariants = tv({
     slots: {
       wrapper: 'flex flex-wrap gap-1',
-      chip: ['flex items-center rounded border border-input', 'transition-colors', 'focus-within:border-focused'],
+      chip: [
+        'flex items-center rounded border border-control-line',
+        'transition-colors',
+        'focus-within:border-focused'
+      ],
       input: 'bg-transparent outline-none placeholder-fg-muted',
       remove: 'shrink-0 rounded-r text-fg-muted/50 transition-colors hover:text-danger',
       add: [
-        'flex items-center justify-center rounded border border-dashed border-input',
+        'flex items-center justify-center rounded border border-dashed border-control-line',
         'text-fg-muted/50 transition-colors',
         'hover:border-fg/20 hover:text-fg'
       ]

@@ -125,7 +125,10 @@
 
       {#if lastResult}
         <div
-          class={cn('rounded border p-2', isError ? 'border-danger/30 bg-danger/5' : 'border-border bg-element-bg/30')}
+          class={cn(
+            'rounded border p-2',
+            isError ? 'border-danger/30 bg-danger/5' : 'border-line-muted bg-element-bg/30'
+          )}
         >
           <pre
             class={cn(

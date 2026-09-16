@@ -17,7 +17,7 @@
 
 <div class="pointer-events-auto flex w-full flex-col overflow-hidden overlay-panel">
   {#if channelsVisible.get()}
-    <div class="divide-y divide-border border-b border-border">
+    <div class="divide-y divide-line-faint border-b border-line-muted">
       {#each namedChannels as channel (channel.idx)}
         <div class="px-2.5 py-2">
           <PreviewChannelPrefs {previewer} {channel} />

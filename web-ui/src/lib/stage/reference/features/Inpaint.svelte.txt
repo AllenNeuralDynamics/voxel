@@ -281,7 +281,7 @@
   {#each list as m (m.id)}
     {@const isViewed = inpaint.isViewed(m.id)}
     {@const isActive = activeId === m.id}
-    <div class={cn('mx-1.5 rounded-xs', isViewed && 'border-t border-border/60 bg-element-selected/40')}>
+    <div class={cn('mx-1.5 rounded-xs', isViewed && 'border-t border-line-muted bg-element-selected/40')}>
       <ContextMenu.Root>
         <ContextMenu.Trigger>
           {#snippet child({ props })}
@@ -329,7 +329,7 @@
         </ContextMenu.Content>
       </ContextMenu.Root>
       {#if isViewed && viewedList.length === 1}
-        <div class="rounded-xs border-y border-border/60 pb-2">
+        <div class="rounded-xs border-y border-line-muted pb-2">
           {#each Object.entries(m.channels) as [channel, { weight }] (channel)}
             <div class="flex h-8 items-center gap-2 px-3.5">
               <span class="w-10 shrink-0 truncate text-base text-fg-muted">{channel}</span>

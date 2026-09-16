@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from 'bits-ui';
 
-  import { LucideCircle as CircleIcon } from '$lib/icons';
   import { cn, type WithoutChild } from '$lib/utils';
 
   let {
@@ -22,9 +21,12 @@
   {...restProps}
 >
   {#snippet children({ checked })}
-    <span class="pointer-events-none absolute inset-s-2 flex size-3.5 items-center justify-center">
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-s-2 flex size-3.5 items-center justify-center rounded-full border border-current"
+    >
       {#if checked}
-        <CircleIcon class="size-2 fill-current" />
+        <span class="size-1.5 rounded-full bg-current"></span>
       {/if}
     </span>
     {@render childrenProp?.({ checked })}

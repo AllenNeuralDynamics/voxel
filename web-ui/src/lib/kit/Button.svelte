@@ -15,9 +15,9 @@
       variant: {
         default: 'border-primary bg-primary text-primary-fg hover:bg-primary/90 active:bg-primary/80',
         secondary:
-          'border-input bg-element-bg text-fg hover:border-border hover:bg-element-hover active:bg-element-active',
+          'border-control-line bg-element-bg text-fg hover:border-control-line-hover hover:bg-element-hover active:bg-element-active',
         outline:
-          'border-input bg-transparent hover:border-border hover:bg-element-hover hover:text-fg active:bg-element-active focus:border-focused',
+          'border-control-line bg-transparent hover:border-control-line-hover hover:bg-element-hover hover:text-fg active:bg-element-active focus:border-focused',
         ghost: 'border-transparent hover:bg-element-hover hover:text-fg active:bg-element-active focus:border-focused',
         danger: 'border-danger bg-danger text-danger-fg hover:bg-danger/90 active:bg-danger/80',
         success: 'border-success bg-success text-success-fg hover:bg-success/90 active:bg-success/80',

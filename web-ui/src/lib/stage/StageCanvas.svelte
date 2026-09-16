@@ -1,4 +1,5 @@
 <script module lang="ts">
+  import type Konva from 'konva';
   import type { Snippet } from 'svelte';
 
   import type { MenuSelection } from './context.svelte';
@@ -11,14 +12,15 @@
     viewport?: Viewport | null;
     marquee?: Bounds | null;
     children?: Snippet;
-    menu?: Snippet<[MenuSelection, Snippet, (point: Point) => void]>;
+    menu?: Snippet<
+      [MenuSelection, Snippet, (point: Point) => void, (bounds: Bounds) => void, (point: Point | null) => void]
+    >;
     overlay?: Snippet<[ViewTransform, number, Point | null]>;
-    resolveDestination?: (point: Point) => Point | undefined;
+    resolveDestination?: (point: Point, hits: Konva.Shape[]) => Point | undefined;
   }
 </script>
 
 <script lang="ts">
-  import type Konva from 'konva';
   import { onMount } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { Group, Layer, Rect, Stage } from 'svelte-konva';
@@ -26,6 +28,7 @@
   import { browser } from '$app/environment';
   import { Close, FitToScreen, Layers } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
+  import { watchTheme } from '$lib/themes/manager.svelte';
 
   import { provideStageContext, type StageFeature } from './context.svelte';
   import { box, fit, intersect, project, screenRect, screenTransform, unproject, worldTransform } from './geometry';
@@ -56,6 +59,7 @@
   const features = new SvelteMap<string, StageFeature>();
   let menuOpen = $state(false);
   let menuSelection = $state.raw<MenuSelection | null>(null);
+  let menuPreview = $state.raw<Point | null>(null);
   let borderColor = $state('#52525b');
   let selectionColor = $state('#e5e7eb');
 
@@ -109,6 +113,17 @@
     setView(view.x + width / 2 - screen.x, view.y + height / 2 - screen.y, view.scale);
   }
 
+  function fitBounds(target: Bounds) {
+    if (
+      !valid ||
+      target.maxX <= target.minX ||
+      target.maxY <= target.minY ||
+      !Object.values(target).every(Number.isFinite)
+    )
+      return;
+    viewport = fit(target, width, height, maxScale);
+  }
+
   provideStageContext({
     get bounds() {
       return bounds;
@@ -136,6 +151,9 @@
     },
     get menuSelection() {
       return menuSelection;
+    },
+    get menuPreview() {
+      return menuPreview;
     },
     get interactionEnabled() {
       return !altHeld && !selectionStart && !menuOpen;
@@ -229,6 +247,7 @@
 
   function openMenu(event: Konva.KonvaEventObject<PointerEvent>) {
     if (!stage) return;
+    menuPreview = null;
     const screen = eventPoint(event.evt);
     const world = unproject(screen, view, orientation);
     if (
@@ -241,22 +260,29 @@
       menuSelection = { bounds: { ...marquee } };
     } else {
       marquee = null;
+      const hits = stage.node.getAllIntersections(screen).sort((a, b) => b.getAbsoluteZIndex() - a.getAbsoluteZIndex());
       menuSelection = {
         point: world,
-        destination: resolveDestination?.(world),
-        hits: stage.node.getAllIntersections(screen).sort((a, b) => b.getAbsoluteZIndex() - a.getAbsoluteZIndex())
+        destination: resolveDestination?.(world, hits),
+        hits
       };
     }
   }
 
   $effect(() => {
-    if (!menuOpen) menuSelection = null;
+    if (!menuOpen) {
+      menuSelection = null;
+      menuPreview = null;
+    }
+  });
+
+  watchTheme(() => {
+    const style = getComputedStyle(host);
+    borderColor = style.getPropertyValue('--color-line').trim() || borderColor;
+    selectionColor = style.getPropertyValue('--color-fg').trim() || selectionColor;
   });
 
   onMount(() => {
-    const style = getComputedStyle(host);
-    borderColor = style.getPropertyValue('--color-border').trim() || borderColor;
-    selectionColor = style.getPropertyValue('--color-fg').trim() || selectionColor;
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Alt') altHeld = true;
       if (event.key === 'Escape') {
@@ -368,7 +394,7 @@
           Layers
         </ContextMenu.SubTrigger>
         <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
-          {#each [...features.values()] as feature (feature.id)}
+          {#each [...features.values()].sort((a, b) => (a.menuOrder ?? 0) - (b.menuOrder ?? 0)) as feature (feature.id)}
             <ContextMenu.CheckboxItem
               checked={feature.visible}
               closeOnSelect={false}
@@ -397,6 +423,11 @@
 
 {#snippet defaultMenu()}
   {#if menuSelection && 'bounds' in menuSelection}
+    {@const selectedBounds = menuSelection.bounds}
+    <ContextMenu.Item onSelect={() => fitBounds(selectedBounds)}>
+      <FitToScreen width="14" height="14" />
+      Fit to selection
+    </ContextMenu.Item>
     <ContextMenu.Item onSelect={() => (marquee = null)}>
       <Close width="14" height="14" />
       Clear selection
@@ -411,7 +442,7 @@
 
 {#snippet mainMenu(selection: MenuSelection)}
   {#if menu}
-    {@render menu(selection, defaultMenu, center)}
+    {@render menu(selection, defaultMenu, center, fitBounds, (point) => (menuPreview = point))}
   {:else}
     {@render defaultMenu()}
   {/if}

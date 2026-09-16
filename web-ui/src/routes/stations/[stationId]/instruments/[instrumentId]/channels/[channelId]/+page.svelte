@@ -21,10 +21,10 @@
     Prop,
     RoiModel
   } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import { SpinBox } from '$lib/prop/numeric';
   import { cn, displayName, toastError } from '$lib/utils';
 
-  import PageHeader from '../../../../PageHeader.svelte';
   import ProfilePropertyRow from '../../profiles/ProfilePropertyRow.svelte';
 
   const app = getVoxelStation();
@@ -290,7 +290,7 @@
                 y="0"
                 width={sensorW}
                 height={sensorH}
-                class="fill-fg-faint/10 stroke-border"
+                class="fill-fg-faint/10 stroke-line"
                 stroke-width={strokeWidth}
               />
               <rect
@@ -487,7 +487,7 @@
         </section>
       {/if}
       <section
-        class={cn('max-w-6xl space-y-3 rounded-lg border border-border-faint/50 p-3', activeInstrument && 'mt-7')}
+        class={cn('max-w-6xl space-y-3 rounded-lg border border-line-faint p-3', activeInstrument && 'mt-7')}
         aria-labelledby="channel-definition-heading"
       >
         <h2 id="channel-definition-heading" class="text-sm text-fg-muted">Channel definition</h2>
@@ -500,7 +500,7 @@
     {/if}
   </main>
   {#if instrument && channel}
-    <footer class="flex h-10 shrink-0 items-center justify-end gap-1.5 border-t border-border px-4">
+    <footer class="flex h-10 shrink-0 items-center justify-end gap-1.5 border-t border-line-muted px-4">
       <Button variant="outline" size="xs" onclick={() => toastError(instrument.applySettings())}>Apply Saved</Button>
       <Button variant="outline" size="xs" onclick={() => toastError(instrument.saveSettings())}>Save Current</Button>
     </footer>

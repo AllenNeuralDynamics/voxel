@@ -7,7 +7,7 @@
       variant: {
         default: 'hover:bg-element-hover hover:text-fg',
         outline:
-          'bg-transparent shadow-[0_0_0_1px_var(--border)] hover:bg-element-hover hover:text-fg hover:shadow-[0_0_0_1px_var(--border-focused)]'
+          'bg-transparent shadow-[0_0_0_1px_var(--control-line)] hover:bg-element-hover hover:text-fg hover:shadow-[0_0_0_1px_var(--border-focused)]'
       },
       size: {
         default: 'h-ui-sm text-base',

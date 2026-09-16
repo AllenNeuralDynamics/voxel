@@ -4,7 +4,7 @@
   export const checkboxVariants = tv({
     base: [
       'flex items-center justify-center rounded border',
-      'border-input bg-element-bg',
+      'border-control-line bg-element-bg',
       'transition-colors',
       'disabled:cursor-not-allowed disabled:opacity-50',
       'data-[state=checked]:border-primary data-[state=checked]:bg-primary',

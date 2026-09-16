@@ -48,7 +48,7 @@
       </div>
     {/each}
   </div>
-  <div class="border-t border-border px-3 py-1">
+  <div class="border-t border-line-muted px-3 py-1">
     <button
       type="button"
       class="flex h-7 w-full cursor-pointer items-center gap-2 text-sm text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"

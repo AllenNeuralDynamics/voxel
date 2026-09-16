@@ -153,7 +153,7 @@
             <span class="max-w-full min-w-0 wrap-anywhere whitespace-normal text-fg-muted">{key}:</span>
             <span class="text-base text-fg-faint">{summary(value)}</span>
           </summary>
-          <div class="ml-2 min-w-0 border-l border-border/50 pl-2">
+          <div class="ml-2 min-w-0 border-l border-line-faint pl-2">
             <JsonView
               data={value}
               baseline={baselineValue}

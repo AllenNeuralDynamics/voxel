@@ -66,10 +66,17 @@ hal:
           target: *fw_target
           init:
             slots: { 0: "BP525", 1: "BP700", 2: "BP780" }
-        illumination_path_selector:
-          target: *fw_target
+        excitation_side_axis:
+          target: vxl.devices.axes.simulated.SimulatedContinuousAxis
+          init: { lower_limit: 0, upper_limit: 100, has_ttl_stepper: false }
+        excitation_selector_1:
+          target: vxl.devices.axes.discrete.MappedDiscreteAxis
           init:
-            slots: { 0: "sample", 1: "calibration" }
+            axis: excitation_side_axis
+            tolerance: 1
+            slots:
+              "0": { label: "left", position: 0 }
+              "1": { label: "right", position: 100 }
         x_axis:
           target: &axis_target vxl.devices.axes.simulated.SimulatedContinuousAxis
           init: { lower_limit: 0, upper_limit: 36700 }
@@ -92,11 +99,15 @@ hal:
         detection_path_selector:
           target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
           init:
-            slots: { 0: "sample", 1: "calibration" }
+            slots: { 0: "specimen", 1: "calibration" }
       kind: subprocess
     node_2:
       devices:
         camera_2: *sim_camera
+        excitation_selector_2:
+          target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+          init:
+            slots: { 0: "left", 1: "right" }
       kind: subprocess
 
   stage:
@@ -108,41 +119,54 @@ hal:
     camera_1:
       filter_wheels: [fw_detection_shared, fw_emission_cam1]
       magnification: 8.0
-      routing: [beam_path]
+      routing: [detection_path]
     camera_2:
       filter_wheels: [fw_detection_shared, fw_emission_cam2]
       magnification: 8.0
-      routing: [beam_path]
+      routing: [detection_path]
 
   illumination:
     laser_405:
-      routing: [beam_path]
+      routing: [excitation_side]
     laser_488:
-      routing: [beam_path]
+      routing: [excitation_side]
     laser_561:
-      routing: [beam_path]
+      routing: [excitation_side]
     laser_640:
-      routing: [beam_path]
+      routing: [excitation_side]
     laser_730:
-      routing: [beam_path]
+      routing: [excitation_side]
 
   optical_routing:
-    beam_path:
+    detection_path:
       type: select
       routes:
-        sample:
+        specimen:
           selectors:
-            illumination_path_selector: sample
-            detection_path_selector: sample
+            detection_path_selector: specimen
         calibration:
           selectors:
-            illumination_path_selector: calibration
             detection_path_selector: calibration
+    excitation_side:
+      type: split-x
+      routes:
+        lower:
+          label: Left illumination
+          selectors:
+            excitation_selector_1: left
+            excitation_selector_2: left
+        upper:
+          label: Right illumination
+          selectors:
+            excitation_selector_1: right
+            excitation_selector_2: right
 
 default:
   routing:
-    beam_path:
-      selected: sample
+    detection_path:
+      selected: specimen
+    excitation_side:
+      threshold: 20000
 
   imaging:
     channels:
@@ -341,14 +365,6 @@ default:
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_730: *laser_waveform_ch1
-
-  stencil:
-    x_offset: 0.0
-    y_offset: 0.0
-    overlap_x: 0.1
-    overlap_y: 0.1
-    z_start: 0.0
-    z_end: 511.0
 
   traversal: snake_row
 

@@ -199,16 +199,6 @@ export interface SplitRoutingRule {
 
 export type RoutingRule = SelectRoutingRule | SplitRoutingRule;
 
-/** Mosaic + z-range defaults prefilled into new tasks (µm). */
-export interface Stencil {
-  x_offset: number;
-  y_offset: number;
-  overlap_x: number;
-  overlap_y: number;
-  z_start: number;
-  z_end: number;
-}
-
 /** A stage position (x, y) + z-range. */
 export interface ZStack {
   x: number;
@@ -260,7 +250,6 @@ export interface InstrumentDefaults {
   routing: Record<string, RoutingRule>;
   metadata_cls: string;
   output: WriterSettings;
-  stencil: Stencil;
   traversal: TileOrder;
 }
 
@@ -318,16 +307,6 @@ export interface WriterPatch {
   compression?: Compression | null;
   downscale_type?: DownscaleType | null;
   target_shard_gb?: number | null;
-}
-
-/** Edit the mosaic + z-range planning defaults. */
-export interface StencilPatch {
-  x_offset?: number | null;
-  y_offset?: number | null;
-  overlap_x?: number | null;
-  overlap_y?: number | null;
-  z_start?: number | null;
-  z_end?: number | null;
 }
 
 /** Edit a planned task's position, z-range, or profiles. */

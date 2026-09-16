@@ -71,7 +71,7 @@
             {/if}
           </div>
         </div>
-        <ul class="min-h-0 divide-y divide-border/40 overflow-y-auto">
+        <ul class="min-h-0 divide-y divide-line-faint overflow-y-auto">
           {#each failure.violations as violation, index (`${violation.code ?? ''}:${violationLocation(violation)}:${index}`)}
             <li class="px-3 py-2">
               <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -108,7 +108,7 @@
     <Dialog.Header>
       <Dialog.Title>Archive State</Dialog.Title>
     </Dialog.Header>
-    <hr class="-mx-4 border-border" />
+    <hr class="-mx-4 border-line-faint" />
     <div class="flex flex-col gap-4 py-2">
       <p class="text-lg text-fg-muted">
         Archive <span class="font-medium text-fg">{id ? displayName(id) : ''}</span>'s current state so it reopens with
@@ -116,7 +116,7 @@
         <span class="font-mono text-fg">state.bak.json</span> or the next available numbered backup.
       </p>
     </div>
-    <hr class="-mx-4 border-border" />
+    <hr class="-mx-4 border-line-faint" />
     <Dialog.Footer>
       <div class="flex-1"></div>
       <Button variant="outline" onclick={() => (archiveStateDialogOpen = false)}>Cancel</Button>

@@ -20,7 +20,7 @@
   <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-2">
     {#each Object.entries(imaging.profiles) as [profileId, profile] (profileId)}
       <article
-        class="grid gap-2 rounded-lg border border-border/60 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6"
+        class="grid gap-2 rounded-lg border border-line-muted px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6"
       >
         <div class="min-w-0">
           <h3 class="font-medium text-fg">{profile.label ?? displayName(profileId)}</h3>
@@ -52,7 +52,7 @@
         </div>
       </article>
     {:else}
-      <p class="rounded-lg border border-border/60 px-3 py-4 text-fg-muted">No profiles configured.</p>
+      <p class="rounded-lg border border-line-muted px-3 py-4 text-fg-muted">No profiles configured.</p>
     {/each}
   </div>
 </section>
@@ -64,7 +64,7 @@
 
   <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-2">
     {#each Object.entries(imaging.channels) as [channelId, channel] (channelId)}
-      <article id={`channel-${channelId}`} class="scroll-mt-12 rounded-lg border border-border/60 p-3">
+      <article id={`channel-${channelId}`} class="scroll-mt-12 rounded-lg border border-line-muted p-3">
         <div class="flex items-center gap-2">
           {#if channel.emission}
             <span class="size-2 shrink-0 rounded-full" style="background-color: {wavelengthToColor(channel.emission)}"
@@ -87,7 +87,7 @@
         </div>
       </article>
     {:else}
-      <p class="rounded-lg border border-border/60 px-3 py-4 text-fg-muted">No channels configured.</p>
+      <p class="rounded-lg border border-line-muted px-3 py-4 text-fg-muted">No channels configured.</p>
     {/each}
   </div>
 </section>

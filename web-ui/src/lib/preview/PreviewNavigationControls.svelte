@@ -26,9 +26,6 @@
     const aspect = previewer.boundingBoxAspect;
     return Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   });
-  const minimapFit = $derived(
-    minimapAspect >= 1 ? { width: 100, height: 100 / minimapAspect } : { width: minimapAspect * 100, height: 100 }
-  );
   const viewportZoomed = $derived(!isFullViewport(previewer.viewport));
 
   async function drawMinimap() {
@@ -162,39 +159,37 @@
   </div>
 
   {#if navigatorVisible.get()}
-    <div class="border-t border-border p-1.5">
-      <div class="relative aspect-square w-full overflow-hidden rounded-xs border border-border/40" onwheel={wheelZoom}>
-        <div
-          bind:this={minimapEl}
-          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
-          style:width="{minimapFit.width}%"
-          style:height="{minimapFit.height}%"
-        >
-          <canvas
-            bind:this={canvasEl}
-            role="button"
-            tabindex={-1}
-            aria-label="Recenter viewport"
-            onpointerdown={recenter}
-            class="h-full w-full cursor-pointer"
-          ></canvas>
-          {#if viewportZoomed}
-            <div
-              role="slider"
-              aria-label="Preview viewport"
-              aria-valuenow={Math.round(previewer.viewport.x * 100)}
-              tabindex="-1"
-              class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/15"
-              style:left="{previewer.viewport.x * 100}%"
-              style:top="{previewer.viewport.y * 100}%"
-              style:width="{previewer.viewport.w * 100}%"
-              style:height="{previewer.viewport.h * 100}%"
-              onpointerdown={pointerDown}
-              onpointermove={pointerMove}
-              onpointerup={pointerUp}
-            ></div>
-          {/if}
-        </div>
+    <div class="border-t border-line-muted p-1.5">
+      <div
+        bind:this={minimapEl}
+        class="relative w-full overflow-hidden rounded-xs border border-line-faint"
+        style:aspect-ratio={minimapAspect}
+        onwheel={wheelZoom}
+      >
+        <canvas
+          bind:this={canvasEl}
+          role="button"
+          tabindex={-1}
+          aria-label="Recenter viewport"
+          onpointerdown={recenter}
+          class="absolute inset-0 h-full w-full cursor-pointer"
+        ></canvas>
+        {#if viewportZoomed}
+          <div
+            role="slider"
+            aria-label="Preview viewport"
+            aria-valuenow={Math.round(previewer.viewport.x * 100)}
+            tabindex="-1"
+            class="absolute min-h-5 min-w-5 cursor-move border border-warning/80 bg-warning/10 transition-colors hover:bg-fg/15"
+            style:left="{previewer.viewport.x * 100}%"
+            style:top="{previewer.viewport.y * 100}%"
+            style:width="{previewer.viewport.w * 100}%"
+            style:height="{previewer.viewport.h * 100}%"
+            onpointerdown={pointerDown}
+            onpointermove={pointerMove}
+            onpointerup={pointerUp}
+          ></div>
+        {/if}
       </div>
     </div>
   {/if}

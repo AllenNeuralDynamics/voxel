@@ -67,22 +67,16 @@
   /* ── Borders ───────────────────────────────────────────────────────
 	 * ─────────────────────────────────────────────────────────────────── */
 
-  --border: oklch(0.709 0.01 56.259);
-  /* stone-400, warm — ~2:1 on the gray surfaces (was 0.795, too close to surface)
-	 * Structural borders. Panel edges, section dividers. */
-
-  --border-variant: oklch(0.74 0.008 57);
-  /* ~stone-375, a touch subtler than border but close enough that inputs stay defined on the lifted surfaces (was 0.78)
-	 * Contained elements — inputs, cards, soft divisions. */
-
-  --border-faint: oklch(0.709 0.01 56.259 / 0.7);
-  /* faint guide line — grid plane outlines, subtle rules */
+  /* Neutral line strengths; preserve the existing structural border at full strength. */
+  --line: oklch(0.709 0.01 56.259);
+  --line-muted: color-mix(in oklch, var(--line) 80%, transparent);
+  --line-faint: color-mix(in oklch, var(--line) 50%, transparent);
+  --line-selected: var(--line);
+  --control-line: var(--line-muted);
+  --control-line-hover: var(--line);
 
   --border-focused: #3183d8;
   /* Notion blue — focus rings. */
-
-  --border-selected: #3183d8;
-  /* Notion blue — selected borders. */
 
   --border-disabled: oklch(0.84 0.006 56);
   /* warm, faint (was 0.895)
@@ -201,20 +195,10 @@
 
   /* ── Borders ──────────────────────────────────────────────────────── */
 
-  --border: oklch(1 0 0 / 22%);
-  /* white/22 — visible on the lifted surfaces (was white/10→14) */
-
-  --border-variant: oklch(1 0 0 / 18%);
-  /* white/18 — a touch subtler than border, but close enough that inputs stay defined (was white/14) */
-
-  --border-faint: oklch(0.62 0.015 286 / 0.6);
-  /* faint guide line — grid plane outlines, subtle rules */
+  --line: oklch(1 0 0 / 22%);
 
   --border-focused: #3183d8;
   /* Notion blue — focus rings. */
-
-  --border-selected: #3183d8;
-  /* Notion blue — selected borders. */
 
   --border-disabled: oklch(1 0 0 / 8%);
   /* white/8 — faint but present (was white/5) */

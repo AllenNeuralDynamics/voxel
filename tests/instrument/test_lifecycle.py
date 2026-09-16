@@ -153,7 +153,6 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
     assert {violation.loc for violation in violations if violation.code == "state.stage_position.out_of_bounds"} == {
         ("state", "tasks", "outside", "x"),
         ("state", "tasks", "outside", "start"),
-        ("state", "stencil", "z_end"),
     }
 
 

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { Group, Line, Rect } from 'svelte-konva';
+
+  import { watchTheme } from '$lib/themes/manager.svelte';
 
   import { getStageContext } from './context.svelte';
   import { type Bounds, type Point, screenTransform, worldTransform } from './geometry';
@@ -48,7 +50,7 @@
 
   const highlighted = $derived.by(() => {
     const selection = context.menuSelection;
-    if (selection) return 'point' in selection ? selection.destination : undefined;
+    if (selection) return 'point' in selection ? (context.menuPreview ?? selection.destination) : undefined;
     if (!grid) return;
     const point = context.cursor;
     if (!point || context.selecting || (context.marquee && contains(context.marquee, point))) return;
@@ -102,8 +104,7 @@
     return lines;
   });
 
-  onMount(async () => {
-    await tick();
+  watchTheme(() => {
     const container = group?.node.getStage()?.container();
     if (container) markerColor = getComputedStyle(container).getPropertyValue('--stage-marker').trim() || markerColor;
   });

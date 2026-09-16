@@ -451,7 +451,7 @@
   }
 
   .hist-input:hover {
-    border-color: var(--color-input);
+    border-color: var(--color-control-line);
   }
 
   .hist-input:focus {

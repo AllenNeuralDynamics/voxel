@@ -3,9 +3,8 @@
   import { resolveInstrumentView } from '$lib/instrument-view';
   import { Button, Dialog, JsonView } from '$lib/kit';
   import { getVoxelStation, type InstrumentDefaults } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import { toastError } from '$lib/utils';
-
-  import PageHeader from '../../PageHeader.svelte';
 
   const app = getVoxelStation();
   const id = $derived(page.params.instrumentId);
@@ -23,7 +22,6 @@
       routing: current.routing,
       metadata_cls: current.metadata_cls,
       output: current.output,
-      stencil: current.stencil,
       traversal: current.traversal
     };
   });
@@ -95,7 +93,7 @@
             {/if}
           </div>
           {#if defaultState}
-            <div class="overflow-x-auto rounded-lg border border-border/60 p-3">
+            <div class="overflow-x-auto rounded-lg border border-line-muted p-3">
               <JsonView data={defaultState} baseline={activeInstrument?.default} expandDepth={1} />
             </div>
           {:else}
@@ -104,7 +102,7 @@
         </section>
         <section class="space-y-2.5" aria-labelledby="hardware-configuration-heading">
           <h2 id="hardware-configuration-heading" class="text-base text-fg">Hardware configuration</h2>
-          <div class="overflow-x-auto rounded-lg border border-border/60 p-3">
+          <div class="overflow-x-auto rounded-lg border border-line-muted p-3">
             <JsonView data={hal} expandDepth={1} />
           </div>
         </section>
@@ -130,7 +128,7 @@
               : 'Save the current state as the new default.'}
           </Dialog.Description>
         </Dialog.Header>
-        <div class="max-h-[60dvh] overflow-auto rounded border border-border bg-surface px-3 py-2">
+        <div class="max-h-[60dvh] overflow-auto rounded border border-line-muted bg-surface px-3 py-2">
           {#if defaultChanges.length === 0}
             <p class="text-base text-fg-muted">Matches default.</p>
           {:else}

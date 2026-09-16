@@ -9,10 +9,10 @@
   import type { SelectOption } from '$lib/kit/Select.svelte';
   import type { DerivedWaveform, Signals, Waveform } from '$lib/model';
   import { getVoxelStation, ROLE_ORDER } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import { SpinBox } from '$lib/prop/numeric';
   import { displayName, toastError } from '$lib/utils';
 
-  import PageHeader from '../../../../../../PageHeader.svelte';
   import WaveformPlot, { type PlotContext } from './WaveformPlot.svelte';
   import {
     cloneWaveform,
@@ -509,7 +509,7 @@
           {@const selectedInGroup = selectedWaveformId && group.waveformIds.includes(selectedWaveformId)}
           <section
             class="overflow-hidden rounded-xs border bg-canvas transition-colors
-              {selectedInGroup ? 'border-focused/60' : 'border-border'}"
+              {selectedInGroup ? 'border-line-selected' : 'border-line-muted'}"
             aria-label={group.label || group.waveformIds.map(displayName).join(', ')}
           >
             <div class="flex min-h-10 flex-wrap items-center gap-1 border-b px-3 py-1.5">
@@ -523,7 +523,7 @@
                     <button
                       type="button"
                       onclick={() => selectWaveform(waveformId)}
-                      class="flex cursor-pointer items-center gap-1.5 rounded-l-full border border-border bg-element-selected px-2 py-0.5 text-base text-fg transition-colors"
+                      class="flex cursor-pointer items-center gap-1.5 rounded-l-full border border-line-selected bg-element-selected px-2 py-0.5 text-base text-fg transition-colors"
                       aria-pressed="true"
                     >
                       <span class="size-2 shrink-0 rounded-full" style="background-color: {color}" aria-hidden="true"
@@ -872,7 +872,7 @@
       </div>
     </main>
     <footer
-      class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-faint bg-surface px-4 py-2"
+      class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-muted bg-surface px-4 py-2"
       aria-labelledby="timing-heading"
     >
       <h2 id="timing-heading" class="shrink-0 text-sm text-fg-muted">Timing</h2>

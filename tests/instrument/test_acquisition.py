@@ -61,7 +61,7 @@ async def writer(opened_instrument: Instrument, tmp_path: Path, monkeypatch: pyt
     camera = instrument._hal.cameras["camera_1"]
     for name in ("check_writable", "open_stack", "begin_batch", "capture_state", "close_stack", "release_writer"):
         monkeypatch.setattr(camera, name, getattr(writer, name))
-    await instrument.add_tasks([(0, 0)])
+    await instrument.add_tasks([(0, 0)], start=0, end=0)
     task_id = next(iter(instrument.state.value.tasks))
     await instrument.update_tasks({task_id: TaskPatch(start=0, end=0, profile_ids=["single_gfp"])})
     return writer

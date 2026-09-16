@@ -109,7 +109,7 @@
     <Dialog.Header>
       <Dialog.Title>Start Acquisition</Dialog.Title>
     </Dialog.Header>
-    <hr class="-mx-4 border-border" />
+    <hr class="-mx-4 border-line-faint" />
 
     {#if instrument}
       <div class="flex max-h-[70vh] flex-col gap-6 overflow-y-auto py-3">
@@ -248,7 +248,7 @@
         </section>
       </div>
 
-      <hr class="-mx-4 border-border" />
+      <hr class="-mx-4 border-line-faint" />
       <Dialog.Footer>
         <span class="mr-auto text-fg-muted">
           {taskCount} task{taskCount === 1 ? '' : 's'} → {volumeCount} volume{volumeCount === 1 ? '' : 's'}

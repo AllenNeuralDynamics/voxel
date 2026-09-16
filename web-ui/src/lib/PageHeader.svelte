@@ -26,18 +26,15 @@
   const pageTitle = $derived(title ?? items.at(-1)?.label ?? '');
 </script>
 
-<header
-  class={cn('min-w-0 shrink-0 px-4 py-4', trailing && 'flex flex-wrap items-center gap-x-3 gap-y-1.5', className)}
-  {...restProps}
->
+<header class={cn('flex h-pane-header min-w-0 shrink-0 items-center gap-3 px-4', className)} {...restProps}>
   <h1 class="sr-only">{pageTitle}</h1>
-  <Breadcrumb.Root class="min-w-0">
-    <Breadcrumb.List class="gap-2 text-xl font-normal">
+  <Breadcrumb.Root class="min-w-0 flex-1">
+    <Breadcrumb.List class="flex-nowrap gap-2 text-xl font-normal">
       {#each items as item, index (`${item.href ?? ''}:${item.label}:${index}`)}
         {@const current = index === items.length - 1}
-        <Breadcrumb.Item class={current ? 'min-w-0 shrink-0' : 'min-w-0 shrink'}>
+        <Breadcrumb.Item class="min-w-0 shrink">
           {#if current || !item.href}
-            <Breadcrumb.Page class="block whitespace-nowrap" title={item.title ?? item.label}>
+            <Breadcrumb.Page class="block truncate" title={item.title ?? item.label}>
               {item.label}
             </Breadcrumb.Page>
           {:else}
@@ -53,7 +50,7 @@
     </Breadcrumb.List>
   </Breadcrumb.Root>
   {#if trailing}
-    <div class="ml-auto flex min-w-0 items-center gap-2">
+    <div class="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
       {@render trailing()}
     </div>
   {/if}

@@ -287,7 +287,7 @@
 </script>
 
 {#snippet snapshotInfoCard(snap: Snapshot)}
-  <div class="flex flex-col divide-y divide-border/50 text-base">
+  <div class="flex flex-col divide-y divide-line-faint text-base">
     <div class="flex flex-col gap-1 px-2.5 py-2">
       <div class="flex items-center justify-between gap-2">
         <span class="min-w-0 truncate font-medium text-fg">{snap.label}</span>
@@ -344,7 +344,7 @@
 {#snippet groupInfoCard(g: SnapshotGroup)}
   {@const gTiles = snaps.tilesOf(g.id)}
   {@const channels = groupChannels(gTiles)}
-  <div class="flex flex-col divide-y divide-border/50 text-base">
+  <div class="flex flex-col divide-y divide-line-faint text-base">
     <div class="flex min-h-8 items-center justify-between gap-2 px-2.5 py-2">
       <span class="min-w-0 truncate font-medium text-fg">{g.name}</span>
       {#if targetGroupId === g.id}
@@ -449,7 +449,7 @@
                 <img
                   src={snap.thumbnail}
                   alt=""
-                  class="h-6 w-8 shrink-0 rounded-sm border border-border object-cover"
+                  class="h-6 w-8 shrink-0 rounded-sm border border-line-faint object-cover"
                 />
                 <Rename
                   value={snap.label}

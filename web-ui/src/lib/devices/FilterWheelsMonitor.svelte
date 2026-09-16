@@ -122,7 +122,7 @@
   {@const filterOptions = slots
     .filter((s): s is { slot: number; name: string } => s.name != null)
     .map((s) => ({ value: s.name, label: s.name }))}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
+  <div class="flex flex-col overflow-hidden rounded-xs border border-line-muted bg-card">
     <!-- row 1: wheel identity + live filter picker (channel dot marks profile-declared filters) -->
     <div class="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
       {@render deviceIdentity(displayName(wheel.id))}
@@ -148,7 +148,7 @@
 
     <!-- row 2: filmstrip — cells slide so the live slot rests under the fixed center gate -->
     {#if slots.length > 0}
-      <div class="relative h-7 overflow-hidden border-t border-border">
+      <div class="relative h-7 overflow-hidden border-t border-line-faint">
         <div
           class="pointer-events-none absolute inset-y-1 left-1/2 w-(--cell) -translate-x-1/2 rounded-sm bg-element-selected shadow-sm"
         ></div>
@@ -166,10 +166,10 @@
               class={cn(
                 'flex shrink-0 items-center justify-center rounded-sm border px-1.5 text-[10px] tracking-tight tabular-nums transition-colors',
                 s.name == null
-                  ? 'border-dashed border-border/40'
+                  ? 'border-dashed border-line-faint'
                   : cellChannels.length
-                    ? 'border-border'
-                    : 'border-border/40',
+                    ? 'border-line'
+                    : 'border-line-faint',
                 s.name == null
                   ? 'text-fg-faint'
                   : s.slot === current
@@ -184,7 +184,7 @@
         </div>
       </div>
     {:else}
-      <p class="border-t border-border px-2.5 py-2 text-[11px] text-fg-muted italic">No positions.</p>
+      <p class="border-t border-line-faint px-2.5 py-2 text-[11px] text-fg-muted italic">No positions.</p>
     {/if}
   </div>
 {/snippet}

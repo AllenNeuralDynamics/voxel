@@ -4,6 +4,12 @@ export type SpatialUnit = 'mm' | 'um';
 export type ViewerMode = 'fov' | 'stage';
 export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
 
+export interface TaskAuthoringDefaults {
+  start: number;
+  end: number;
+  overlap: number;
+}
+
 /**
  * Shared UI preferences, instantiated once per browser window.
  *
@@ -13,8 +19,8 @@ export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
  *
  * Keep conversion/formatting logic and hardware state outside this module.
  * Pane sizes, navigation history, and per-channel preview settings stay with
- * their existing owners. Spatial units and stage live visibility use this module;
- * the remaining preferences have not yet been migrated.
+ * their existing owners. Spatial units, stage visibility, and instrument-scoped
+ * task-authoring defaults use this module; the remaining preferences have not yet been migrated.
  */
 export const prefs = {
   spatialUnit: pref<SpatialUnit>('ui:spatial-unit', 'mm'),
@@ -28,6 +34,10 @@ export const prefs = {
   stage: {
     layersVisible: pref('ui:stage:layers-visible', true),
     liveVisible: pref('stage:live-visible', true)
+  },
+
+  plan: {
+    taskDefaults: pref<Record<string, TaskAuthoringDefaults>>('ui:plan:task-defaults', {})
   },
 
   logs: {

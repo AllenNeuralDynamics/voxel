@@ -4,9 +4,9 @@
   import { buildDeviceTopology, buildDeviceUsageIndex, resolveDeviceConfig } from '$lib/device-topology';
   import { resolveInstrumentView } from '$lib/instrument-view';
   import { getVoxelStation } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import { cn, displayName } from '$lib/utils';
 
-  import PageHeader from '../../../../PageHeader.svelte';
   import DeviceControls from './DeviceControls.svelte';
 
   const app = getVoxelStation();
@@ -82,7 +82,7 @@
         <span class="text-fg-muted">]</span>
       </span>
     {:else}
-      <div class={cn('space-y-1', depth > 0 && 'border-l border-border pl-3')}>
+      <div class={cn('space-y-1', depth > 0 && 'border-l border-line-faint pl-3')}>
         {#each value as item, index (index)}
           {#if isStructured(item)}
             <div>
@@ -100,7 +100,7 @@
     {/if}
   {:else if isRecord(value)}
     {#if Object.keys(value).length > 0}
-      <div class={cn('space-y-1', depth > 0 && 'border-l border-border pl-3')}>
+      <div class={cn('space-y-1', depth > 0 && 'border-l border-line-faint pl-3')}>
         {#each Object.entries(value) as [key, item] (key)}
           {#if isStructured(item)}
             <div class="min-w-0">
@@ -160,7 +160,7 @@
             </section>
           {/if}
 
-          <section id="details" class="rounded-lg border border-border/60 p-3">
+          <section id="details" class="rounded-lg border border-line-muted p-3">
             <h3 class="mb-3 text-sm font-medium text-fg-muted">Details</h3>
             <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1.5">
               <dt class="font-medium text-fg-muted">Role</dt>
@@ -196,9 +196,9 @@
           </section>
 
           {#if entry.referencedBy.length > 0}
-            <section class="rounded-lg border border-border/60 p-3">
+            <section class="rounded-lg border border-line-muted p-3">
               <h3 class="mb-3 text-sm font-medium text-fg-muted">Used by</h3>
-              <ul class="divide-y divide-border/50">
+              <ul class="divide-y divide-line-faint">
                 {#each entry.referencedBy as reference (`${reference.deviceId}:${reference.path}`)}
                   {@render relationship(reference)}
                 {/each}

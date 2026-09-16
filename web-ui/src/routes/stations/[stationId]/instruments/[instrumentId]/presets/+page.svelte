@@ -7,10 +7,9 @@
   import { page } from '$app/state';
   import { Button } from '$lib/kit';
   import { errorMessage, getVoxelStation, type PresetRecord } from '$lib/model';
+  import PageHeader from '$lib/PageHeader.svelte';
   import PresetNameDialog from '$lib/PresetNameDialog.svelte';
   import { cn } from '$lib/utils';
-
-  import PageHeader from '../../../PageHeader.svelte';
 
   const app = getVoxelStation();
   const stationId = $derived(page.params.stationId ?? '');
@@ -78,12 +77,12 @@
           {#if loading}
             <p class="py-8 text-center text-fg-muted" role="status">Loading presets…</p>
           {:else if loadError}
-            <div class="flex flex-col items-center gap-3 rounded-lg border border-border p-6">
+            <div class="flex flex-col items-center gap-3 rounded-lg border border-line-muted p-6">
               <p class="text-fg-muted" role="alert">Unable to load presets: {loadError}</p>
               <Button variant="outline" size="xs" onclick={() => refreshPresets()}>Retry</Button>
             </div>
           {:else if sorted.length > 0}
-            <div class="overflow-hidden rounded-lg border border-border bg-card">
+            <div class="overflow-hidden rounded-lg border border-line-muted bg-card">
               {#each sorted as preset, index (preset.id)}
                 <a
                   href={resolve('/stations/[stationId]/instruments/[instrumentId]/presets/[presetId]', {
@@ -93,7 +92,7 @@
                   })}
                   class={cn(
                     'block px-4 py-3 transition-colors hover:bg-element-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focused',
-                    index > 0 && 'border-t border-border'
+                    index > 0 && 'border-t border-line-faint'
                   )}
                 >
                   <span class="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -109,7 +108,7 @@
               {/each}
             </div>
           {:else}
-            <div class="rounded-lg border border-dashed border-border px-4 py-8 text-center text-fg-muted">
+            <div class="rounded-lg border border-dashed border-line-muted px-4 py-8 text-center text-fg-muted">
               No presets have been saved for this instrument.
             </div>
           {/if}

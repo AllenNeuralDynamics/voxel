@@ -8,7 +8,7 @@
   const { app }: { app: Station } = $props();
   const connectionState = $derived(app.client.state);
 
-  const borderClass = $derived(connectionState === 'failed' ? 'border-danger/30 bg-danger/5' : 'border-border');
+  const borderClass = $derived(connectionState === 'failed' ? 'border-danger/30 bg-danger/5' : 'border-line-muted');
 </script>
 
 <div class="flex h-screen w-full items-center justify-center bg-canvas">
@@ -29,7 +29,7 @@
       </button>
     </div>
 
-    <hr class={cn('border-border', borderClass)} />
+    <hr class={cn('border-line-muted', borderClass)} />
 
     <!-- Body: text column + large glyph, URL -->
     <div class="flex flex-1 items-center justify-between gap-4 p-8">
@@ -51,11 +51,11 @@
           <span class="text-4xl leading-none font-black">!</span>
         </div>
       {:else}
-        <div class="size-16 shrink-0 animate-spin rounded-full border-3 border-border border-t-primary"></div>
+        <div class="size-16 shrink-0 animate-spin rounded-full border-3 border-line-muted border-t-primary"></div>
       {/if}
     </div>
 
-    <hr class={cn('border-border', borderClass)} />
+    <hr class={cn('border-line-muted', borderClass)} />
 
     <!-- Footer: retry -->
     <div class="flex h-ui-md items-center justify-end gap-2 px-4">

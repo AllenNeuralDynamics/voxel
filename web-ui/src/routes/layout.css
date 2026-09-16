@@ -16,6 +16,8 @@
   --ui-sm: calc(var(--ui-base) - 1 * var(--ui-step));
   --ui-md: var(--ui-base);
   --ui-lg: calc(var(--ui-base) + 1 * var(--ui-step));
+  --pane-header-height: calc(var(--ui-md) + 8 * var(--ui-step));
+  --pane-footer-height: calc(var(--ui-md) + 4 * var(--ui-step));
 }
 
 .nss {
@@ -23,7 +25,7 @@
 }
 
 @utility overlay-panel {
-  @apply rounded-sm border border-border bg-surface/80 shadow-xl backdrop-blur-sm;
+  @apply rounded-sm border border-line-muted bg-surface/80 shadow-xl backdrop-blur-sm;
 }
 
 @theme {
@@ -44,6 +46,8 @@
   --spacing-ui-sm: var(--ui-sm);
   --spacing-ui-md: var(--ui-md);
   --spacing-ui-lg: var(--ui-lg);
+  --spacing-pane-header: var(--pane-header-height);
+  --spacing-pane-footer: var(--pane-footer-height);
 
   /* ── Surfaces ──────────────────────────────────────────────────────── */
   --color-canvas: var(--canvas);
@@ -66,13 +70,14 @@
   --color-fg-accent: var(--fg-accent);
 
   /* ── Borders ───────────────────────────────────────────────────────── */
-  --color-border: var(--border);
-  --color-border-variant: var(--border-variant);
+  --color-line: var(--line);
+  --color-line-muted: var(--line-muted);
+  --color-line-faint: var(--line-faint);
+  --color-line-selected: var(--line-selected);
+  --color-control-line: var(--control-line);
+  --color-control-line-hover: var(--control-line-hover);
   --color-border-focused: var(--border-focused);
-  --color-border-selected: var(--border-selected);
   --color-border-disabled: var(--border-disabled);
-  --color-border-faint: var(--border-faint);
-  --color-input: var(--border-variant);
   --color-ring: var(--border-focused);
 
   /* ── Interactive ───────────────────────────────────────────────────── */
@@ -115,7 +120,6 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-input: var(--input);
   --color-ring: var(--ring);
 }
 
@@ -179,7 +183,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-line-muted outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;

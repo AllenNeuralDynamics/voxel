@@ -5,10 +5,10 @@
   import { type NumericSource, useNumericModel } from './model.svelte';
 
   const SIZE = {
-    xs: 'h-ui-xs px-1',
-    sm: 'h-ui-sm px-1',
-    md: 'h-ui-md text-base px-1.5',
-    lg: 'h-ui-lg text-lg px-2'
+    xs: 'h-ui-xs',
+    sm: 'h-ui-sm',
+    md: 'h-ui-md text-base',
+    lg: 'h-ui-lg text-lg'
   } as const;
 
   interface Props {
@@ -53,7 +53,7 @@
 
 <div
   class={cn(
-    'focus-within:border-focused inline-flex items-center overflow-hidden rounded border border-input bg-element-bg leading-none transition-colors hover:bg-element-hover',
+    'focus-within:border-focused inline-flex items-center overflow-hidden rounded border border-control-line bg-element-bg leading-none transition-colors hover:bg-element-hover',
     SIZE[size],
     effectiveDisabled && 'pointer-events-none opacity-50',
     className
@@ -71,15 +71,16 @@
     {numCharacters}
     {align}
     disabled={effectiveDisabled}
-    class="min-w-0 flex-1 px-0.5 leading-none"
+    class={cn('min-w-0 flex-1 leading-none', prefix ? 'pl-0.5' : 'pl-1.5', suffix || steppers ? 'pr-0.5' : 'pr-1.5')}
   />
   {#if suffix}
     <span class="pointer-events-none shrink-0 px-1.5 font-mono text-fg-muted">{suffix}</span>
   {/if}
   {#if steppers}
-    <div class="flex shrink-0 cursor-pointer flex-col self-stretch border-l border-input">
+    <div class="flex shrink-0 cursor-pointer flex-col self-stretch border-l border-control-line">
       <button
-        class="flex flex-1 items-center justify-center rounded-tr border-b border-input bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+        type="button"
+        class="flex flex-1 items-center justify-center rounded-tr border-b border-control-line bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
         onclick={increment}
         disabled={effectiveDisabled || (model.max != null && model.value >= model.max)}
         aria-label="Increment"
@@ -87,6 +88,7 @@
         <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z" /></svg>
       </button>
       <button
+        type="button"
         class="flex flex-1 items-center justify-center rounded-br bg-transparent px-1 text-fg-faint transition-colors hover:bg-element-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
         onclick={decrement}
         disabled={effectiveDisabled || (model.min != null && model.value <= model.min)}

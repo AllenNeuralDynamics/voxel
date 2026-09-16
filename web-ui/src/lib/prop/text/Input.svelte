@@ -57,7 +57,9 @@
   }
 </script>
 
-<div class={cn(styles.wrapper({ class: className }), effectiveDisabled && 'pointer-events-none border-input/50')}>
+<div
+  class={cn(styles.wrapper({ class: className }), effectiveDisabled && 'pointer-events-none border-control-line/50')}
+>
   {#if prefix}
     <span class={styles.prefix()}>{prefix}</span>
   {/if}

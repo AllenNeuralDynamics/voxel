@@ -31,11 +31,9 @@
 
   /* ── Borders ───────────────────────────────────────────────────────── */
 
-  --border: #4f505f; /* zed: border (was #313244) */
-  --border-variant: #464657; /* zed: border, subtler step (was #313244; variant is accent-colored in zed) */
-  --border-faint: #6c708699; /* faint guide line — grid outlines, subtle rules */
+  --line: #4f505f;
+
   --border-focused: #b4befe; /* zed: border.focused */
-  --border-selected: #cba6f7; /* zed: border.selected */
   --border-disabled: #6c7086; /* zed: border.disabled */
 
   /* ── Interactive ───────────────────────────────────────────────────── */

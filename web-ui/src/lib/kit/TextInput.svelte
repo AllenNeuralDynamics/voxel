@@ -3,7 +3,11 @@
 
   export const textInputVariants = tv({
     slots: {
-      wrapper: ['flex items-center rounded border border-input', 'transition-colors', 'focus-within:border-focused'],
+      wrapper: [
+        'flex items-center rounded border border-control-line',
+        'transition-colors',
+        'focus-within:border-focused'
+      ],
       input: ['w-full bg-transparent outline-none', 'placeholder-fg-muted'],
       prefix: ['flex shrink-0 items-center font-mono whitespace-nowrap', 'text-fg-muted select-none']
     },
@@ -87,7 +91,7 @@
   }
 </script>
 
-<div class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none border-input/50')}>
+<div class={cn(styles.wrapper({ class: className }), disabled && 'pointer-events-none border-control-line/50')}>
   {#if prefix}
     <span class={styles.prefix()}>{prefix}</span>
   {/if}

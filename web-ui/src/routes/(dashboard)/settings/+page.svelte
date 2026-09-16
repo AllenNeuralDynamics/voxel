@@ -3,7 +3,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-  <header class="flex h-14 shrink-0 items-center border-b border-border px-6">
+  <header class="flex h-14 shrink-0 items-center border-b border-line-muted px-6">
     <h1 class="text-xl font-medium text-fg">Settings</h1>
   </header>
 

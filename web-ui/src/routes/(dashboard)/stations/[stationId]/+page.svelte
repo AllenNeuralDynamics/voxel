@@ -143,7 +143,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-  <header class="flex h-14 shrink-0 items-center gap-4 border-b border-border px-6">
+  <header class="flex h-14 shrink-0 items-center gap-4 border-b border-line-muted px-6">
     <nav class="flex min-w-0 flex-1 items-center gap-1.5" aria-label="Breadcrumb">
       <a
         href={resolve('/(dashboard)/stations/[stationId]', { stationId })}
@@ -210,7 +210,7 @@
     {/if}
 
     {#if selection?.kind === 'template'}
-      <section class="mb-6 max-w-xl rounded-lg border border-border bg-card p-4">
+      <section class="mb-6 max-w-xl rounded-lg border border-line-muted bg-card p-4">
         <div class="mb-3 flex items-center gap-2">
           <span class="rounded-full bg-element-bg px-1.5 py-px text-sm text-fg-muted">Template</span>
           <p class="text-fg-muted">Create a new instrument from these defaults.</p>
@@ -255,7 +255,7 @@
             <p class="mt-0.5 text-fg-muted">Resolve these issues before opening this instrument.</p>
           </div>
         </div>
-        <ul class="divide-y divide-border/40">
+        <ul class="divide-y divide-line-faint">
           {#each selected.errors as violation, index (`${violation.code ?? ''}:${violationLocation(violation)}:${index}`)}
             <li class="px-3 py-2">
               {#if violationLocation(violation)}
@@ -271,7 +271,7 @@
         This {selection.kind === 'template' ? 'template' : 'instrument'} is not in the station catalog.
       </p>
     {:else if discovery}
-      <div class="rounded-lg border border-dashed border-border p-10 text-center text-fg-muted">
+      <div class="rounded-lg border border-dashed border-line-muted p-10 text-center text-fg-muted">
         No instruments are installed on this station.
       </div>
     {:else}

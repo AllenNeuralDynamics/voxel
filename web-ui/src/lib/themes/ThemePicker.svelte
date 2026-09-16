@@ -20,21 +20,21 @@
 
   function pillClass(selected: boolean): string {
     if (selected) return 'border-primary bg-primary/10 text-primary';
-    return 'border-border text-fg-muted hover:border-fg/25 hover:text-fg';
+    return 'border-control-line text-fg-muted hover:border-control-line-hover hover:text-fg';
   }
 
   const triggerClass =
-    'flex h-ui-sm w-full min-w-0 items-center justify-between gap-2.5 rounded border border-input bg-transparent px-2.5 text-lg transition-colors hover:bg-element-hover focus:border-focused focus:outline-none';
+    'flex h-ui-sm w-full min-w-0 items-center justify-between gap-2.5 rounded border border-control-line bg-transparent px-2.5 text-lg transition-colors hover:bg-element-hover focus:border-focused focus:outline-none';
   const itemClass =
     'flex w-full cursor-default items-center justify-between gap-2.5 rounded px-2.5 py-2 text-lg outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg';
   const contentClass =
-    'z-50 mt-1 w-(--bits-select-anchor-width) rounded border bg-floating p-1 shadow-md origin-(--bits-select-content-transform-origin) text-fg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95';
+    'z-50 mt-1 w-(--bits-select-anchor-width) rounded border border-line-muted bg-floating p-1 shadow-md origin-(--bits-select-content-transform-origin) text-fg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95';
 </script>
 
 {#snippet swatches(colors: readonly string[])}
   <div class="flex gap-0.5">
     {#each colors as color, i (i)}
-      <span class="h-3 w-3 rounded-full border border-border/40" style="background: {color}"></span>
+      <span class="h-3 w-3 rounded-full border border-line-faint" style="background: {color}"></span>
     {/each}
   </div>
 {/snippet}

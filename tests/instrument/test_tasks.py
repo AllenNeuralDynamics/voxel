@@ -11,7 +11,7 @@ async def test_task_tiles_resolve_rules_at_task_positions(opened_instrument: Ins
     instrument = opened_instrument
     await instrument.set_traversal(TileOrder.CUSTOM)
     await instrument.set_routing_rule("excitation_side", SplitRoutingRule(threshold=5))
-    await instrument.add_tasks([(4, 0), (5, 0)])
+    await instrument.add_tasks([(4, 0), (5, 0)], start=0, end=0)
     assert [tile.routes for tile in instrument.task_tiles.value] == [
         {"excitation_side": "lower"},
         {"excitation_side": "upper"},
@@ -29,15 +29,16 @@ async def test_add_batch_replays_exact_ids_values_and_order(instrument: Instrume
     state = instrument.state.value
     xy = [(float(index), float(index * 2)) for index in range(20)]
     profiles = list(state.imaging.profiles) if explicit_profiles else None
-    await instrument.add_tasks(xy, profile_ids=profiles)
+    start, end = 3.0, 7.0
+    await instrument.add_tasks(xy, start=start, end=end, profile_ids=profiles)
     added = list(instrument.state.value.tasks.items())
 
     assert len(added) == 20
     assert [(task.x, task.y) for _, task in added] == xy
     assert all(
         task.profile_ids == (profiles if profiles is not None else [instrument.active_profile_id.value])
-        and task.start == state.stencil.z_start
-        and task.end == state.stencil.z_end
+        and task.start == start
+        and task.end == end
         for _, task in added
     )
 
@@ -52,7 +53,7 @@ async def test_add_batch_replays_exact_ids_values_and_order(instrument: Instrume
 @pytest.mark.parametrize("indices", [(3, 1), (4, 0), (4, 3, 2, 1, 0)])
 async def test_remove_batch_restores_custom_order(instrument: Instrument, indices: tuple[int, ...]) -> None:
     await instrument.set_traversal(TileOrder.CUSTOM)
-    await instrument.add_tasks([(4, 0), (1, 0), (3, 0), (0, 0), (2, 0)])
+    await instrument.add_tasks([(4, 0), (1, 0), (3, 0), (0, 0), (2, 0)], start=0, end=10)
     original = list(instrument.state.value.tasks.items())
     removed = [original[index][0] for index in indices]
     remaining = [(uid, task) for uid, task in original if uid not in removed]
@@ -72,7 +73,7 @@ async def test_remove_batch_restores_custom_order(instrument: Instrument, indice
 
 
 async def test_update_batch_replays_only_affected_tasks(instrument: Instrument) -> None:
-    await instrument.add_tasks([(0, 0), (1, 1), (2, 2)])
+    await instrument.add_tasks([(0, 0), (1, 1), (2, 2)], start=0, end=10)
     original = instrument.state.value.tasks
     first, untouched, last = original
     other_profile = next(
@@ -95,7 +96,7 @@ async def test_update_batch_replays_only_affected_tasks(instrument: Instrument) 
 
 @pytest.mark.parametrize("operation", ["add", "remove", "update", "invalid_profile"])
 async def test_invalid_batch_preserves_state_disk_and_history(instrument: Instrument, operation: str) -> None:
-    await instrument.add_tasks([(0, 0), (1, 1)])
+    await instrument.add_tasks([(0, 0), (1, 1)], start=0, end=10)
     first = next(iter(instrument.state.value.tasks))
     await instrument.update_tasks({first: TaskPatch(x=2)})
     await instrument.undo()
@@ -103,7 +104,7 @@ async def test_invalid_batch_preserves_state_disk_and_history(instrument: Instru
     history = instrument.history.value
     persisted = (instrument.path / "state.json").read_bytes()
     edits = {
-        "add": lambda: instrument.add_tasks([(2, 2)], profile_ids=["missing"]),
+        "add": lambda: instrument.add_tasks([(2, 2)], start=0, end=10, profile_ids=["missing"]),
         "remove": lambda: instrument.remove_tasks([first, "missing"]),
         "update": lambda: instrument.update_tasks({first: TaskPatch(x=5), "missing": TaskPatch(x=6)}),
         "invalid_profile": lambda: instrument.update_tasks({first: TaskPatch(profile_ids=["missing"])}),
@@ -121,7 +122,7 @@ async def test_invalid_batch_preserves_state_disk_and_history(instrument: Instru
 
 @pytest.mark.parametrize("operation", ["add", "remove", "update", "unchanged"])
 async def test_noop_batch_preserves_redo(instrument: Instrument, operation: str) -> None:
-    await instrument.add_tasks([(0, 0)])
+    await instrument.add_tasks([(0, 0)], start=0, end=10)
     first = next(iter(instrument.state.value.tasks))
     await instrument.update_tasks({first: TaskPatch(x=1)})
     await instrument.undo()
@@ -130,7 +131,7 @@ async def test_noop_batch_preserves_redo(instrument: Instrument, operation: str)
 
     match operation:
         case "add":
-            await instrument.add_tasks([])
+            await instrument.add_tasks([], start=0, end=10)
         case "remove":
             await instrument.remove_tasks([])
         case "update":

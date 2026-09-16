@@ -3,7 +3,7 @@
 Rows are the instrument's tasks (ordered by ``task_tiles``); columns expose each task's position,
 z-range (editable), slice count, and profiles. Edits go through :meth:`Instrument.update_tasks` /
 :meth:`Instrument.remove_tasks`; double-clicking a row moves the stage to that task's (x, y). Mirrors
-main's ``GridTable`` on the task-centric domain (tasks/stencil/traversal) rather than the old row/col
+main's ``GridTable`` on the task-centric domain (tasks/traversal) rather than the old row/col
 tile grid.
 """
 
@@ -19,7 +19,6 @@ from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
 from vxl.instrument import Instrument, InstrumentState
 from vxl.instrument.config import AcquisitionTask, TaskPatch
-from vxl.instrument.traversal import Tile
 from vxl.qt.devices.adapter import DevicesStore
 from vxl.qt.devices.bind import bind_slider_spinbox
 from vxl.qt.devices.stage import StageStore
@@ -41,8 +40,6 @@ from vxl.qt.ui.kit import (
 )
 
 log = logging.getLogger(__name__)
-
-_MOSAIC_CAP = 10_000  # safety bound on computed mosaic cells, so a degenerate config can't freeze paint
 
 
 @dataclass(frozen=True)
@@ -190,12 +187,9 @@ class TasksTable(QWidget):
 
 
 class GridCanvas(QWidget):
-    """Stage-space map of the plan: a mosaic-grid scaffold (FOV-sized cells from the stencil), the
-    planned stacks stamped as FOV footprints, the traversal path, and the live stage FOV.
+    """Stage-space map of the plan: task footprints, traversal path, and live stage FOV.
 
-    Layers toggle independently. Single-click selects a stack; double-click a stack moves the stage
-    there; double-click an empty grid cell stamps a new stack at it. The mosaic is computed UI-side
-    (stencil + active FOV + stage bounds, mirroring the web); stacks come from ``instrument.task_tiles``.
+    Layers toggle independently. Single-click selects a stack; its context menu moves the stage there.
     """
 
     def __init__(self, instrument: Instrument, stage: StageStore, parent: QWidget | None = None) -> None:
@@ -204,8 +198,7 @@ class GridCanvas(QWidget):
         self._stage = stage
         self._selected: str | None = None
         self._active_ids: set[str] = set()
-        self._mosaic: list[Tile] = []  # computed grid scaffold (UI-side), and the stamp source
-        self._layers = {"bounds": True, "grid": True, "stacks": True, "path": True, "fov": True}
+        self._layers = {"bounds": True, "stacks": True, "path": True, "fov": True}
 
         self.setStyleSheet(f"GridCanvas {{ background-color: {Colors.BG_DARK}; }}")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -215,14 +208,12 @@ class GridCanvas(QWidget):
         self._unsubs: list[Teardown] = [
             instrument.task_tiles.subscribe(self._refresh),
             instrument.active_profile_id.subscribe(self._refresh),
-            instrument.fov.subscribe(self._recompute_mosaic),  # FOV drives both the live rect and the mosaic
-            instrument.state.subscribe(self._recompute_mosaic),  # stencil edits change the mosaic
+            instrument.fov.subscribe(lambda _fov: self.update()),
         ]
         stage.position_changed.connect(self.update)
         stage.moving_changed.connect(self.update)
-        stage.limits_changed.connect(self._recompute_mosaic)  # stage bounds clip the mosaic
+        stage.limits_changed.connect(self.update)
         self._refresh()
-        self._recompute_mosaic()
 
     def teardown(self) -> None:
         for unsub in self._unsubs:
@@ -230,16 +221,16 @@ class GridCanvas(QWidget):
         self._unsubs = []
         self._stage.position_changed.disconnect(self.update)
         self._stage.moving_changed.disconnect(self.update)
-        self._stage.limits_changed.disconnect(self._recompute_mosaic)
+        self._stage.limits_changed.disconnect(self.update)
 
     def _build_layer_toggles(self) -> None:
-        """Overlay (top-left) of per-layer visibility toggles: stage bounds, mosaic grid, planned
-        stacks, traversal path, live FOV. Child widgets composite over the painted canvas; flipping
+        """Overlay (top-left) of per-layer visibility toggles: stage bounds, planned stacks,
+        traversal path, and live FOV. Child widgets composite over the painted canvas; flipping
         one repaints with that layer hidden."""
         bar = QWidget()
         bar.setStyleSheet(f"background-color: {Colors.BG_LIGHT}; border-radius: 4px;")
         row = hbox(bar, spacing=Spacing.MD, margins=(Spacing.SM, Spacing.XS, Spacing.SM, Spacing.XS))
-        layers = (("bounds", "Bounds"), ("grid", "Grid"), ("stacks", "Stacks"), ("path", "Path"), ("fov", "FOV"))
+        layers = (("bounds", "Bounds"), ("stacks", "Stacks"), ("path", "Path"), ("fov", "FOV"))
         for key, label in layers:
             toggle = Toggle()
             toggle.setChecked(self._layers[key])
@@ -260,37 +251,6 @@ class GridCanvas(QWidget):
         tasks = self._instrument.state.value.tasks
         self._active_ids = {tid for tid, task in tasks.items() if active_id in task.profile_ids}
         self.update()
-
-    def _recompute_mosaic(self, _arg: object = None) -> None:
-        """Rebuild the mosaic-grid scaffold (stencil + active FOV + stage bounds), then repaint."""
-        self._mosaic = self._compute_mosaic()
-        self.update()
-
-    def _compute_mosaic(self) -> list[Tile]:
-        """Grid of FOV-sized cells whose *centers* tile the reachable stage range [lower, upper],
-        stepped by FOV*(1-overlap) from the stencil offset. Centering on stage positions (not corners)
-        is what makes a cell line up with the live FOV when the stage sits there; edge cells overshoot
-        the bounds by half a FOV, which the padded viewbox keeps in view. Mirrors the web mosaic."""
-        fov = self._instrument.fov.cache
-        if fov is None:
-            return []
-        fw, fh = fov
-        x, y = self._stage.x, self._stage.y
-        x_lo, x_hi, y_lo, y_hi = x.lower_limit, x.upper_limit, y.lower_limit, y.upper_limit
-        stencil = self._instrument.state.value.stencil
-        step_x, step_y = fw * (1 - stencil.overlap_x), fh * (1 - stencil.overlap_y)
-        if fw <= 0 or fh <= 0 or step_x <= 0 or step_y <= 0 or x_hi <= x_lo or y_hi <= y_lo:
-            return []
-        cells: list[Tile] = []
-        cy = y_lo + stencil.y_offset
-        while cy <= y_hi and len(cells) < _MOSAIC_CAP:
-            cx = x_lo + stencil.x_offset
-            while cx <= x_hi and len(cells) < _MOSAIC_CAP:
-                if cx >= x_lo and cy >= y_lo:  # a negative offset can push the first center below the bound
-                    cells.append(Tile(x=cx, y=cy, w=fw, h=fh))
-                cx += step_x
-            cy += step_y
-        return cells
 
     def _transform(self) -> QTransform | None:
         """Stage-µm → screen-px. The viewbox is the stage bounds padded by half a FOV on every side,
@@ -332,13 +292,6 @@ class GridCanvas(QWidget):
         if self._layers["bounds"]:
             self._stroke(painter, Colors.BORDER)
             painter.drawRect(QRectF(x.lower_limit, y.lower_limit, x.range, y.range))
-
-        # Mosaic grid scaffold (the stamp source): FOV-sized cells over the stage, outline only
-        if self._layers["grid"]:
-            self._stroke(painter, Colors.BORDER)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            for cell in self._mosaic:
-                painter.drawRect(self._footprint(cell))
 
         # Planned stacks (footprints): active-profile stacks accented + faintly filled; others muted
         if self._layers["stacks"]:
@@ -395,20 +348,6 @@ class GridCanvas(QWidget):
                 return tile.task_id
         return None
 
-    def _cell_at(self, pos: QPointF) -> Tile | None:
-        """The mosaic-grid cell under ``pos`` (screen → stage-µm), or None."""
-        transform = self._transform()
-        if transform is None:
-            return None
-        inverse, ok = transform.inverted()
-        if not ok:
-            return None
-        point = inverse.map(pos)
-        for cell in self._mosaic:
-            if self._footprint(cell).contains(point):
-                return cell
-        return None
-
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
@@ -416,8 +355,7 @@ class GridCanvas(QWidget):
         self.update()
 
     def contextMenuEvent(self, event: QContextMenuEvent | None) -> None:
-        """Right-click a stack to move the stage there; right-click an empty grid cell to stamp a
-        stack or move there."""
+        """Right-click a task footprint to move the stage there."""
         if event is None:
             return
         pos = QPointF(event.pos())
@@ -425,14 +363,8 @@ class GridCanvas(QWidget):
         stacks = {tile.task_id: tile for tile in self._instrument.task_tiles.value}
         if (tid := self._task_at(pos)) is not None and (stack := stacks.get(tid)) is not None:
             menu.addAction("Move stage here", lambda: self._move_stage(stack.x, stack.y))
-        elif (cell := self._cell_at(pos)) is not None:
-            menu.addAction("Add stack here", lambda: self._add_stack(cell.x, cell.y))
-            menu.addAction("Move stage here", lambda: self._move_stage(cell.x, cell.y))
         if not menu.isEmpty():
             menu.exec(event.globalPos())
-
-    def _add_stack(self, x: float, y: float) -> None:
-        spawn(self._instrument.add_tasks([(x, y)]), log=log)
 
     def _move_stage(self, x: float, y: float) -> None:
         spawn(self._instrument.move_stage(x=x, y=y), log=log)

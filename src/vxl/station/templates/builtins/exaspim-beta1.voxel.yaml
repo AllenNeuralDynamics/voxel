@@ -195,14 +195,6 @@ default:
               negative_galvo: *negative_galvo_waveform
               z_axis: *z_axis_waveform
 
-  stencil:
-    x_offset: 0.0
-    y_offset: 0.0
-    overlap_x: 0.1
-    overlap_y: 0.1
-    z_start: 0.0
-    z_end: 511.0
-
   traversal: snake_row
 
   output:

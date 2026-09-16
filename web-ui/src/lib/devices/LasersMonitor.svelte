@@ -99,7 +99,7 @@
   <!-- {@const temp = laser.temperature?.value} -->
   {@const enabled = laser.isEnabled?.value === true}
   {@const channel = channelOf(laser.id)}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
+  <div class="flex flex-col overflow-hidden rounded-xs border border-line-muted bg-card">
     <!-- row 1: identity + power readout + enable -->
     <div class="flex items-center gap-3 px-2.5 pt-2 pb-1.5">
       {@render deviceIdentity(wl ? `${wl} nm` : laser.id, channel)}
@@ -112,12 +112,12 @@
     </div>
 
     <!-- row 2: power graph + setpoint slider — full-bleed to the card edges, hairline dividers only -->
-    <div class="flex h-10 border-t border-border" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
+    <div class="flex h-10 border-t border-line-faint" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
       <div class="min-w-0 flex-1">
         {@render graph(laser)}
       </div>
       {#if typeof setpoint === 'number'}
-        <div class="w-5 shrink-0 border-l border-border/50">
+        <div class="w-5 shrink-0 border-l border-line-faint">
           {@render setpointSlider(laser, setpoint)}
         </div>
       {/if}

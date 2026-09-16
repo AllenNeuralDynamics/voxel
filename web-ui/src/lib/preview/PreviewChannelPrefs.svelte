@@ -117,7 +117,7 @@
 
       <Popover.Portal>
         <Popover.Content
-          class="z-50 flex flex-col-reverse rounded border border-border bg-surface shadow-xl outline-none"
+          class="z-50 flex flex-col-reverse rounded border border-line-muted bg-surface shadow-xl outline-none"
           style="width: {columnWidth}px;"
           side="top"
           sideOffset={2}
@@ -125,7 +125,7 @@
           onOpenAutoFocus={focusSearch}
         >
           <div
-            class="grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1.5 border-t border-border px-2 py-2 text-sm text-fg-muted"
+            class="grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1.5 border-t border-line-faint px-2 py-2 text-sm text-fg-muted"
           >
             <span>Black</span>
             <SpinBox
@@ -200,12 +200,12 @@
               bind:this={searchInput}
               bind:value={search}
               placeholder="Search colormaps..."
-              class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-input bg-element-bg px-1.5 text-sm text-fg placeholder-fg-muted focus:outline-none"
+              class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-control-line bg-element-bg px-1.5 text-sm text-fg placeholder-fg-muted focus:outline-none"
             />
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
                 tabindex={-1}
-                class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-element-bg transition-colors hover:bg-element-hover {hasFilter
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-control-line bg-element-bg transition-colors hover:bg-element-hover {hasFilter
                   ? 'text-fg'
                   : 'text-fg-muted'}"
                 aria-label="Filter groups"
@@ -214,7 +214,7 @@
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content
-                  class="z-60 min-w-32 rounded border border-border bg-surface p-1 shadow-xl outline-none"
+                  class="z-60 min-w-32 rounded border border-line-muted bg-surface p-1 shadow-xl outline-none"
                   side="top"
                   sideOffset={4}
                   align="end"
@@ -244,7 +244,7 @@
             </DropdownMenu.Root>
           </div>
 
-          <div class="max-h-80 overflow-y-auto border-y border-border px-2">
+          <div class="max-h-80 overflow-y-auto border-y border-line-faint px-2">
             <div class="swatch-grid py-2">
               {@render swatch(AUTO_COLORMAP, 'auto', autoGradient)}
             </div>
@@ -283,13 +283,13 @@
               }}
               placeholder={triggerColor}
               size="5"
-              class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-input border-l-(--hex-color) bg-element-bg px-1.5 font-mono text-xs text-fg placeholder:text-fg-muted focus:outline-none"
+              class="focus:border-focused h-6 min-w-0 flex-1 rounded border border-l-[3px] border-control-line border-l-(--hex-color) bg-element-bg px-1.5 font-mono text-xs text-fg placeholder:text-fg-muted focus:outline-none"
               style:--hex-color={triggerColor}
             />
             <button
               type="button"
               onclick={submitHex}
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-input bg-element-bg text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-control-line bg-element-bg text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
               aria-label="Apply custom hex color"
             >
               <Check width="14" height="14" />
@@ -325,7 +325,7 @@
 
   .swatch-row.selected {
     background: var(--color-accent);
-    outline: 1px solid var(--color-border);
+    outline: 1px solid var(--color-line-selected);
   }
 
   .swatch-gradient {

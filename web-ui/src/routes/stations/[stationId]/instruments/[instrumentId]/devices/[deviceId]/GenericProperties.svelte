@@ -55,7 +55,7 @@
                 />
               </Collapsible.Trigger>
               <Collapsible.Content class="pt-1">
-                <div class="rounded border border-border bg-card p-2">
+                <div class="rounded border border-line-muted bg-card p-2">
                   <JsonView data={device.getProp(name)?.value} />
                 </div>
               </Collapsible.Content>

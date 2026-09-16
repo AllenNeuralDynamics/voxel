@@ -1,3 +1,5 @@
+import { tick } from 'svelte';
+
 import { pref } from '$lib/utils';
 
 // ── Registry ─────────────────────────────────────────────────────────
@@ -144,3 +146,18 @@ class ThemeManager {
 }
 
 export const themes = new ThemeManager();
+
+/** Run initially and after effective theme changes settle in the DOM. Call during component initialization. */
+export function watchTheme(callback: () => void): void {
+  $effect(() => {
+    void themes.resolvedMode;
+    void themes.active;
+    let cancelled = false;
+    void tick().then(() => {
+      if (!cancelled) callback();
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+}

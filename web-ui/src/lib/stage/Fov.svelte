@@ -2,13 +2,11 @@
   import { onMount } from 'svelte';
   import { Group, Rect } from 'svelte-konva';
 
-  import { VideoCamera } from '$lib/icons';
-  import { ContextMenu } from '$lib/kit';
   import type { PreviewSession } from '$lib/preview/session.svelte';
 
   import { getStageContext } from './context.svelte';
   import FovImage from './FovImage.svelte';
-  import { type Bounds, worldTransform } from './geometry';
+  import { type Bounds, type Point, worldTransform } from './geometry';
 
   let {
     preview,
@@ -23,7 +21,6 @@
   } = $props();
 
   const context = getStageContext();
-  let group = $state<Group>();
   const images = $derived(
     (preview?.channels ?? []).flatMap((channel) => {
       const frame = channel.overviewFrame;
@@ -35,6 +32,18 @@
     })
   );
 
+  /** Activate the FOV beneath another layer's hit target. */
+  export function activateAt(point: Point) {
+    if (!visible) return;
+    const inBounds =
+      bounds && point.x >= bounds.minX && point.x <= bounds.maxX && point.y >= bounds.minY && point.y <= bounds.maxY;
+    const inImage = images.some(
+      ({ rect }) =>
+        point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
+    );
+    if (inBounds || inImage) onactivate?.();
+  }
+
   onMount(() =>
     context.register({
       id: 'live',
@@ -44,23 +53,12 @@
       },
       setVisible: (next) => {
         visible = next;
-      },
-      menu: (selection) =>
-        onactivate && 'hits' in selection && selection.hits.some((hit) => group?.node.isAncestorOf(hit))
-          ? liveMenu
-          : undefined
+      }
     })
   );
 </script>
 
-{#snippet liveMenu()}
-  <ContextMenu.Item onSelect={() => onactivate?.()}>
-    <VideoCamera width="14" height="14" />
-    Open field of view
-  </ContextMenu.Item>
-{/snippet}
-
-<Group bind:this={group} {visible} {...worldTransform(context.view.scale, context.orientation)}>
+<Group {visible} {...worldTransform(context.view.scale, context.orientation)}>
   {#if visible && preview}
     <Group listening={false}>
       {#each images as image (image.channel)}

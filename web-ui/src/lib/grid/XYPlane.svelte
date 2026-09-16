@@ -10,7 +10,7 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import { ContextMenu } from '$lib/kit';
-  import { type AlignEdge, type Instrument, type TaskTile } from '$lib/model';
+  import { type Instrument, type TaskTile } from '$lib/model';
   import { toastError } from '$lib/utils';
 
   import { getTaskSelection } from './selection.svelte';
@@ -22,7 +22,7 @@
     fov: boolean;
   }
 
-  /** An auto-grid cell computed from the stencil (a potential tile position, not a placed task). */
+  /** A fixed auto-grid cell: a potential tile position, not a placed task. */
   interface GridTile {
     row: number;
     col: number;
@@ -34,10 +34,15 @@
 
   interface Props {
     instrument: Instrument;
+    taskRange?: { start: number; end: number } | null;
     layers?: LayerVisibility;
   }
 
-  let { instrument, layers = $bindable({ grid: true, tasks: true, path: true, fov: true }) }: Props = $props();
+  let {
+    instrument,
+    taskRange = null,
+    layers = $bindable({ grid: true, tasks: true, path: true, fov: true })
+  }: Props = $props();
 
   // ── Geometry ─────────────────────────────────────────────────────────
 
@@ -62,26 +67,23 @@
   const isAcquiring = $derived(instrument.mode === 'capture');
   const arrowSize = $derived(Math.min(fovW, fovH) * 0.08);
 
-  // ── Auto-grid computed from the stencil ──────────────────────────────
+  // ── Fixed auto-grid ─────────────────────────────────────────────────
+
+  const GRID_OVERLAP = 0.1;
 
   const mosaicTiles = $derived.by<GridTile[]>(() => {
     if (!sx || !sy) return [];
-    const s = instrument.state.stencil;
-    const stepW = fovW * (1 - s.overlap_x);
-    const stepH = fovH * (1 - s.overlap_y);
+    const stepW = fovW * (1 - GRID_OVERLAP);
+    const stepH = fovH * (1 - GRID_OVERLAP);
     if (stepW <= 0 || stepH <= 0) return [];
-    const colMin = Math.ceil(-s.x_offset / stepW);
-    const colMax = Math.floor((stageWidth - s.x_offset) / stepW) + 1;
-    const rowMin = Math.ceil(-s.y_offset / stepH);
-    const rowMax = Math.floor((stageHeight - s.y_offset) / stepH) + 1;
+    const colMax = Math.floor(stageWidth / stepW) + 1;
+    const rowMax = Math.floor(stageHeight / stepH) + 1;
     const tiles: GridTile[] = [];
-    for (let row = rowMin; row < rowMax; row++) {
-      for (let col = colMin; col < colMax; col++) {
-        const tx = s.x_offset + col * stepW;
-        const ty = s.y_offset + row * stepH;
-        if (tx >= 0 && tx <= stageWidth && ty >= 0 && ty <= stageHeight) {
-          tiles.push({ row, col, x: tx, y: ty, w: fovW, h: fovH });
-        }
+    for (let row = 0; row < rowMax; row++) {
+      for (let col = 0; col < colMax; col++) {
+        const tx = col * stepW;
+        const ty = row * stepH;
+        if (tx <= stageWidth && ty <= stageHeight) tiles.push({ row, col, x: tx, y: ty, w: fovW, h: fovH });
       }
     }
     return tiles;
@@ -97,7 +99,7 @@
     return activeProfileId ? (tasks[taskId]?.profile_ids.includes(activeProfileId) ?? false) : false;
   }
 
-  /** Auto-grid cells are stencil-relative; tasks and stage positions are absolute stage µm. */
+  /** Auto-grid cells are stage-origin-relative; tasks and stage positions are absolute stage µm. */
   const gridToAbs = (t: GridTile): { x: number; y: number } => ({ x: sxLower + t.x, y: syLower + t.y });
 
   /** Whether the active profile already has a task placed at absolute (x, y). */
@@ -212,7 +214,8 @@
 
   function addTasksAt(positions: Array<{ x: number; y: number }>) {
     const xy = positions.filter((p) => !taskAt(p.x, p.y)).map((p): [number, number] => [p.x, p.y]);
-    if (xy.length > 0) toastError(instrument.addTasks(xy, activeProfileId ? [activeProfileId] : undefined));
+    if (xy.length > 0 && taskRange)
+      toastError(instrument.addTasks(xy, taskRange, activeProfileId ? [activeProfileId] : undefined));
   }
 
   function handleTileSelect(e: MouseEvent, tile: GridTile) {
@@ -320,20 +323,6 @@
       });
     }
 
-    // Align grid (empty + task targets — tiles ARE the grid)
-    if (target.kind !== 'tile') {
-      const pos = target.kind === 'empty' ? { x: target.x, y: target.y } : { x: target.tile.x, y: target.tile.y };
-      items.push({
-        type: 'submenu',
-        label: 'Align grid',
-        items: (['top', 'bottom', 'left', 'right', 'center'] as AlignEdge[]).map((edge) => ({
-          type: 'action' as const,
-          label: edge[0].toUpperCase() + edge.slice(1),
-          action: () => toastError(instrument.alignStencil(edge, pos))
-        }))
-      });
-    }
-
     // Copy / paste
     if (target.kind === 'tile' || target.kind === 'task') {
       const { x, y } = target.kind === 'tile' ? gridToAbs(target.tile) : target.tile;
@@ -387,6 +376,7 @@
       items.push({
         type: 'action',
         label: 'Add task',
+        disabled: !taskRange,
         action: () => addTasksAt([{ x: target.x, y: target.y }])
       });
     } else if (target.kind === 'tile') {
@@ -396,6 +386,7 @@
         items.push({
           type: 'action',
           label: empty.length === 1 ? 'Add task' : `Add tasks (${empty.length})`,
+          disabled: !taskRange,
           action: () => addTasksAt(empty)
         });
       }
@@ -453,7 +444,7 @@
           y={oy * tile.y - tile.h / 2}
           width={tile.w}
           height={tile.h}
-          class="nss fill-transparent stroke-1 outline-none {selected ? 'stroke-fg/50' : 'stroke-border'}"
+          class="nss fill-transparent stroke-1 outline-none {selected ? 'stroke-fg/50' : 'stroke-line'}"
           class:cursor-pointer={!isXYMoving}
           class:cursor-not-allowed={isXYMoving}
           role="button"
@@ -579,7 +570,7 @@
         <svg
           bind:this={svgRef}
           viewBox={viewBoxStr}
-          class="border border-border-faint"
+          class="border border-line-faint"
           style="width: {canvasWidth}px; height: {canvasHeight}px;"
           overflow="visible"
           role="img"

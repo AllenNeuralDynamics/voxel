@@ -3,7 +3,7 @@
 
   export const textAreaVariants = tv({
     slots: {
-      wrapper: ['rounded border border-input', 'transition-colors', 'focus-within:border-focused'],
+      wrapper: ['rounded border border-control-line', 'transition-colors', 'focus-within:border-focused'],
       textarea: ['w-full bg-transparent outline-none', 'placeholder-fg-muted']
     },
     variants: {
@@ -97,7 +97,7 @@
   );
 </script>
 
-<div class={cn(styles.wrapper({ class: className }), disabled && 'border-input/50')}>
+<div class={cn(styles.wrapper({ class: className }), disabled && 'border-control-line/50')}>
   <textarea
     bind:this={textareaEl}
     {id}

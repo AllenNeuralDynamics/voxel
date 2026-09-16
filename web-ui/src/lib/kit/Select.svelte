@@ -5,13 +5,13 @@
     slots: {
       trigger: [
         'group flex w-full items-center justify-between gap-2',
-        'rounded border border-input',
+        'rounded border border-control-line',
         'transition-colors',
         'focus:border-focused focus:outline-none',
-        'disabled:cursor-not-allowed disabled:border-input/50'
+        'disabled:cursor-not-allowed disabled:border-control-line/50'
       ],
       content: [
-        'z-50 rounded border bg-floating p-1 shadow-md',
+        'z-50 rounded border border-line-muted bg-floating p-1 shadow-md',
         'w-(--bits-select-anchor-width) min-w-(--bits-select-anchor-width)',
         'origin-(--bits-select-content-transform-origin) text-fg',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',

@@ -179,12 +179,17 @@
   <canvas bind:this={canvasEl} class="h-full w-full"></canvas>
 
   {#if previewer.error}
-    <div class="absolute inset-x-4 top-16 z-10 rounded border border-danger/40 bg-canvas/90 px-3 py-2 text-danger">
+    <div
+      class="absolute inset-x-4 top-pane-header z-10 rounded border border-danger/40 bg-canvas/90 px-3 py-2 text-danger"
+    >
       {previewer.error}
     </div>
   {/if}
 
-  <div class="pointer-events-none absolute top-3 right-3 z-10 w-58">
+  <!-- Center the ui-xs toolbar, including its p-1 padding and panel border; the minimap expands below it. -->
+  <div
+    class="pointer-events-none absolute top-[calc((var(--pane-header-height)-var(--ui-xs))/2-var(--spacing)-1px)] right-3 z-10 w-58"
+  >
     <PreviewNavigationControls {previewer} />
   </div>
 

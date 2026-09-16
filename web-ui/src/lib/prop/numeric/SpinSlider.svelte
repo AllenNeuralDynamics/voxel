@@ -93,7 +93,7 @@
   />
   <input
     type="range"
-    class="slider-input focus:border-focused min-w-16 flex-1 cursor-pointer appearance-none overflow-hidden rounded-r border border-input bg-transparent transition-colors outline-none"
+    class="slider-input focus:border-focused min-w-16 flex-1 cursor-pointer appearance-none overflow-hidden rounded-r border border-control-line bg-transparent transition-colors outline-none"
     min={sliderMin}
     max={sliderMax}
     step={sliderStep}

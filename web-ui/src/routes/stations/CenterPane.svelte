@@ -62,9 +62,9 @@
         <div class="flex h-full flex-col bg-canvas">
           <div class="relative flex min-h-0 flex-1">
             <div class="relative min-w-0 flex-1 overflow-hidden" data-fly-origin>
-              <div class="absolute top-3 left-3 z-20 flex items-center gap-1">
+              <div class="pointer-events-none absolute top-0 left-3 z-20 flex h-pane-header items-center gap-1">
                 <div
-                  class="flex h-ui-xs items-stretch divide-x divide-border overflow-hidden rounded-md border border-border bg-canvas/80 shadow-sm backdrop-blur-sm"
+                  class="pointer-events-auto flex h-ui-xs items-stretch divide-x divide-control-line overflow-hidden rounded-sm border border-control-line bg-canvas/80 shadow-sm backdrop-blur-sm"
                 >
                   {#each previewModes as { mode, label, title } (mode)}
                     <button
@@ -112,14 +112,14 @@
       </Pane>
     </PaneGroup>
     <footer
-      class="grid min-h-11 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-border bg-surface px-3 py-2 @min-[72rem]/center-pane:grid-cols-[minmax(max-content,1fr)_auto_minmax(0,48rem)]"
+      class="grid min-h-pane-footer shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-line-muted bg-surface px-3 py-2 @min-[72rem]/center-pane:grid-cols-[minmax(max-content,1fr)_auto_minmax(0,48rem)]"
     >
       <div class="col-start-1 row-start-1 flex items-center gap-2">
         <button
           type="button"
           aria-pressed={logsOpen}
           onclick={toggleLogs}
-          class="flex h-6 w-20 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border-faint/50 bg-element-bg px-2 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+          class="flex h-6 w-20 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line-faint bg-element-bg px-2 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
         >
           {logsOpen ? 'Hide logs' : 'Show logs'}
         </button>
@@ -130,7 +130,7 @@
           ).length}
           <Popover.Root>
             <Popover.Trigger
-              class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border-faint/50 bg-element-bg px-2 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+              class="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-line-faint bg-element-bg px-2 text-sm whitespace-nowrap text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
               title="Preview frame information"
             >
               <span>Preview Frames</span>
@@ -146,7 +146,7 @@
             </Popover.Trigger>
             <Popover.Portal>
               <Popover.Content
-                class="z-50 min-w-48 rounded border border-border bg-surface p-3 shadow-xl outline-none"
+                class="z-50 min-w-48 rounded border border-line-muted bg-surface p-3 shadow-xl outline-none"
                 side="top"
                 align="center"
                 sideOffset={6}

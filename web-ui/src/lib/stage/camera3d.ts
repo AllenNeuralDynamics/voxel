@@ -34,7 +34,7 @@ export class Camera3D {
   orient: { x: number; y: number; z: number } = { x: 1, y: 1, z: 1 };
   viewW = 0;
   viewH = 0;
-  pad = 18;
+  pad = 2;
   shown: Record<Axis3, boolean> = { x: true, y: true, z: true };
 
   get onAxes(): Axis3[] {

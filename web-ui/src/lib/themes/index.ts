@@ -1,5 +1,13 @@
 export { default as AppearanceSheet } from './AppearanceSheet.svelte';
-export { type Density, type Mode, type ThemeEntry, type ThemeId, type ThemePrefs, themes } from './manager.svelte';
+export {
+  type Density,
+  type Mode,
+  type ThemeEntry,
+  type ThemeId,
+  type ThemePrefs,
+  themes,
+  watchTheme
+} from './manager.svelte';
 export { default as ThemePicker } from './ThemePicker.svelte';
 
 export const brand = {

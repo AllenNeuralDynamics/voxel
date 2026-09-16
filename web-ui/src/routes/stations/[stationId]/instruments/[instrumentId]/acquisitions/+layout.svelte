@@ -2,8 +2,7 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getVoxelStation } from '$lib/model';
-
-  import PageHeader, { type PageHeaderItem } from '../../../PageHeader.svelte';
+  import PageHeader, { type PageHeaderItem } from '$lib/PageHeader.svelte';
 
   const { children } = $props();
   const app = getVoxelStation();

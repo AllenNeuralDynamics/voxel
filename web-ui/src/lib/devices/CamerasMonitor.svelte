@@ -48,7 +48,7 @@
   {@const sizeMb = cam.frameSizeMb?.value}
   {@const fill = cam.bufferFill}
   {@const dropped = info?.dropped_frames ?? 0}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-border bg-card">
+  <div class="flex flex-col overflow-hidden rounded-xs border border-line-muted bg-card">
     <!-- row 1: identity + geometry -->
     <div class="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
       {@render deviceIdentity(displayName(cam.id), channel)}
@@ -59,7 +59,7 @@
     </div>
 
     <!-- row 2: status — mode dot leads the live rates, or "Idle" -->
-    <div class="flex h-12 flex-col gap-1 border-t border-border px-2.5 py-1.5">
+    <div class="flex h-12 flex-col gap-1 border-t border-line-faint px-2.5 py-1.5">
       {#snippet modeDot()}
         <span
           class={cn(

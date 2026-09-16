@@ -46,7 +46,6 @@ import type {
   StationFeedView,
   StationInfo,
   StationStatus,
-  StencilPatch,
   TaskPatch,
   TaskValues,
   TileOrder,
@@ -118,36 +117,6 @@ function roiDiffers(
     return !(live.x === 0 && live.y === 0 && live.w === sensor.x && live.h === sensor.y);
   }
   return saved.x !== live.x || saved.y !== live.y || saved.w !== live.w || saved.h !== live.h;
-}
-
-export type AlignEdge = 'top' | 'bottom' | 'left' | 'right' | 'center';
-
-/**
- * New mosaic offset so the given edge's nearest tile center lands on `stagePos` (µm). Top/bottom snap
- * Y only, left/right snap X only, center snaps both — each tile spans one FOV, so aligning any edge on
- * an axis is the same "shift the offset to the nearest tile center" operation.
- */
-function alignedOffset(
-  edge: AlignEdge,
-  stagePos: { x: number; y: number },
-  lowerLimit: { x: number; y: number },
-  offset: { x: number; y: number },
-  spacing: { x: number; y: number }
-): { x: number; y: number } {
-  let x = offset.x;
-  let y = offset.y;
-  if (edge === 'left' || edge === 'right' || edge === 'center') x = snapAxis(stagePos.x - lowerLimit.x, x, spacing.x);
-  if (edge === 'top' || edge === 'bottom' || edge === 'center') y = snapAxis(stagePos.y - lowerLimit.y, y, spacing.y);
-  return { x, y };
-}
-
-/** Snap an offset so the nearest tile center lands on `fovCenter`. */
-function snapAxis(fovCenter: number, offset: number, step: number): number {
-  if (step <= 0) return offset;
-  const r = (((fovCenter - offset) % step) + step) % step;
-  const a = offset + r;
-  const b = offset + r - step;
-  return Math.abs(a - offset) <= Math.abs(b - offset) ? a : b;
 }
 
 type StageAxis = 'x' | 'y' | 'z';
@@ -490,7 +459,6 @@ export class Instrument {
         routing: session.instrument.routing,
         metadata_cls: session.instrument.metadata_cls,
         output: session.instrument.output,
-        stencil: session.instrument.stencil,
         traversal: session.instrument.traversal,
         tasks: session.instrument.tasks,
         metadata: session.instrument.metadata,
@@ -532,17 +500,6 @@ export class Instrument {
     return this.edits.run(() =>
       this.#client.post<{ active: string }>(`${this.#base}/profile/active`, { profile_id: profileId })
     );
-  }
-
-  /** Shift the stencil mosaic offset so `edge` aligns to a stage position (default: current). µm. */
-  alignStencil(edge: AlignEdge, position?: { x: number; y: number }): Promise<void> {
-    const { stencil } = this.state;
-    const [fovW, fovH] = this.fov ?? [0, 0];
-    const lowerLimit = { x: this.stage.x.lowerLimit?.value ?? 0, y: this.stage.y.lowerLimit?.value ?? 0 };
-    const pos = position ?? { x: this.stage.x.position?.value ?? 0, y: this.stage.y.position?.value ?? 0 };
-    const spacing = { x: fovW * (1 - stencil.overlap_x), y: fovH * (1 - stencil.overlap_y) };
-    const { x, y } = alignedOffset(edge, pos, lowerLimit, { x: stencil.x_offset, y: stencil.y_offset }, spacing);
-    return this.updateStencil({ x_offset: x, y_offset: y });
   }
 
   updateProfile(patch: ProfilePatch): Promise<Change<[string, ProfilePatch]>> {
@@ -610,10 +567,6 @@ export class Instrument {
     return this.edits.run(() => this.#client.patch<Change<WriterPatch>>(`${this.#base}/output`, patch));
   }
 
-  updateStencil(patch: StencilPatch): Promise<void> {
-    return this.#client.patch(`${this.#base}/stencil`, patch);
-  }
-
   updateMetadata(fields: Record<string, unknown>): Promise<Change<Record<string, unknown>>> {
     return this.edits.run(() => this.#client.patch<Change<Record<string, unknown>>>(`${this.#base}/metadata`, fields));
   }
@@ -631,9 +584,18 @@ export class Instrument {
     return this.edits.run(() => this.#client.put<Change<TileOrder>>(`${this.#base}/traversal`, { order }));
   }
 
-  addTasks(xy: [number, number][], profileIds?: string[]): Promise<Change<TaskValues>> {
+  addTasks(
+    xy: [number, number][],
+    range: { start: number; end: number },
+    profileIds?: string[]
+  ): Promise<Change<TaskValues>> {
     return this.edits.run(() =>
-      this.#client.post<Change<TaskValues>>(`${this.#base}/tasks`, { xy, profile_ids: profileIds ?? null })
+      this.#client.post<Change<TaskValues>>(`${this.#base}/tasks`, {
+        xy,
+        profile_ids: profileIds ?? null,
+        start: range.start,
+        end: range.end
+      })
     );
   }
 

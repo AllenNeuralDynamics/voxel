@@ -13,9 +13,8 @@
 
   let { instrument }: Props = $props();
 
-  const PANEL_WIDTH = 64;
-
   let containerRef = $state<HTMLDivElement | null>(null);
+  let panelWidth = $state(400);
   let panelHeight = $state(250);
 
   const taskSelection = getTaskSelection();
@@ -36,7 +35,7 @@
   }
 
   const fovZ = $derived(z ? zPos - zLower : 0);
-  const zLineY = $derived(depth > 0 ? (1 - fovZ / depth) * panelHeight - 1 : 0);
+  const zLineX = $derived(depth > 0 ? (fovZ / depth) * panelWidth : 0);
   const stageTarget = $derived(instrument.stage.target);
   const targetPending = $derived(instrument.stage.targetPending);
   const displayValue = $derived(targetPending && stageTarget?.z != null ? stageTarget.z : zPos);
@@ -49,7 +48,9 @@
   onMount(() => {
     if (!containerRef) return;
     const observer = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
       const h = entry.contentRect.height;
+      if (w > 0) panelWidth = w;
       if (h > 0) panelHeight = h;
     });
     observer.observe(containerRef);
@@ -59,8 +60,7 @@
 
 <div
   bind:this={containerRef}
-  class="relative h-full flex-none border border-border-faint transition-colors duration-300 ease-in-out hover:bg-floating/75"
-  style="width: {PANEL_WIDTH}px"
+  class="relative h-full w-full border border-line-faint transition-colors duration-300 ease-in-out hover:bg-floating/75"
 >
   <p class="absolute top-1 right-1 z-10 text-fg-muted">Z</p>
 
@@ -68,7 +68,7 @@
     <input
       type="range"
       class="stage-slider absolute inset-0 z-10 h-full w-full"
-      style:--thumb-length="{PANEL_WIDTH}px"
+      style:--thumb-length="{panelHeight}px"
       min={zLower}
       max={zUpper}
       step={10}
@@ -79,7 +79,7 @@
   {/if}
 
   <svg
-    viewBox="0 0 {PANEL_WIDTH} {panelHeight}"
+    viewBox="0 0 {panelWidth} {panelHeight}"
     class="pointer-none absolute inset-0 z-0"
     preserveAspectRatio="none"
     width="100%"
@@ -90,24 +90,24 @@
       {#if t}
         {@const selected = taskSelection.has(tile.task_id)}
         {@const active = isActive(tile.task_id)}
-        {@const z0Y = depth > 0 ? (1 - (t.start - zLower) / depth) * panelHeight - 1 : 0}
-        {@const z1Y = depth > 0 ? (1 - (t.end - zLower) / depth) * panelHeight - 1 : 0}
+        {@const z0X = depth > 0 ? ((t.start - zLower) / depth) * panelWidth : 0}
+        {@const z1X = depth > 0 ? ((t.end - zLower) / depth) * panelWidth : 0}
         <g
           class="text-fg"
           stroke-width={selected ? '1.5' : '0.5'}
           stroke="currentColor"
           opacity={selected ? 1 : active ? 0.3 : 0.15}
         >
-          <line class="nss" x1="0" y1={z0Y} x2={PANEL_WIDTH} y2={z0Y} />
-          <line class="nss" x1="0" y1={z1Y} x2={PANEL_WIDTH} y2={z1Y} />
+          <line class="nss" x1={z0X} y1="0" x2={z0X} y2={panelHeight} />
+          <line class="nss" x1={z1X} y1="0" x2={z1X} y2={panelHeight} />
         </g>
       {/if}
     {/each}
     <line
-      x1="0"
-      y1={zLineY}
-      x2={PANEL_WIDTH}
-      y2={zLineY}
+      x1={zLineX}
+      y1="0"
+      x2={zLineX}
+      y2={panelHeight}
       class="nss"
       stroke-width="1"
       stroke={zMoving ? 'var(--color-danger)' : 'var(--color-success)'}
@@ -121,14 +121,12 @@
   .stage-slider {
     -webkit-appearance: none;
     appearance: none;
-    writing-mode: vertical-rl;
-    direction: rtl;
     cursor: pointer;
     margin: 0;
     padding: 0;
     border: none;
     background-color: transparent;
-    --_track-color: var(--color-border);
+    --_track-color: var(--color-control-line);
     --_track-width: 1px;
 
     &::-webkit-slider-runnable-track {

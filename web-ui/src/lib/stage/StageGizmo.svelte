@@ -2,6 +2,7 @@
   import { watch } from 'runed';
 
   import type { Stage } from '$lib/model';
+  import { watchTheme } from '$lib/themes/manager.svelte';
   import { cn, toastError } from '$lib/utils';
 
   import { type Axis3, Camera3D } from './camera3d';
@@ -85,7 +86,7 @@
     ctx.clearRect(0, 0, size.w, size.h);
 
     const styles = getComputedStyle(canvasEl!);
-    const border = styles.getPropertyValue('--color-border').trim() || '#3a3a3a';
+    const border = styles.getPropertyValue('--color-line').trim() || '#3a3a3a';
     const accent = styles.getPropertyValue('--color-primary').trim() || '#4a9';
     const danger = styles.getPropertyValue('--color-danger').trim() || '#e55';
     const success = styles.getPropertyValue('--color-success').trim() || '#5a5';
@@ -311,6 +312,8 @@
     return () => ro.disconnect();
   });
 
+  watchTheme(draw);
+
   // Redraw whenever the position, view (shown axes), or size changes.
   watch(
     () =>
@@ -331,7 +334,7 @@
 </script>
 
 <div class={cn('flex h-full flex-col gap-2', className)}>
-  <div class="flex min-h-0 flex-1 items-center justify-center py-0">
+  <div class="flex min-h-0 flex-1 items-center justify-center">
     <div bind:this={box} class="relative aspect-square h-full">
       <canvas
         bind:this={canvasEl}
@@ -347,12 +350,12 @@
 
   <footer class="flex shrink-0 items-center justify-between gap-2">
     <span class=" font-medium tracking-wide text-fg-muted uppercase">Stage</span>
-    <div class="flex overflow-hidden rounded border border-border">
+    <div class="flex overflow-hidden rounded border border-control-line">
       {#each AXES as a (a)}
         <button
           onclick={() => toggle(a)}
           class={cn(
-            'w-7 cursor-pointer border-l border-border py-0.5  uppercase transition-colors first:border-l-0',
+            'w-7 cursor-pointer border-l border-control-line py-0.5  uppercase transition-colors first:border-l-0',
             shown[a] ? AXIS_ON[a] : 'text-fg-faint hover:text-fg-muted'
           )}
           title={`View down ${a.toUpperCase()}`}

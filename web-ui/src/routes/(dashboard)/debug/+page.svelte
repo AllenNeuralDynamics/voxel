@@ -93,7 +93,7 @@
   <section class="grid h-full min-h-0 grid-rows-[auto_1fr] gap-3 overflow-hidden p-4">
     <!-- Top toolbar: section tabs (primary) + surface picker (secondary) -->
     <div class="flex h-8 items-center gap-3 text-lg">
-      <div class="flex h-8 gap-1 rounded-md border border-border">
+      <div class="flex h-8 gap-1 rounded-md border border-line-muted">
         {#each SECTIONS as section (section)}
           <button
             class="cursor-pointer rounded-sm px-3 py-1 capitalize transition-colors {activeSection === section
@@ -105,7 +105,7 @@
           </button>
         {/each}
       </div>
-      <div class="ml-auto flex h-8 gap-1 rounded-md border border-border text-base">
+      <div class="ml-auto flex h-8 gap-1 rounded-md border border-line-muted text-base">
         {#each surfaces as { name }, i (i)}
           <button
             class="cursor-pointer rounded-sm px-2.5 py-1 transition-colors {activeSurface === i
@@ -120,7 +120,8 @@
     </div>
 
     <div
-      class="min-h-0 overflow-auto rounded-lg border border-border {surfaces[activeSurface].bg} flex flex-col gap-6 p-4"
+      class="min-h-0 overflow-auto rounded-lg border border-line-muted {surfaces[activeSurface]
+        .bg} flex flex-col gap-6 p-4"
     >
       {#if activeSection === 'kit'}
         <!-- ─────────────── Kit primitives ─────────────── -->
@@ -142,7 +143,7 @@
           <div class="flex gap-3">
             {#each ['canvas', 'surface', 'panel', 'elevated', 'floating'] as surface (surface)}
               <div
-                class="flex h-20 w-28 items-end rounded-md border border-border p-2 text-base text-fg-muted bg-{surface}"
+                class="flex h-20 w-28 items-end rounded-md border border-line-muted p-2 text-base text-fg-muted bg-{surface}"
               >
                 {surface}
               </div>
@@ -150,13 +151,16 @@
           </div>
         </div>
 
-        <!-- Borders -->
+        <!-- Lines -->
         <div>
-          <h3 class="mb-2 text-base text-fg-faint">Borders</h3>
-          <div class="flex gap-2">
-            {#each ['border', 'border-variant', 'border-focused', 'border-selected', 'border-disabled'] as b (b)}
-              <div class="flex h-12 w-24 items-end rounded-md border-2 border-{b} p-2 text-base text-fg-muted">
-                {b.replace('border-', '')}
+          <h3 class="mb-2 text-base text-fg-faint">Lines and control borders</h3>
+          <div class="flex flex-wrap gap-2">
+            {#each ['line', 'line-muted', 'line-faint', 'line-selected', 'control-line', 'control-line-hover', 'border-focused', 'border-disabled'] as token (token)}
+              <div
+                class="flex h-12 min-w-28 items-end rounded-md border p-2 text-base text-fg-muted"
+                style:border-color={`var(--${token})`}
+              >
+                {token}
               </div>
             {/each}
           </div>
@@ -167,7 +171,9 @@
           <h3 class="mb-2 text-base text-fg-faint">Elements</h3>
           <div class="flex gap-2">
             {#each ['element-bg', 'element-hover', 'element-active', 'element-selected'] as el (el)}
-              <div class="flex h-12 w-24 items-end rounded-md border border-border p-2 text-base text-fg-muted bg-{el}">
+              <div
+                class="flex h-12 w-24 items-end rounded-md border border-line-muted p-2 text-base text-fg-muted bg-{el}"
+              >
                 {el.replace('element-', '')}
               </div>
             {/each}
@@ -319,7 +325,7 @@
             </p>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Numeric.Input</h4>
             <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
@@ -347,7 +353,7 @@
             </div>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Numeric.SpinBox</h4>
             <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
@@ -372,7 +378,7 @@
             </div>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Numeric.SpinSlider</h4>
             <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
@@ -398,7 +404,7 @@
           </div>
         </section>
 
-        <hr class="border-t border-border" />
+        <hr class="border-t border-line-faint" />
 
         <!-- Enumerated -->
         <section class="space-y-4">
@@ -410,7 +416,7 @@
             </p>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Enumerated.Select</h4>
             <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
@@ -437,7 +443,7 @@
           </div>
         </section>
 
-        <hr class="border-t border-border" />
+        <hr class="border-t border-line-faint" />
 
         <!-- Bool -->
         <section class="space-y-4">
@@ -448,7 +454,7 @@
             </p>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Bool.Toggle</h4>
             <div class="flex flex-col gap-2 text-base">
               {#each sizes as sz (sz)}
@@ -467,7 +473,7 @@
           </div>
         </section>
 
-        <hr class="border-t border-border" />
+        <hr class="border-t border-line-faint" />
 
         <!-- Text -->
         <section class="space-y-4">
@@ -476,13 +482,13 @@
             <p class="mt-1 text-base text-fg-muted">
               <code>StringModel</code> for free-form text. Widget commits on Enter or blur — not per keystroke — so
               instrument-control writes don't fire on every character.
-              <kbd class="rounded border border-border bg-element-bg px-1">Esc</kbd>
+              <kbd class="rounded border border-line-muted bg-element-bg px-1">Esc</kbd>
               reverts to the model's value. Namespace is <code>Text</code> (not <code>String</code>) to avoid shadowing
               the JS global.
             </p>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">Text.Input</h4>
             <div class="flex flex-col gap-2 text-base">
               <div class="flex items-center gap-3">
@@ -499,7 +505,7 @@
               </div>
               <p class="mt-1 text-fg-faint">
                 Type freely — no patches fire while you're editing. Press <kbd
-                  class="rounded border border-border bg-element-bg px-1">Enter</kbd
+                  class="rounded border border-line-muted bg-element-bg px-1">Enter</kbd
                 > or click away to commit (toast fires once). Both inputs share the same model — committing one updates the
                 other.
               </p>
@@ -507,7 +513,7 @@
           </div>
         </section>
 
-        <hr class="border-t border-border" />
+        <hr class="border-t border-line-faint" />
 
         <!-- PropInput dispatcher -->
         <section class="space-y-4">
@@ -522,7 +528,7 @@
             </p>
           </div>
 
-          <div class="space-y-2 border-l-2 border-border/50 pl-4">
+          <div class="space-y-2 border-l-2 border-line-faint pl-4">
             <h4 class="text-base font-medium tracking-wide text-fg-faint uppercase">All kinds, dispatched</h4>
             <div class="grid grid-cols-[16rem_1fr_minmax(9rem,auto)] items-center gap-x-4 gap-y-2 text-base">
               {#each dispatchRows as row (row.label)}

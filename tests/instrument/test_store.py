@@ -8,6 +8,7 @@ from vxl.instrument import InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.config import AcquisitionTask
 from vxl.instrument.errors import OperationRejectedError, StartupError
 from vxl.instrument.store import InstrumentInspection, Invalid, Loaded, Missing
+from vxl.instrument.traversal import TileOrder
 
 
 def test_load_config_returns_the_parsed_config(instrument_template: Path) -> None:
@@ -133,14 +134,14 @@ async def test_store_saves_selected_live_fields_as_defaults(
     config = instrument_config
     directory = InstrumentStore.instantiate(config, "save-default", tmp_path)
     store = InstrumentStore.load(directory)
-    stencil = store.value.stencil.model_copy(update={"x_offset": 42.0})
-    await store.update(stencil=stencil)
+    traversal = TileOrder.SWEEP_COLUMN
+    await store.update(traversal=traversal)
 
-    await store.save_as_default({"stencil"})
+    await store.save_as_default({"traversal"})
 
-    assert store.default.value.stencil == stencil
-    assert store.config.default.stencil == stencil
-    assert load_yaml(directory / "config.yaml", InstrumentConfig).default.stencil == stencil
+    assert store.default.value.traversal == traversal
+    assert store.config.default.traversal == traversal
+    assert load_yaml(directory / "config.yaml", InstrumentConfig).default.traversal == traversal
 
 
 async def test_store_restores_selected_defaults_to_live_state(
@@ -149,13 +150,13 @@ async def test_store_restores_selected_defaults_to_live_state(
     config = instrument_config
     directory = InstrumentStore.instantiate(config, "restore-default", tmp_path)
     store = InstrumentStore.load(directory)
-    await store.update(stencil=store.value.stencil.model_copy(update={"x_offset": 42.0}))
+    await store.update(traversal=TileOrder.SWEEP_COLUMN)
 
-    await store.restore_default({"stencil"})
+    await store.restore_default({"traversal"})
 
-    assert store.value.stencil == store.default.value.stencil
+    assert store.value.traversal == store.default.value.traversal
     persisted = InstrumentState.model_validate_json((directory / "state.json").read_text(encoding="utf-8"))
-    assert persisted.stencil == store.default.value.stencil
+    assert persisted.traversal == store.default.value.traversal
 
 
 def test_store_rejects_an_invalid_existing_state_file(instrument_config: InstrumentConfig, tmp_path: Path) -> None:

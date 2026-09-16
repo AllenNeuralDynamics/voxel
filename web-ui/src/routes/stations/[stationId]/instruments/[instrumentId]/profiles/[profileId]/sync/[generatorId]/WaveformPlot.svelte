@@ -46,7 +46,7 @@
     const mode = themes.resolvedMode;
     const styles = getComputedStyle(document.documentElement);
     const axisColor = styles.getPropertyValue('--color-fg-muted').trim();
-    const gridColor = styles.getPropertyValue('--color-border').trim();
+    const gridColor = styles.getPropertyValue('--color-line-faint').trim();
     const limitColor = styles.getPropertyValue('--color-danger').trim();
     void mode;
 

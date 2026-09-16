@@ -6,7 +6,7 @@
       text: 'cursor-text rounded border border-transparent',
       input: [
         'w-full min-w-0 bg-surface outline-none',
-        'rounded border border-input',
+        'rounded border border-control-line',
         'focus:border-focused',
         'aria-invalid:border-danger',
         'transition-colors'

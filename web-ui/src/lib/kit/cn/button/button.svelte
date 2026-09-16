@@ -10,9 +10,9 @@
       variant: {
         default: 'border-primary bg-primary text-primary-fg hover:bg-primary/90 active:bg-primary/80',
         outline:
-          'border-input bg-transparent text-fg hover:border-border hover:bg-element-hover active:bg-element-active',
+          'border-control-line bg-transparent text-fg hover:border-control-line-hover hover:bg-element-hover active:bg-element-active',
         secondary:
-          'border-input bg-element-bg text-fg hover:border-border hover:bg-element-hover active:bg-element-active',
+          'border-control-line bg-element-bg text-fg hover:border-control-line-hover hover:bg-element-hover active:bg-element-active',
         ghost: 'text-fg-muted hover:bg-element-hover hover:text-fg active:bg-element-active',
         destructive: 'border-danger bg-danger text-danger-fg hover:bg-danger/90 active:bg-danger/80',
         link: 'text-primary underline-offset-4 hover:underline'

@@ -6,7 +6,6 @@
     threshold: number;
     lower: string;
     upper: string;
-    color?: string;
   }
 
   /** An interaction intent, not a persistence or hardware command. */
@@ -30,6 +29,7 @@
     visible = $bindable(true),
     disabled = false,
     index = 0,
+    color = '#d4d4d8',
     haloColor = '#18181b',
     formatDistance = (value) => `${Number(value.toFixed(1))} µm`,
     resolveThreshold = (value) => value,
@@ -40,6 +40,7 @@
     visible?: boolean;
     disabled?: boolean;
     index?: number;
+    color?: string;
     haloColor?: string;
     formatDistance?: (value: number) => string;
     /** Resolve a drag position in world units before moving the line. */
@@ -61,7 +62,6 @@
   let hovered = $state(false);
   const threshold = $derived(value ?? rule.threshold);
   const vertical = $derived(rule.axis === 'x');
-  const color = $derived(rule.color ?? '#38bdf8');
   const frame = $derived(screenRect(visibleBounds, view, orientation));
   const fullFrame = $derived(screenRect(bounds, view, orientation));
   const point = $derived(context.project({ x: threshold, y: threshold }));
@@ -135,6 +135,7 @@
   onMount(() =>
     context.register({
       id: 'routing:' + rule.id,
+      menuOrder: 2,
       get label() {
         return 'Routing · ' + rule.label;
       },
@@ -204,7 +205,7 @@
       strokeWidth={3}
       lineJoin="round"
       fillAfterStrokeEnabled
-      opacity={0.9}
+      opacity={0.65}
       listening={false}
     />
   {/if}
@@ -224,7 +225,7 @@
         text={label.text}
         wrap="none"
         ellipsis
-        align="center"
+        align={vertical ? (label.rect.x < point.x ? 'right' : 'left') : label.rect.y < point.y ? 'left' : 'right'}
         fontSize={11}
         fontFamily="sans-serif"
         fill={color}
@@ -232,7 +233,7 @@
         strokeWidth={3}
         lineJoin="round"
         fillAfterStrokeEnabled
-        opacity={0.9}
+        opacity={0.65}
         listening={false}
       />
     {/if}

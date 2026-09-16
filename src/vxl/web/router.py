@@ -33,7 +33,6 @@ from vxl.instrument.config import (
     ChannelPatch,
     ProfilePatch,
     RoutingRule,
-    StencilPatch,
     TaskPatch,
     WriterPatch,
 )
@@ -117,6 +116,8 @@ class _ActivateProfile(BaseModel):
 
 class _AddTasks(BaseModel):
     xy: list[tuple[float, float]]
+    start: float
+    end: float
     profile_ids: list[str] | None = None
 
 
@@ -540,11 +541,6 @@ async def update_output(patch: WriterPatch, instrument: InstrumentDep) -> Change
     return await instrument.update_output(patch)
 
 
-@instrument_router.patch("/stencil", status_code=204)
-async def update_stencil(patch: StencilPatch, instrument: InstrumentDep) -> None:
-    await instrument.update_stencil(patch)
-
-
 @instrument_router.patch("/metadata")
 async def update_metadata(fields: dict[str, Any], instrument: InstrumentDep) -> Change[dict[str, Any]]:
     return await instrument.update_metadata(**fields)
@@ -564,7 +560,7 @@ async def set_traversal(body: _Traversal, instrument: InstrumentDep) -> Change[T
 async def add_tasks(
     body: _AddTasks, instrument: InstrumentDep
 ) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
-    return await instrument.add_tasks(body.xy, profile_ids=body.profile_ids)
+    return await instrument.add_tasks(body.xy, profile_ids=body.profile_ids, start=body.start, end=body.end)
 
 
 @instrument_router.patch("/tasks")

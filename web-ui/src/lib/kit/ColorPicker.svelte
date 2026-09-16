@@ -49,13 +49,13 @@
 
 <Popover.Root>
   <Popover.Trigger
-    class="h-2.5 w-2.5 rounded-full border border-border transition-all hover:border-fg-muted"
+    class="h-2.5 w-2.5 rounded-full border border-control-line transition-all hover:border-control-line-hover"
     style="background-color: {color}"
     aria-label="Pick color"
   />
 
   <Popover.Content
-    class="z-50 rounded-md border border-border bg-floating p-2 shadow-xl outline-none"
+    class="z-50 rounded-md border border-line-muted bg-floating p-2 shadow-xl outline-none"
     sideOffset={4}
     {align}
   >
@@ -70,7 +70,7 @@
               class="h-5 w-5 rounded-full border transition-all hover:scale-110 {color.toLowerCase() ===
               presetColor.toLowerCase()
                 ? 'border-focused ring-focused ring-1'
-                : 'border-border hover:border-fg-muted'}"
+                : 'border-control-line hover:border-control-line-hover'}"
               style="background-color: {presetColor}"
               aria-label="Select preset color"
             ></button>
@@ -80,14 +80,14 @@
     {/if}
 
     <!-- Custom color -->
-    <div class={presetColors.length > 0 ? 'border-t border-border pt-2' : ''}>
+    <div class={presetColors.length > 0 ? 'border-t border-line-faint pt-2' : ''}>
       <div class="flex gap-1.5">
         <!-- Native color picker -->
         <input
           type="color"
           value={color}
           oninput={handleCustomColorChange}
-          class="h-6 w-8 cursor-pointer rounded border border-input bg-element-bg"
+          class="h-6 w-8 cursor-pointer rounded border border-control-line bg-element-bg"
         />
         <!-- Hex input -->
         <input
@@ -97,7 +97,7 @@
           onblur={handleCustomInputBlur}
           placeholder="#ff00ff"
           size="7"
-          class="focus:border-focused h-6 min-w-0 rounded border border-input bg-element-bg px-1.5 font-mono text-base text-fg placeholder-fg-muted focus:outline-none"
+          class="focus:border-focused h-6 min-w-0 rounded border border-control-line bg-element-bg px-1.5 font-mono text-base text-fg placeholder-fg-muted focus:outline-none"
         />
       </div>
     </div>

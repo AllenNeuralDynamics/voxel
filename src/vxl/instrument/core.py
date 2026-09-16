@@ -46,7 +46,6 @@ from .config import (
     ProfileConfig,
     ProfilePatch,
     RoutingRule,
-    StencilPatch,
     TaskPatch,
     WriterPatch,
     ZStack,
@@ -534,23 +533,17 @@ class Instrument:
             await self._history.clear()
             await self._active_profile_id.set(next_profile_id)
 
-    async def update_stencil(self, patch: StencilPatch) -> None:
-        """Persist acquisition stencil settings."""
-        async with self._lock:
-            self._ensure_mode(
-                "update the stencil",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
-            stencil = self._store.value.stencil.model_copy(update=patch.changes())
-            await self._store.update(stencil=stencil)
-
     async def set_traversal(self, order: TileOrder) -> Change[TileOrder]:
         """Set the acquisition task traversal order and return its change."""
         return await self._undoable_edit("Change the traversal order", lambda: order, self._write_traversal)
 
     async def add_tasks(
-        self, xy: Sequence[tuple[float, float]], *, profile_ids: Sequence[str] | None = None
+        self,
+        xy: Sequence[tuple[float, float]],
+        *,
+        start: float,
+        end: float,
+        profile_ids: Sequence[str] | None = None,
     ) -> Change[_TaskValues]:
         """Add tasks as one undoable edit and return their indexed before/after values."""
 
@@ -562,9 +555,7 @@ class Instrument:
             return {
                 uuid.uuid4().hex: (
                     len(state.tasks) + index,
-                    AcquisitionTask(
-                        x=x, y=y, start=state.stencil.z_start, end=state.stencil.z_end, profile_ids=profiles
-                    ),
+                    AcquisitionTask(x=x, y=y, start=start, end=end, profile_ids=profiles),
                 )
                 for index, (x, y) in enumerate(xy)
             }
@@ -813,7 +804,7 @@ class Instrument:
         return violations
 
     def _stage_position_violations(self) -> list[Violation]:
-        """Check task and stencil positions against the stage bounds validated by HAL."""
+        """Check task positions against the stage bounds validated by HAL."""
         stage = self._hal.stage
         limits: dict[str, tuple[float, float]] = {}
         for axis, handle in (("x", stage.x), ("y", stage.y), ("z", stage.z)):
@@ -840,9 +831,6 @@ class Instrument:
             check(task.y, "y", (*task_loc, "y"), f"Task '{task_id}' y")
             check(task.start, "z", (*task_loc, "start"), f"Task '{task_id}' start")
             check(task.end, "z", (*task_loc, "end"), f"Task '{task_id}' end")
-        stencil = self._store.value.stencil
-        check(stencil.z_start, "z", ("state", "stencil", "z_start"), "Stencil z_start")
-        check(stencil.z_end, "z", ("state", "stencil", "z_end"), "Stencil z_end")
         return violations
 
     async def _refresh_device_props(self) -> None:

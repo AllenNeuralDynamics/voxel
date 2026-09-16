@@ -58,9 +58,9 @@
   <main class="h-full min-h-0 overflow-hidden">
     <div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[24rem_minmax(0,1fr)] lg:grid-rows-1">
       <aside
-        class="max-h-80 min-h-0 overflow-y-auto border-b border-border bg-surface lg:max-h-none lg:border-r lg:border-b-0"
+        class="max-h-80 min-h-0 overflow-y-auto border-b border-line bg-surface lg:max-h-none lg:border-r lg:border-b-0"
       >
-        <div class="flex h-14 items-center border-b border-border px-3">
+        <div class="flex h-14 items-center border-b border-line-muted px-3">
           <a
             href={resolve('/(dashboard)/stations')}
             class="flex h-ui-lg flex-1 items-center gap-2 rounded-md px-2 transition-colors hover:bg-element-hover"

@@ -49,7 +49,7 @@
   <div class="flex flex-col gap-2 px-3 py-2">
     {#each dimensions as dimension (dimension.id)}
       {@const options = dimension.routes.map((route) => ({ value: route, label: dimension.routeLabel(route) }))}
-      <div class="flex flex-col gap-1 rounded-xs border border-border bg-card px-2.5 py-1.5">
+      <div class="flex flex-col gap-1 rounded-xs border border-line-muted bg-card px-2.5 py-1.5">
         <div class="flex items-center gap-2">
           <a
             href={resolve(
