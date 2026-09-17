@@ -175,7 +175,8 @@
         selection.clear();
         selection.add(...rows.slice(Math.min(first, last), Math.max(first, last) + 1).map((row) => row.taskId));
       }
-    } else selection.select(id);
+    } else if (selection.has(id) && selection.size === 1) selection.clear();
+    else selection.select(id);
     lastClickedId = id;
   }
 

@@ -357,8 +357,9 @@
       onselect={(ids, toggle) => {
         if (toggle) ids.forEach((id) => taskSelection.toggle(id));
         else {
+          const clear = ids.length === 1 && taskSelection.size === 1 && taskSelection.has(ids[0]);
           taskSelection.clear();
-          taskSelection.add(...ids);
+          if (!clear) taskSelection.add(...ids);
         }
       }}
       onactivate={(point) => fovLayer?.activateAt(point)}

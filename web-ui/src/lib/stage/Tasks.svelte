@@ -8,7 +8,7 @@
   import type { TaskTile } from '$lib/model';
 
   import { getStageContext, type MenuSelection } from './context.svelte';
-  import { intersect, type Point, screenRect, screenTransform } from './geometry';
+  import { intersect, type Point, screenTransform, worldTransform } from './geometry';
 
   let {
     tiles,
@@ -54,18 +54,20 @@
     context.visibleBounds ? items.filter((item) => intersect(item.bounds, context.visibleBounds!)) : []
   );
   const path = $derived(
-    items.map(({ bounds }) =>
-      context.project({ x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 })
-    )
+    items.map(({ bounds }) => ({
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2
+    }))
   );
   const traversalScene = $derived.by(() => {
     const points = path;
     const stroke = color;
+    const pixel = 1 / context.view.scale;
     return (drawing: Konva.Context) => {
       if (points.length < 2) return;
 
       drawing.setAttr('strokeStyle', stroke);
-      drawing.setAttr('lineWidth', 1.5);
+      drawing.setAttr('lineWidth', 1.5 * pixel);
       drawing.setAttr('globalAlpha', 0.35);
       drawing.beginPath();
       drawing.moveTo(points[0].x, points[0].y);
@@ -80,14 +82,15 @@
         const dx = end.x - start.x;
         const dy = end.y - start.y;
         const length = Math.hypot(dx, dy);
-        if (length < 24) continue;
+        if (length < 24 * pixel) continue;
         const x = (start.x + end.x) / 2;
         const y = (start.y + end.y) / 2;
         const cos = dx / length;
         const sin = dy / length;
-        drawing.moveTo(x - 4 * cos + 4 * sin, y - 4 * sin - 4 * cos);
+        const arm = 4 * pixel;
+        drawing.moveTo(x - arm * cos + arm * sin, y - arm * sin - arm * cos);
         drawing.lineTo(x, y);
-        drawing.lineTo(x - 4 * cos - 4 * sin, y - 4 * sin + 4 * cos);
+        drawing.lineTo(x - arm * cos - arm * sin, y - arm * sin + arm * cos);
       }
       drawing.stroke();
     };
@@ -166,18 +169,21 @@
   {/if}
 {/snippet}
 
-<Group {visible} {...screenTransform(context.view)}>
-  {#if visible}
+{#if visible}
+  <Group {...worldTransform(context.view.scale, context.orientation)}>
     {#each drawn as item (item.id)}
-      {@const rect = screenRect(item.bounds, context.view, context.orientation)}
       {@const active = selected.has(item.id)}
       <Rect
         staticConfig
-        {...rect}
+        x={item.bounds.minX}
+        y={item.bounds.minY}
+        width={item.bounds.maxX - item.bounds.minX}
+        height={item.bounds.maxY - item.bounds.minY}
         name={`task:${item.id}`}
         fill={transparent(item.fill ?? color, item.fill ? (active ? 0.22 : 0.12) : active ? 0.12 : 0.02)}
         stroke={transparent(color, active ? 1 : 0.4)}
         strokeWidth={active ? 1.5 : 1}
+        strokeScaleEnabled={false}
         perfectDrawEnabled={false}
         shadowForStrokeEnabled={false}
         onpointerclick={(event) => {
@@ -192,7 +198,9 @@
     {#if path.length > 1}
       <Shape staticConfig sceneFunc={traversalScene} listening={false} perfectDrawEnabled={false} />
     {/if}
-    {#if tooltip}
+  </Group>
+  {#if tooltip}
+    <Group {...screenTransform(context.view)} listening={false}>
       <Label x={tooltip.point.x} y={tooltip.point.y} listening={false}>
         <Tag fill={haloColor} cornerRadius={4} />
         <Text
@@ -206,6 +214,6 @@
           fill={color}
         />
       </Label>
-    {/if}
+    </Group>
   {/if}
-</Group>
+{/if}
