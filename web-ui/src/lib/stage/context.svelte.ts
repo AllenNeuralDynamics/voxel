@@ -23,6 +23,7 @@ export interface StageContext {
   readonly marquee: Bounds | null;
   readonly selecting: boolean;
   readonly altHeld: boolean;
+  readonly shiftHeld: boolean;
   readonly cursor: Point | null;
   readonly menuSelection: MenuSelection | null;
   readonly menuPreview: Point | null;

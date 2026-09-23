@@ -9,8 +9,8 @@
   const instrument = $derived(app.instrument?.id === page.params.instrumentId ? app.instrument : null);
   const preferenceKey = $derived(`${page.params.stationId ?? ''}/${page.params.instrumentId ?? ''}`);
   const taskRange = $derived.by(() => {
-    const saved = prefs.plan.taskDefaults.get()[preferenceKey];
-    if (saved) return { start: saved.start, end: saved.end };
+    const saved = prefs.plan.defaults.get()[preferenceKey];
+    if (saved) return saved.zRange;
     const z = instrument?.stage.z.position?.value;
     return z != null && Number.isFinite(z) ? { start: z, end: z } : null;
   });

@@ -28,8 +28,8 @@
   let grid = $state<{ origin: Point; width: number; height: number } | null>(null);
 
   $effect(() => {
-    if (!context.altHeld && !context.menuSelection) grid = null;
-    else if (context.altHeld && !context.menuSelection && !grid) {
+    if (!context.shiftHeld && !context.menuSelection) grid = null;
+    else if (context.shiftHeld && !context.menuSelection && !grid) {
       grid = untrack(() =>
         position && fov && fov.width > 0 && fov.height > 0 ? { origin: { ...position }, ...fov } : null
       );

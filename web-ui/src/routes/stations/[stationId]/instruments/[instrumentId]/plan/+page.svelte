@@ -72,8 +72,8 @@
     return x != null && y != null && Number.isFinite(x) && Number.isFinite(y) ? ([x, y] as [number, number]) : null;
   });
   const currentTaskRange = $derived.by(() => {
-    const saved = prefs.plan.taskDefaults.get()[preferenceKey];
-    if (saved) return { start: saved.start, end: saved.end };
+    const saved = prefs.plan.defaults.get()[preferenceKey];
+    if (saved) return saved.zRange;
     const z = instrument?.stage.z.position?.value;
     return z != null && Number.isFinite(z) ? { start: z, end: z } : null;
   });
@@ -82,11 +82,11 @@
     const inst = instrument;
     if (!inst || !currentPosition || !currentTaskRange || inst.mode === 'capture' || inst.edits.busy) return;
     const change = await inst.addTasks([currentPosition], currentTaskRange);
-    const defaults = prefs.plan.taskDefaults.get();
+    const defaults = prefs.plan.defaults.get();
     if (!defaults[preferenceKey]) {
-      prefs.plan.taskDefaults.set({
+      prefs.plan.defaults.set({
         ...defaults,
-        [preferenceKey]: { ...currentTaskRange, overlap: 0.1 }
+        [preferenceKey]: { zRange: currentTaskRange, overlap: 0.1 }
       });
     }
     const id = Object.keys(change.after)[0];

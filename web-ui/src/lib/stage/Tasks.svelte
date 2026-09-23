@@ -181,7 +181,7 @@
         height={item.bounds.maxY - item.bounds.minY}
         name={`task:${item.id}`}
         fill={transparent(item.fill ?? color, item.fill ? (active ? 0.22 : 0.12) : active ? 0.12 : 0.02)}
-        stroke={transparent(color, active ? 1 : 0.4)}
+        stroke={transparent(color, active ? 0.6 : 0.2)}
         strokeWidth={active ? 1.5 : 1}
         strokeScaleEnabled={false}
         perfectDrawEnabled={false}

@@ -18,6 +18,7 @@
   import Fov from './Fov.svelte';
   import type { Bounds, Point, Viewport } from './geometry';
   import Position from './Position.svelte';
+  import { getRegionSelection } from './region.svelte';
   import Routing from './Routing.svelte';
   import RoutingRegions from './RoutingRegions.svelte';
   import StageCanvas from './StageCanvas.svelte';
@@ -27,12 +28,12 @@
 
   const app = getVoxelStation();
   const taskSelection = getTaskSelection();
+  const regionSelection = getRegionSelection();
   const tasksVisible = pref('stage:tasks-visible', true);
   const routingRegionsVisible = pref('stage:routing-regions-visible', true);
   let fovLayer = $state<Fov>();
   let positionLayer = $state<Position>();
   let tasksLayer = $state<Tasks>();
-  let marquee = $state<Bounds | null>(null);
   let menuTasks = $state.raw<ReturnType<Tasks['destinations']>>([]);
   let menuGrid = $state.raw<Point | undefined>();
   const previews = getPreviewContext();
@@ -184,14 +185,12 @@
     toastError(stage.moveTo(clampPosition(point)));
   }
 
-  async function defineRegion(bounds: Bounds) {
+  async function addTasksInRegion(bounds: Bounds) {
     if (!instrument || !planAddHref) return;
-    const url = new URL(planAddHref, page.url);
-    for (const [key, value] of Object.entries(bounds)) url.searchParams.set(key, String(value));
-    // The pathname is resolved above; only numeric bounds are appended here.
+    regionSelection.setBounds(bounds);
+    // The destination is resolved above from the active instrument route parameters.
     // eslint-disable-next-line svelte/no-navigation-without-resolve
-    await goto(`${planAddHref}${url.search}`, { keepFocus: true, noScroll: true });
-    marquee = null;
+    await goto(planAddHref, { keepFocus: true, noScroll: true });
   }
 
   function scaleBar(scale: number, width: number) {
@@ -219,7 +218,7 @@
     bounds={stageBounds}
     orientation={stage.orientation}
     bind:viewport
-    bind:marquee
+    bind:marquee={() => regionSelection.bounds, (bounds) => regionSelection.setBounds(bounds)}
     resolveDestination={(point, hits) => {
       menuGrid = positionLayer?.destination(point);
       menuTasks = (tasksLayer?.destinations(hits) ?? []).map((task) => ({ ...task, point: clampPosition(task.point) }));
@@ -254,11 +253,13 @@
     {/snippet}
     {#snippet menu(selection, canvasActions, center, fitBounds, previewDestination)}
       {#if 'bounds' in selection}
-        <ContextMenu.Item onSelect={() => toastError(defineRegion(selection.bounds))}>
-          <BoxSelect width="14" height="14" />
-          {definingRegion ? 'Use as region' : 'Define region here'}
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
+        {#if !definingRegion}
+          <ContextMenu.Item onSelect={() => toastError(addTasksInRegion(selection.bounds))}>
+            <BoxSelect width="14" height="14" />
+            Add tasks in region
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+        {/if}
       {:else if colorGroups.length}
         {@const key = `${instrument.stationId}/${instrument.id}`}
         <ContextMenu.Sub>

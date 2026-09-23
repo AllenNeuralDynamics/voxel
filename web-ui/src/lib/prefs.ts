@@ -4,9 +4,16 @@ export type SpatialUnit = 'mm' | 'um';
 export type ViewerMode = 'fov' | 'stage';
 export type LogLevel = 'debug' | 'info' | 'warning' | 'error';
 
-export interface TaskAuthoringDefaults {
-  start: number;
-  end: number;
+export interface PlanRegion {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export interface PlanDefaults {
+  region?: PlanRegion;
+  zRange: { start: number; end: number };
   overlap: number;
 }
 
@@ -20,7 +27,7 @@ export interface TaskAuthoringDefaults {
  * Keep conversion/formatting logic and hardware state outside this module.
  * Pane sizes, navigation history, and per-channel preview settings stay with
  * their existing owners. Spatial units, stage visibility, and instrument-scoped
- * task-authoring defaults use this module; the remaining preferences have not yet been migrated.
+ * plan defaults use this module; the remaining preferences have not yet been migrated.
  */
 export const prefs = {
   spatialUnit: pref<SpatialUnit>('ui:spatial-unit', 'mm'),
@@ -37,7 +44,7 @@ export const prefs = {
   },
 
   plan: {
-    taskDefaults: pref<Record<string, TaskAuthoringDefaults>>('ui:plan:task-defaults', {})
+    defaults: pref<Record<string, PlanDefaults>>('ui:plan:defaults', {})
   },
 
   logs: {

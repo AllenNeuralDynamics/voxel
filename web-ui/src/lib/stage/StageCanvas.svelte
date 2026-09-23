@@ -31,7 +31,8 @@
   import { watchTheme } from '$lib/themes/manager.svelte';
 
   import { provideStageContext, type StageFeature } from './context.svelte';
-  import { box, fit, intersect, project, screenRect, screenTransform, unproject, worldTransform } from './geometry';
+  import { box, fit, intersect, project, screenRect, unproject, worldTransform } from './geometry';
+  import Marquee from './Marquee.svelte';
 
   let {
     bounds,
@@ -51,6 +52,7 @@
   let height = $state(0);
   let cursor = $state.raw<Point | null>(null);
   let altHeld = $state(false);
+  let shiftHeld = $state(false);
   let dragging = $state.raw<Konva.Node | null>(null);
   let selectionStart = $state<Point | null>(null);
   let selectionPointer: number | null = null;
@@ -61,7 +63,6 @@
   let menuSelection = $state.raw<MenuSelection | null>(null);
   let menuPreview = $state.raw<Point | null>(null);
   let borderColor = $state('#52525b');
-  let selectionColor = $state('#e5e7eb');
 
   const valid = $derived(
     width > 0 &&
@@ -145,6 +146,9 @@
     },
     get altHeld() {
       return altHeld;
+    },
+    get shiftHeld() {
+      return shiftHeld;
     },
     get cursor() {
       return cursor;
@@ -232,7 +236,6 @@
     if (!selectionStart || (event && event.pointerId !== selectionPointer)) return;
     if (stage) stage.node.container().style.cursor = 'grab';
     if (event) updateSelection(event);
-    if (!selectionMoved) marquee = null;
     selectionStart = null;
     selectionPointer = null;
     selectionOrigin = null;
@@ -259,7 +262,6 @@
     ) {
       menuSelection = { bounds: { ...marquee } };
     } else {
-      marquee = null;
       const hits = stage.node.getAllIntersections(screen).sort((a, b) => b.getAbsoluteZIndex() - a.getAbsoluteZIndex());
       menuSelection = {
         point: world,
@@ -279,12 +281,12 @@
   watchTheme(() => {
     const style = getComputedStyle(host);
     borderColor = style.getPropertyValue('--color-line').trim() || borderColor;
-    selectionColor = style.getPropertyValue('--color-fg').trim() || selectionColor;
   });
 
   onMount(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Alt') altHeld = true;
+      if (event.key === 'Shift') shiftHeld = true;
       if (event.key === 'Escape') {
         cancelSelection();
         marquee = null;
@@ -292,9 +294,11 @@
     };
     const keyup = (event: KeyboardEvent) => {
       if (event.key === 'Alt') altHeld = false;
+      if (event.key === 'Shift') shiftHeld = false;
     };
     const blur = () => {
       altHeld = false;
+      shiftHeld = false;
       cancelSelection();
       stage?.node.stopDrag();
     };
@@ -350,9 +354,6 @@
             onwheel={zoom}
             onpointerdown={beginSelection}
             oncontextmenu={openMenu}
-            onpointerclick={(event) => {
-              if (event.evt.button === 0 && !event.evt.altKey && !selectionStart) marquee = null;
-            }}
           >
             <Layer>
               <Group {...worldTransform(view.scale, orientation)}>
@@ -368,16 +369,8 @@
                 />
               </Group>
               {@render children?.()}
-            </Layer>
-            <Layer {...screenTransform(view)} listening={false}>
               {#if marquee}
-                <Rect {...screenRect(marquee, view, orientation)} fill={selectionColor} opacity={0.08} />
-                <Rect
-                  {...screenRect(marquee, view, orientation)}
-                  stroke={selectionColor}
-                  strokeWidth={1}
-                  dash={[4, 3]}
-                />
+                <Marquee bind:bounds={marquee} />
               {/if}
             </Layer>
           </Stage>
@@ -426,11 +419,11 @@
     {@const selectedBounds = menuSelection.bounds}
     <ContextMenu.Item onSelect={() => fitBounds(selectedBounds)}>
       <FitToScreen width="14" height="14" />
-      Fit to selection
+      Fit to region
     </ContextMenu.Item>
     <ContextMenu.Item onSelect={() => (marquee = null)}>
       <Close width="14" height="14" />
-      Clear selection
+      Clear region
     </ContextMenu.Item>
   {:else}
     <ContextMenu.Item onSelect={() => (viewport = fitted)}>

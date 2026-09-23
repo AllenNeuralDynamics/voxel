@@ -15,6 +15,7 @@
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
   import { setVoxelStation, Station } from '$lib/model';
   import { PreviewSession, providePreviewContext } from '$lib/preview/session.svelte';
+  import { provideRegionSelection } from '$lib/stage/region.svelte';
   import { createPaneSize, displayName, toastError } from '$lib/utils';
 
   import CenterPane from './CenterPane.svelte';
@@ -30,6 +31,12 @@
   const stationId = $derived(page.params.stationId ?? '');
   const previews = providePreviewContext();
   provideTaskSelection();
+  const regionSelection = provideRegionSelection();
+
+  $effect(() => {
+    const scope = app.instrument?.sessionId ?? null;
+    untrack(() => regionSelection.setScope(scope));
+  });
 
   $effect(() => {
     const instrument = app.instrument;

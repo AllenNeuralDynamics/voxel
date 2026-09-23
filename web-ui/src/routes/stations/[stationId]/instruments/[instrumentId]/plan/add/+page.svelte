@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto, replaceState } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getTaskSelection } from '$lib/grid/selection.svelte';
@@ -10,6 +10,7 @@
   import { prefs } from '$lib/prefs';
   import { SpinBox } from '$lib/prop/numeric';
   import { getSpatialUnit } from '$lib/spatial-units';
+  import { getRegionSelection, type RegionField } from '$lib/stage/region.svelte';
   import { displayName, toastError } from '$lib/utils';
 
   import StageNumericField from '../StageNumericField.svelte';
@@ -17,6 +18,7 @@
   const app = getVoxelStation();
   const instrument = $derived(app.instrument?.id === page.params.instrumentId ? app.instrument : null);
   const selection = getTaskSelection();
+  const regionSelection = getRegionSelection();
   const unit = $derived(getSpatialUnit(prefs.spatialUnit.get()));
   const routeParams = $derived({
     stationId: page.params.stationId ?? '',
@@ -25,10 +27,8 @@
   const preferenceKey = $derived(`${routeParams.stationId}/${routeParams.instrumentId}`);
   const planHref = $derived(resolve('/stations/[stationId]/instruments/[instrumentId]/plan', routeParams));
 
-  type BoundsField = 'minX' | 'maxX' | 'minY' | 'maxY';
   type ZField = 'start' | 'end';
-  type DraftField = BoundsField | ZField;
-  const boundsFields: { key: BoundsField; label: string }[] = [
+  const boundsFields: { key: RegionField; label: string }[] = [
     { key: 'minX', label: 'X minimum' },
     { key: 'maxX', label: 'X maximum' },
     { key: 'minY', label: 'Y minimum' },
@@ -39,60 +39,30 @@
     { key: 'end', label: 'Z end' }
   ];
 
-  function numberParam(name: string): number | null {
-    const raw = page.url.searchParams.get(name);
-    if (raw === null || raw.trim() === '') return null;
-    const value = Number(raw);
-    return Number.isFinite(value) ? value : null;
-  }
-
-  let draft = $state<Record<DraftField, number | null>>({
-    minX: null,
-    maxX: null,
-    minY: null,
-    maxY: null,
-    start: null,
-    end: null
-  });
+  let zRange = $state<Record<ZField, number | null>>({ start: null, end: null });
   let overlap = $state(0.1);
   let profileIds = $state<string[]>([]);
   let initializedFor = $state('');
-
-  $effect(() => {
-    const minX = numberParam('minX');
-    const maxX = numberParam('maxX');
-    const minY = numberParam('minY');
-    const maxY = numberParam('maxY');
-    if (minX == null || maxX == null || minY == null || maxY == null || maxX <= minX || maxY <= minY) return;
-
-    Object.assign(draft, { minX, maxX, minY, maxY });
-    replaceState(resolve('/stations/[stationId]/instruments/[instrumentId]/plan/add', routeParams), page.state);
-  });
 
   $effect(() => {
     const inst = instrument;
     const key = preferenceKey;
     if (!inst || initializedFor === key) return;
     initializedFor = key;
-    const saved = prefs.plan.taskDefaults.get()[key];
+    const saved = prefs.plan.defaults.get()[key];
     const stageZ = inst.stage.z.position?.value;
-    draft.start = saved?.start ?? stageZ ?? null;
-    draft.end = saved?.end ?? stageZ ?? null;
+    zRange.start = saved?.zRange.start ?? stageZ ?? null;
+    zRange.end = saved?.zRange.end ?? stageZ ?? null;
     overlap = saved?.overlap ?? 0.1;
     profileIds = inst.activeProfileId ? [inst.activeProfileId] : [];
+    if (!regionSelection.bounds && saved?.region) regionSelection.setBounds(saved.region);
   });
 
   const profiles = $derived(Object.entries(instrument?.imaging.profiles ?? {}));
   const disabled = $derived(!instrument || instrument.mode === 'capture' || instrument.edits.busy);
-  const validBounds = $derived(
-    draft.minX != null &&
-      draft.maxX != null &&
-      draft.minY != null &&
-      draft.maxY != null &&
-      draft.maxX > draft.minX &&
-      draft.maxY > draft.minY
-  );
-  const validZ = $derived(draft.start != null && draft.end != null && draft.end >= draft.start);
+  const region = $derived(regionSelection.bounds);
+  const hasRegionValues = $derived(boundsFields.some(({ key }) => regionSelection[key] !== null));
+  const validZ = $derived(zRange.start != null && zRange.end != null && zRange.end >= zRange.start);
 
   function axisCenters(min: number, max: number, size: number): number[] {
     if (!(size > 0) || !(max > min)) return [];
@@ -102,15 +72,12 @@
     return Array.from({ length: count }, (_, index) => first + index * spacing);
   }
 
-  const columns = $derived(
-    validBounds && instrument?.fov ? axisCenters(draft.minX!, draft.maxX!, instrument.fov[0]) : []
-  );
-  const rows = $derived(validBounds && instrument?.fov ? axisCenters(draft.minY!, draft.maxY!, instrument.fov[1]) : []);
+  const columns = $derived(region && instrument?.fov ? axisCenters(region.minX, region.maxX, instrument.fov[0]) : []);
+  const rows = $derived(region && instrument?.fov ? axisCenters(region.minY, region.maxY, instrument.fov[1]) : []);
   const positions = $derived(columns.flatMap((x) => rows.map((y) => [x, y] as [number, number])));
-  const canSubmit = $derived(!disabled && validBounds && validZ && profileIds.length > 0 && positions.length > 0);
+  const canSubmit = $derived(!disabled && !!region && validZ && profileIds.length > 0 && positions.length > 0);
 
-  function axisFor(field: DraftField): 'x' | 'y' | 'z' {
-    if (field === 'start' || field === 'end') return 'z';
+  function axisFor(field: RegionField): 'x' | 'y' {
     return field.endsWith('X') ? 'x' : 'y';
   }
 
@@ -119,17 +86,18 @@
   }
 
   function clearRegion() {
-    draft.minX = draft.maxX = draft.minY = draft.maxY = null;
+    regionSelection.clear();
   }
 
   async function submit() {
     const inst = instrument;
-    if (!inst || !canSubmit || draft.start == null || draft.end == null) return;
-    const range = { start: draft.start, end: draft.end };
+    const bounds = region;
+    if (!inst || !canSubmit || !bounds || zRange.start == null || zRange.end == null) return;
+    const range = { start: zRange.start, end: zRange.end };
     const change = await inst.addTasks(positions, range, profileIds);
-    prefs.plan.taskDefaults.set({
-      ...prefs.plan.taskDefaults.get(),
-      [preferenceKey]: { ...range, overlap }
+    prefs.plan.defaults.set({
+      ...prefs.plan.defaults.get(),
+      [preferenceKey]: { region: { ...bounds }, zRange: range, overlap }
     });
     const ids = Object.entries(change.after)
       .filter(([, value]) => value !== null)
@@ -140,13 +108,30 @@
   }
 </script>
 
-{#snippet numericField(field: DraftField, label: string)}
+{#snippet regionField(field: RegionField, label: string)}
   <label class="grid gap-1 text-base">
     <span class="text-fg-muted">{label}</span>
     <StageNumericField
       stage={instrument?.stage}
       axis={axisFor(field)}
-      bind:value={draft[field]}
+      bind:value={regionSelection[field]}
+      step={unit.step * unit.scale}
+      displayScale={unit.scale}
+      decimals={unit.decimals}
+      suffix={unit.label}
+      class="w-full"
+      {disabled}
+    />
+  </label>
+{/snippet}
+
+{#snippet zField(field: ZField, label: string)}
+  <label class="grid gap-1 text-base">
+    <span class="text-fg-muted">{label}</span>
+    <StageNumericField
+      stage={instrument?.stage}
+      axis="z"
+      bind:value={zRange[field]}
       step={unit.step * unit.scale}
       displayScale={unit.scale}
       decimals={unit.decimals}
@@ -166,7 +151,7 @@
         <div class="flex items-center justify-between gap-2">
           <h2 id="region-heading" class="text-lg">Region</h2>
           <div class="flex items-center gap-1">
-            <Button variant="ghost" size="xs" disabled={!validBounds} onclick={clearRegion}>Clear</Button>
+            <Button variant="ghost" size="xs" disabled={!hasRegionValues} onclick={clearRegion}>Clear</Button>
             <Tooltip.Root>
               <Tooltip.Trigger>
                 {#snippet child({ props })}
@@ -176,20 +161,20 @@
                 {/snippet}
               </Tooltip.Trigger>
               <Tooltip.Content side="left" sideOffset={4}>
-                Alt-drag on Stage and choose Define region here to populate these bounds.
+                Alt-drag on Stage to create or replace this region.
               </Tooltip.Content>
             </Tooltip.Root>
           </div>
         </div>
         <div class="grid gap-3 py-2">
           {#each boundsFields as { key, label } (key)}
-            {@render numericField(key, label)}
+            {@render regionField(key, label)}
           {/each}
         </div>
-        {#if draft.minX != null && draft.maxX != null && draft.maxX <= draft.minX}
+        {#if regionSelection.minX != null && regionSelection.maxX != null && regionSelection.maxX <= regionSelection.minX}
           <p class="mt-2 text-base text-danger">X maximum must be greater than X minimum.</p>
         {/if}
-        {#if draft.minY != null && draft.maxY != null && draft.maxY <= draft.minY}
+        {#if regionSelection.minY != null && regionSelection.maxY != null && regionSelection.maxY <= regionSelection.minY}
           <p class="mt-2 text-base text-danger">Y maximum must be greater than Y minimum.</p>
         {/if}
       </section>
@@ -198,7 +183,7 @@
         <h2 id="geometry-heading" class="text-lg">Geometry</h2>
         <div class="grid gap-3 py-2">
           {#each zFields as { key, label } (key)}
-            {@render numericField(key, label)}
+            {@render zField(key, label)}
           {/each}
           <label class="grid gap-1 text-base">
             <span class="text-fg-muted">Overlap</span>
@@ -213,7 +198,7 @@
             />
           </label>
         </div>
-        {#if draft.start != null && draft.end != null && draft.end < draft.start}
+        {#if zRange.start != null && zRange.end != null && zRange.end < zRange.start}
           <p class="mt-2 text-base text-danger">Z end must be greater than or equal to Z start.</p>
         {/if}
       </section>
