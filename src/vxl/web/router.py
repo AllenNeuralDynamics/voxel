@@ -22,7 +22,6 @@ from vxl._utils.color import ColormapGroup, get_colormap_catalog
 from vxl.devices.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRequest,
-    ActiveAcquisitionState,
     Instrument,
     InstrumentConfig,
     InstrumentInspection,
@@ -37,7 +36,6 @@ from vxl.instrument.config import (
     WriterPatch,
 )
 from vxl.instrument.metadata import discover_metadata_schema, resolve_metadata_class
-from vxl.instrument.traversal import TileOrder
 from vxl.preview.protocol import VOXEL_PREVIEW_FRAMING_VERSION
 from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
 from vxl.system import StationInfo
@@ -114,19 +112,8 @@ class _ActivateProfile(BaseModel):
     profile_id: str
 
 
-class _AddTasks(BaseModel):
-    xy: list[tuple[float, float]]
-    start: float
-    end: float
-    profile_ids: list[str] | None = None
-
-
-class _UpdateTasks(BaseModel):
-    patches: dict[str, TaskPatch]
-
-
-class _Traversal(BaseModel):
-    order: TileOrder
+class _TaskOrder(BaseModel):
+    ids: list[str]
 
 
 class _MetadataSchema(BaseModel):
@@ -551,29 +538,28 @@ async def set_metadata_schema(body: _MetadataSchema, instrument: InstrumentDep) 
     await instrument.set_metadata_schema(body.target)
 
 
-@instrument_router.put("/traversal")
-async def set_traversal(body: _Traversal, instrument: InstrumentDep) -> Change[TileOrder]:
-    return await instrument.set_traversal(body.order)
-
-
 @instrument_router.post("/tasks")
-async def add_tasks(
-    body: _AddTasks, instrument: InstrumentDep
-) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
-    return await instrument.add_tasks(body.xy, profile_ids=body.profile_ids, start=body.start, end=body.end)
+async def add_task(task: AcquisitionTask, instrument: InstrumentDep) -> Change[list[AcquisitionTask]]:
+    return await instrument.add_task(task)
 
 
-@instrument_router.patch("/tasks")
-async def update_tasks(
-    body: _UpdateTasks, instrument: InstrumentDep
-) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
-    return await instrument.update_tasks(body.patches)
+@instrument_router.put("/tasks/order")
+async def reorder_tasks(body: _TaskOrder, instrument: InstrumentDep) -> Change[list[AcquisitionTask]]:
+    return await instrument.reorder_tasks(body.ids)
+
+
+@instrument_router.patch("/tasks/{task_id}")
+async def update_task(
+    task_id: str,
+    patch: TaskPatch,
+    instrument: InstrumentDep,
+    edit_id: UUID | None = None,
+) -> Change[AcquisitionTask]:
+    return await instrument.update_task(task_id, patch, edit_id=edit_id)
 
 
 @instrument_router.delete("/tasks")
-async def remove_tasks(
-    instrument: InstrumentDep, ids: Annotated[list[str], Query()]
-) -> Change[dict[str, tuple[int, AcquisitionTask] | None]]:
+async def remove_tasks(instrument: InstrumentDep, ids: Annotated[list[str], Query()]) -> Change[list[AcquisitionTask]]:
     return await instrument.remove_tasks(ids)
 
 
@@ -621,7 +607,7 @@ async def execute_device_command(
 
 
 @instrument_router.post("/acquisition")
-async def start_acquisition(body: AcquisitionRequest, instrument: InstrumentDep) -> ActiveAcquisitionState:
+async def start_acquisition(body: AcquisitionRequest, instrument: InstrumentDep) -> AcquisitionManifest:
     try:
         return await instrument.start_acquisition(body)
     except OSError as error:

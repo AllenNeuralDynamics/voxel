@@ -18,7 +18,7 @@
     context.register({
       id: 'routing-regions',
       label: 'Routing regions',
-      menuOrder: 1,
+      menuOrder: 3,
       get visible() {
         return visible;
       },

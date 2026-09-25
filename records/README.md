@@ -63,16 +63,15 @@ manifest = AcquisitionManifest(
     storage=StorageSpec(path=PurePosixPath("runs") / str(acquisition_id)),
     state_snapshot={},
     hardware_snapshot={},
-    volumes=[AcquisitionVolume(task="tile-1", profile="488-nm")],
+    volumes=[AcquisitionVolume(task="tile-1", profile="488-nm", x=0, y=0, z_start=0, z_step=1, z_end=10)],
 )
 
 created = await records.acquisitions.create(manifest)
 running = await records.acquisitions.start_acquisition(created.id)
-with_running_volume = await records.acquisitions.start_volume(running.id, task="tile-1", profile="488-nm")
+with_running_volume = await records.acquisitions.start_volume(running.id, volume_index=0)
 with_completed_volume = await records.acquisitions.complete_volume(
     with_running_volume.id,
-    task="tile-1",
-    profile="488-nm",
+    volume_index=0,
 )
 completed = await records.acquisitions.complete_acquisition(with_completed_volume.id)
 ```

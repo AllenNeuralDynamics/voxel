@@ -4,10 +4,16 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { getTaskSelection } from '$lib/grid/selection.svelte';
   import { BoxSelect, Brush, CenterFocus, Crosshair, FitToScreen, Stop } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
-  import { getVoxelStation, NumericModel, type TaskTile } from '$lib/model';
+  import {
+    createAreaTask,
+    getVoxelStation,
+    NumericModel,
+    type PlannedVolume,
+    planningFov,
+    rectanglePoints
+  } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { formatSpatialDistance, formatSpatialValue } from '$lib/spatial-units';
@@ -27,14 +33,14 @@
   let { viewport = $bindable(null) }: { viewport?: Viewport | null } = $props();
 
   const app = getVoxelStation();
-  const taskSelection = getTaskSelection();
   const regionSelection = getRegionSelection();
-  const tasksVisible = pref('stage:tasks-visible', true);
+  const taskVisibility = pref<Record<string, boolean>>('stage:task-visible', {});
+  const acquisitionPathVisible = pref('stage:acquisition-path-visible', true);
   const routingRegionsVisible = pref('stage:routing-regions-visible', true);
   let fovLayer = $state<Fov>();
   let positionLayer = $state<Position>();
   let tasksLayer = $state<Tasks>();
-  let menuTasks = $state.raw<ReturnType<Tasks['destinations']>>([]);
+  let menuVolumes = $state.raw<ReturnType<Tasks['destinations']>>([]);
   let menuGrid = $state.raw<Point | undefined>();
   const previews = getPreviewContext();
   const routingVisibility = pref<Record<string, boolean>>('stage:routing-visible', {});
@@ -44,21 +50,31 @@
   const stage = $derived(instrument?.stage);
   const stageBounds = $derived(stage?.bounds(true));
   const travelBounds = $derived(stage?.bounds(false));
-  const planAddHref = $derived(
-    instrument
-      ? resolve('/stations/[stationId]/instruments/[instrumentId]/plan/add', {
-          stationId: instrument.stationId,
-          instrumentId: instrument.id
-        })
-      : ''
-  );
-  const definingRegion = $derived(page.url.pathname === planAddHref);
   const NICE_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
   const position = $derived.by(() => {
     const x = stage?.x.position?.value;
     const y = stage?.y.position?.value;
     return x == null || y == null ? null : { x, y };
   });
+  const areaProfile = $derived(
+    instrument?.activeProfileId ?? Object.keys(instrument?.imaging.profiles ?? {})[0] ?? null
+  );
+  const areaFov = $derived(areaProfile && instrument ? planningFov(instrument.profileFovs, [areaProfile]) : null);
+  const areaZRange = $derived.by(() => {
+    if (!instrument) return null;
+    const key = `${instrument.stationId}/${instrument.id}`;
+    const saved = prefs.plan.defaults.get()[key]?.zRange;
+    if (saved) return saved;
+    const z = instrument.stage.z.position?.value;
+    return z != null && Number.isFinite(z) ? { start: z, end: z } : null;
+  });
+  const currentAreaTask = $derived.by(() => {
+    const task = instrument?.plan.find(({ id }) => id === page.params.taskId);
+    return task?.layout.type === 'area' ? task : null;
+  });
+  const currentTaskNumber = $derived(
+    currentAreaTask ? (instrument?.plan.findIndex(({ id }) => id === currentAreaTask.id) ?? -1) + 1 : null
+  );
   const commandedTarget = $derived.by(() => {
     const target = stage?.target;
     if (!target || !position) return null;
@@ -78,27 +94,7 @@
         }
       : null
   );
-  const taskBounds = $derived.by(() => {
-    let result: Bounds | null = null;
-    for (const tile of instrument?.taskTiles ?? []) {
-      if (![tile.x, tile.y, tile.w, tile.h].every(Number.isFinite) || tile.w <= 0 || tile.h <= 0) continue;
-      const bounds = {
-        minX: tile.x - tile.w / 2,
-        maxX: tile.x + tile.w / 2,
-        minY: tile.y - tile.h / 2,
-        maxY: tile.y + tile.h / 2
-      };
-      result = result
-        ? {
-            minX: Math.min(result.minX, bounds.minX),
-            maxX: Math.max(result.maxX, bounds.maxX),
-            minY: Math.min(result.minY, bounds.minY),
-            maxY: Math.max(result.maxY, bounds.maxY)
-          }
-        : bounds;
-    }
-    return result;
-  });
+  const taskBounds = $derived(instrument?.plannedVolumes.length ? (tasksLayer?.extent() ?? null) : null);
   const routingSplits = $derived(
     Array.from(instrument?.routingDimensions.values() ?? []).flatMap((dimension) =>
       dimension.axis && dimension.model instanceof NumericModel && Number.isFinite(dimension.model.value)
@@ -160,9 +156,9 @@
     return regions;
   });
 
-  function taskColor(tile: TaskTile): string | undefined {
-    const x = colorSplits.x && tile.routes[colorSplits.x.id];
-    const y = colorSplits.y && tile.routes[colorSplits.y.id];
+  function taskColor(volume: PlannedVolume): string | undefined {
+    const x = colorSplits.x && volume.routes[colorSplits.x.id];
+    const y = colorSplits.y && volume.routes[colorSplits.y.id];
     if (colorSplits.x && x !== 'lower' && x !== 'upper') return;
     if (colorSplits.y && y !== 'lower' && y !== 'upper') return;
     return routingColor(
@@ -185,12 +181,52 @@
     toastError(stage.moveTo(clampPosition(point)));
   }
 
-  async function addTasksInRegion(bounds: Bounds) {
-    if (!instrument || !planAddHref) return;
-    regionSelection.setBounds(bounds);
-    // The destination is resolved above from the active instrument route parameters.
-    // eslint-disable-next-line svelte/no-navigation-without-resolve
-    await goto(planAddHref, { keepFocus: true, noScroll: true });
+  async function createTaskInRegion(bounds: Bounds) {
+    const inst = instrument;
+    const profile = areaProfile;
+    const fov = areaFov;
+    const z = areaZRange;
+    if (!inst || !profile || !fov || !z || inst.mode === 'capture' || inst.edits.busy) return;
+
+    const preferenceKey = `${inst.stationId}/${inst.id}`;
+    const overlap = prefs.plan.defaults.get()[preferenceKey]?.overlap ?? 0.1;
+    const task = createAreaTask(bounds, fov, overlap, profile, z);
+    await inst.addTask(task);
+    prefs.plan.defaults.set({
+      ...prefs.plan.defaults.get(),
+      [preferenceKey]: { region: { ...bounds }, zRange: z, overlap }
+    });
+    regionSelection.clear();
+    if (instrument !== inst) return;
+    await goto(
+      resolve('/stations/[stationId]/instruments/[instrumentId]/plan/[taskId]', {
+        stationId: inst.stationId,
+        instrumentId: inst.id,
+        taskId: task.id
+      })
+    );
+  }
+
+  async function replaceTaskArea(bounds: Bounds) {
+    const inst = instrument;
+    const task = currentAreaTask;
+    if (!inst || !task || task.layout.type !== 'area' || inst.mode === 'capture' || inst.edits.busy) return;
+    const layout = task.layout;
+
+    await inst.updateTask(task.id, {
+      layout: { ...layout, points: rectanglePoints(bounds) }
+    });
+    const preferenceKey = `${inst.stationId}/${inst.id}`;
+    const defaults = prefs.plan.defaults.get();
+    prefs.plan.defaults.set({
+      ...defaults,
+      [preferenceKey]: {
+        region: { ...bounds },
+        zRange: defaults[preferenceKey]?.zRange ?? { start: task.z.start, end: task.z.end },
+        overlap: defaults[preferenceKey]?.overlap ?? layout.grid.overlap
+      }
+    });
+    regionSelection.clear();
   }
 
   function scaleBar(scale: number, width: number) {
@@ -221,8 +257,11 @@
     bind:marquee={() => regionSelection.bounds, (bounds) => regionSelection.setBounds(bounds)}
     resolveDestination={(point, hits) => {
       menuGrid = positionLayer?.destination(point);
-      menuTasks = (tasksLayer?.destinations(hits) ?? []).map((task) => ({ ...task, point: clampPosition(task.point) }));
-      return menuGrid ?? (menuTasks.length === 1 ? menuTasks[0].point : clampPosition(point));
+      menuVolumes = (tasksLayer?.destinations(hits) ?? []).map((volume) => ({
+        ...volume,
+        point: clampPosition(volume.point)
+      }));
+      return menuGrid ?? (menuVolumes.length === 1 ? menuVolumes[0].point : clampPosition(point));
     }}
   >
     {#snippet overlay(view, width, cursor)}
@@ -251,15 +290,26 @@
         <div class="h-1 rounded-full bg-fg-muted" style:width="{bar.barPx}px"></div>
       </div>
     {/snippet}
+    <!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
     {#snippet menu(selection, canvasActions, center, fitBounds, previewDestination)}
       {#if 'bounds' in selection}
-        {#if !definingRegion}
-          <ContextMenu.Item onSelect={() => toastError(addTasksInRegion(selection.bounds))}>
+        {#if currentAreaTask && currentTaskNumber}
+          <ContextMenu.Item
+            disabled={instrument.mode === 'capture' || instrument.edits.busy}
+            onSelect={() => toastError(replaceTaskArea(selection.bounds))}
+          >
             <BoxSelect width="14" height="14" />
-            Add tasks in region
+            Replace Task {currentTaskNumber} area
           </ContextMenu.Item>
-          <ContextMenu.Separator />
         {/if}
+        <ContextMenu.Item
+          disabled={!areaProfile || !areaFov || !areaZRange || instrument.mode === 'capture' || instrument.edits.busy}
+          onSelect={() => toastError(createTaskInRegion(selection.bounds))}
+        >
+          <BoxSelect width="14" height="14" />
+          Create area task
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
       {:else if colorGroups.length}
         {@const key = `${instrument.stationId}/${instrument.id}`}
         <ContextMenu.Sub>
@@ -294,21 +344,21 @@
         {#if menuGrid}
           {@render movementAction('Go to grid cell', menuGrid, previewDestination)}
         {/if}
-        {#if menuTasks.length === 1}
-          {@render movementAction(`Go to Task ${menuTasks[0].order}`, menuTasks[0].point, previewDestination)}
-        {:else if menuTasks.length > 1}
+        {#if menuVolumes.length === 1}
+          {@render movementAction(`Go to Volume ${menuVolumes[0].order}`, menuVolumes[0].point, previewDestination)}
+        {:else if menuVolumes.length > 1}
           <ContextMenu.Sub>
-            <ContextMenu.SubTrigger><Crosshair width="14" height="14" />Go to task</ContextMenu.SubTrigger>
+            <ContextMenu.SubTrigger><Crosshair width="14" height="14" />Go to volume</ContextMenu.SubTrigger>
             <ContextMenu.SubContent sideOffset={8}>
-              {#each menuTasks as task (task.order)}
-                {@render movementAction(`Task ${task.order}`, task.point, previewDestination)}
+              {#each menuVolumes as volume (volume.order)}
+                {@render movementAction(`Volume ${volume.order}`, volume.point, previewDestination)}
               {/each}
             </ContextMenu.SubContent>
           </ContextMenu.Sub>
         {/if}
         {#if !menuGrid}
           {@render movementAction(
-            menuTasks.length ? 'Go to clicked position' : 'Go to position',
+            menuVolumes.length ? 'Go to clicked position' : 'Go to position',
             clampPosition(selection.point),
             previewDestination
           )}
@@ -349,21 +399,29 @@
     />
     <Tasks
       bind:this={tasksLayer}
-      tiles={instrument.taskTiles}
+      plan={instrument.plan}
+      volumes={instrument.plannedVolumes}
+      profileFovs={instrument.profileFovs}
+      disabled={instrument.mode === 'capture' || instrument.edits.busy}
       fill={taskColor}
-      selected={taskSelection.ids}
-      bind:visible={() => tasksVisible.get(), (value) => tasksVisible.set(value)}
+      bind:taskVisibility={() => taskVisibility.get(), (value) => taskVisibility.set(value)}
+      bind:pathVisible={() => acquisitionPathVisible.get(), (value) => acquisitionPathVisible.set(value)}
       color={themes.resolvedMode === 'light' ? '#52525b' : '#d4d4d8'}
       haloColor={themes.resolvedMode === 'light' ? '#ffffff' : '#18181b'}
-      onselect={(ids, toggle) => {
-        if (toggle) ids.forEach((id) => taskSelection.toggle(id));
-        else {
-          const clear = ids.length === 1 && taskSelection.size === 1 && taskSelection.has(ids[0]);
-          taskSelection.clear();
-          if (!clear) taskSelection.add(...ids);
-        }
-      }}
       onactivate={(point) => fovLayer?.activateAt(point)}
+      onpointedit={({ task: taskId, index, point, phase }) => {
+        if (phase !== 'end' || instrument.mode === 'capture') return;
+        const task = instrument.plan.find(({ id }) => id === taskId);
+        if (!task) return;
+        toastError(
+          instrument.updateTask(taskId, {
+            layout: {
+              ...task.layout,
+              points: task.layout.points.map((current, pointIndex) => (pointIndex === index ? point : current))
+            }
+          })
+        );
+      }}
     />
     <Group>
       {#each routingSplits as rule, index (rule.model)}

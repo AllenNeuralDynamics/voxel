@@ -23,7 +23,6 @@ export { default as PaneDivider } from './PaneDivider.svelte';
 export { default as Rename, type RenameVariants, renameVariants } from './Rename.svelte';
 export { default as Select, type SelectVariants, selectVariants } from './Select.svelte';
 export { default as Slider } from './Slider.svelte';
-export * as SortableList from './sortable-list';
 export { default as Switch, type SwitchVariants, switchVariants } from './Switch.svelte';
 export { default as TagInput, type TagInputVariants, tagInputVariants } from './TagInput.svelte';
 export { default as TextArea, type TextAreaVariants, textAreaVariants } from './TextArea.svelte';

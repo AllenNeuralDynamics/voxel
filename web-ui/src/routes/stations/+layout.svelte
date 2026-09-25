@@ -9,7 +9,6 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { activateDashboardWindow, isStationWindowRequest, stationWindowName } from '$lib/app-windows';
-  import { provideTaskSelection } from '$lib/grid/selection.svelte';
   import { Power, Redo, Undo } from '$lib/icons';
   import { Button, Dialog, Sidebar, Spinner } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
@@ -30,7 +29,6 @@
   setVoxelStation(app);
   const stationId = $derived(page.params.stationId ?? '');
   const previews = providePreviewContext();
-  provideTaskSelection();
   const regionSelection = provideRegionSelection();
 
   $effect(() => {

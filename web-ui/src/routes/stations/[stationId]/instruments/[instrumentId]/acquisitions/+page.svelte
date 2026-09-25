@@ -6,7 +6,13 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { AlertCircleOutline, AlertOutline, Check, CircleDashed, DotsSpinner, Minus } from '$lib/icons';
-  import { type AcquisitionManifest, type AcquisitionStatus, getVoxelStation, type VolumeStatus } from '$lib/model';
+  import {
+    type AcquisitionManifest,
+    type AcquisitionStatus,
+    type AcquisitionVolume,
+    getVoxelStation,
+    type VolumeStatus
+  } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { formatSpatialValue, getSpatialUnit } from '$lib/spatial-units';
   import { cn, displayName } from '$lib/utils';
@@ -20,7 +26,7 @@
   let lastManifest = $state.raw<AcquisitionManifest | null>(null);
   const acquisitions = $derived.by(() => {
     const records = app.acquisitions.filter((candidate) => candidate.instrument === instrumentId);
-    const observed = acquisition?.manifest ?? lastManifest;
+    const observed = acquisition ? app.acquisitions.find((candidate) => candidate.id === acquisition.id) : lastManifest;
     if (observed && observed.instrument === instrumentId) {
       const index = records.findIndex((candidate) => candidate.id === observed.id);
       if (index < 0) records.push(observed);
@@ -28,7 +34,9 @@
     }
     return records.toSorted((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
   });
-  const manifest = $derived(acquisition?.manifest ?? null);
+  const manifest = $derived(
+    acquisition ? (app.acquisitions.find((candidate) => candidate.id === acquisition.id) ?? null) : null
+  );
 
   onMount(() => {
     void app.refresh();
@@ -37,11 +45,13 @@
   watch(
     () => acquisition,
     (current, previous) => {
-      if (current) lastManifest = current.manifest;
-      else if (previous) void app.refresh();
+      if (current) {
+        const observed = app.acquisitions.find((candidate) => candidate.id === current.id);
+        if (observed) lastManifest = observed;
+      } else if (previous) void app.refresh();
     }
   );
-  const progress = $derived(acquisition?.progress ?? null);
+  const progress = $derived(acquisition);
 
   const dateFormat = new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
@@ -56,18 +66,16 @@
     return ordinals;
   });
 
-  const currentVolumeIndex = $derived(
-    manifest && progress
-      ? manifest.volumes.findIndex((volume) => volume.task === progress.task && volume.profile === progress.profile)
-      : -1
+  const currentVolumeIndex = $derived(progress?.volume_index ?? -1);
+  const currentVolume = $derived(manifest?.volumes[currentVolumeIndex] ?? null);
+  const framesTotal = $derived(
+    currentVolume ? Math.trunc((currentVolume.z_end - currentVolume.z_start) / currentVolume.z_step) + 1 : 0
   );
   const completedVolumes = $derived(manifest?.volumes.filter((volume) => volume.status === 'completed').length ?? 0);
   const framePercent = $derived(
-    progress && progress.frames_total > 0
-      ? Math.min(100, Math.max(0, (progress.frames_captured / progress.frames_total) * 100))
-      : 0
+    progress && framesTotal > 0 ? Math.min(100, Math.max(0, (progress.frames_captured / framesTotal) * 100)) : 0
   );
-  const currentTaskPosition = $derived(manifest && progress ? taskPosition(manifest, progress.task) : null);
+  const currentTaskPosition = $derived(currentVolume ? volumePosition(currentVolume) : null);
   const history = $derived(acquisitions.filter((candidate) => candidate.id !== manifest?.id));
 
   function profileLabel(source: AcquisitionManifest, profileId: string): string {
@@ -79,11 +87,9 @@
     return ordinal ? `Task ${String(ordinal).padStart(4, '0')}` : 'Unknown task';
   }
 
-  function taskPosition(source: AcquisitionManifest, taskId: string): string | null {
-    const task = source.state_snapshot.tasks[taskId];
-    if (!task) return null;
+  function volumePosition(volume: AcquisitionVolume): string {
     const unit = prefs.spatialUnit.get();
-    return `X ${formatSpatialValue(task.x, unit)} · Y ${formatSpatialValue(task.y, unit)} · Z ${formatSpatialValue(task.start, unit)}–${formatSpatialValue(task.end, unit)} ${getSpatialUnit(unit).label}`;
+    return `X ${formatSpatialValue(volume.x, unit)} · Y ${formatSpatialValue(volume.y, unit)} · Z ${formatSpatialValue(volume.z_start, unit)}–${formatSpatialValue(volume.z_end, unit)} ${getSpatialUnit(unit).label}`;
   }
 
   function storageLabel(source: AcquisitionManifest): string {
@@ -186,13 +192,15 @@
           </div>
         </section>
 
-        {#if progress}
+        {#if progress && currentVolume}
           <section class="mt-4 rounded-sm border border-line-muted bg-card/50 p-3">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="text-sm font-medium tracking-wide text-fg-muted uppercase">Current volume</p>
+                <p class="text-sm font-medium tracking-wide text-fg-muted uppercase">
+                  Current volume · {displayName(progress.phase)}
+                </p>
                 <h2 class="mt-1 truncate text-lg font-medium text-fg">
-                  {taskLabel(progress.task)} · {profileLabel(manifest, progress.profile)}
+                  {taskLabel(currentVolume.task)} · {profileLabel(manifest, currentVolume.profile)}
                 </h2>
                 {#if currentTaskPosition}
                   <p class="mt-0.5 truncate text-sm text-fg-muted" title={currentTaskPosition}>
@@ -209,7 +217,7 @@
               <div class="mb-1.5 flex items-baseline justify-between gap-3 text-sm tabular-nums">
                 <span class="text-fg-muted">Frames</span>
                 <span class="text-fg">
-                  {progress.frames_captured.toLocaleString()} / {progress.frames_total.toLocaleString()}
+                  {progress.frames_captured.toLocaleString()} / {framesTotal.toLocaleString()}
                   <span class="ml-1 text-fg-muted">({Math.round(framePercent)}%)</span>
                 </span>
               </div>
@@ -218,7 +226,7 @@
                 role="progressbar"
                 aria-label="Current volume frame progress"
                 aria-valuemin="0"
-                aria-valuemax={progress.frames_total}
+                aria-valuemax={framesTotal}
                 aria-valuenow={progress.frames_captured}
               >
                 <div
@@ -239,7 +247,7 @@
           </div>
 
           <div class="overflow-hidden rounded-sm border border-line-muted bg-card/50">
-            {#each manifest.volumes as volume, index (`${volume.task}:${volume.profile}`)}
+            {#each manifest.volumes as volume, index (index)}
               {@const current = index === currentVolumeIndex}
               <div
                 class={cn(
@@ -257,7 +265,7 @@
                 </div>
                 {#if current && progress}
                   <span class="text-sm text-fg-muted tabular-nums">
-                    {progress.frames_captured.toLocaleString()} / {progress.frames_total.toLocaleString()}
+                    {progress.frames_captured.toLocaleString()} / {framesTotal.toLocaleString()}
                   </span>
                 {:else}
                   <span class="text-sm text-fg-faint capitalize">{volume.status}</span>

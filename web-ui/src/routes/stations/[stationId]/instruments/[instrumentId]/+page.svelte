@@ -21,8 +21,7 @@
       imaging: current.imaging,
       routing: current.routing,
       metadata_cls: current.metadata_cls,
-      output: current.output,
-      traversal: current.traversal
+      output: current.output
     };
   });
   const canManageDefaults = $derived(activeInstrument?.mode === 'idle' || activeInstrument?.mode === 'preview');

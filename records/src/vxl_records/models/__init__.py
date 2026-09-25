@@ -6,6 +6,7 @@ from .acquisition import (
     AcquisitionOrigin,
     AcquisitionStatus,
     AcquisitionVolume,
+    PlannedVolume,
     VolumeStatus,
 )
 from .dataset import Dataset, DatasetFormat, DatasetStatus
@@ -30,6 +31,7 @@ __all__ = [
     "LogEntry",
     "LogException",
     "ObjectLocation",
+    "PlannedVolume",
     "PresetRecord",
     "RemoteTarget",
     "StorageSpec",

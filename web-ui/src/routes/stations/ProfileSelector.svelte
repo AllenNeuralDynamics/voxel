@@ -26,7 +26,7 @@
 
   /** Whether any planned task targets this profile (drives the dot indicator). */
   function profileHasTasks(id: string): boolean {
-    return Object.values(instrument.state.tasks).some((t) => t.profile_ids.includes(id));
+    return instrument.plan.some((task) => task.profiles.includes(id));
   }
 
   const profileList = $derived(

@@ -256,7 +256,6 @@ default:
               right_galvo_neg: *right_galvo_neg_waveform
               z_axis: *z_axis_waveform
 
-  traversal: snake_row
 
   output:
     max_level: 3

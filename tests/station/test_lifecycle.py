@@ -4,19 +4,19 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from vxl_records import VoxelRecords
+from vxl_records import PlannedVolume, VoxelRecords
 from vxlib.history import HistoryState
 from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
 from rigup import DeviceInterface, DeviceProps
 from vxl.instrument import (
     AcquisitionMode,
-    ActiveAcquisitionState,
+    ActiveAcquisition,
+    Bounds,
     Instrument,
     InstrumentConfig,
     InstrumentState,
 )
-from vxl.instrument.models import TaskTile
 from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
 from vxl.preview.protocol import StagePosition
 from vxl.station import Station, StationStatus
@@ -33,7 +33,7 @@ class FakeInstrument:
         self.state = Cell(InstrumentState(**config.default.model_dump()))
         self.default = Cell(config.default)
         self.mode = Cell(AcquisitionMode.IDLE)
-        self.acquisition = Cell[ActiveAcquisitionState | None](None)
+        self.acquisition = Cell[ActiveAcquisition | None](None)
         self.active_profile_id = Cell(next(iter(self.state.value.imaging.profiles)))
         self.history = Cell(HistoryState())
         self.device_interfaces: dict[str, DeviceInterface] = {}
@@ -45,7 +45,8 @@ class FakeInstrument:
         self.config = config
         self.hardware_config = config.hal
         self.fov = ReactiveQuery(fn=self._get_fov)
-        self.task_tiles = Cell[list[TaskTile]]([])
+        self.profile_fovs = Cell[dict[str, dict[str, Bounds]]]({})
+        self.planned_volumes = Cell[list[PlannedVolume]]([])
 
     async def _get_fov(self) -> tuple[float, float]:
         return (1.0, 1.0)

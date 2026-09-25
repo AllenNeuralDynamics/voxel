@@ -199,31 +199,58 @@ export interface SplitRoutingRule {
 
 export type RoutingRule = SelectRoutingRule | SplitRoutingRule;
 
-/** A stage position (x, y) + z-range. */
-export interface ZStack {
+/** One absolute XY stage position in micrometres. */
+export interface Point2D {
   x: number;
   y: number;
+}
+
+/** A fixed absolute Z range in micrometres. */
+export interface ZRange {
+  type: 'fixed';
   start: number;
   end: number;
 }
 
-/** A planned acquisition: a ZStack imaged by one or more profiles. */
-export interface AcquisitionTask extends ZStack {
-  profile_ids: string[];
+export type ZDefinition = ZRange;
+
+export interface GridSettings {
+  overlap: number;
+  anchor: Point2D;
 }
 
-/** A tile footprint in stage space (µm); `w`/`h` are the FOV at creation. */
-export interface Tile {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+export interface ExplicitPositions {
+  type: 'positions';
+  points: Point2D[];
 }
 
-/** A task's footprint tile tagged with its task id; an ordered `TaskTile[]` carries geometry + traversal order. */
-export interface TaskTile extends Tile {
-  task_id: string;
-  routes: Record<string, string>;
+export interface TiledArea {
+  type: 'area';
+  points: Point2D[];
+  grid: GridSettings;
+}
+
+export type TaskLayout = ExplicitPositions | TiledArea;
+
+/** Whether a task iterates positions or profiles in its outer loop. */
+export type VolumeOrder = 'position_major' | 'profile_major';
+
+/** Persisted acquisition intent expanded into concrete volumes by the instrument. */
+export interface AcquisitionTask {
+  id: string;
+  layout: TaskLayout;
+  profiles: string[];
+  z: ZDefinition;
+  traversal: TileOrder;
+  volume_order: VolumeOrder;
+}
+
+/** One detection footprint relative to a task's stage position, in micrometres. */
+export interface FootprintBounds {
+  min_x: number;
+  min_y: number;
+  max_x: number;
+  max_y: number;
 }
 
 /** Tile acquisition ordering strategy. */
@@ -250,12 +277,11 @@ export interface InstrumentDefaults {
   routing: Record<string, RoutingRule>;
   metadata_cls: string;
   output: WriterSettings;
-  traversal: TileOrder;
 }
 
 /** Reusable instrument configuration, including its acquisition plan but excluding specimen metadata. */
 export interface InstrumentPreset extends InstrumentDefaults {
-  tasks: Record<string, AcquisitionTask>;
+  plan: AcquisitionTask[];
 }
 
 /** One immutable, named preset stored for an installed instrument. */
@@ -282,9 +308,6 @@ export interface Change<T> {
   after: T;
 }
 
-/** Affected tasks with insertion positions; null means the task is absent. */
-export type TaskValues = Record<string, [index: number, task: AcquisitionTask] | null>;
-
 /** Edit a profile's top-level fields. */
 export interface ProfilePatch {
   z_step?: number | null;
@@ -309,13 +332,13 @@ export interface WriterPatch {
   target_shard_gb?: number | null;
 }
 
-/** Edit a planned task's position, z-range, or profiles. */
+/** Edit fields on one persisted acquisition task. */
 export interface TaskPatch {
-  x?: number | null;
-  y?: number | null;
-  start?: number | null;
-  end?: number | null;
-  profile_ids?: string[] | null;
+  layout?: TaskLayout;
+  profiles?: string[];
+  z?: ZDefinition;
+  traversal?: TileOrder;
+  volume_order?: VolumeOrder;
 }
 
 // ---- preview control payloads ----
@@ -410,10 +433,20 @@ export interface AcquisitionDataset {
   locations: DatasetLocation[];
 }
 
-/** One task/profile capture and its channel datasets. */
-export interface AcquisitionVolume {
+/** One fully resolved volume in acquisition order. */
+export interface PlannedVolume {
   task: string;
   profile: string;
+  x: number;
+  y: number;
+  z_start: number;
+  z_step: number;
+  z_end: number;
+  routes: Record<string, string>;
+}
+
+/** One task/profile capture and its channel datasets. */
+export interface AcquisitionVolume extends PlannedVolume {
   status: VolumeStatus;
   datasets: Record<string, AcquisitionDataset>;
 }
@@ -558,22 +591,20 @@ export interface InstrumentStatus {
   preview_revision: number;
   fov: [number, number] | null;
   state: InstrumentState;
-  task_tiles: TaskTile[];
+  profile_fovs: Record<string, Record<string, FootprintBounds>>;
+  planned_volumes: PlannedVolume[];
   history: HistoryState;
 }
 
-/** Transient captured-frame progress for one task/profile volume. */
-export interface VolumeProgress {
-  task: string;
-  profile: string;
-  frames_captured: number;
-  frames_total: number;
-}
+export type AcquisitionPhase = 'positioning' | 'configuring' | 'capturing' | 'finalizing' | 'stopping';
 
-/** The latest durable manifest plus transient progress for the instrument's current run. */
-export interface ActiveAcquisitionState {
-  manifest: AcquisitionManifest;
-  progress: VolumeProgress;
+/** Transient execution progress linked to a durable acquisition manifest. */
+export interface ActiveAcquisition {
+  id: string;
+  manifest_revision: number;
+  volume_index: number;
+  phase: AcquisitionPhase;
+  frames_captured: number;
 }
 
 /** A command parameter's introspected signature. */
@@ -637,9 +668,10 @@ export interface InstrumentView extends InstrumentState {
   active_profile_id: string;
   preview_revision: number;
   fov: [number, number] | null;
-  task_tiles: TaskTile[];
+  profile_fovs: Record<string, Record<string, FootprintBounds>>;
+  planned_volumes: PlannedVolume[];
   devices: Record<string, DeviceState>;
-  acquisition: ActiveAcquisitionState | null;
+  acquisition: ActiveAcquisition | null;
   history: HistoryState;
   remote_stores: Record<string, Remote>;
 }

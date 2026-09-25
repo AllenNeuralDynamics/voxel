@@ -102,7 +102,7 @@
                   <span class="mt-1 block text-sm text-fg-muted">
                     {Object.keys(preset.value.imaging.profiles).length} profiles ·
                     {Object.keys(preset.value.imaging.channels).length} channels ·
-                    {Object.keys(preset.value.tasks).length} planned tasks
+                    {preset.value.plan.length} planned tasks
                   </span>
                 </a>
               {/each}

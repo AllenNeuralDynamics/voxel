@@ -20,9 +20,6 @@ importers:
       '@tanstack/svelte-hotkeys':
         specifier: ^0.9.1
         version: 0.9.1(svelte@5.56.7)
-      '@thisux/sveltednd':
-        specifier: ^0.0.20
-        version: 0.0.20(svelte@5.56.7)
       konva:
         specifier: ^10.5.0
         version: 10.5.0
@@ -704,24 +701,6 @@ packages:
     resolution: {integrity: sha512-y4Th0egC64BkJ8kOnPaPZc5ZQS7Sapc2w5+zd/xUAcRITiNMbflglLeK2+TiuyZ2hbpsBMaIwL9wL4hVwrI7Nw==}
     peerDependencies:
       svelte: ^5.25.0
-
-  '@thisux/sveltednd@0.0.14':
-    resolution: {integrity: sha512-Vbq69SU3HUomPg6oCXtb89OG89hka0YIkdaErYibn3waK7tYE66IcQxD/Fzg8YNW3EVsXoA9kc7kW5EUBCSQGg==}
-
-  '@thisux/sveltednd@0.0.17':
-    resolution: {integrity: sha512-lRninjw439phhA8xAHqCpMAX0hnwFMdbXW4M0XJgAdnGxeum+QsLiIC4P3HnkNXAygsVKUqxRcbS84CxDZ9hPw==}
-    peerDependencies:
-      svelte: ^5.0.0
-
-  '@thisux/sveltednd@0.0.18':
-    resolution: {integrity: sha512-MO+iR9ZRHApvtwgWujmqwUbhv9mKs0jLOmeG4tn98GmU1/9wVOi02jrNqeggKg3c8dXz6pMmUHfOfmcq7WwYZg==}
-    peerDependencies:
-      svelte: ^5.0.0
-
-  '@thisux/sveltednd@0.0.20':
-    resolution: {integrity: sha512-VE0HopIlHIvNOfSZ1SsiIzl1AmTU0VSd2Nz2Q2nIdqIUsT/UP4hiLw2ed2jFqTKTbqC+kbCYL9vuBpkYnEw+Kw==}
-    peerDependencies:
-      svelte: ^5.0.0
 
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
@@ -2104,23 +2083,6 @@ snapshots:
   '@tanstack/svelte-hotkeys@0.9.1(svelte@5.56.7)':
     dependencies:
       '@tanstack/hotkeys': 0.7.1
-      svelte: 5.56.7
-
-  '@thisux/sveltednd@0.0.14': {}
-
-  '@thisux/sveltednd@0.0.17(svelte@5.56.7)':
-    dependencies:
-      '@thisux/sveltednd': 0.0.14
-      svelte: 5.56.7
-
-  '@thisux/sveltednd@0.0.18(svelte@5.56.7)':
-    dependencies:
-      '@thisux/sveltednd': 0.0.17(svelte@5.56.7)
-      svelte: 5.56.7
-
-  '@thisux/sveltednd@0.0.20(svelte@5.56.7)':
-    dependencies:
-      '@thisux/sveltednd': 0.0.18(svelte@5.56.7)
       svelte: 5.56.7
 
   '@tybys/wasm-util@0.10.3':

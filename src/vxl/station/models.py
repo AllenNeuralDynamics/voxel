@@ -5,12 +5,12 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
+from vxl_records import PlannedVolume
 from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
 
 from rigup import DeviceInterface, PropertyModel
-from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, InstrumentConfig, InstrumentState
-from vxl.instrument.models import TaskTile
+from vxl.instrument import AcquisitionMode, ActiveAcquisition, Bounds, InstrumentConfig, InstrumentState
 from vxl.preview import StreamCursor
 from vxl.system import Remote, StationInfo
 
@@ -50,9 +50,10 @@ class InstrumentView(InstrumentState):
     preview_revision: int = Field(ge=0)
     fov: tuple[float, float] | None
 
-    task_tiles: list[TaskTile]
+    profile_fovs: dict[str, dict[str, Bounds]]
+    planned_volumes: list[PlannedVolume]
     devices: dict[str, DeviceState]
-    acquisition: ActiveAcquisitionState | None
+    acquisition: ActiveAcquisition | None
     history: HistoryState
     remote_stores: dict[str, Remote]
 

@@ -366,7 +366,6 @@ default:
               camera_1: *camera_waveform_ch1
               laser_730: *laser_waveform_ch1
 
-  traversal: snake_row
 
   output:
     max_level: 3

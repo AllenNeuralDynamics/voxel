@@ -1,145 +1,176 @@
 import pytest
 
-from vxl.instrument import Instrument, InstrumentStore
-from vxl.instrument.config import SplitRoutingRule, TaskPatch
+from vxl.instrument import (
+    AcquisitionTask,
+    ExplicitPositions,
+    Instrument,
+    InstrumentStore,
+    Point2D,
+    TaskPatch,
+    TileOrder,
+    ZRange,
+)
+from vxl.instrument.config import SplitRoutingRule
 from vxl.instrument.errors import OperationRejectedError
-from vxl.instrument.traversal import TileOrder
+
+
+def _task(
+    task_id: str,
+    xy: list[tuple[float, float]],
+    profiles: list[str],
+    *,
+    start: float = 0,
+    end: float = 10,
+) -> AcquisitionTask:
+    return AcquisitionTask(
+        id=task_id,
+        layout=ExplicitPositions(points=[Point2D(x=x, y=y) for x, y in xy]),
+        profiles=profiles,
+        z=ZRange(start=start, end=end),
+        traversal=TileOrder.CUSTOM,
+    )
+
+
+def _replace_position(x: float, y: float) -> TaskPatch:
+    return TaskPatch(layout=ExplicitPositions(points=[Point2D(x=x, y=y)]))
 
 
 @pytest.mark.parametrize("instrument_config", ["split-x"], indirect=True)
-async def test_task_tiles_resolve_rules_at_task_positions(opened_instrument: Instrument) -> None:
+async def test_planned_volumes_resolve_rules_at_task_positions(opened_instrument: Instrument) -> None:
     instrument = opened_instrument
-    await instrument.set_traversal(TileOrder.CUSTOM)
+    profile = instrument.active_profile_id.value
     await instrument.set_routing_rule("excitation_side", SplitRoutingRule(threshold=5))
-    await instrument.add_tasks([(4, 0), (5, 0)], start=0, end=0)
-    assert [tile.routes for tile in instrument.task_tiles.value] == [
+    await instrument.add_task(_task("task", [(4, 0), (5, 0)], [profile], start=0, end=0))
+    assert [volume.routes for volume in instrument.planned_volumes.value] == [
         {"excitation_side": "lower"},
         {"excitation_side": "upper"},
     ]
 
     await instrument.set_routing_rule("excitation_side", SplitRoutingRule(threshold=0))
-    assert [tile.routes for tile in instrument.task_tiles.value] == [
+    assert [volume.routes for volume in instrument.planned_volumes.value] == [
         {"excitation_side": "upper"},
         {"excitation_side": "upper"},
     ]
 
 
 @pytest.mark.parametrize("explicit_profiles", [False, True])
-async def test_add_batch_replays_exact_ids_values_and_order(instrument: Instrument, explicit_profiles: bool) -> None:
+async def test_add_task_replays_exact_values(instrument: Instrument, explicit_profiles: bool) -> None:
     state = instrument.state.value
     xy = [(float(index), float(index * 2)) for index in range(20)]
-    profiles = list(state.imaging.profiles) if explicit_profiles else None
-    start, end = 3.0, 7.0
-    await instrument.add_tasks(xy, start=start, end=end, profile_ids=profiles)
-    added = list(instrument.state.value.tasks.items())
+    profiles = list(state.imaging.profiles) if explicit_profiles else [instrument.active_profile_id.value]
+    task = _task("task", xy, profiles, start=3, end=7)
 
-    assert len(added) == 20
-    assert [(task.x, task.y) for _, task in added] == xy
-    assert all(
-        task.profile_ids == (profiles if profiles is not None else [instrument.active_profile_id.value])
-        and task.start == start
-        and task.end == end
-        for _, task in added
-    )
+    await instrument.add_task(task)
+    assert instrument.state.value.plan == [task]
 
     await instrument.undo()
-    assert instrument.state.value.tasks == {}
+    assert instrument.state.value.plan == []
     assert instrument.history.value.undo_label is None
     await instrument.redo()
-    assert list(instrument.state.value.tasks.items()) == added
-    assert list(InstrumentStore.load(instrument.path).value.tasks.items()) == added
+    assert instrument.state.value.plan == [task]
+    assert InstrumentStore.load(instrument.path).value.plan == [task]
 
 
 @pytest.mark.parametrize("indices", [(3, 1), (4, 0), (4, 3, 2, 1, 0)])
-async def test_remove_batch_restores_custom_order(instrument: Instrument, indices: tuple[int, ...]) -> None:
-    await instrument.set_traversal(TileOrder.CUSTOM)
-    await instrument.add_tasks([(4, 0), (1, 0), (3, 0), (0, 0), (2, 0)], start=0, end=10)
-    original = list(instrument.state.value.tasks.items())
-    removed = [original[index][0] for index in indices]
-    remaining = [(uid, task) for uid, task in original if uid not in removed]
+async def test_remove_tasks_restores_plan_order(instrument: Instrument, indices: tuple[int, ...]) -> None:
+    profile = instrument.active_profile_id.value
+    for index, x in enumerate((4, 1, 3, 0, 2)):
+        await instrument.add_task(_task(f"task-{index}", [(x, 0)], [profile]))
+    original = instrument.state.value.plan
+    removed = [original[index].id for index in indices]
+    remaining = [task for task in original if task.id not in removed]
 
     await instrument.remove_tasks(removed)
-    assert list(instrument.state.value.tasks.items()) == remaining
-    assert [tile.task_id for tile in instrument.task_tiles.value] == [uid for uid, _ in remaining]
+    assert instrument.state.value.plan == remaining
 
     await instrument.undo()
-    assert list(instrument.state.value.tasks.items()) == original
-    assert [tile.task_id for tile in instrument.task_tiles.value] == [uid for uid, _ in original]
-    assert list(InstrumentStore.load(instrument.path).value.tasks.items()) == original
+    assert instrument.state.value.plan == original
+    assert InstrumentStore.load(instrument.path).value.plan == original
 
     await instrument.redo()
-    assert list(instrument.state.value.tasks.items()) == remaining
-    assert [tile.task_id for tile in instrument.task_tiles.value] == [uid for uid, _ in remaining]
+    assert instrument.state.value.plan == remaining
 
 
-async def test_update_batch_replays_only_affected_tasks(instrument: Instrument) -> None:
-    await instrument.add_tasks([(0, 0), (1, 1), (2, 2)], start=0, end=10)
-    original = instrument.state.value.tasks
-    first, untouched, last = original
-    other_profile = next(
-        uid for uid in instrument.state.value.imaging.profiles if uid != instrument.active_profile_id.value
+async def test_update_task_replays_only_the_affected_task(instrument: Instrument) -> None:
+    profiles = list(instrument.state.value.imaging.profiles)
+    profile = instrument.active_profile_id.value
+    other_profile = next(uid for uid in profiles if uid != profile)
+    for index in range(3):
+        await instrument.add_task(_task(f"task-{index}", [(index, index)], [profile]))
+    original = instrument.state.value.plan
+    target = original[0]
+    patch = TaskPatch(
+        layout=ExplicitPositions(points=[Point2D(x=5, y=6)]),
+        profiles=[other_profile],
+        z=ZRange(start=2, end=10),
     )
-    await instrument.update_tasks(
-        {last: TaskPatch(start=2, end=10, profile_ids=[other_profile]), first: TaskPatch(x=5, y=6)}
-    )
-    updated = instrument.state.value.tasks
-    assert list(updated) == list(original)
-    assert updated[untouched] == original[untouched]
-    assert updated[first] == original[first].model_copy(update={"x": 5, "y": 6})
-    assert updated[last] == original[last].model_copy(update={"start": 2, "end": 10, "profile_ids": [other_profile]})
+
+    await instrument.update_task(target.id, patch)
+    updated = instrument.state.value.plan
+    assert [task.id for task in updated] == [task.id for task in original]
+    assert updated[1:] == original[1:]
+    assert updated[0] == target.model_copy(update=patch.changes())
 
     await instrument.undo()
-    assert list(instrument.state.value.tasks.items()) == list(original.items())
+    assert instrument.state.value.plan == original
     await instrument.redo()
-    assert list(instrument.state.value.tasks.items()) == list(updated.items())
+    assert instrument.state.value.plan == updated
 
 
 @pytest.mark.parametrize("operation", ["add", "remove", "update", "invalid_profile"])
-async def test_invalid_batch_preserves_state_disk_and_history(instrument: Instrument, operation: str) -> None:
-    await instrument.add_tasks([(0, 0), (1, 1)], start=0, end=10)
-    first = next(iter(instrument.state.value.tasks))
-    await instrument.update_tasks({first: TaskPatch(x=2)})
+async def test_invalid_edit_preserves_state_disk_and_history(instrument: Instrument, operation: str) -> None:
+    profile = instrument.active_profile_id.value
+    first = _task("first", [(0, 0)], [profile])
+    await instrument.add_task(first)
+    await instrument.add_task(_task("second", [(1, 1)], [profile]))
+    await instrument.update_task(first.id, _replace_position(2, 0))
     await instrument.undo()
     state = instrument.state.value
     history = instrument.history.value
     persisted = (instrument.path / "state.json").read_bytes()
-    edits = {
-        "add": lambda: instrument.add_tasks([(2, 2)], start=0, end=10, profile_ids=["missing"]),
-        "remove": lambda: instrument.remove_tasks([first, "missing"]),
-        "update": lambda: instrument.update_tasks({first: TaskPatch(x=5), "missing": TaskPatch(x=6)}),
-        "invalid_profile": lambda: instrument.update_tasks({first: TaskPatch(profile_ids=["missing"])}),
-    }
 
-    with pytest.raises(OperationRejectedError, match="missing"):
-        await edits[operation]()
+    async def apply_invalid_edit() -> None:
+        match operation:
+            case "add":
+                await instrument.add_task(first)
+            case "remove":
+                await instrument.remove_tasks([first.id, "missing"])
+            case "update":
+                await instrument.update_task("missing", TaskPatch(profiles=[profile]))
+            case "invalid_profile":
+                await instrument.update_task(first.id, TaskPatch(profiles=["missing"]))
+
+    with pytest.raises(OperationRejectedError):
+        await apply_invalid_edit()
 
     assert instrument.state.value == state
     assert instrument.history.value == history
     assert (instrument.path / "state.json").read_bytes() == persisted
     await instrument.redo()
-    assert instrument.state.value.tasks[first].x == 2
+    updated = instrument.state.value.plan[0]
+    assert updated.layout.points[0].x == 2
 
 
-@pytest.mark.parametrize("operation", ["add", "remove", "update", "unchanged"])
-async def test_noop_batch_preserves_redo(instrument: Instrument, operation: str) -> None:
-    await instrument.add_tasks([(0, 0)], start=0, end=10)
-    first = next(iter(instrument.state.value.tasks))
-    await instrument.update_tasks({first: TaskPatch(x=1)})
+@pytest.mark.parametrize("operation", ["remove", "update", "reorder"])
+async def test_noop_edit_preserves_redo(instrument: Instrument, operation: str) -> None:
+    profile = instrument.active_profile_id.value
+    task = _task("task", [(0, 0)], [profile])
+    await instrument.add_task(task)
+    await instrument.update_task(task.id, _replace_position(1, 0))
     await instrument.undo()
     state = instrument.state.value
     history = instrument.history.value
 
     match operation:
-        case "add":
-            await instrument.add_tasks([], start=0, end=10)
         case "remove":
             await instrument.remove_tasks([])
         case "update":
-            await instrument.update_tasks({})
-        case "unchanged":
-            await instrument.update_tasks({first: TaskPatch(x=0)})
+            await instrument.update_task(task.id, _replace_position(0, 0))
+        case "reorder":
+            await instrument.reorder_tasks([task.id])
 
     assert instrument.state.value == state
     assert instrument.history.value == history
     await instrument.redo()
-    assert instrument.state.value.tasks[first].x == 1
+    updated = instrument.state.value.plan[0]
+    assert updated.layout.points[0].x == 1

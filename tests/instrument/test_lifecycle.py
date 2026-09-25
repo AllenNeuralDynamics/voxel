@@ -7,10 +7,16 @@ from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 
 from rigup import CommandRequest, DeviceInterface, DeviceProps
-from vxl.instrument import AcquisitionMode, Instrument, InstrumentConfig, InstrumentState, InstrumentStore
-from vxl.instrument.config import AcquisitionTask, WriterPatch
+from vxl.instrument import (
+    AcquisitionMode,
+    AcquisitionRequest,
+    Instrument,
+    InstrumentConfig,
+    InstrumentState,
+    InstrumentStore,
+)
+from vxl.instrument.config import AcquisitionTask, ExplicitPositions, Point2D, WriterPatch, ZRange
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
-from vxl.instrument.models import AcquisitionRequest
 from vxl.system import System
 
 
@@ -63,15 +69,15 @@ async def test_startup_failure_closes_open_hal(
         assert instrument._hal.devices
         raise RuntimeError("channel initialization failed")
 
-    async def fail_validation():
+    def fail_validation():
         assert instrument._hal.devices
-        return [Violation(code="test.startup", msg="instrument validation failed")]
+        raise StartupError([Violation(code="test.startup", msg="instrument validation failed")])
 
     if phase == "channels":
         monkeypatch.setattr(instrument, "_build_channels", fail_channels)
         error, message = RuntimeError, "channel initialization failed"
     else:
-        monkeypatch.setattr(instrument, "_startup_violations", fail_validation)
+        monkeypatch.setattr(instrument, "_validate_startup", fail_validation)
         error, message = StartupError, "instrument validation failed"
 
     with pytest.raises(error, match=message):
@@ -107,7 +113,14 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
     state = state.model_copy(
         update={
             "imaging": imaging,
-            "tasks": {"outside": AcquisitionTask(x=101, y=50, start=-1, end=50, profile_ids=["single_gfp"])},
+            "plan": [
+                AcquisitionTask(
+                    id="outside",
+                    layout=ExplicitPositions(points=[Point2D(x=101, y=50)]),
+                    profiles=["single_gfp"],
+                    z=ZRange(start=-1, end=50),
+                )
+            ],
         }
     )
     camera_interface = DeviceInterface.model_validate(
@@ -131,6 +144,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
         return SimpleNamespace(lower_limit=Cell(0), upper_limit=Cell(100))
 
     hal = SimpleNamespace(
+        topology=instrument._hal.topology,
         device_interfaces={"camera_1": camera_interface, "daq": daq_interface},
         signal_generators={"daq": SimpleNamespace(ports=Cell({"camera_1": "ao0", "aotf_1": "ao1"}))},
         stage=SimpleNamespace(x=axis(), y=axis(), z=axis()),
@@ -138,8 +152,10 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
     with monkeypatch.context() as patch:
         patch.setattr(instrument_store, "_value", state)
         patch.setattr(instrument, "_hal", hal)
-        violations = await instrument._startup_violations()
+        with pytest.raises(StartupError) as raised:
+            instrument._validate_startup()
 
+    violations = raised.value.violations
     assert {violation.code for violation in violations} == {
         "state.stage_position.out_of_bounds",
         "imaging.profile.props.device_unavailable",
@@ -151,8 +167,8 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
         "imaging.profile.sync.port_missing",
     }
     assert {violation.loc for violation in violations if violation.code == "state.stage_position.out_of_bounds"} == {
-        ("state", "tasks", "outside", "x"),
-        ("state", "tasks", "outside", "start"),
+        ("state", "plan", 0, "layout"),
+        ("state", "plan", 0, "z", "start"),
     }
 
 
@@ -191,9 +207,9 @@ async def test_edits_accept_idle_and_preview(instrument: Instrument, mode: Acqui
 async def test_edits_report_capture_restriction(instrument: Instrument) -> None:
     await instrument._mode.set(AcquisitionMode.CAPTURE)
     with pytest.raises(
-        InstrumentBusyError, match="Unable to update tasks: requires mode idle or preview; current mode is capture"
+        InstrumentBusyError, match="Unable to remove tasks: requires mode idle or preview; current mode is capture"
     ):
-        await instrument.update_tasks({})
+        await instrument.remove_tasks([])
 
 
 async def test_update_signals_requires_idle_mode(instrument: Instrument) -> None:
@@ -238,19 +254,11 @@ async def test_apply_settings_uses_locked_public_transition(
     await instrument.apply_settings()
 
 
-async def test_acquisition_plans_after_acquiring_lock(instrument: Instrument, monkeypatch: pytest.MonkeyPatch) -> None:
-    planned = asyncio.Event()
-
-    def generate_plan(_task_ids):
-        planned.set()
-        return []
-
-    monkeypatch.setattr(instrument, "_generate_plan", generate_plan)
+async def test_acquisition_validates_plan_after_acquiring_lock(instrument: Instrument) -> None:
     request = AcquisitionRequest(storage=StorageSpec(path=PurePosixPath("run")))
     async with instrument._lock:
         acquisition = asyncio.create_task(instrument.start_acquisition(request))
         await asyncio.sleep(0)
-        assert not planned.is_set()
+        assert not acquisition.done()
     with pytest.raises(OperationRejectedError, match="No tasks planned"):
         await acquisition
-    assert planned.is_set()

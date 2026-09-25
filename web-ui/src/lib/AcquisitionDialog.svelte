@@ -59,11 +59,8 @@
     isLocal ? [] : Object.entries(remotes[store]?.roots ?? {}).map(([label, name]) => ({ value: name, label }))
   );
 
-  // Each (task, profile) pair is one captured volume.
-  const taskCount = $derived(instrument ? Object.keys(instrument.state.tasks).length : 0);
-  const volumeCount = $derived(
-    instrument ? Object.values(instrument.state.tasks).reduce((n, t) => n + t.profile_ids.length, 0) : 0
-  );
+  const taskCount = $derived(instrument?.plan.length ?? 0);
+  const volumeCount = $derived(instrument?.plannedVolumes.length ?? 0);
 
   function timestamp(): string {
     const d = new Date();

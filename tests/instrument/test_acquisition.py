@@ -14,9 +14,16 @@ from vxl_records import (
 )
 
 from vxl.devices.camera import CaptureState
-from vxl.instrument import AcquisitionMode, ActiveAcquisitionState, Instrument
-from vxl.instrument.config import TaskPatch
-from vxl.instrument.models import AcquisitionRequest
+from vxl.instrument import (
+    AcquisitionMode,
+    AcquisitionRequest,
+    AcquisitionTask,
+    ActiveAcquisition,
+    ExplicitPositions,
+    Instrument,
+    Point2D,
+    ZRange,
+)
 
 
 class _Writer:
@@ -61,9 +68,14 @@ async def writer(opened_instrument: Instrument, tmp_path: Path, monkeypatch: pyt
     camera = instrument._hal.cameras["camera_1"]
     for name in ("check_writable", "open_stack", "begin_batch", "capture_state", "close_stack", "release_writer"):
         monkeypatch.setattr(camera, name, getattr(writer, name))
-    await instrument.add_tasks([(0, 0)], start=0, end=0)
-    task_id = next(iter(instrument.state.value.tasks))
-    await instrument.update_tasks({task_id: TaskPatch(start=0, end=0, profile_ids=["single_gfp"])})
+    await instrument.add_task(
+        AcquisitionTask(
+            id="task",
+            layout=ExplicitPositions(points=[Point2D(x=0, y=0)]),
+            profiles=["single_gfp"],
+            z=ZRange(start=0, end=0),
+        )
+    )
     return writer
 
 
@@ -73,24 +85,22 @@ async def test_acquisition_manifest_tracks_completed_dataset(
     instrument = opened_instrument
     catalog = records.acquisitions
     storage = StorageSpec(path=PurePosixPath("run"))
-    states: list[ActiveAcquisitionState | None] = []
+    states: list[ActiveAcquisition | None] = []
     instrument.acquisition.subscribe(states.append)
     started = await instrument.start_acquisition(AcquisitionRequest(storage=storage, operator="operator"))
     await asyncio.wait_for(instrument.wait_acquisition(), timeout=5)
 
-    persisted = await catalog.get(started.manifest.id)
+    persisted = await catalog.get(started.id)
     dataset = persisted.volumes[0].datasets["gfp"]
-    assert started.manifest.status is AcquisitionStatus.RUNNING
-    assert started.progress.task == next(iter(instrument.state.value.tasks))
-    assert started.progress.profile == "single_gfp"
-    assert started.progress.frames_captured == 0
-    assert started.progress.frames_total == 1
+    assert started.status is AcquisitionStatus.RUNNING
+    assert started.volumes[0].task == "task"
+    assert started.volumes[0].profile == "single_gfp"
+    assert states[0] is not None
+    assert states[0].frames_captured == 0
     assert instrument.acquisition.value is None
     assert states[-1] is None
     assert any(
-        state is not None
-        and state.manifest.status is AcquisitionStatus.COMPLETED
-        and state.progress.frames_captured == state.progress.frames_total
+        state is not None and state.manifest_revision > started.revision and state.frames_captured == 1
         for state in states
     )
     assert persisted.status is AcquisitionStatus.COMPLETED
@@ -99,7 +109,7 @@ async def test_acquisition_manifest_tracks_completed_dataset(
     location = dataset.locations[0]
     assert isinstance(location, LocalLocation)
     assert location.status is LocationStatus.AVAILABLE
-    assert location.path == str(tmp_path / "data/run/tasks/0001/single_gfp/gfp.ome.zarr")
+    assert location.path == str(tmp_path / "data/run/volumes/000001/single_gfp/gfp.ome.zarr")
     assert persisted.state_snapshot == instrument.state.value.model_dump(mode="json")
     assert (tmp_path / "data/run/manifest.json").is_file()
     assert not (tmp_path / "data/run/record.json").exists()
@@ -118,7 +128,7 @@ async def test_writer_close_failure_marks_dataset_and_acquisition_failed(
     started = await instrument.start_acquisition(AcquisitionRequest(storage=storage, operator="operator"))
     await asyncio.wait_for(instrument.wait_acquisition(), timeout=5)
 
-    persisted = await catalog.get(started.manifest.id)
+    persisted = await catalog.get(started.id)
     dataset = persisted.volumes[0].datasets["gfp"]
     assert persisted.status is AcquisitionStatus.FAILED
     assert persisted.failure is not None

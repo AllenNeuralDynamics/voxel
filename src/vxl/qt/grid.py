@@ -1,10 +1,7 @@
 """Grid panel — the planned acquisition tasks as an editable table.
 
-Rows are the instrument's tasks (ordered by ``task_tiles``); columns expose each task's position,
-z-range (editable), slice count, and profiles. Edits go through :meth:`Instrument.update_tasks` /
-:meth:`Instrument.remove_tasks`; double-clicking a row moves the stage to that task's (x, y). Mirrors
-main's ``GridTable`` on the task-centric domain (tasks/traversal) rather than the old row/col
-tile grid.
+Rows are the instrument's high-level tasks; the canvas renders their resolved volume footprints and
+traversal. This is the compact Qt projection of the same task plan published to other clients.
 """
 
 import logging
@@ -14,6 +11,7 @@ from typing import Any
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QMouseEvent, QPainter, QPaintEvent, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QMenu, QSizePolicy, QWidget
+from vxl_records import PlannedVolume
 from vxlib.asyncio import spawn
 from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
@@ -47,17 +45,22 @@ class _Row:
     """Per-row data the column getters read: the task plus the z_step that yields its slice count."""
 
     task: AcquisitionTask
+    planned: list[PlannedVolume]
     z_step: float | None
 
 
-def _position_mm(task: AcquisitionTask) -> str:
-    return f"{task.stack.x / 1000:.2f}, {task.stack.y / 1000:.2f}"
+def _position_mm(row: _Row) -> str:
+    if not row.planned:
+        return "—"
+    point = row.planned[0]
+    suffix = "" if len(row.planned) == 1 else f" (+{len(row.planned) - 1})"
+    return f"{point.x / 1000:.2f}, {point.y / 1000:.2f}{suffix}"
 
 
 def _slices(row: _Row) -> str:
     if row.z_step is None or row.z_step <= 0:
         return "—"
-    return str(row.task.stack.num_frames(row.z_step))
+    return str(row.task.z.num_frames(row.z_step))
 
 
 TASK_TABLE_COLUMNS: list[TableColumn] = [
@@ -68,14 +71,14 @@ TASK_TABLE_COLUMNS: list[TableColumn] = [
         header="Position (mm)",
         width=None,
         min_width=110,
-        getter=lambda _t, r: _position_mm(r.task) if r else "",
+        getter=lambda _t, r: _position_mm(r) if r else "",
     ),
     TableColumn(
         key="z_start",
         header="Z Start",
         column_type=ColumnType.SPINBOX,
         width=90,
-        getter=lambda _t, r: int(r.task.stack.start) if r else 0,
+        getter=lambda _t, r: int(r.task.z.start) if r else 0,
         setter=lambda _t, _r, v: {"start": v},
         editable=lambda _t, r: r is not None,
         suffix=" µm",
@@ -88,7 +91,7 @@ TASK_TABLE_COLUMNS: list[TableColumn] = [
         header="Z End",
         column_type=ColumnType.SPINBOX,
         width=90,
-        getter=lambda _t, r: int(r.task.stack.end) if r else 0,
+        getter=lambda _t, r: int(r.task.z.end) if r else 0,
         setter=lambda _t, _r, v: {"end": v},
         editable=lambda _t, r: r is not None,
         suffix=" µm",
@@ -101,13 +104,13 @@ TASK_TABLE_COLUMNS: list[TableColumn] = [
         key="profiles",
         header="Profiles",
         width=120,
-        getter=lambda _t, r: ", ".join(r.task.profile_ids) if r else "",
+        getter=lambda _t, r: ", ".join(r.task.profiles) if r else "",
     ),
 ]
 
 
 class TasksTableModel(TableModel[str, "_Row | None"]):
-    """Table model over the instrument's tasks. Rows are task ids (in ``task_tiles`` order); aux is the
+    """Table model over the instrument's tasks. Rows follow the acquisition plan; aux is the
     task + its z_step. Refreshes on every state commit; edits go through ``update_tasks``."""
 
     def __init__(self, instrument: Instrument, columns: list[TableColumn]) -> None:
@@ -119,23 +122,24 @@ class TasksTableModel(TableModel[str, "_Row | None"]):
         return self._instrument.state.value
 
     def _get_rows(self) -> list[str]:
-        return [tile.task_id for tile in self._instrument.task_tiles.value]
+        return [task.id for task in self._snap().plan]
 
     def _get_aux_data(self, row_data: str) -> "_Row | None":
         snap = self._snap()
-        task = snap.tasks.get(row_data)
+        task = next((task for task in snap.plan if task.id == row_data), None)
+        planned = [volume for volume in self._instrument.planned_volumes.value if volume.task == row_data]
         if task is None:
             return None
         z_step = None
-        if task.profile_ids and (profile := snap.imaging.profiles.get(task.profile_ids[0])) is not None:
+        if task.profiles and (profile := snap.imaging.profiles.get(task.profiles[0])) is not None:
             z_step = profile.z_step
-        return _Row(task, z_step)
+        return _Row(task, planned, z_step)
 
     def _on_edit(self, row_data: str, aux_data: "_Row | None", column: TableColumn, value: Any) -> None:
         if aux_data is None or column.setter is None:
             return
-        patch = TaskPatch(**column.setter(row_data, aux_data, value))
-        spawn(self._instrument.update_tasks({row_data: patch}), log=log)
+        z = aux_data.task.z.model_copy(update=column.setter(row_data, aux_data, value))
+        spawn(self._instrument.update_task(aux_data.task.id, TaskPatch(z=z)), log=log)
 
     def delete(self, task_ids: list[str]) -> None:
         """Remove the given tasks, then clear the checkbox selection."""
@@ -165,10 +169,11 @@ class TasksTable(QWidget):
         task_id = self._model.get_row_at(row_idx)
         if task_id is None:
             return
-        task = self._instrument.state.value.tasks.get(task_id)
-        if task is None:
+        volumes = [volume for volume in self._instrument.planned_volumes.value if volume.task == task_id]
+        if not volumes:
             return
-        spawn(self._instrument.move_stage(x=task.x, y=task.y), log=log)
+        point = volumes[0]
+        spawn(self._instrument.move_stage(x=point.x, y=point.y), log=log)
 
     def contextMenuEvent(self, event: QContextMenuEvent | None) -> None:
         """Right-click → bulk actions on the checkbox-selected tasks."""
@@ -206,7 +211,8 @@ class GridCanvas(QWidget):
         self._build_layer_toggles()
 
         self._unsubs: list[Teardown] = [
-            instrument.task_tiles.subscribe(self._refresh),
+            instrument.profile_fovs.subscribe(self._refresh),
+            instrument.planned_volumes.subscribe(self._refresh),
             instrument.active_profile_id.subscribe(self._refresh),
             instrument.fov.subscribe(lambda _fov: self.update()),
         ]
@@ -248,8 +254,7 @@ class GridCanvas(QWidget):
     def _refresh(self, _value: object = None) -> None:
         """Recompute which tasks belong to the active profile (for highlighting), then repaint."""
         active_id = self._instrument.active_profile_id.value
-        tasks = self._instrument.state.value.tasks
-        self._active_ids = {tid for tid, task in tasks.items() if active_id in task.profile_ids}
+        self._active_ids = {task.id for task in self._instrument.state.value.plan if active_id in task.profiles}
         self.update()
 
     def _transform(self) -> QTransform | None:
@@ -271,9 +276,18 @@ class GridCanvas(QWidget):
         t.translate(-vb_x, -vb_y)
         return t
 
-    @staticmethod
-    def _footprint(tile: Any) -> QRectF:
-        return QRectF(tile.x - tile.w / 2, tile.y - tile.h / 2, tile.w, tile.h)
+    def _footprints(self, task_id: str) -> list[QRectF]:
+        return [
+            QRectF(
+                volume.x + bounds.min_x,
+                volume.y + bounds.min_y,
+                bounds.max_x - bounds.min_x,
+                bounds.max_y - bounds.min_y,
+            )
+            for volume in self._instrument.planned_volumes.value
+            if volume.task == task_id
+            for bounds in self._instrument.profile_fovs.value.get(volume.profile, {}).values()
+        ]
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
         del event
@@ -285,7 +299,7 @@ class GridCanvas(QWidget):
             return
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setTransform(transform)
-        stacks = {tile.task_id: tile for tile in self._instrument.task_tiles.value}
+        task_ids = list(dict.fromkeys(volume.task for volume in self._instrument.planned_volumes.value))
 
         # Stage bounds
         x, y = self._stage.x, self._stage.y
@@ -295,7 +309,7 @@ class GridCanvas(QWidget):
 
         # Planned stacks (footprints): active-profile stacks accented + faintly filled; others muted
         if self._layers["stacks"]:
-            for tid, stack in stacks.items():
+            for tid in task_ids:
                 if tid == self._selected:
                     self._stroke(painter, Colors.ACCENT_BRIGHT, width=2)
                 elif tid in self._active_ids:
@@ -308,11 +322,13 @@ class GridCanvas(QWidget):
                     painter.setBrush(fill)
                 else:
                     painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRect(self._footprint(stack))
+                for footprint in self._footprints(tid):
+                    painter.drawRect(footprint)
 
         # Traversal path through stack centers
         if self._layers["path"]:
-            points = [QPointF(tile.x, tile.y) for tile in self._instrument.task_tiles.value]
+            positions = dict.fromkeys((volume.x, volume.y) for volume in self._instrument.planned_volumes.value)
+            points = [QPointF(x, y) for x, y in positions]
             if len(points) > 1:
                 self._stroke(painter, Colors.TEXT_MUTED)
                 painter.drawPolyline(QPolygonF(points))
@@ -343,9 +359,10 @@ class GridCanvas(QWidget):
         if not ok:
             return None
         point = inverse.map(pos)
-        for tile in self._instrument.task_tiles.value:
-            if self._footprint(tile).contains(point):
-                return tile.task_id
+        task_ids = dict.fromkeys(volume.task for volume in self._instrument.planned_volumes.value)
+        for task_id in reversed(task_ids):
+            if any(footprint.contains(point) for footprint in self._footprints(task_id)):
+                return task_id
         return None
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
@@ -360,9 +377,11 @@ class GridCanvas(QWidget):
             return
         pos = QPointF(event.pos())
         menu = QMenu(self)
-        stacks = {tile.task_id: tile for tile in self._instrument.task_tiles.value}
-        if (tid := self._task_at(pos)) is not None and (stack := stacks.get(tid)) is not None:
-            menu.addAction("Move stage here", lambda: self._move_stage(stack.x, stack.y))
+        if (tid := self._task_at(pos)) is not None:
+            volumes = [volume for volume in self._instrument.planned_volumes.value if volume.task == tid]
+            if volumes:
+                point = volumes[0]
+                menu.addAction("Move stage here", lambda: self._move_stage(point.x, point.y))
         if not menu.isEmpty():
             menu.exec(event.globalPos())
 

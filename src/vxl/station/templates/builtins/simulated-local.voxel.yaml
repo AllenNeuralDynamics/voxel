@@ -148,7 +148,6 @@ default:
               aotf_1: *aotf_blanking_waveform
         desc: "Single RFP channel"
 
-  traversal: snake_row
 
   output:
     max_level: 3

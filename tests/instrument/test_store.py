@@ -4,11 +4,17 @@ import pytest
 from pydantic import ValidationError
 
 from vxl._utils.files import load_yaml
-from vxl.instrument import InstrumentConfig, InstrumentState, InstrumentStore
-from vxl.instrument.config import AcquisitionTask
+from vxl.instrument import (
+    AcquisitionTask,
+    ExplicitPositions,
+    InstrumentConfig,
+    InstrumentState,
+    InstrumentStore,
+    Point2D,
+    ZRange,
+)
 from vxl.instrument.errors import OperationRejectedError, StartupError
 from vxl.instrument.store import InstrumentInspection, Invalid, Loaded, Missing
-from vxl.instrument.traversal import TileOrder
 
 
 def test_load_config_returns_the_parsed_config(instrument_template: Path) -> None:
@@ -84,8 +90,13 @@ def _semantically_invalid_state(config: InstrumentConfig) -> InstrumentState:
     profile = state.imaging.profiles["single_gfp"].model_copy(update={"channels": ["missing_channel"]})
     profiles = {**state.imaging.profiles, "single_gfp": profile}
     imaging = state.imaging.model_copy(update={"profiles": profiles})
-    task = AcquisitionTask(x=0, y=0, start=0, end=0, profile_ids=["missing_profile"])
-    return state.model_copy(update={"imaging": imaging, "tasks": {"broken": task}})
+    task = AcquisitionTask(
+        id="broken",
+        layout=ExplicitPositions(points=[Point2D(x=0, y=0)]),
+        profiles=["missing_profile"],
+        z=ZRange(start=0, end=0),
+    )
+    return state.model_copy(update={"imaging": imaging, "plan": [task]})
 
 
 def test_store_check_collects_config_and_state_errors(tmp_path: Path) -> None:
@@ -134,14 +145,14 @@ async def test_store_saves_selected_live_fields_as_defaults(
     config = instrument_config
     directory = InstrumentStore.instantiate(config, "save-default", tmp_path)
     store = InstrumentStore.load(directory)
-    traversal = TileOrder.SWEEP_COLUMN
-    await store.update(traversal=traversal)
+    output = store.value.output.model_copy(update={"target_shard_gb": 1.5})
+    await store.update(output=output)
 
-    await store.save_as_default({"traversal"})
+    await store.save_as_default({"output"})
 
-    assert store.default.value.traversal == traversal
-    assert store.config.default.traversal == traversal
-    assert load_yaml(directory / "config.yaml", InstrumentConfig).default.traversal == traversal
+    assert store.default.value.output == output
+    assert store.config.default.output == output
+    assert load_yaml(directory / "config.yaml", InstrumentConfig).default.output == output
 
 
 async def test_store_restores_selected_defaults_to_live_state(
@@ -150,13 +161,13 @@ async def test_store_restores_selected_defaults_to_live_state(
     config = instrument_config
     directory = InstrumentStore.instantiate(config, "restore-default", tmp_path)
     store = InstrumentStore.load(directory)
-    await store.update(traversal=TileOrder.SWEEP_COLUMN)
+    await store.update(output=store.value.output.model_copy(update={"target_shard_gb": 1.5}))
 
-    await store.restore_default({"traversal"})
+    await store.restore_default({"output"})
 
-    assert store.value.traversal == store.default.value.traversal
+    assert store.value.output == store.default.value.output
     persisted = InstrumentState.model_validate_json((directory / "state.json").read_text(encoding="utf-8"))
-    assert persisted.traversal == store.default.value.traversal
+    assert persisted.output == store.default.value.output
 
 
 def test_store_rejects_an_invalid_existing_state_file(instrument_config: InstrumentConfig, tmp_path: Path) -> None:
@@ -220,7 +231,7 @@ def test_store_check_collects_independent_state_semantic_violations(
             "imaging.profile.channel_missing",
             ("state", "imaging", "profiles", "single_gfp", "channels", 0),
         ),
-        ("task.profile_missing", ("state", "tasks", "broken", "profile_ids", 0)),
+        ("task.profile_missing", ("state", "plan", 0, "profiles", 0)),
     ]
 
 

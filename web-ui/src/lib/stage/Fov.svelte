@@ -48,6 +48,7 @@
     context.register({
       id: 'live',
       label: 'Live FOV',
+      menuOrder: 0,
       get visible() {
         return visible;
       },

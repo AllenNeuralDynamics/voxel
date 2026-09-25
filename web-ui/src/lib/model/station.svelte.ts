@@ -24,7 +24,8 @@ import { SnapshotStore } from './snapshots.svelte';
 import type {
   AcquisitionManifest,
   AcquisitionRequest,
-  ActiveAcquisitionState,
+  AcquisitionTask,
+  ActiveAcquisition,
   Change,
   ChannelPatch,
   DeviceState,
@@ -47,8 +48,6 @@ import type {
   StationInfo,
   StationStatus,
   TaskPatch,
-  TaskValues,
-  TileOrder,
   WriterPatch
 } from './types';
 import { DEFAULT_STAGE_ORIENTATION } from './types';
@@ -248,13 +247,15 @@ export class Instrument {
   /** Session-owned rule editors; numeric values and bounds are in micrometres. */
   readonly routingDimensions = new SvelteMap<string, RoutingDimension>();
 
-  /** Retained manifest and current-volume progress for the active run. */
-  acquisition = $state.raw<ActiveAcquisitionState | null>(null);
+  /** Transient progress for the active run; durable details live in the acquisition catalog. */
+  acquisition = $state.raw<ActiveAcquisition | null>(null);
 
   readonly mode = $derived(this.status.mode);
   readonly fov = $derived(this.status.fov);
   readonly state = $derived(this.status.state);
-  readonly taskTiles = $derived(this.status.task_tiles);
+  readonly plan = $derived(this.state.plan);
+  readonly profileFovs = $derived(this.status.profile_fovs);
+  readonly plannedVolumes = $derived(this.status.planned_volumes);
   readonly history = $derived(this.status.history);
   readonly edits = createEditQueue();
   readonly imaging = $derived(this.state.imaging);
@@ -459,12 +460,12 @@ export class Instrument {
         routing: session.instrument.routing,
         metadata_cls: session.instrument.metadata_cls,
         output: session.instrument.output,
-        traversal: session.instrument.traversal,
-        tasks: session.instrument.tasks,
+        plan: session.instrument.plan,
         metadata: session.instrument.metadata,
         last_modified: session.instrument.last_modified
       },
-      task_tiles: session.instrument.task_tiles,
+      profile_fovs: session.instrument.profile_fovs,
+      planned_volumes: session.instrument.planned_volumes,
       history: session.instrument.history
     };
   }
@@ -580,41 +581,34 @@ export class Instrument {
     return Promise.resolve(this.metadataSchemas);
   }
 
-  setTraversal(order: TileOrder): Promise<Change<TileOrder>> {
-    return this.edits.run(() => this.#client.put<Change<TileOrder>>(`${this.#base}/traversal`, { order }));
+  addTask(task: AcquisitionTask): Promise<Change<AcquisitionTask[]>> {
+    return this.edits.run(() => this.#client.post<Change<AcquisitionTask[]>>(`${this.#base}/tasks`, task));
   }
 
-  addTasks(
-    xy: [number, number][],
-    range: { start: number; end: number },
-    profileIds?: string[]
-  ): Promise<Change<TaskValues>> {
+  updateTask(taskId: string, patch: TaskPatch, { editId }: EditContext = {}): Promise<Change<AcquisitionTask>> {
+    const query = editId ? `?edit_id=${encodeURIComponent(editId)}` : '';
     return this.edits.run(() =>
-      this.#client.post<Change<TaskValues>>(`${this.#base}/tasks`, {
-        xy,
-        profile_ids: profileIds ?? null,
-        start: range.start,
-        end: range.end
-      })
+      this.#client.patch<Change<AcquisitionTask>>(`${this.#base}/tasks/${encodeURIComponent(taskId)}${query}`, patch)
     );
   }
 
-  /** Apply a per-task patch to one or more tasks in a single request. */
-  updateTasks(patches: Record<string, TaskPatch>): Promise<Change<TaskValues>> {
-    return this.edits.run(() => this.#client.patch<Change<TaskValues>>(`${this.#base}/tasks`, { patches }));
+  reorderTasks(taskIds: string[]): Promise<Change<AcquisitionTask[]>> {
+    return this.edits.run(() =>
+      this.#client.put<Change<AcquisitionTask[]>>(`${this.#base}/tasks/order`, { ids: taskIds })
+    );
   }
 
   /** Delete one or more tasks in a single request. */
-  removeTasks(taskIds: string[]): Promise<Change<TaskValues>> {
+  removeTasks(taskIds: string[]): Promise<Change<AcquisitionTask[]>> {
     const query = taskIds.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
-    return this.edits.run(() => this.#client.del<Change<TaskValues>>(`${this.#base}/tasks?${query}`));
+    return this.edits.run(() => this.#client.del<Change<AcquisitionTask[]>>(`${this.#base}/tasks?${query}`));
   }
 
   /** Launch a run; `request.task_ids=null` captures every planned task in traversal order. */
-  async startAcquisition(request: AcquisitionRequest): Promise<ActiveAcquisitionState> {
-    const acquisition = await this.#client.post<ActiveAcquisitionState>(`${this.#base}/acquisition`, request);
-    this.#onAcquisitionCreated(acquisition.manifest);
-    return acquisition;
+  async startAcquisition(request: AcquisitionRequest): Promise<AcquisitionManifest> {
+    const manifest = await this.#client.post<AcquisitionManifest>(`${this.#base}/acquisition`, request);
+    this.#onAcquisitionCreated(manifest);
+    return manifest;
   }
 
   stopAcquisition(): Promise<void> {
@@ -962,6 +956,22 @@ export class Station {
     this.acquisitions = acquisitions;
   }
 
+  async #refreshAcquisition(active: ActiveAcquisition | null): Promise<void> {
+    if (!active) return;
+    const cached = this.acquisitions.find((manifest) => manifest.id === active.id);
+    if (cached && cached.revision >= active.manifest_revision) return;
+    try {
+      const manifest = await this.#client.get<AcquisitionManifest>(
+        `${this.#stationBase}/acquisitions/${encodeURIComponent(active.id)}`
+      );
+      const current = this.acquisitions.find((candidate) => candidate.id === manifest.id);
+      if (current && current.revision >= manifest.revision) return;
+      this.acquisitions = [manifest, ...this.acquisitions.filter((candidate) => candidate.id !== manifest.id)];
+    } catch {
+      // A later revision or reconnect will retry this best-effort cache refresh.
+    }
+  }
+
   /** Sweep persisted snapshots whose instrument no longer exists (frontend-only GC, on connect). */
   async #pruneSnapshots(): Promise<void> {
     try {
@@ -994,6 +1004,7 @@ export class Station {
     }
     if (this.instrument?.sessionId === session.info.id) {
       this.instrument.applySession(session);
+      void this.#refreshAcquisition(session.instrument.acquisition);
       return;
     }
     this.instrument?.dispose();
@@ -1013,6 +1024,7 @@ export class Station {
       this.snaps.scope = this.#openName;
       this.inpaint.scope = this.#openName;
       this.#lastInstrument.set(this.#openName);
+      void this.#refreshAcquisition(session.instrument.acquisition);
     } catch (error) {
       this.instrument = null;
       this.#openName = null;

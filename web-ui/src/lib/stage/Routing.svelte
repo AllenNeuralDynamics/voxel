@@ -135,7 +135,7 @@
   onMount(() =>
     context.register({
       id: 'routing:' + rule.id,
-      menuOrder: 2,
+      menuOrder: 4,
       get label() {
         return 'Routing · ' + rule.label;
       },

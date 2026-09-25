@@ -32,7 +32,17 @@ def _manifest(
         storage=StorageSpec(path=PurePosixPath(f"runs/{acquisition_id}")),
         state_snapshot={},
         hardware_snapshot={},
-        volumes=[AcquisitionVolume(task="task-a", profile="488")],
+        volumes=[
+            AcquisitionVolume(
+                task="task-a",
+                profile="488",
+                x=0,
+                y=0,
+                z_start=0,
+                z_step=1,
+                z_end=0,
+            )
+        ],
     )
 
 

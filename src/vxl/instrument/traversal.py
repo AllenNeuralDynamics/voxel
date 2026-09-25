@@ -1,101 +1,81 @@
-"""Tile ordering and acquisition result models."""
+"""Spatial ordering algorithms for planned acquisition positions."""
 
 import math
-from enum import StrEnum
 
-from pydantic import BaseModel
-
-
-class Tile(BaseModel):
-    x: float
-    y: float
-    w: float  # FOV width at creation (µm)
-    h: float  # FOV height at creation (µm)
+from .config import Point2D, TileOrder
 
 
-class TileOrder(StrEnum):
-    """Task acquisition ordering strategy. Callable — sorts a list of tiles."""
+def order_positions(
+    positions: list[Point2D],
+    order: TileOrder,
+    *,
+    row_tolerance: float,
+    column_tolerance: float,
+) -> list[Point2D]:
+    """Return positions in the requested traversal order."""
 
-    SWEEP_ROW = "sweep_row"
-    SWEEP_COLUMN = "sweep_column"
-    SNAKE_ROW = "snake_row"
-    SNAKE_COLUMN = "snake_column"
-    NEAREST_NEIGHBOR = "nearest_neighbor"
-    OPTIMIZED = "optimized"
-    CUSTOM = "custom"
-
-    def __call__[T: Tile](self, tiles: list[T]) -> list[T]:
-        match self:
-            case TileOrder.SWEEP_ROW:
-                return _sweep(tiles, band_axis="y", sort_axis="x")
-            case TileOrder.SWEEP_COLUMN:
-                return _sweep(tiles, band_axis="x", sort_axis="y")
-            case TileOrder.SNAKE_ROW:
-                return _snake(tiles, band_axis="y", sort_axis="x")
-            case TileOrder.SNAKE_COLUMN:
-                return _snake(tiles, band_axis="x", sort_axis="y")
-            case TileOrder.NEAREST_NEIGHBOR:
-                return _nearest_neighbor(tiles)
-            case TileOrder.OPTIMIZED:
-                return _two_opt(_nearest_neighbor(tiles))
-            case _:
-                return tiles
+    match order:
+        case TileOrder.SWEEP_ROW:
+            return _sweep(positions, band_axis="y", sort_axis="x", tolerance=row_tolerance)
+        case TileOrder.SWEEP_COLUMN:
+            return _sweep(positions, band_axis="x", sort_axis="y", tolerance=column_tolerance)
+        case TileOrder.SNAKE_ROW:
+            return _snake(positions, band_axis="y", sort_axis="x", tolerance=row_tolerance)
+        case TileOrder.SNAKE_COLUMN:
+            return _snake(positions, band_axis="x", sort_axis="y", tolerance=column_tolerance)
+        case TileOrder.NEAREST_NEIGHBOR:
+            return _nearest_neighbor(positions)
+        case TileOrder.OPTIMIZED:
+            return _two_opt(_nearest_neighbor(positions))
+        case _:
+            return list(positions)
 
 
-def _dist(a: Tile, b: Tile) -> float:
+def _dist(a: Point2D, b: Point2D) -> float:
     return math.hypot(a.x - b.x, a.y - b.y)
 
 
-def _band_tolerance[T: Tile](tiles: list[T], axis: str) -> float:
-    """Median FOV dimension * 0.3 along the band axis."""
-    if not tiles:
-        return 1.0
-    sizes = sorted(s.h if axis == "y" else s.w for s in tiles)
-    return sizes[len(sizes) // 2] * 0.3
-
-
-def _cluster_bands[T: Tile](tiles: list[T], axis: str) -> list[list[T]]:
+def _cluster_bands(positions: list[Point2D], axis: str, tolerance: float) -> list[list[Point2D]]:
     """Group tiles into bands along the given axis by proximity."""
-    if not tiles:
+    if not positions:
         return []
-    tol = _band_tolerance(tiles, axis)
-    key = (lambda s: s.y) if axis == "y" else (lambda s: s.x)
-    ordered = sorted(tiles, key=key)
+    key = (lambda point: point.y) if axis == "y" else (lambda point: point.x)
+    ordered = sorted(positions, key=key)
 
-    bands: list[list[T]] = [[ordered[0]]]
-    for s in ordered[1:]:
-        if abs(key(s) - key(bands[-1][0])) <= tol:
-            bands[-1].append(s)
+    bands = [[ordered[0]]]
+    for position in ordered[1:]:
+        if abs(key(position) - key(bands[-1][0])) <= tolerance:
+            bands[-1].append(position)
         else:
-            bands.append([s])
+            bands.append([position])
     return bands
 
 
-def _sweep[T: Tile](tiles: list[T], *, band_axis: str, sort_axis: str) -> list[T]:
+def _sweep(positions: list[Point2D], *, band_axis: str, sort_axis: str, tolerance: float) -> list[Point2D]:
     """Sort into bands, then sort within each band."""
-    bands = _cluster_bands(tiles, band_axis)
-    sort_key = (lambda s: s.x) if sort_axis == "x" else (lambda s: s.y)
-    result: list[T] = []
+    bands = _cluster_bands(positions, band_axis, tolerance)
+    sort_key = (lambda point: point.x) if sort_axis == "x" else (lambda point: point.y)
+    result: list[Point2D] = []
     for band in bands:
         result.extend(sorted(band, key=sort_key))
     return result
 
 
-def _snake[T: Tile](tiles: list[T], *, band_axis: str, sort_axis: str) -> list[T]:
+def _snake(positions: list[Point2D], *, band_axis: str, sort_axis: str, tolerance: float) -> list[Point2D]:
     """Sort into bands, alternating direction within bands."""
-    bands = _cluster_bands(tiles, band_axis)
-    sort_key = (lambda s: s.x) if sort_axis == "x" else (lambda s: s.y)
-    result: list[T] = []
+    bands = _cluster_bands(positions, band_axis, tolerance)
+    sort_key = (lambda point: point.x) if sort_axis == "x" else (lambda point: point.y)
+    result: list[Point2D] = []
     for i, band in enumerate(bands):
         result.extend(sorted(band, key=sort_key, reverse=(i % 2 == 1)))
     return result
 
 
-def _nearest_neighbor[T: Tile](tiles: list[T]) -> list[T]:
+def _nearest_neighbor(positions: list[Point2D]) -> list[Point2D]:
     """Greedy nearest-neighbor ordering. O(n²)."""
-    if len(tiles) <= 1:
-        return list(tiles)
-    remaining = list(tiles)
+    if len(positions) <= 1:
+        return list(positions)
+    remaining = list(positions)
     result = [remaining.pop(0)]
     while remaining:
         current = result[-1]
@@ -104,7 +84,7 @@ def _nearest_neighbor[T: Tile](tiles: list[T]) -> list[T]:
     return result
 
 
-def _two_opt[T: Tile](path: list[T]) -> list[T]:
+def _two_opt(path: list[Point2D]) -> list[Point2D]:
     """Improve path by reversing segments that reduce total distance."""
     if len(path) <= 3:
         return path

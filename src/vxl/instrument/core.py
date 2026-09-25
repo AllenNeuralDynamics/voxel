@@ -7,24 +7,26 @@ import uuid
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import Any, Self
 
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from vxl_records import (
     AcquisitionManifest,
     AcquisitionOrigin,
     AcquisitionVolume,
-    DatasetLocation,
     DatasetStatus,
     LocationStatus,
+    PlannedVolume,
     StorageSpec,
     VoxelRecords,
 )
 from vxlib.history import Change, HistoryState, UndoHistory
 from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 from vxlib.reactivity import Cell, Computed, Emitter, ReactiveQuery, Readable, Subscribable
+from vxlib.schema import FrozenModel
 
 from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
@@ -47,19 +49,49 @@ from .config import (
     ProfilePatch,
     RoutingRule,
     TaskPatch,
+    VolumeOrder,
     WriterPatch,
-    ZStack,
 )
-from .errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
+from .errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation, ViolationLoc
 from .metadata import ExperimentMetadata, resolve_metadata_class
-from .models import AcquisitionMode, AcquisitionRequest, ActiveAcquisitionState, TaskTile, VolumeProgress
+from .planning import Bounds, resolve_layout, resolve_z
 from .store import PROMOTABLE_FIELDS, InstrumentStore
-from .traversal import TileOrder
 
 logger = logging.getLogger(__name__)
 
-# Affected tasks retain their insertion positions; None means the task is absent.
-type _TaskValues = dict[str, tuple[int, AcquisitionTask] | None]
+
+class AcquisitionMode(StrEnum):
+    IDLE = "idle"
+    PREVIEW = "preview"
+    CAPTURE = "capture"
+
+
+class AcquisitionRequest(BaseModel):
+    """Parameters of an acquisition run. Shared by the instrument API and web request body."""
+
+    storage: StorageSpec
+    task_ids: list[str] | None = None
+    operator: str | None = None
+
+
+class AcquisitionPhase(StrEnum):
+    """The current operational phase of an active acquisition."""
+
+    POSITIONING = "positioning"
+    CONFIGURING = "configuring"
+    CAPTURING = "capturing"
+    FINALIZING = "finalizing"
+    STOPPING = "stopping"
+
+
+class ActiveAcquisition(FrozenModel):
+    """Transient execution progress linked to a durable acquisition manifest."""
+
+    id: uuid.UUID
+    manifest_revision: int = Field(ge=1)
+    volume_index: int = Field(ge=0)
+    phase: AcquisitionPhase
+    frames_captured: int = Field(default=0, ge=0)
 
 
 @dataclass(frozen=True)
@@ -115,12 +147,21 @@ class Instrument:
         self._preview_positions: dict[str, dict[int, StagePosition | None]] = {}
         self._viewport = PreviewViewport()
         self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
-        self._acquisition = Cell[ActiveAcquisitionState | None](None)
+        self._acquisition = Cell[ActiveAcquisition | None](None)
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._history = UndoHistory()
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
         self.fov: ReactiveQuery[tuple[float, float]] = ReactiveQuery(fn=self._compute_current_fov)
-        self.task_tiles: Computed[list[TaskTile]] = Computed(self._store, fn=self._compute_task_tiles)
+        self.profile_fovs = Computed[dict[str, dict[str, Bounds]]](
+            self._store,
+            self._device_props_updates,
+            fn=self._compute_profile_fovs,
+        )
+        self.planned_volumes = Computed[list[PlannedVolume]](
+            self._store,
+            self.profile_fovs,
+            fn=self._compute_volumes,
+        )
 
     @classmethod
     def from_path(cls, home: Path | str, *, records: VoxelRecords, system: System | None = None) -> Self:
@@ -178,7 +219,7 @@ class Instrument:
         return self._mode
 
     @property
-    def acquisition(self) -> Readable[ActiveAcquisitionState | None]:
+    def acquisition(self) -> Readable[ActiveAcquisition | None]:
         """The current acquisition snapshot, or ``None`` when no run is active."""
         return self._acquisition
 
@@ -229,7 +270,7 @@ class Instrument:
                     for device_id, handle in self._hal.devices.items()
                 ]
                 await self._refresh_device_props()
-                await self._validate_startup()
+                self._validate_startup()
                 self._channels = self._build_channels()
                 await self._discover_remote_stores()
                 for camera in self._hal.cameras.values():
@@ -237,7 +278,8 @@ class Instrument:
                 await self._apply_profile(self._active_profile_id.value)
                 for cam_id, camera in self._hal.cameras.items():
                     await self._subscribe_camera(cam_id, camera)
-                await self.task_tiles.refresh()
+                await self.profile_fovs.refresh()
+                await self.planned_volumes.refresh()
         except BaseException:
             try:
                 await self.close()
@@ -335,7 +377,11 @@ class Instrument:
             await asyncio.gather(*moves)
 
     async def set_routing_rule(
-        self, dimension: str, rule: RoutingRule, *, edit_id: uuid.UUID | None = None
+        self,
+        dimension: str,
+        rule: RoutingRule,
+        *,
+        edit_id: uuid.UUID | None = None,
     ) -> Change[RoutingRule | None]:
         """Persist a rule without moving hardware; edit_id groups consecutive replacements of this dimension."""
         return await self._undoable_edit(
@@ -505,7 +551,7 @@ class Instrument:
     async def restore_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
         """Restore selected instrument defaults and clear history.
 
-        ``include`` defaults to all ``PROMOTABLE_FIELDS``; tasks, metadata, and excluded fields remain unchanged.
+        ``include`` defaults to all ``PROMOTABLE_FIELDS``; the plan, metadata, and excluded fields remain unchanged.
         """
         async with self._lock:
             self._ensure_mode(
@@ -533,60 +579,58 @@ class Instrument:
             await self._history.clear()
             await self._active_profile_id.set(next_profile_id)
 
-    async def set_traversal(self, order: TileOrder) -> Change[TileOrder]:
-        """Set the acquisition task traversal order and return its change."""
-        return await self._undoable_edit("Change the traversal order", lambda: order, self._write_traversal)
+    async def add_task(self, task: AcquisitionTask) -> Change[list[AcquisitionTask]]:
+        """Append a task and return the resulting plan change."""
 
-    async def add_tasks(
+        def prepare() -> list[AcquisitionTask]:
+            plan = self._store.value.plan
+            if any(existing.id == task.id for existing in plan):
+                raise OperationRejectedError(f"Task '{task.id}' already exists")
+            return [*plan, task]
+
+        return await self._undoable_edit("Add task", prepare, self._write_plan)
+
+    async def update_task(
         self,
-        xy: Sequence[tuple[float, float]],
+        task_id: str,
+        patch: TaskPatch,
         *,
-        start: float,
-        end: float,
-        profile_ids: Sequence[str] | None = None,
-    ) -> Change[_TaskValues]:
-        """Add tasks as one undoable edit and return their indexed before/after values."""
+        edit_id: uuid.UUID | None = None,
+    ) -> Change[AcquisitionTask]:
+        """Patch one task without changing its plan position."""
 
-        def prepare() -> _TaskValues:
-            state = self._store.value
-            profiles = list(profile_ids) if profile_ids is not None else [self._active_profile_id.value]
-            if not profiles:
-                raise OperationRejectedError("Adding tasks requires at least one profile")
-            return {
-                uuid.uuid4().hex: (
-                    len(state.tasks) + index,
-                    AcquisitionTask(x=x, y=y, start=start, end=end, profile_ids=profiles),
-                )
-                for index, (x, y) in enumerate(xy)
-            }
+        def prepare() -> AcquisitionTask:
+            for existing in self._store.value.plan:
+                if existing.id == task_id:
+                    return AcquisitionTask.model_validate({**existing.model_dump(), **patch.changes()})
+            raise OperationRejectedError(f"No such task '{task_id}'")
 
-        return await self._undoable_edit("Add tasks", prepare, self._write_tasks)
+        return await self._undoable_edit("Update task", prepare, self._write_task, edit_id=edit_id)
 
-    async def remove_tasks(self, task_ids: Sequence[str]) -> Change[_TaskValues]:
-        """Remove tasks as one undoable edit and return their indexed before/after values."""
+    async def remove_tasks(self, task_ids: Sequence[str]) -> Change[list[AcquisitionTask]]:
+        """Remove tasks as one undoable plan edit."""
 
-        def prepare() -> _TaskValues:
-            tasks = self._store.value.tasks
-            if unknown := [tid for tid in task_ids if tid not in tasks]:
+        def prepare() -> list[AcquisitionTask]:
+            plan = self._store.value.plan
+            known = {task.id for task in plan}
+            if unknown := [task_id for task_id in task_ids if task_id not in known]:
                 raise OperationRejectedError("; ".join(f"No such task '{tid}'" for tid in unknown))
-            return dict.fromkeys(task_ids)
+            removed = set(task_ids)
+            return [task for task in plan if task.id not in removed]
 
-        return await self._undoable_edit("Remove tasks", prepare, self._write_tasks)
+        return await self._undoable_edit("Remove tasks", prepare, self._write_plan)
 
-    async def update_tasks(self, patches: Mapping[str, TaskPatch]) -> Change[_TaskValues]:
-        """Apply task patches as one undoable edit and return their indexed before/after values."""
+    async def reorder_tasks(self, task_ids: Sequence[str]) -> Change[list[AcquisitionTask]]:
+        """Replace the task order as one undoable plan edit."""
 
-        def prepare() -> _TaskValues:
-            tasks = self._store.value.tasks
-            if unknown := [tid for tid in patches if tid not in tasks]:
-                raise OperationRejectedError("; ".join(f"No such task '{tid}'" for tid in unknown))
-            return {
-                tid: (index, task.model_copy(update=patches[tid].changes()))
-                for index, (tid, task) in enumerate(tasks.items())
-                if tid in patches
-            }
+        def prepare() -> list[AcquisitionTask]:
+            plan = self._store.value.plan
+            current = {task.id: task for task in plan}
+            if len(task_ids) != len(set(task_ids)) or set(task_ids) != set(current):
+                raise OperationRejectedError("Task order must contain every task ID exactly once")
+            return [current[task_id] for task_id in task_ids]
 
-        return await self._undoable_edit("Update tasks", prepare, self._write_tasks)
+        return await self._undoable_edit("Reorder tasks", prepare, self._write_plan)
 
     async def undo(self) -> None:
         """Undo the last recorded edit without driving hardware."""
@@ -600,8 +644,8 @@ class Instrument:
             self._ensure_mode("redo", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
             await self._history.redo()
 
-    async def start_acquisition(self, request: AcquisitionRequest) -> ActiveAcquisitionState:
-        """Start a background acquisition and return its initial running state.
+    async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionManifest:
+        """Start a background acquisition and return its durable manifest.
 
         Capture the requested tasks, or all tasks if omitted, in traversal order. Validate camera storage
         access before creating the acquisition record; progress is published through ``acquisition``.
@@ -614,8 +658,16 @@ class Instrument:
             if self._mode.value == AcquisitionMode.CAPTURE:
                 raise InstrumentBusyError("An acquisition is already in progress")
             state = self._store.value
-            plan = self._generate_plan(request.task_ids)
-            if not plan:
+            known = {task.id for task in state.plan}
+            selected = None if request.task_ids is None else set(request.task_ids)
+            if selected is not None and (unknown := selected - known):
+                raise OperationRejectedError("; ".join(f"No such task '{task_id}'" for task_id in sorted(unknown)))
+            volumes = [
+                AcquisitionVolume.model_validate(volume.model_dump())
+                for volume in self.planned_volumes.value
+                if selected is None or volume.task in selected
+            ]
+            if not volumes:
                 raise OperationRejectedError("No tasks planned — add tasks before acquiring")
             if self._mode.value == AcquisitionMode.PREVIEW:
                 await self._stop_preview()
@@ -625,7 +677,7 @@ class Instrument:
             # (round-trip write). Any failure raises here — before a manifest, motion, or capture.
             detections = {
                 state.imaging.channels[ch_id].detection
-                for v in plan
+                for v in volumes
                 for ch_id in state.imaging.profiles[v.profile].channels
                 if ch_id in state.imaging.channels
             }
@@ -643,7 +695,7 @@ class Instrument:
                 storage=storage,
                 state_snapshot=state.model_dump(mode="json"),
                 hardware_snapshot=self._hal.topology.model_dump(mode="json"),
-                volumes=plan,
+                volumes=volumes,
             )
             await self._records.acquisitions.create(manifest)
             try:
@@ -655,14 +707,21 @@ class Instrument:
             await self._mode.set(AcquisitionMode.IDLE)
             raise
 
-        acquisition = ActiveAcquisitionState(manifest=manifest, progress=self._volume_progress(state, plan[0]))
+        acquisition = ActiveAcquisition(
+            id=manifest.id,
+            manifest_revision=manifest.revision,
+            volume_index=0,
+            phase=AcquisitionPhase.CONFIGURING,
+        )
         await self._acquisition.set(acquisition)
-        self._acq_task = asyncio.create_task(self._run_acquisition(manifest.id, storage, plan))
-        return acquisition
+        self._acq_task = asyncio.create_task(self._execute_acquisition(manifest))
+        return manifest
 
     async def stop_acquisition(self) -> None:
         """Cancel the active acquisition and await its cleanup."""
         if (task := self._acq_task) is not None and not task.done():
+            if (acquisition := self._acquisition.value) is not None:
+                await self._acquisition.set(acquisition.model_copy(update={"phase": AcquisitionPhase.STOPPING}))
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
@@ -694,17 +753,15 @@ class Instrument:
             if isinstance(camera_stores, BaseException):
                 logger.warning("Could not discover remote stores for camera %s: %s", camera_id, camera_stores)
 
-    async def _validate_startup(self) -> None:
-        if violations := await self._startup_violations():
-            raise StartupError(violations)
-
-    async def _startup_violations(self) -> list[Violation]:
+    def _validate_startup(self) -> None:
         """Validate persisted state against hardware capabilities established by HAL."""
-        return [
+        violations = [
             *self._profile_interface_violations(self._hal.device_interfaces),
             *self._signal_port_violations(),
             *self._stage_position_violations(),
         ]
+        if violations:
+            raise StartupError(violations)
 
     def _profile_interface_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
         violations = []
@@ -814,7 +871,7 @@ class Instrument:
             limits[axis] = (lower, upper)
         violations = []
 
-        def check(value: float, axis: str, loc: tuple[str, ...], label: str) -> None:
+        def check(value: float, axis: str, loc: ViolationLoc, label: str) -> None:
             lower, upper = limits[axis]
             if not lower <= value <= upper:
                 violations.append(
@@ -825,12 +882,14 @@ class Instrument:
                     )
                 )
 
-        for task_id, task in self._store.value.tasks.items():
-            task_loc = ("state", "tasks", task_id)
-            check(task.x, "x", (*task_loc, "x"), f"Task '{task_id}' x")
-            check(task.y, "y", (*task_loc, "y"), f"Task '{task_id}' y")
-            check(task.start, "z", (*task_loc, "start"), f"Task '{task_id}' start")
-            check(task.end, "z", (*task_loc, "end"), f"Task '{task_id}' end")
+        task_indices = {task.id: index for index, task in enumerate(self._store.value.plan)}
+        for volume_index, volume in enumerate(self._compute_volumes()):
+            task_loc = ("state", "plan", task_indices[volume.task])
+            label = f"Task '{volume.task}' volume {volume_index + 1}"
+            check(volume.x, "x", (*task_loc, "layout"), f"{label} x")
+            check(volume.y, "y", (*task_loc, "layout"), f"{label} y")
+            check(volume.z_start, "z", (*task_loc, "z", "start"), f"{label} z start")
+            check(volume.z_end, "z", (*task_loc, "z", "end"), f"{label} z end")
         return violations
 
     async def _refresh_device_props(self) -> None:
@@ -1191,58 +1250,62 @@ class Instrument:
         await self._store.update(metadata=validated)
         return Change(before=state.metadata, after=self._store.value.metadata)
 
-    async def _write_traversal(self, order: TileOrder) -> Change[TileOrder]:
-        before = self._store.value.traversal
-        await self._store.update(traversal=order)
-        return Change(before=before, after=self._store.value.traversal)
+    async def _write_plan(self, plan: list[AcquisitionTask]) -> Change[list[AcquisitionTask]]:
+        before = self._store.value.plan
+        await self._store.update(plan=plan)
+        return Change(before=before, after=self._store.value.plan)
 
-    async def _write_tasks(self, values: _TaskValues) -> Change[_TaskValues]:
-        def snapshot() -> _TaskValues:
-            tasks = self._store.value.tasks
-            positions = {tid: index for index, tid in enumerate(tasks)}
-            return {tid: (positions[tid], tasks[tid]) if tid in tasks else None for tid in values}
+    async def _write_task(self, task: AcquisitionTask) -> Change[AcquisitionTask]:
+        plan = list(self._store.value.plan)
+        for index, current in enumerate(plan):
+            if current.id == task.id:
+                plan[index] = task
+                await self._store.update(plan=plan)
+                return Change(before=current, after=self._store.value.plan[index])
+        raise OperationRejectedError(f"No such task '{task.id}'")
 
-        before = snapshot()
-        tasks = [(tid, task) for tid, task in self._store.value.tasks.items() if tid not in values]
-        replacements = sorted(
-            ((value[0], tid, value[1]) for tid, value in values.items() if value is not None),
-            key=lambda item: item[0],
-        )
-        for index, tid, task in replacements:
-            tasks.insert(index, (tid, task))
-        await self._store.update(tasks=dict(tasks))
-        return Change(before=before, after=snapshot())
-
-    def _saved_fov_for_profiles(self, profile_ids: Sequence[str]) -> tuple[float, float]:
-        """Return the bounding-box FOV implied by saved ROIs and cached camera geometry."""
+    def _compute_profile_fovs(self) -> dict[str, dict[str, Bounds]]:
+        """Resolve each saved profile ROI into specimen-space detection FOVs."""
         imaging = self._store.value.imaging
-        widths: list[float] = []
-        heights: list[float] = []
-        for profile_id in profile_ids:
-            profile = imaging.profiles.get(profile_id)
-            if profile is None:
-                continue
+        fovs: dict[str, dict[str, Bounds]] = {}
+        for profile_id, profile in imaging.profiles.items():
+            profile_fovs: dict[str, Bounds] = {}
             for channel_id in profile.channels:
                 channel = imaging.channels.get(channel_id)
                 if channel is None:
                     continue
                 camera_id = channel.detection
+                if camera_id in profile_fovs:
+                    continue
                 camera = self._hal.cameras.get(camera_id)
                 if camera is None or (pixel_size := camera.pixel_size_um.value) is None:
                     continue
                 if (sensor_size := camera.sensor_size_px.value) is None:
                     continue
                 roi = profile.rois.get(camera_id)
-                width_px, height_px = (roi.w, roi.h) if roi is not None else (sensor_size.x, sensor_size.y)
+                x, y, width_px, height_px = (
+                    (roi.x, roi.y, roi.w, roi.h) if roi is not None else (0, 0, sensor_size.x, sensor_size.y)
+                )
                 path = self._hal.topology.detection[camera_id]
                 factor = pixel_size / path.magnification
-                if path.rotation_deg % 180 == 0:
-                    widths.append(width_px * factor.x)
-                    heights.append(height_px * factor.y)
-                else:
-                    widths.append(height_px * factor.y)
-                    heights.append(width_px * factor.x)
-        return (max(widths, default=0.0), max(heights, default=0.0))
+                cx = (x + width_px / 2 - sensor_size.x / 2) * factor.x
+                cy = (y + height_px / 2 - sensor_size.y / 2) * factor.y
+                width, height = width_px * factor.x, height_px * factor.y
+                match path.rotation_deg % 360:
+                    case 90:
+                        cx, cy, width, height = -cy, cx, height, width
+                    case 180:
+                        cx, cy = -cx, -cy
+                    case 270:
+                        cx, cy, width, height = cy, -cx, height, width
+                profile_fovs[camera_id] = Bounds(
+                    min_x=cx - width / 2,
+                    min_y=cy - height / 2,
+                    max_x=cx + width / 2,
+                    max_y=cy + height / 2,
+                )
+            fovs[profile_id] = profile_fovs
+        return fovs
 
     async def _compute_current_fov(self) -> tuple[float, float]:
         if not self._hal.cameras:
@@ -1262,126 +1325,99 @@ class Instrument:
                 logger.warning("Profile '%s' cameras disagree on FOV; using bounding box", active_id)
             return (max(w for w, _ in fovs), max(h for _, h in fovs))
 
-        return self._saved_fov_for_profiles([active_id])
+        envelope = Bounds.envelope(self.profile_fovs.value.get(active_id, {}).values())
+        return (0.0, 0.0) if envelope is None else (envelope.width, envelope.height)
 
-    def _compute_task_tiles(self) -> list[TaskTile]:
-        """Each task's footprint tile (position + its profiles' combined FOV), in traversal order.
-
-        Replaces the old (tiles-dict + order-list) pair. The traversal is generic over the ``Tile``
-        subtype, so it returns the :class:`TaskTile`s — each carrying its ``task_id`` — already ordered.
-        Read the order with ``[tt.task_id for tt in task_tiles.value]``.
-        """
+    def _compute_volumes(self) -> list[PlannedVolume]:
+        """Resolve persisted task definitions into ordered executable volumes."""
         state = self._store.value
-        tiles: list[TaskTile] = []
-        for key, task in state.tasks.items():
-            w, h = self._saved_fov_for_profiles(task.profile_ids)
-            tiles.append(
-                TaskTile(
-                    task_id=key,
-                    x=task.x,
-                    y=task.y,
-                    w=w,
-                    h=h,
-                    routes=state.resolve_routes(self._hal.topology, x=task.x, y=task.y),
-                )
+        fovs = self.profile_fovs.value
+        planned_volumes = []
+        for task in state.plan:
+            bounds = [bound for profile_id in task.profiles for bound in fovs.get(profile_id, {}).values()]
+            tile_width = min((bound.width for bound in bounds), default=0.0)
+            tile_height = min((bound.height for bound in bounds), default=0.0)
+            positions = resolve_layout(
+                task.layout,
+                width=tile_width,
+                height=tile_height,
+                traversal=task.traversal,
             )
-        return list(state.traversal(tiles))
-
-    def _generate_plan(self, task_ids: list[str] | None) -> list[AcquisitionVolume]:
-        """Resolve the ordered (task, profile) volumes to capture; validate an explicit selection.
-
-        ``task_ids`` is a selection, not an ordering: order always comes from the traversal query, so a
-        subset is visited in the same spatial order as the full run. Unknown ids raise
-        :class:`OperationRejectedError`.
-        """
-        tasks = self._store.value.tasks
-        if task_ids is not None and (unknown := [t for t in task_ids if t not in tasks]):
-            raise OperationRejectedError("; ".join(f"No such task '{task_id}'" for task_id in unknown))
-        selected = None if task_ids is None else set(task_ids)
-        return [
-            AcquisitionVolume(task=tile.task_id, profile=pid)
-            for tile in self.task_tiles.value
-            if selected is None or tile.task_id in selected
-            for pid in tasks[tile.task_id].profile_ids
-        ]
-
-    @staticmethod
-    def _volume_progress(state: InstrumentState, volume: AcquisitionVolume) -> VolumeProgress:
-        stack = state.tasks[volume.task].stack
-        z_step = state.imaging.profiles[volume.profile].z_step
-        return VolumeProgress(
-            task=volume.task,
-            profile=volume.profile,
-            frames_captured=0,
-            frames_total=stack.num_frames(z_step),
-        )
+            resolved = [
+                (
+                    point,
+                    resolve_z(task.z, point),
+                    state.resolve_routes(self._hal.topology, x=point.x, y=point.y),
+                )
+                for point in positions
+            ]
+            if task.volume_order is VolumeOrder.POSITION_MAJOR:
+                ordered = ((point, z, routes, profile) for point, z, routes in resolved for profile in task.profiles)
+            else:
+                ordered = ((point, z, routes, profile) for profile in task.profiles for point, z, routes in resolved)
+            planned_volumes.extend(
+                PlannedVolume(
+                    task=task.id,
+                    profile=profile,
+                    x=point.x,
+                    y=point.y,
+                    z_start=z.start,
+                    z_step=state.imaging.profiles[profile].z_step,
+                    z_end=z.end,
+                    routes=routes,
+                )
+                for point, z, routes, profile in ordered
+            )
+        return planned_volumes
 
     async def _update_acquisition(
         self,
+        manifest: AcquisitionManifest,
         *,
-        manifest: AcquisitionManifest | None = None,
-        progress: VolumeProgress | None = None,
-    ) -> ActiveAcquisitionState:
+        volume_index: int | None = None,
+        phase: AcquisitionPhase | None = None,
+        frames_captured: int | None = None,
+    ) -> ActiveAcquisition:
         current = self._acquisition.value
         if current is None:
             raise RuntimeError("cannot update acquisition state when no run is active")
-        updated = ActiveAcquisitionState(
-            manifest=manifest if manifest is not None else current.manifest,
-            progress=progress if progress is not None else current.progress,
+        if current.id != manifest.id:
+            raise RuntimeError("active acquisition does not match the running manifest")
+        updated = ActiveAcquisition(
+            id=current.id,
+            manifest_revision=manifest.revision,
+            volume_index=current.volume_index if volume_index is None else volume_index,
+            phase=current.phase if phase is None else phase,
+            frames_captured=current.frames_captured if frames_captured is None else frames_captured,
         )
         await self._acquisition.set(updated)
         return updated
 
-    async def _run_acquisition(self, acq_id: uuid.UUID, storage: StorageSpec, plan: list[AcquisitionVolume]) -> None:
-        """Capture each planned (task, profile) volume in order. Runs as the background ``_acq_task``.
-
-        Reads state live — it's frozen for the whole run (CAPTURE blocks edits) — and delegates each
-        volume to :meth:`_capture_volume`, updating acquisition records around every lifecycle boundary. A volume
-        failure aborts the run and skips remaining volumes; cancellation marks unfinished volumes
-        cancelled. ``mode`` returns to IDLE when the run completes, fails, or is cancelled.
-        """
-        tasks = self._store.value.tasks
-        task_ordinals = {
-            task_id: ordinal for ordinal, task_id in enumerate(dict.fromkeys(volume.task for volume in plan), start=1)
-        }
+    async def _execute_acquisition(self, manifest: AcquisitionManifest) -> None:
+        """Execute every volume in a running manifest and finalize the acquisition."""
         try:
-            for v in plan:
-                progress = self._volume_progress(self._store.value, v)
-                manifest = await self._records.acquisitions.start_volume(acq_id, task=v.task, profile=v.profile)
-                await self._update_acquisition(manifest=manifest, progress=progress)
-                await self._apply_profile(v.profile)
-                subpath = PurePosixPath("tasks", f"{task_ordinals[v.task]:04d}", v.profile)
-                await self._capture_volume(
-                    tasks[v.task].stack,
-                    storage,
-                    subpath,
-                    acq_id=acq_id,
-                    task=v.task,
-                    profile=v.profile,
-                    progress=progress,
-                )
-                manifest = await self._records.acquisitions.complete_volume(acq_id, task=v.task, profile=v.profile)
-                await self._update_acquisition(manifest=manifest)
-            manifest = await self._records.acquisitions.complete_acquisition(acq_id)
-            await self._update_acquisition(manifest=manifest)
+            for volume_index in range(len(manifest.volumes)):
+                manifest = await self._execute_volume(manifest, volume_index)
+            manifest = await self._records.acquisitions.complete_acquisition(manifest.id)
+            await self._update_acquisition(manifest)
             logger.info(
                 "Acquisition complete: %d volumes → %s",
-                len(plan),
-                self._system.resolve_storage(storage).target,
+                len(manifest.volumes),
+                self._system.resolve_storage(manifest.storage).target,
             )
         except asyncio.CancelledError:
             try:
-                manifest = await self._records.acquisitions.cancel_acquisition(acq_id)
-                await self._update_acquisition(manifest=manifest)
+                manifest = await self._records.acquisitions.cancel_acquisition(manifest.id)
+                await self._update_acquisition(manifest)
             except Exception:
-                logger.exception("Failed to persist cancellation for acquisition %s", acq_id)
+                logger.exception("Failed to persist cancellation for acquisition %s", manifest.id)
             raise
         except Exception as error:
             try:
-                manifest = await self._records.acquisitions.fail_acquisition(acq_id, error)
-                await self._update_acquisition(manifest=manifest)
+                manifest = await self._records.acquisitions.fail_acquisition(manifest.id, error)
+                await self._update_acquisition(manifest)
             except Exception:
-                logger.exception("Failed to persist failure for acquisition %s", acq_id)
+                logger.exception("Failed to persist failure for acquisition %s", manifest.id)
             logger.exception("Acquisition aborted")
         finally:
             self._acq_task = None
@@ -1397,60 +1433,59 @@ class Instrument:
             await self._mode.set(AcquisitionMode.IDLE)
             await self._acquisition.set(None)
             try:
-                await self._records.logs.close_acquisition_window(acq_id)
+                await self._records.logs.close_acquisition_window(manifest.id)
             except Exception:
-                logger.exception("Failed to close the log window for acquisition %s", acq_id)
+                logger.exception("Failed to close the log window for acquisition %s", manifest.id)
 
-    async def _capture_volume(
-        self,
-        stack: ZStack,
-        storage: StorageSpec,
-        subpath: PurePosixPath,
-        *,
-        acq_id: uuid.UUID,
-        task: str,
-        profile: str,
-        progress: VolumeProgress,
-    ) -> None:
-        """Acquire one volume for the already-active profile, updating :attr:`acquisition` per batch.
+    async def _execute_volume(self, manifest: AcquisitionManifest, volume_index: int) -> AcquisitionManifest:
+        """Execute and persist the complete lifecycle of one manifest volume.
 
         Cleanup always disables lasers, resets the stepper, and finalizes the writers, so cancellation
         leaves hardware safe and the partial stack finalized.
         """
+        volume = manifest.volumes[volume_index]
+        manifest = await self._records.acquisitions.start_volume(manifest.id, volume_index=volume_index)
+        await self._update_acquisition(
+            manifest,
+            volume_index=volume_index,
+            phase=AcquisitionPhase.CONFIGURING,
+            frames_captured=0,
+        )
+        await self._apply_profile(volume.profile)
+
         settings = self._store.value.output
         channels = self.active_channels
         scanning_axis = self._hal.stage.scanning_axis
-        z_step = self.active_profile.z_step
-        num_frames = stack.num_frames(z_step)
+        num_frames = volume.frames_total
         batch_z = settings.batch_z
-        if progress.frames_total != num_frames:
-            raise RuntimeError(
-                f"planned frame total changed for task {task} / profile {profile}: "
-                f"{progress.frames_total} != {num_frames}"
-            )
-        locations: dict[str, DatasetLocation] = {}
+        subpath = PurePosixPath(
+            "volumes",
+            f"{volume_index + 1:06d}",
+            volume.profile,
+        )
         frames_done = 0
         capture_error: BaseException | None = None
         try:
+            await self._update_acquisition(manifest, phase=AcquisitionPhase.POSITIONING)
             await asyncio.gather(
-                self._hal.stage.x.move_abs(stack.x, wait=True),
-                self._hal.stage.y.move_abs(stack.y, wait=True),
-                self._hal.stage.z.move_abs(stack.start, wait=True),
+                self._hal.stage.x.move_abs(volume.x, wait=True),
+                self._hal.stage.y.move_abs(volume.y, wait=True),
+                self._hal.stage.z.move_abs(volume.z_start, wait=True),
             )
-            routes = self._store.value.resolve_routes(self._hal.topology, x=stack.x, y=stack.y)
+            await self._update_acquisition(manifest, phase=AcquisitionPhase.CONFIGURING)
             async with self._lock:
-                await self._ensure_routes(routes)
+                await self._ensure_routes(volume.routes)
             await scanning_axis.configure_ttl_stepper(TTLStepperConfig(step_mode=StepMode.RELATIVE))
-            await scanning_axis.queue_relative_move(z_step)
+            await scanning_axis.queue_relative_move(volume.z_step)
             init_coros = []
             for ch_id, ch in channels.items():
                 config = self._channel_config(ch_id)
                 init_coros.append(
                     ch.camera.open_stack(
-                        storage=storage,
+                        storage=manifest.storage,
                         subpath=subpath / ch_id,
                         num_frames=num_frames,
-                        z_step=z_step,
+                        z_step=volume.z_step,
                         magnification=self._hal.topology.detection[config.detection].magnification,
                         settings=settings,
                     )
@@ -1459,14 +1494,14 @@ class Instrument:
             locations = dict(zip(channels, opened, strict=True))
             await self._reset_preview()
             manifest = await self._records.acquisitions.register_datasets(
-                acq_id,
-                task=task,
-                profile=profile,
+                manifest.id,
+                volume_index=volume_index,
                 locations=locations,
             )
-            await self._update_acquisition(manifest=manifest)
+            await self._update_acquisition(manifest)
 
             await asyncio.gather(*(ch.enable_laser() for ch in channels.values()))
+            await self._update_acquisition(manifest, phase=AcquisitionPhase.CAPTURING)
 
             for batch_idx in range(math.ceil(num_frames / batch_z)):
                 frames_in_batch = min(batch_z, num_frames - batch_idx * batch_z)
@@ -1482,15 +1517,19 @@ class Instrument:
                 await self._stop_signal_generators()
                 done = min((batch_idx + 1) * batch_z, num_frames)
                 frames_done = done
-                progress = progress.updated(frames_captured=done)
-                await self._update_acquisition(progress=progress)
+                await self._update_acquisition(manifest, frames_captured=done)
         except BaseException as error:
             capture_error = error
 
+        active = self._acquisition.value
+        if active is not None and active.phase is not AcquisitionPhase.STOPPING:
+            await self._update_acquisition(manifest, phase=AcquisitionPhase.FINALIZING)
         cleanup_errors = await self._teardown_capture(list(channels.values()), scanning_axis)
         if capture_error is None and not cleanup_errors:
-            logger.info("Captured %d frames: task %s / profile %s", num_frames, task, profile)
-            return
+            manifest = await self._records.acquisitions.complete_volume(manifest.id, volume_index=volume_index)
+            await self._update_acquisition(manifest)
+            logger.info("Captured %d frames: task %s / profile %s", num_frames, volume.task, volume.profile)
+            return manifest
 
         location_status = LocationStatus.FAILED if cleanup_errors else LocationStatus.AVAILABLE
         dataset_status = DatasetStatus.PARTIAL if frames_done else DatasetStatus.FAILED
@@ -1501,21 +1540,22 @@ class Instrument:
                 else self._records.acquisitions.fail_volume
             )
             manifest = await terminalize(
-                acq_id,
-                task=task,
-                profile=profile,
+                manifest.id,
+                volume_index=volume_index,
                 dataset_status=dataset_status,
                 location_status=location_status,
             )
-            await self._update_acquisition(manifest=manifest)
+            await self._update_acquisition(manifest)
         except Exception:
-            logger.exception("Failed to persist volume failure for task %s / profile %s", task, profile)
+            logger.exception("Failed to persist volume failure for task %s / profile %s", volume.task, volume.profile)
 
         if capture_error is not None:
             for error in cleanup_errors:
-                logger.error("Cleanup also failed for task %s / profile %s", task, profile, exc_info=error)
+                logger.error(
+                    "Cleanup also failed for task %s / profile %s", volume.task, volume.profile, exc_info=error
+                )
             raise capture_error.with_traceback(capture_error.__traceback__)
-        raise ExceptionGroup(f"writer cleanup failed for task {task} / profile {profile}", cleanup_errors)
+        raise ExceptionGroup(f"writer cleanup failed for task {volume.task} / profile {volume.profile}", cleanup_errors)
 
     async def _teardown_capture(self, chans: list[Channel], scanning_axis: ContinuousAxisHandle) -> list[Exception]:
         """Cleanup after a volume, regardless of how capture exited: disable lasers, reset the stepper,

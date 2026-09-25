@@ -1,84 +1,127 @@
+<script module lang="ts">
+  import type { Point2D } from '$lib/model';
+
+  export interface TaskPointEdit {
+    task: string;
+    index: number;
+    point: Point2D;
+    phase: 'start' | 'move' | 'end';
+  }
+</script>
+
 <script lang="ts">
   import type Konva from 'konva';
-  import { onMount } from 'svelte';
-  import { Group, Label, Rect, Shape, Tag, Text } from 'svelte-konva';
+  import { untrack } from 'svelte';
+  import { Circle, Group, Label, Line, Rect, Shape, Tag, Text } from 'svelte-konva';
 
-  import { Check } from '$lib/icons';
-  import { ContextMenu } from '$lib/kit';
-  import type { TaskTile } from '$lib/model';
+  import type { AcquisitionTask, FootprintBounds, PlannedVolume } from '$lib/model';
 
-  import { getStageContext, type MenuSelection } from './context.svelte';
-  import { intersect, type Point, screenTransform, worldTransform } from './geometry';
+  import { getStageContext } from './context.svelte';
+  import { type Bounds, intersect, type Point, screenTransform, worldTransform } from './geometry';
 
   let {
-    tiles,
-    selected,
-    visible = $bindable(true),
+    plan,
+    volumes,
+    profileFovs,
+    taskVisibility = $bindable({}),
+    pathVisible = $bindable(true),
+    disabled = false,
     color = '#d4d4d8',
     fill,
     haloColor = '#18181b',
-    onselect,
-    onactivate
+    onactivate,
+    onpointedit
   }: {
-    tiles: readonly TaskTile[];
-    selected: ReadonlySet<string>;
-    visible?: boolean;
+    plan: readonly AcquisitionTask[];
+    volumes: readonly PlannedVolume[];
+    profileFovs: Readonly<Record<string, Readonly<Record<string, FootprintBounds>>>>;
+    taskVisibility?: Record<string, boolean>;
+    pathVisible?: boolean;
+    disabled?: boolean;
     color?: string;
-    fill?: (tile: TaskTile) => string | undefined;
+    fill?: (volume: PlannedVolume) => string | undefined;
     haloColor?: string;
-    onselect: (ids: string[], toggle?: boolean) => void;
     onactivate?: (point: Point) => void;
+    onpointedit?: (edit: TaskPointEdit) => void;
   } = $props();
 
+  interface VolumeTile {
+    bounds: Bounds;
+    color: string | undefined;
+    key: string;
+    order: number;
+    point: Point;
+    profile: string;
+    task: string;
+    taskOrder: number | undefined;
+  }
+
   const context = getStageContext();
-  const items = $derived(
-    tiles.flatMap((tile, index) =>
-      [tile.x, tile.y, tile.w, tile.h].every(Number.isFinite) && tile.w > 0 && tile.h > 0
-        ? [
-            {
-              id: tile.task_id,
-              order: index + 1,
-              fill: fill?.(tile),
-              bounds: {
-                minX: tile.x - tile.w / 2,
-                maxX: tile.x + tile.w / 2,
-                minY: tile.y - tile.h / 2,
-                maxY: tile.y + tile.h / 2
-              }
-            }
-          ]
-        : []
-    )
-  );
+  const taskOrder = $derived(new Map(plan.map((task, index) => [task.id, index + 1])));
+  const taskVisible = (task: string) => taskVisibility[task] ?? true;
+  const tiles = $derived.by(() => {
+    const result: VolumeTile[] = [];
+    for (const [index, volume] of volumes.entries()) {
+      const seen: string[] = [];
+      for (const footprint of Object.values(profileFovs[volume.profile] ?? {})) {
+        const bounds = absoluteBounds(volume, footprint);
+        if (!valid(bounds)) continue;
+        const key = boundsKey(bounds);
+        if (seen.includes(key)) continue;
+        seen.push(key);
+        result.push({
+          bounds,
+          color: fill?.(volume),
+          key: `${index + 1}:${key}`,
+          order: index + 1,
+          point: { x: volume.x, y: volume.y },
+          profile: volume.profile,
+          task: volume.task,
+          taskOrder: taskOrder.get(volume.task)
+        });
+      }
+    }
+    return result;
+  });
   const drawn = $derived(
-    context.visibleBounds ? items.filter((item) => intersect(item.bounds, context.visibleBounds!)) : []
+    context.visibleBounds
+      ? tiles.filter((tile) => taskVisible(tile.task) && intersect(tile.bounds, context.visibleBounds!))
+      : []
   );
-  const path = $derived(
-    items.map(({ bounds }) => ({
-      x: (bounds.minX + bounds.maxX) / 2,
-      y: (bounds.minY + bounds.maxY) / 2
-    }))
+  const path = $derived.by(() => {
+    const points: (Point & { task: string })[] = [];
+    for (const { task, x, y } of volumes) {
+      const previous = points.at(-1);
+      if (!previous || previous.task !== task || previous.x !== x || previous.y !== y) points.push({ task, x, y });
+    }
+    return points;
+  });
+  const pathSegments = $derived(
+    path.slice(1).flatMap((end, index) => {
+      const start = path[index];
+      return taskVisible(start.task) && taskVisible(end.task) ? [{ start, end }] : [];
+    })
   );
   const traversalScene = $derived.by(() => {
-    const points = path;
+    const segments = pathSegments;
     const stroke = color;
     const pixel = 1 / context.view.scale;
     return (drawing: Konva.Context) => {
-      if (points.length < 2) return;
+      if (!segments.length) return;
 
       drawing.setAttr('strokeStyle', stroke);
-      drawing.setAttr('lineWidth', 1.5 * pixel);
-      drawing.setAttr('globalAlpha', 0.35);
+      drawing.setAttr('lineWidth', 1.25 * pixel);
+      drawing.setAttr('globalAlpha', 0.2);
       drawing.beginPath();
-      drawing.moveTo(points[0].x, points[0].y);
-      for (const point of points.slice(1)) drawing.lineTo(point.x, point.y);
+      for (const { start, end } of segments) {
+        drawing.moveTo(start.x, start.y);
+        drawing.lineTo(end.x, end.y);
+      }
       drawing.stroke();
 
-      drawing.setAttr('globalAlpha', 0.6);
+      drawing.setAttr('globalAlpha', 0.32);
       drawing.beginPath();
-      for (let index = 0; index < points.length - 1; index++) {
-        const start = points[index];
-        const end = points[index + 1];
+      for (const { start, end } of segments) {
         const dx = end.x - start.x;
         const dy = end.y - start.y;
         const length = Math.hypot(dx, dy);
@@ -95,16 +138,28 @@
       drawing.stroke();
     };
   });
+
   const hovered = $derived.by(() => {
     const cursor = context.cursor;
-    if (!visible || !context.interactionEnabled || !cursor) return [];
-    return items.filter(
-      ({ bounds }) =>
-        cursor.x >= bounds.minX && cursor.x <= bounds.maxX && cursor.y >= bounds.minY && cursor.y <= bounds.maxY
-    );
+    if (!context.interactionEnabled || !cursor) return null;
+    let result: VolumeTile | null = null;
+    for (const tile of drawn) {
+      const { bounds } = tile;
+      if (
+        cursor.x >= bounds.minX &&
+        cursor.x <= bounds.maxX &&
+        cursor.y >= bounds.minY &&
+        cursor.y <= bounds.maxY &&
+        (!result || area(bounds) < area(result.bounds))
+      )
+        result = tile;
+    }
+    return result;
   });
-  const hoverKey = $derived(hovered.length ? JSON.stringify(hovered.map((item) => item.id)) : '');
+  const hoverKey = $derived(hovered ? hovered.key : '');
   let ready = $state(false);
+  let hoveredPoint = $state<string | null>(null);
+  let editing = $state<{ task: string; index: number; point: Point } | null>(null);
 
   $effect(() => {
     const key = hoverKey;
@@ -115,43 +170,151 @@
   });
 
   const tooltip = $derived.by(() => {
-    if (!ready || !hovered.length || !context.cursor) return null;
-    const labels = hovered.map((item) => `Task ${item.order}`);
+    if (!ready || !hovered || !context.cursor) return null;
+    const text = [
+      `Volume ${hovered.order}`,
+      hovered.taskOrder === undefined ? undefined : `Task ${hovered.taskOrder}`,
+      hovered.profile
+    ]
+      .filter((line) => line !== undefined)
+      .join('\n');
     const point = context.project(context.cursor);
-    const width = Math.max(...labels.map((label) => label.length)) * 8 + 12;
-    const height = labels.length * 16 + 12;
-    const position = {
-      x: Math.max(4, Math.min(point.x + 12, context.view.width - width - 4)),
-      y: Math.max(4, Math.min(point.y + 12, context.view.height - height - 4))
+    const width = Math.max(...text.split('\n').map((line) => line.length)) * 8 + 12;
+    const height = text.split('\n').length * 16 + 12;
+    return {
+      point: {
+        x: Math.max(4, Math.min(point.x + 12, context.view.width - width - 4)),
+        y: Math.max(4, Math.min(point.y + 12, context.view.height - height - 4))
+      },
+      text,
+      width,
+      height
     };
-    return { point: position, text: labels.join('\n'), width, height };
   });
 
   export function destinations(hits: readonly Konva.Shape[]) {
-    return visible
-      ? items
-          .filter((item) => hits.some((hit) => hit.hasName(`task:${item.id}`)))
-          .map((item) => ({
-            order: item.order,
-            point: { x: (item.bounds.minX + item.bounds.maxX) / 2, y: (item.bounds.minY + item.bounds.maxY) / 2 }
-          }))
-      : [];
+    const orders = new Set(
+      hits.flatMap((hit) =>
+        hit
+          .name()
+          .split(/\s+/)
+          .filter((name) => name.startsWith('volume:'))
+          .map((name) => Number(name.slice('volume:'.length)))
+      )
+    );
+    return volumes.flatMap((volume, index) =>
+      orders.has(index + 1)
+        ? [
+            {
+              order: index + 1,
+              task: volume.task,
+              taskOrder: taskOrder.get(volume.task),
+              profile: volume.profile,
+              point: { x: volume.x, y: volume.y }
+            }
+          ]
+        : []
+    );
   }
 
-  onMount(() =>
-    context.register({
-      id: 'tasks',
-      label: 'Tasks',
-      get visible() {
-        return visible;
-      },
-      setVisible: (next) => {
-        visible = next;
-      },
-      menu: (selection) => ('bounds' in selection ? regionMenu : undefined)
-    })
-  );
+  export function extent(): Bounds | null {
+    let result: Bounds | null = null;
+    for (const { bounds, task } of tiles) {
+      if (!taskVisible(task)) continue;
+      result = result
+        ? {
+            minX: Math.min(result.minX, bounds.minX),
+            minY: Math.min(result.minY, bounds.minY),
+            maxX: Math.max(result.maxX, bounds.maxX),
+            maxY: Math.max(result.maxY, bounds.maxY)
+          }
+        : bounds;
+    }
+    return result;
+  }
 
+  function absoluteBounds(volume: PlannedVolume, footprint: FootprintBounds): Bounds {
+    return {
+      minX: volume.x + footprint.min_x,
+      minY: volume.y + footprint.min_y,
+      maxX: volume.x + footprint.max_x,
+      maxY: volume.y + footprint.max_y
+    };
+  }
+
+  function valid(bounds: Bounds) {
+    return Object.values(bounds).every(Number.isFinite) && bounds.maxX > bounds.minX && bounds.maxY > bounds.minY;
+  }
+
+  function boundsKey(bounds: Bounds) {
+    return `${bounds.minX}:${bounds.minY}:${bounds.maxX}:${bounds.maxY}`;
+  }
+
+  function area(bounds: Bounds) {
+    return (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY);
+  }
+
+  function taskPoints(task: AcquisitionTask): Point[] {
+    return task.layout.points.map((point, index) =>
+      editing?.task === task.id && editing.index === index ? editing.point : point
+    );
+  }
+
+  function edit(task: AcquisitionTask, index: number, point: Point, phase: TaskPointEdit['phase']) {
+    onpointedit?.({ task: task.id, index, point, phase });
+  }
+
+  function movePoint(
+    task: AcquisitionTask,
+    index: number,
+    event: Konva.KonvaEventObject<MouseEvent | PointerEvent | TouchEvent>
+  ) {
+    const point = context.unproject(event.target.getAbsolutePosition());
+    editing = { task: task.id, index, point };
+    edit(task, index, point, 'move');
+  }
+
+  function finishPoint(
+    task: AcquisitionTask,
+    index: number,
+    event: Konva.KonvaEventObject<MouseEvent | PointerEvent | TouchEvent>
+  ) {
+    const point = context.unproject(event.target.getAbsolutePosition());
+    editing = null;
+    event.target.getStage()!.container().style.cursor = 'grab';
+    edit(task, index, point, 'end');
+  }
+
+  $effect(() => {
+    const tasks = plan.map(({ id }, index) => ({ id, index }));
+    const registrations = untrack(() => [
+      ...tasks.map((task) =>
+        context.register({
+          id: `task:${task.id}`,
+          label: `Task ${task.index + 1}`,
+          menuOrder: 1 + task.index / tasks.length,
+          get visible() {
+            return taskVisible(task.id);
+          },
+          setVisible: (visible) => {
+            taskVisibility = { ...taskVisibility, [task.id]: visible };
+          }
+        })
+      ),
+      context.register({
+        id: 'acquisition-path',
+        label: 'Acquisition path',
+        menuOrder: 2,
+        get visible() {
+          return pathVisible;
+        },
+        setVisible: (visible) => {
+          pathVisible = visible;
+        }
+      })
+    ]);
+    return () => untrack(() => registrations.forEach((unregister) => unregister()));
+  });
   function transparent(color: string, opacity: number) {
     const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(color);
     if (!match) return color;
@@ -159,61 +322,96 @@
   }
 </script>
 
-{#snippet regionMenu(selection: MenuSelection)}
-  {#if 'bounds' in selection}
-    {@const ids = items.filter((item) => intersect(item.bounds, selection.bounds)).map((item) => item.id)}
-    <ContextMenu.Item disabled={ids.length === 0} onSelect={() => onselect(ids)}>
-      <Check width="14" height="14" />
-      Select tasks in region ({ids.length})
-    </ContextMenu.Item>
-  {/if}
-{/snippet}
-
-{#if visible}
-  <Group {...worldTransform(context.view.scale, context.orientation)}>
-    {#each drawn as item (item.id)}
-      {@const active = selected.has(item.id)}
-      <Rect
-        staticConfig
-        x={item.bounds.minX}
-        y={item.bounds.minY}
-        width={item.bounds.maxX - item.bounds.minX}
-        height={item.bounds.maxY - item.bounds.minY}
-        name={`task:${item.id}`}
-        fill={transparent(item.fill ?? color, item.fill ? (active ? 0.22 : 0.12) : active ? 0.12 : 0.02)}
-        stroke={transparent(color, active ? 0.6 : 0.2)}
-        strokeWidth={active ? 1.5 : 1}
-        strokeScaleEnabled={false}
-        perfectDrawEnabled={false}
-        shadowForStrokeEnabled={false}
-        onpointerclick={(event) => {
-          if (event.evt.button !== 0 || !context.interactionEnabled) return;
-          onselect([item.id], event.evt.metaKey || event.evt.ctrlKey);
-        }}
-        onpointerdblclick={() => {
-          if (context.interactionEnabled && context.cursor) onactivate?.(context.cursor);
-        }}
-      />
-    {/each}
-    {#if path.length > 1}
-      <Shape staticConfig sceneFunc={traversalScene} listening={false} perfectDrawEnabled={false} />
-    {/if}
-  </Group>
-  {#if tooltip}
-    <Group {...screenTransform(context.view)} listening={false}>
-      <Label x={tooltip.point.x} y={tooltip.point.y} listening={false}>
-        <Tag fill={haloColor} cornerRadius={4} />
-        <Text
-          text={tooltip.text}
-          width={tooltip.width}
-          height={tooltip.height}
-          padding={6}
-          fontSize={12}
-          lineHeight={16 / 12}
-          fontFamily="sans-serif"
-          fill={color}
+<Group {...worldTransform(context.view.scale, context.orientation)}>
+  {#each drawn as tile (tile.key)}
+    <Rect
+      staticConfig
+      x={tile.bounds.minX}
+      y={tile.bounds.minY}
+      width={tile.bounds.maxX - tile.bounds.minX}
+      height={tile.bounds.maxY - tile.bounds.minY}
+      name={`volume:${tile.order}`}
+      fill={transparent(tile.color ?? color, tile.color ? 0.12 : 0.02)}
+      stroke={transparent(tile.color ?? color, 0.25)}
+      strokeWidth={1}
+      strokeScaleEnabled={false}
+      perfectDrawEnabled={false}
+      shadowForStrokeEnabled={false}
+      onpointerdblclick={() => {
+        if (context.interactionEnabled) onactivate?.(tile.point);
+      }}
+    />
+  {/each}
+  {#each plan as task (task.id)}
+    {#if taskVisible(task.id)}
+      {@const points = taskPoints(task)}
+      {#if task.layout.type === 'area' && points.length > 1}
+        <Line
+          points={points.flatMap(({ x, y }) => [x, y])}
+          closed={points.length > 2}
+          stroke={transparent(color, 0.45)}
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          listening={false}
         />
-      </Label>
-    </Group>
+      {/if}
+    {/if}
+  {/each}
+  {#if pathVisible && pathSegments.length}
+    <Shape staticConfig sceneFunc={traversalScene} listening={false} perfectDrawEnabled={false} />
   {/if}
-{/if}
+</Group>
+<Group {...screenTransform(context.view)}>
+  {#each plan as task (task.id)}
+    {#if taskVisible(task.id)}
+      {#each taskPoints(task) as point, index (`${task.id}:${index}`)}
+        {@const screen = context.project(point)}
+        {@const pointKey = `${task.id}:${index}`}
+        {@const active = hoveredPoint === pointKey || (editing?.task === task.id && editing.index === index)}
+        <Circle
+          x={Math.round(screen.x)}
+          y={Math.round(screen.y)}
+          radius={3}
+          fill={active ? color : transparent(color, 0.45)}
+          stroke="transparent"
+          strokeWidth={1}
+          hitStrokeWidth={4}
+          perfectDrawEnabled={false}
+          draggable={!disabled && !!onpointedit && context.interactionEnabled}
+          dragDistance={4}
+          onmouseenter={(event) => {
+            hoveredPoint = pointKey;
+            if (!disabled && onpointedit && context.interactionEnabled)
+              event.target.getStage()!.container().style.cursor = 'move';
+          }}
+          onmouseleave={(event) => {
+            if (hoveredPoint === pointKey) hoveredPoint = null;
+            if (!editing) event.target.getStage()!.container().style.cursor = 'grab';
+          }}
+          ondragstart={(event) => {
+            editing = { task: task.id, index, point };
+            event.target.getStage()!.container().style.cursor = 'move';
+            edit(task, index, point, 'start');
+          }}
+          ondragmove={(event) => movePoint(task, index, event)}
+          ondragend={(event) => finishPoint(task, index, event)}
+        />
+      {/each}
+    {/if}
+  {/each}
+  {#if tooltip}
+    <Label x={tooltip.point.x} y={tooltip.point.y} listening={false}>
+      <Tag fill={haloColor} cornerRadius={4} />
+      <Text
+        text={tooltip.text}
+        width={tooltip.width}
+        height={tooltip.height}
+        padding={6}
+        fontSize={12}
+        lineHeight={16 / 12}
+        fontFamily="sans-serif"
+        fill={color}
+      />
+    </Label>
+  {/if}
+</Group>

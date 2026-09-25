@@ -202,7 +202,6 @@ default:
               laser_488: *laser_waveform_ch1
               aotf_1: *aotf_blanking_waveform
 
-  traversal: snake_row
 
   output:
     max_level: 3
