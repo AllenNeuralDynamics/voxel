@@ -286,17 +286,17 @@ export class PreviewSession {
     this.#renderer.dispose();
   }
 
-  startPreview(): void {
+  async startPreview(): Promise<void> {
     if (!this.channels.some((channel) => channel.visible)) {
       console.warn('[Preview] no visible channels to preview');
       return;
     }
     this.#clearFrames();
-    void this.#client.post(`${this.#instrumentBase}/preview/start`);
+    await this.#client.post(`${this.#instrumentBase}/preview/start`);
   }
 
-  stopPreview(): void {
-    void this.#client.post(`${this.#instrumentBase}/preview/stop`);
+  stopPreview(): Promise<void> {
+    return this.#client.post(`${this.#instrumentBase}/preview/stop`);
   }
 
   setChannelVisible(name: string, visible: boolean): void {

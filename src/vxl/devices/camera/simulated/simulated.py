@@ -1,3 +1,4 @@
+import math
 import time
 from collections.abc import Mapping
 from typing import ClassVar, cast, final
@@ -45,9 +46,17 @@ class SimulatedCamera(Camera):
     def __init__(
         self,
         uid: str,
+        *,
         frame_source: FrameSource | FrameSourceConfig | Mapping[str, object] | None = None,
+        start_delay_s: float = 2.0,
+        stop_delay_s: float = 1.0,
     ) -> None:
+        if any(not math.isfinite(delay) or delay < 0 for delay in (start_delay_s, stop_delay_s)):
+            raise ValueError("Camera operation delays must be finite and non-negative")
         super().__init__(uid=uid)
+        # Model blocking hardware calls; set both to zero for fast simulations.
+        self._start_delay_s = start_delay_s
+        self._stop_delay_s = stop_delay_s
         self._frame_source = create_frame_source(frame_source)
         self._roi_width_px = self.sensor_size_px.x
         self._roi_height_px = self.sensor_size_px.y
@@ -178,6 +187,7 @@ class SimulatedCamera(Camera):
         if self._frame_count >= 0:
             self.log.warning("Camera is already running. Ignoring start command.")
             return
+        time.sleep(self._start_delay_s)
         self._frame_count = 0
         self._requested_frame_count = frame_count if frame_count is not None else -1
         self._last_grab_frame_time = 0
@@ -237,6 +247,7 @@ class SimulatedCamera(Camera):
             self.log.warning("Camera is not running. Ignoring stop command.")
             return
 
+        time.sleep(self._stop_delay_s)
         self.log.debug("stopped after %d frames", self._frame_count)
         self._frame_count = -1
 

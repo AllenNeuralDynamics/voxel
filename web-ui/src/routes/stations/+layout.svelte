@@ -99,13 +99,6 @@
 
   // --- Keyboard shortcuts ---
 
-  createHotkey('Alt+P', () => {
-    const inst = app.instrument;
-    const preview = previews.current;
-    if (!inst || !preview) return;
-    if (inst.mode === 'preview') preview.stopPreview();
-    else preview.startPreview();
-  });
   createHotkeySequence(['Mod+K', 'Q'], () => {
     if (app.instrument) showCloseDialog();
   });

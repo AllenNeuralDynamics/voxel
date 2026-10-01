@@ -1,4 +1,6 @@
+import math
 import random
+import time
 
 from rigup import describe, numeric
 from vxl.devices.aotf.base import AOTF
@@ -6,7 +8,17 @@ from vxl.devices.laser.base import Laser
 
 
 class SimulatedLaser(Laser):
-    def __init__(self, uid: str, wavelength: int, max_power_mw: float = 1000.0) -> None:
+    def __init__(
+        self,
+        uid: str,
+        *,
+        wavelength: int,
+        max_power_mw: float = 1000.0,
+        enable_delay_s: float = 3.0,
+    ) -> None:
+        if not math.isfinite(enable_delay_s) or enable_delay_s < 0:
+            raise ValueError("Laser enable delay must be finite and non-negative")
+        self._enable_delay_s = enable_delay_s
         self._max_power_mw = max_power_mw
         self._power_setpoint_mw = 10.0
         self._is_enabled = False
@@ -14,7 +26,10 @@ class SimulatedLaser(Laser):
         super().__init__(uid=uid, wavelength=wavelength)
 
     def enable(self) -> None:
+        if self.is_enabled:
+            return
         self.log.debug("Enabling laser")
+        time.sleep(self._enable_delay_s)
         self._is_enabled = True
 
     def disable(self) -> None:
