@@ -2,6 +2,8 @@
   import { onDestroy, type Snippet } from 'svelte';
   import { flip } from 'svelte/animate';
 
+  import * as ScrollArea from '$lib/kit/cn/scroll-area';
+
   import type { SortableLayout } from './placement';
   import { setSortableContext, SortableState } from './sortable.svelte';
 
@@ -12,7 +14,11 @@
     item: Snippet<[T, number]>;
     layout?: SortableLayout;
     threshold?: number;
+    /** Layout and padding of the sortable list, inside the scroll viewport. */
     class?: string;
+    /** Sizing, borders, and positioning of the outer scroll container. */
+    containerClass?: string;
+    ariaLabel?: string;
     flipDuration?: number;
   }
 
@@ -24,26 +30,44 @@
     layout = 'vertical',
     threshold = 4,
     class: className = '',
+    containerClass = '',
+    ariaLabel = 'Sortable list',
     flipDuration = 120
   }: Props = $props();
 
-  const state = new SortableState<T>();
-  setSortableContext(state);
-  onDestroy(() => state.dispose());
+  const list = new SortableState<T>();
+  let viewport = $state<HTMLDivElement | null>(null);
+  setSortableContext(list);
+  onDestroy(() => list.dispose());
 
   $effect(() => {
-    state.key = key;
-    state.onReorder = onReorder;
-    state.layout = layout;
-    state.threshold = threshold;
-    state.sync(items);
+    if (viewport) return list.attach(viewport);
+  });
+
+  $effect(() => {
+    list.key = key;
+    list.onReorder = onReorder;
+    list.layout = layout;
+    list.threshold = threshold;
+    list.sync(items);
   });
 </script>
 
-<div class={className}>
-  {#each state.items as entry, index (state.key(entry))}
-    <div animate:flip={{ duration: flipDuration }}>
-      {@render item(entry, index)}
-    </div>
-  {/each}
-</div>
+<ScrollArea.Root
+  bind:viewportRef={viewport}
+  class={containerClass}
+  orientation={layout === 'horizontal' ? 'horizontal' : 'vertical'}
+  viewportProps={{
+    'aria-label': ariaLabel,
+    role: 'region',
+    class: 'overscroll-contain [overflow-anchor:none]'
+  }}
+>
+  <div class={className}>
+    {#each list.items as entry, index (list.key(entry))}
+      <div animate:flip={{ duration: flipDuration }}>
+        {@render item(entry, index)}
+      </div>
+    {/each}
+  </div>
+</ScrollArea.Root>

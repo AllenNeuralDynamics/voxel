@@ -18,7 +18,7 @@
   const selectedStationId = $derived(page.params.stationId ?? null);
   const requestedInstrument = $derived(page.url.searchParams.get('instrument'));
   const requestedTemplate = $derived(page.url.searchParams.get('template'));
-  const settingsSelected = $derived(page.route.id?.endsWith('/settings') ?? false);
+  const uiLabSelected = $derived(page.route.id?.startsWith('/(dashboard)/ui-lab') ?? false);
 
   onMount(() => {
     window.name = DASHBOARD_WINDOW_NAME;
@@ -70,13 +70,13 @@
             <span class="text-2xl font-normal tracking-wide uppercase">Voxel</span>
           </a>
           <a
-            href={resolve('/(dashboard)/settings')}
+            href={resolve('/(dashboard)/ui-lab')}
             class={cn(
               'flex size-ui-lg shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-element-hover hover:text-fg',
-              settingsSelected && 'bg-element-selected text-fg'
+              uiLabSelected && 'bg-element-selected text-fg'
             )}
-            title="Settings"
-            aria-label="Settings"
+            title="UI Lab"
+            aria-label="UI Lab"
           >
             <Cog width="18" height="18" />
           </a>

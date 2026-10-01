@@ -4,3 +4,4 @@ import Root from './Root.svelte';
 
 export type { SortableLayout } from './placement';
 export { Handle, Item, Root };
+export default { Handle, Item, Root };

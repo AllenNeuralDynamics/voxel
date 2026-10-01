@@ -406,7 +406,7 @@
               onReorder={reorderProfiles}
               item={profileChip}
               layout="flow"
-              class="contents"
+              class="flex flex-wrap items-center gap-1.5"
             />
           </div>
         </section>

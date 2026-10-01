@@ -16,6 +16,10 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions (Pointer sorting enhances editable list content.) -->
-<span class={className} onpointerdown={(event) => list.begin(item, event, disabled)}>
+<span
+  class={className}
+  style:touch-action={disabled ? 'auto' : 'none'}
+  onpointerdown={(event) => list.begin(item, event, disabled)}
+>
   {@render children()}
 </span>

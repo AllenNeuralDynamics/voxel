@@ -1,9 +1,10 @@
 import { getContext, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
+import { AutoScroll } from './auto-scroll';
 import { insertionIndex, type Point, type SortableLayout } from './placement';
 
-const CTX = Symbol('sortable');
+const CTX = Symbol('sortable2');
 
 export class SortableState<T> {
   items = $state<T[]>([]);
@@ -13,6 +14,11 @@ export class SortableState<T> {
   threshold = 4;
 
   #nodes = new SvelteMap<string, HTMLElement>();
+  #viewport: HTMLElement | null = null;
+  #autoScroll = new AutoScroll();
+  #pointer: Point = { x: 0, y: 0 };
+  #startScroll: Point = { x: 0, y: 0 };
+  #startViewport: Point = { x: 0, y: 0 };
   #pointerId: number | null = null;
   #dragged: T | null = null;
   #source: T[] = [];
@@ -25,6 +31,16 @@ export class SortableState<T> {
   #sourceOpacity = '';
   #bodyCursor = '';
   #bodyUserSelect = '';
+
+  attach(viewport: HTMLElement): () => void {
+    this.#viewport = viewport;
+    viewport.addEventListener('scroll', this.#place);
+    return () => {
+      this.dispose();
+      viewport.removeEventListener('scroll', this.#place);
+      this.#viewport = null;
+    };
+  }
 
   sync(items: T[]): void {
     if (this.#pointerId === null) this.items = [...items];
@@ -39,7 +55,7 @@ export class SortableState<T> {
   }
 
   begin(item: T, event: PointerEvent, disabled: boolean): void {
-    if (disabled || event.button !== 0 || this.#pointerId !== null) return;
+    if (disabled || event.button !== 0 || this.#pointerId !== null || !this.#viewport) return;
     event.preventDefault();
     this.#pointerId = event.pointerId;
     this.#dragged = item;
@@ -48,6 +64,7 @@ export class SortableState<T> {
     window.addEventListener('pointermove', this.#move);
     window.addEventListener('pointerup', this.#end);
     window.addEventListener('pointercancel', this.#cancel);
+    window.addEventListener('blur', this.#abort);
   }
 
   dispose(): void {
@@ -55,11 +72,14 @@ export class SortableState<T> {
   }
 
   #start(pointer: Point): void {
-    if (!this.#dragged) return;
+    if (!this.#dragged || !this.#viewport) return;
     const draggedKey = this.key(this.#dragged);
     const node = this.#nodes.get(draggedKey);
     if (!node) return;
     const rect = node.getBoundingClientRect();
+    const viewportRect = this.#viewport.getBoundingClientRect();
+    this.#startViewport = { x: viewportRect.left, y: viewportRect.top };
+    this.#startScroll = { x: this.#viewport.scrollLeft, y: this.#viewport.scrollTop };
 
     this.#dragging = true;
     this.#sourceNode = node;
@@ -98,11 +118,13 @@ export class SortableState<T> {
     this.#bodyUserSelect = document.body.style.userSelect;
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
+    this.#autoScroll.start(this.#viewport, this.layout === 'horizontal', pointer);
   }
 
   #move = (event: PointerEvent): void => {
     if (event.pointerId !== this.#pointerId || !this.#dragged) return;
     const pointer = { x: event.clientX, y: event.clientY };
+    this.#pointer = pointer;
     const dx = pointer.x - this.#startPointer.x;
     const dy = pointer.y - this.#startPointer.y;
     if (!this.#dragging) {
@@ -112,7 +134,19 @@ export class SortableState<T> {
     if (!this.#dragging) return;
     event.preventDefault();
     if (this.#ghost) this.#ghost.style.transform = `translate(${dx}px, ${dy}px)`;
+    this.#autoScroll.update(pointer);
+    this.#place();
+  };
 
+  #place = (): void => {
+    if (!this.#dragging || !this.#dragged || !this.#viewport) return;
+    const rect = this.#viewport.getBoundingClientRect();
+    // Keep pre-reorder geometry stable through FLIP animations. Translate the pointer
+    // into that original coordinate space when scrolling (including wheel scrolling).
+    const pointer = {
+      x: this.#pointer.x + this.#viewport.scrollLeft - this.#startScroll.x + this.#startViewport.x - rect.left,
+      y: this.#pointer.y + this.#viewport.scrollTop - this.#startScroll.y + this.#startViewport.y - rect.top
+    };
     const remaining = this.#candidates.map(({ item }) => item);
     const index = insertionIndex(this.layout, {
       pointer,
@@ -127,6 +161,8 @@ export class SortableState<T> {
 
   #end = (event: PointerEvent): void => {
     if (event.pointerId !== this.#pointerId) return;
+    this.#pointer = { x: event.clientX, y: event.clientY };
+    this.#place();
     const changed =
       this.#dragging && this.items.some((item, index) => this.key(item) !== this.key(this.#source[index]));
     const reordered = [...this.items];
@@ -138,10 +174,14 @@ export class SortableState<T> {
     if (event.pointerId === this.#pointerId) this.#finish(true);
   };
 
+  #abort = (): void => this.#finish(true);
+
   #finish(restore: boolean): void {
+    this.#autoScroll.stop();
     window.removeEventListener('pointermove', this.#move);
     window.removeEventListener('pointerup', this.#end);
     window.removeEventListener('pointercancel', this.#cancel);
+    window.removeEventListener('blur', this.#abort);
     this.#ghost?.remove();
     if (this.#sourceNode) this.#sourceNode.style.opacity = this.#sourceOpacity;
     if (this.#dragging) {

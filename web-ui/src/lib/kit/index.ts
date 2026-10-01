@@ -10,6 +10,7 @@ export * as ContextMenu from './cn/context-menu';
 export * as Dialog from './cn/dialog';
 export * as DropdownMenu from './cn/dropdown-menu';
 export * as HoverCard from './cn/hover-card';
+export * as ScrollArea from './cn/scroll-area';
 export * as Sheet from './cn/sheet';
 export * as Sidebar from './cn/sidebar';
 export { Toaster } from './cn/sonner';
