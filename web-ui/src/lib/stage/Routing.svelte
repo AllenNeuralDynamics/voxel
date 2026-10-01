@@ -132,8 +132,8 @@
   $effect(() => {
     if (!visible || disabled || !onedit || rule.axis !== dragAxis) untrack(finish);
   });
-  onMount(() =>
-    context.register({
+  onMount(() => {
+    const unregisterFeature = context.register({
       id: 'routing:' + rule.id,
       menuOrder: 4,
       get label() {
@@ -144,10 +144,20 @@
       },
       setVisible: (next) => {
         visible = next;
+      }
+    });
+    const unregisterMenu = context.registerMenuSource({
+      id: 'routing:' + rule.id,
+      get label() {
+        return 'Routing · ' + rule.label;
       },
-      menu: (selection) => ('hits' in selection && line && selection.hits.includes(line.node) ? menu : undefined)
-    })
-  );
+      menu: (selection) => (visible && line && selection.hits.includes(line.node) ? menu : undefined)
+    });
+    return () => {
+      unregisterMenu();
+      unregisterFeature();
+    };
+  });
   onDestroy(finish);
 </script>
 

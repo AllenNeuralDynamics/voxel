@@ -205,6 +205,12 @@ export interface Point2D {
   y: number;
 }
 
+/** Axis-aligned XY bounds in micrometres. */
+export interface Bounds {
+  min: Point2D;
+  max: Point2D;
+}
+
 /** A fixed absolute Z range in micrometres. */
 export interface ZRange {
   type: 'fixed';
@@ -214,43 +220,25 @@ export interface ZRange {
 
 export type ZDefinition = ZRange;
 
-export interface GridSettings {
-  overlap: number;
-  anchor: Point2D;
-}
+export type XYMode = 'explicit_points' | 'bounding_box' | 'convex_hull';
 
-export interface ExplicitPositions {
-  type: 'positions';
+export interface XYDefinition {
+  mode: XYMode;
   points: Point2D[];
+  overlap: Point2D;
 }
-
-export interface TiledArea {
-  type: 'area';
-  points: Point2D[];
-  grid: GridSettings;
-}
-
-export type TaskLayout = ExplicitPositions | TiledArea;
 
 /** Whether a task iterates positions or profiles in its outer loop. */
-export type VolumeOrder = 'position_major' | 'profile_major';
+export type IterationOrder = 'position_major' | 'profile_major';
 
 /** Persisted acquisition intent expanded into concrete volumes by the instrument. */
 export interface AcquisitionTask {
   id: string;
-  layout: TaskLayout;
+  xy: XYDefinition;
   profiles: string[];
   z: ZDefinition;
   traversal: TileOrder;
-  volume_order: VolumeOrder;
-}
-
-/** One detection footprint relative to a task's stage position, in micrometres. */
-export interface FootprintBounds {
-  min_x: number;
-  min_y: number;
-  max_x: number;
-  max_y: number;
+  iteration: IterationOrder;
 }
 
 /** Tile acquisition ordering strategy. */
@@ -334,11 +322,11 @@ export interface WriterPatch {
 
 /** Edit fields on one persisted acquisition task. */
 export interface TaskPatch {
-  layout?: TaskLayout;
+  xy?: XYDefinition;
   profiles?: string[];
   z?: ZDefinition;
   traversal?: TileOrder;
-  volume_order?: VolumeOrder;
+  iteration?: IterationOrder;
 }
 
 // ---- preview control payloads ----
@@ -591,7 +579,7 @@ export interface InstrumentStatus {
   preview_revision: number;
   fov: [number, number] | null;
   state: InstrumentState;
-  profile_fovs: Record<string, Record<string, FootprintBounds>>;
+  profile_fovs: Record<string, Record<string, Bounds>>;
   planned_volumes: PlannedVolume[];
   history: HistoryState;
 }
@@ -668,7 +656,7 @@ export interface InstrumentView extends InstrumentState {
   active_profile_id: string;
   preview_revision: number;
   fov: [number, number] | null;
-  profile_fovs: Record<string, Record<string, FootprintBounds>>;
+  profile_fovs: Record<string, Record<string, Bounds>>;
   planned_volumes: PlannedVolume[];
   devices: Record<string, DeviceState>;
   acquisition: ActiveAcquisition | null;

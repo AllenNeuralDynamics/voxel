@@ -1,23 +1,21 @@
 from .config import (
     AcquisitionTask,
-    ExplicitPositions,
-    GridSettings,
+    Bounds,
     InstrumentConfig,
     InstrumentPreset,
     InstrumentState,
+    IterationOrder,
     Point2D,
-    TaskLayout,
     TaskPatch,
-    TiledArea,
     TileOrder,
-    VolumeOrder,
+    XYDefinition,
+    XYMode,
     ZDefinition,
     ZRange,
 )
 from .core import AcquisitionMode, AcquisitionPhase, AcquisitionRequest, ActiveAcquisition, Instrument
 from .errors import InstrumentBusyError, InstrumentError, OperationRejectedError, StartupError, Violation
 from .metadata import ExaspimMetadata, ExperimentMetadata, annotation
-from .planning import Bounds
 from .store import InstrumentInspection, InstrumentStore
 
 __all__ = [
@@ -29,8 +27,6 @@ __all__ = [
     "Bounds",
     "ExaspimMetadata",
     "ExperimentMetadata",
-    "ExplicitPositions",
-    "GridSettings",
     "Instrument",
     "InstrumentBusyError",
     "InstrumentConfig",
@@ -39,15 +35,15 @@ __all__ = [
     "InstrumentPreset",
     "InstrumentState",
     "InstrumentStore",
+    "IterationOrder",
     "OperationRejectedError",
     "Point2D",
     "StartupError",
-    "TaskLayout",
     "TaskPatch",
     "TileOrder",
-    "TiledArea",
     "Violation",
-    "VolumeOrder",
+    "XYDefinition",
+    "XYMode",
     "ZDefinition",
     "ZRange",
     "annotation",

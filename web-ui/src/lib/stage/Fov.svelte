@@ -6,18 +6,14 @@
 
   import { getStageContext } from './context.svelte';
   import FovImage from './FovImage.svelte';
-  import { type Bounds, type Point, worldTransform } from './geometry';
+  import { worldTransform } from './geometry';
 
   let {
     preview,
-    bounds,
-    visible = $bindable(true),
-    onactivate
+    visible = $bindable(true)
   }: {
     preview: PreviewSession | null;
-    bounds: Bounds | null;
     visible?: boolean;
-    onactivate?: () => void;
   } = $props();
 
   const context = getStageContext();
@@ -31,18 +27,6 @@
       return [{ channel, rect: { x: x - width / 2, y: y - height / 2, width, height } }];
     })
   );
-
-  /** Activate the FOV beneath another layer's hit target. */
-  export function activateAt(point: Point) {
-    if (!visible) return;
-    const inBounds =
-      bounds && point.x >= bounds.minX && point.x <= bounds.maxX && point.y >= bounds.minY && point.y <= bounds.maxY;
-    const inImage = images.some(
-      ({ rect }) =>
-        point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
-    );
-    if (inBounds || inImage) onactivate?.();
-  }
 
   onMount(() =>
     context.register({
@@ -68,18 +52,8 @@
     </Group>
     <Group>
       {#each images as image (image.channel)}
-        <FovImage {preview} channel={image.channel} rect={image.rect} {onactivate} />
+        <FovImage {preview} channel={image.channel} rect={image.rect} />
       {/each}
     </Group>
-  {/if}
-  {#if bounds && onactivate}
-    <Rect
-      x={bounds.minX}
-      y={bounds.minY}
-      width={bounds.maxX - bounds.minX}
-      height={bounds.maxY - bounds.minY}
-      fill="transparent"
-      onpointerdblclick={() => onactivate?.()}
-    />
   {/if}
 </Group>

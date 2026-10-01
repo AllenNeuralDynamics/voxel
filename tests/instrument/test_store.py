@@ -6,11 +6,12 @@ from pydantic import ValidationError
 from vxl._utils.files import load_yaml
 from vxl.instrument import (
     AcquisitionTask,
-    ExplicitPositions,
     InstrumentConfig,
     InstrumentState,
     InstrumentStore,
     Point2D,
+    XYDefinition,
+    XYMode,
     ZRange,
 )
 from vxl.instrument.errors import OperationRejectedError, StartupError
@@ -92,7 +93,7 @@ def _semantically_invalid_state(config: InstrumentConfig) -> InstrumentState:
     imaging = state.imaging.model_copy(update={"profiles": profiles})
     task = AcquisitionTask(
         id="broken",
-        layout=ExplicitPositions(points=[Point2D(x=0, y=0)]),
+        xy=XYDefinition(mode=XYMode.EXPLICIT_POINTS, points=[Point2D(x=0, y=0)]),
         profiles=["missing_profile"],
         z=ZRange(start=0, end=0),
     )

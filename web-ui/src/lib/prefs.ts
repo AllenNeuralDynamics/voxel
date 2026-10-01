@@ -14,7 +14,12 @@ export interface PlanRegion {
 export interface PlanDefaults {
   region?: PlanRegion;
   zRange: { start: number; end: number };
-  overlap: number;
+  overlap: { x: number; y: number };
+}
+
+export function planOverlap(value: PlanDefaults['overlap'] | number | undefined): PlanDefaults['overlap'] {
+  if (typeof value === 'number') return { x: value, y: value };
+  return value ?? { x: 0.1, y: 0.1 };
 }
 
 /**

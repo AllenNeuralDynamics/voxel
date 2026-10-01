@@ -33,7 +33,9 @@
 
   $effect(() => {
     const scope = app.instrument?.sessionId ?? null;
-    untrack(() => regionSelection.setScope(scope));
+    untrack(() => {
+      regionSelection.setScope(scope);
+    });
   });
 
   $effect(() => {

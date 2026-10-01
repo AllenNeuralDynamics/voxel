@@ -1,6 +1,6 @@
 import type { SpatialUnit } from '$lib/prefs';
 
-interface SpatialUnitDefinition {
+export interface SpatialUnitDefinition {
   value: SpatialUnit;
   label: string;
   /** Micrometers per displayed unit. Internal values always remain in µm. */

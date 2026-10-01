@@ -110,10 +110,10 @@
       const seen: string[] = [];
       for (const footprint of Object.values(instrument?.profileFovs[volume.profile] ?? {})) {
         const bounds = {
-          minX: volume.x + footprint.min_x,
-          minY: volume.y + footprint.min_y,
-          maxX: volume.x + footprint.max_x,
-          maxY: volume.y + footprint.max_y
+          minX: volume.x + footprint.min.x,
+          minY: volume.y + footprint.min.y,
+          maxX: volume.x + footprint.max.x,
+          maxY: volume.y + footprint.max.y
         };
         const boundsKey = `${bounds.minX}:${bounds.minY}:${bounds.maxX}:${bounds.maxY}`;
         if (seen.includes(boundsKey)) continue;

@@ -1,49 +1,17 @@
 """Pure spatial resolution for persisted acquisition task definitions."""
 
 import math
-from collections.abc import Iterable
-from typing import Self
 
-from pydantic import model_validator
-from vxlib.schema import FrozenModel
-
-from .config import ExplicitPositions, Point2D, TaskLayout, TiledArea, TileOrder, ZDefinition, ZRange
+from .config import (
+    Bounds,
+    Point2D,
+    TileOrder,
+    XYDefinition,
+    XYMode,
+    ZDefinition,
+    ZRange,
+)
 from .traversal import order_positions
-
-
-class Bounds(FrozenModel):
-    """Axis-aligned bounds relative to a task's stage position, in micrometres."""
-
-    min_x: float
-    min_y: float
-    max_x: float
-    max_y: float
-
-    @property
-    def width(self) -> float:
-        return self.max_x - self.min_x
-
-    @property
-    def height(self) -> float:
-        return self.max_y - self.min_y
-
-    @classmethod
-    def envelope(cls, bounds: Iterable[Self]) -> Self | None:
-        values = list(bounds)
-        if not values:
-            return None
-        return cls(
-            min_x=min(bound.min_x for bound in values),
-            min_y=min(bound.min_y for bound in values),
-            max_x=max(bound.max_x for bound in values),
-            max_y=max(bound.max_y for bound in values),
-        )
-
-    @model_validator(mode="after")
-    def _check_bounds(self) -> Self:
-        if self.max_x <= self.min_x or self.max_y <= self.min_y:
-            raise ValueError("bounds must have positive width and height")
-        return self
 
 
 def resolve_z(definition: ZDefinition, _xy: Point2D) -> ZRange:
@@ -52,16 +20,15 @@ def resolve_z(definition: ZDefinition, _xy: Point2D) -> ZRange:
     return definition
 
 
-def resolve_layout(layout: TaskLayout, *, width: float, height: float, traversal: TileOrder) -> list[Point2D]:
-    """Resolve and spatially order the XY positions described by a task layout."""
+def resolve_xy(definition: XYDefinition, *, width: float, height: float, traversal: TileOrder) -> list[Point2D]:
+    """Resolve and spatially order the positions described by an XY definition."""
 
-    match layout:
-        case ExplicitPositions(points=points):
-            positions = list(points)
-        case TiledArea() if width > 0 and height > 0:
-            positions = _area_positions(layout, width=width, height=height)
-        case TiledArea():
-            return []
+    if definition.mode is XYMode.EXPLICIT_POINTS:
+        positions = list(definition.points)
+    elif width > 0 and height > 0:
+        positions = _region_positions(definition, width=width, height=height)
+    else:
+        return []
     return order_positions(
         positions,
         traversal,
@@ -70,27 +37,58 @@ def resolve_layout(layout: TaskLayout, *, width: float, height: float, traversal
     )
 
 
-def _area_positions(area: TiledArea, *, width: float, height: float) -> list[Point2D]:
-    xs = [point.x for point in area.points]
-    ys = [point.y for point in area.points]
-    step_x = width * (1 - area.grid.overlap)
-    step_y = height * (1 - area.grid.overlap)
-    start_x = math.floor((min(xs) + width / 2 - area.grid.anchor.x) / step_x)
-    end_x = max(start_x, math.ceil((max(xs) - width / 2 - area.grid.anchor.x) / step_x))
-    start_y = math.floor((min(ys) + height / 2 - area.grid.anchor.y) / step_y)
-    end_y = max(start_y, math.ceil((max(ys) - height / 2 - area.grid.anchor.y) / step_y))
+def _region_positions(definition: XYDefinition, *, width: float, height: float) -> list[Point2D]:
+    bounds = Bounds(
+        min=Point2D(x=min(point.x for point in definition.points), y=min(point.y for point in definition.points)),
+        max=Point2D(x=max(point.x for point in definition.points), y=max(point.y for point in definition.points)),
+    )
+    polygon = (
+        [
+            bounds.min,
+            Point2D(x=bounds.max.x, y=bounds.min.y),
+            bounds.max,
+            Point2D(x=bounds.min.x, y=bounds.max.y),
+        ]
+        if definition.mode is XYMode.BOUNDING_BOX
+        else _convex_hull(definition.points)
+    )
+    step_x = width * (1 - definition.overlap.x)
+    step_y = height * (1 - definition.overlap.y)
+    end_x = max(0, math.ceil((bounds.max.x - bounds.min.x - width) / step_x))
+    end_y = max(0, math.ceil((bounds.max.y - bounds.min.y - height) / step_y))
     return [
         Point2D(x=x, y=y)
-        for ix in range(start_x, end_x + 1)
-        for iy in range(start_y, end_y + 1)
+        for ix in range(end_x + 1)
+        for iy in range(end_y + 1)
         if _rectangle_intersects_polygon(
-            x := area.grid.anchor.x + ix * step_x,
-            y := area.grid.anchor.y + iy * step_y,
+            x := bounds.min.x + width / 2 + ix * step_x,
+            y := bounds.min.y + height / 2 + iy * step_y,
             width,
             height,
-            area.points,
+            polygon,
         )
     ]
+
+
+def _convex_hull(points: list[Point2D]) -> list[Point2D]:
+    """Return the outer points in counter-clockwise order."""
+
+    ordered = sorted(points, key=lambda point: (point.x, point.y))
+
+    def cross(origin: Point2D, first: Point2D, second: Point2D) -> float:
+        return (first.x - origin.x) * (second.y - origin.y) - (first.y - origin.y) * (second.x - origin.x)
+
+    lower: list[Point2D] = []
+    for point in ordered:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+    upper: list[Point2D] = []
+    for point in reversed(ordered):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+    return [*lower[:-1], *upper[:-1]]
 
 
 def _rectangle_intersects_polygon(x: float, y: float, width: float, height: float, polygon: list[Point2D]) -> bool:

@@ -21,6 +21,13 @@ export function withOpacity(color: string, opacity = 18): string {
   return `color-mix(in srgb, ${color} ${opacity}%, transparent)`;
 }
 
+/** Return a six-digit hex color with a 0–1 alpha value for canvas drawing. */
+export function hexWithAlpha(color: string, alpha: number): string {
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(color);
+  if (!match) return color;
+  return `rgba(${parseInt(match[1], 16)}, ${parseInt(match[2], 16)}, ${parseInt(match[3], 16)}, ${alpha})`;
+}
+
 // ── oklch lightness tone-mapping ──────────────────────────────────────────
 // Spectral/emission colors carry wildly different luminance by hue (yellow ≈ white,
 // violet ≈ dark), so a fixed palette reads well against only one background polarity.

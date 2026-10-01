@@ -279,10 +279,10 @@ class GridCanvas(QWidget):
     def _footprints(self, task_id: str) -> list[QRectF]:
         return [
             QRectF(
-                volume.x + bounds.min_x,
-                volume.y + bounds.min_y,
-                bounds.max_x - bounds.min_x,
-                bounds.max_y - bounds.min_y,
+                volume.x + bounds.min.x,
+                volume.y + bounds.min.y,
+                bounds.width,
+                bounds.height,
             )
             for volume in self._instrument.planned_volumes.value
             if volume.task == task_id

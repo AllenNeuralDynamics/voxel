@@ -2,7 +2,7 @@
   import type Konva from 'konva';
   import type { Snippet } from 'svelte';
 
-  import type { MenuSelection } from './context.svelte';
+  import type { FitTarget, MenuSelection, NavigationTarget } from './context.svelte';
   import type { Bounds, Orientation, Point, Viewport, ViewTransform } from './geometry';
 
   export interface StageCanvasProps {
@@ -13,10 +13,20 @@
     marquee?: Bounds | null;
     children?: Snippet;
     menu?: Snippet<
-      [MenuSelection, Snippet, (point: Point) => void, (bounds: Bounds) => void, (point: Point | null) => void]
+      [
+        MenuSelection,
+        NavigationTarget[],
+        NavigationTarget[],
+        FitTarget[],
+        (point: Point) => void,
+        (bounds: Bounds) => void,
+        (point: Point | null) => void
+      ]
     >;
-    overlay?: Snippet<[ViewTransform, number, Point | null]>;
-    resolveDestination?: (point: Point, hits: Konva.Shape[]) => Point | undefined;
+    overlay?: Snippet<[ViewTransform, number, number, Point | null]>;
+    onmenuopen?: () => void;
+    onstageclick?: (point: Point, hits: Konva.Shape[], screen: Point) => void;
+    onescape?: () => void;
   }
 </script>
 
@@ -26,11 +36,11 @@
   import { Group, Layer, Rect, Stage } from 'svelte-konva';
 
   import { browser } from '$app/environment';
-  import { Close, FitToScreen, Layers } from '$lib/icons';
+  import { Layers } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import { watchTheme } from '$lib/themes/manager.svelte';
 
-  import { provideStageContext, type StageFeature } from './context.svelte';
+  import { provideStageContext, type StageFeature, type StageMenuSource } from './context.svelte';
   import { box, fit, intersect, project, screenRect, unproject, worldTransform } from './geometry';
   import Marquee from './Marquee.svelte';
 
@@ -43,7 +53,9 @@
     children,
     menu,
     overlay,
-    resolveDestination
+    onmenuopen,
+    onstageclick,
+    onescape
   }: StageCanvasProps = $props();
 
   let host: HTMLDivElement;
@@ -59,6 +71,7 @@
   let selectionOrigin: Point | null = null;
   let selectionMoved = false;
   const features = new SvelteMap<string, StageFeature>();
+  const menuSources = new SvelteMap<string, StageMenuSource>();
   let menuOpen = $state(false);
   let menuSelection = $state.raw<MenuSelection | null>(null);
   let menuPreview = $state.raw<Point | null>(null);
@@ -101,12 +114,22 @@
   const menuSections = $derived.by(() => {
     const selection = menuSelection;
     if (!selection) return [];
-    return [...features.values()]
-      .filter((feature) => feature.visible)
-      .flatMap((feature) => {
-        const content = feature.menu?.(selection);
-        return content ? [{ id: feature.id, label: feature.label, content }] : [];
-      });
+    return [...menuSources.values()].flatMap((source) => {
+      const content = source.menu?.(selection);
+      return content ? [{ id: source.id, label: source.label ?? source.id, content }] : [];
+    });
+  });
+  const taskTargets = $derived.by(() => {
+    const selection = menuSelection;
+    return selection ? [...menuSources.values()].flatMap((source) => source.addTask?.(selection) ?? []) : [];
+  });
+  const goToTargets = $derived.by(() => {
+    const selection = menuSelection;
+    return selection ? [...menuSources.values()].flatMap((source) => source.goTo?.(selection) ?? []) : [];
+  });
+  const fitTargets = $derived.by(() => {
+    const selection = menuSelection;
+    return selection ? [...menuSources.values()].flatMap((source) => source.fit?.(selection) ?? []) : [];
   });
 
   function center(point: Point) {
@@ -169,6 +192,13 @@
       features.set(feature.id, feature);
       return () => {
         features.delete(feature.id);
+      };
+    },
+    registerMenuSource(source) {
+      if (menuSources.has(source.id)) throw new Error('Duplicate stage menu source: ' + source.id);
+      menuSources.set(source.id, source);
+      return () => {
+        menuSources.delete(source.id);
       };
     }
   });
@@ -250,25 +280,24 @@
 
   function openMenu(event: Konva.KonvaEventObject<PointerEvent>) {
     if (!stage) return;
+    onmenuopen?.();
     menuPreview = null;
     const screen = eventPoint(event.evt);
     const world = unproject(screen, view, orientation);
-    if (
-      marquee &&
-      world.x >= marquee.minX &&
-      world.x <= marquee.maxX &&
-      world.y >= marquee.minY &&
-      world.y <= marquee.maxY
-    ) {
-      menuSelection = { bounds: { ...marquee } };
-    } else {
-      const hits = stage.node.getAllIntersections(screen).sort((a, b) => b.getAbsoluteZIndex() - a.getAbsoluteZIndex());
-      menuSelection = {
-        point: world,
-        destination: resolveDestination?.(world, hits),
-        hits
-      };
-    }
+    const hits = stage.node.getAllIntersections(screen).sort((a, b) => b.getAbsoluteZIndex() - a.getAbsoluteZIndex());
+    menuSelection = {
+      point: world,
+      hits,
+      region: marquee ? { ...marquee } : null
+    };
+  }
+
+  function clickStage(event: Konva.KonvaEventObject<PointerEvent>) {
+    if (!stage || event.evt.button !== 0 || event.evt.altKey || selectionStart || menuOpen) return;
+    const screen = eventPoint(event.evt);
+    const point = unproject(screen, view, orientation);
+    const hits = stage.node.getAllIntersections(screen).sort((a, b) => b.getAbsoluteZIndex() - a.getAbsoluteZIndex());
+    onstageclick?.(point, hits, screen);
   }
 
   $effect(() => {
@@ -290,6 +319,7 @@
       if (event.key === 'Escape') {
         cancelSelection();
         marquee = null;
+        onescape?.();
       }
     };
     const keyup = (event: KeyboardEvent) => {
@@ -353,6 +383,7 @@
             }}
             onwheel={zoom}
             onpointerdown={beginSelection}
+            onpointerclick={clickStage}
             oncontextmenu={openMenu}
           >
             <Layer>
@@ -374,7 +405,7 @@
               {/if}
             </Layer>
           </Stage>
-          {@render overlay?.(view, width, cursor)}
+          {@render overlay?.(view, width, height, cursor)}
         {/if}
       </div>
     {/snippet}
@@ -398,64 +429,26 @@
           {/each}
         </ContextMenu.SubContent>
       </ContextMenu.Sub>
-      <ContextMenu.Separator />
     {/if}
     {#if menuSelection}
-      {#if 'bounds' in menuSelection}
-        {@render featureMenus(menuSelection)}
-        {#if menuSections.length}<ContextMenu.Separator />{/if}
-        {@render mainMenu(menuSelection)}
-      {:else}
-        {@render mainMenu(menuSelection)}
-        {#if menuSections.length}<ContextMenu.Separator />{/if}
-        {@render featureMenus(menuSelection)}
-      {/if}
+      {@render menu?.(
+        menuSelection,
+        taskTargets,
+        goToTargets,
+        fitTargets,
+        center,
+        fitBounds,
+        (point) => (menuPreview = point)
+      )}
+      {#if menuSections.length}<ContextMenu.Separator />{/if}
+      {#each menuSections as section (section.id)}
+        <ContextMenu.Sub>
+          <ContextMenu.SubTrigger>{section.label}</ContextMenu.SubTrigger>
+          <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
+            {@render section.content(menuSelection)}
+          </ContextMenu.SubContent>
+        </ContextMenu.Sub>
+      {/each}
     {/if}
   </ContextMenu.Content>
 </ContextMenu.Root>
-
-{#snippet defaultMenu()}
-  {#if menuSelection && 'bounds' in menuSelection}
-    {@const selectedBounds = menuSelection.bounds}
-    <ContextMenu.Item onSelect={() => fitBounds(selectedBounds)}>
-      <FitToScreen width="14" height="14" />
-      Fit to region
-    </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => (marquee = null)}>
-      <Close width="14" height="14" />
-      Clear region
-    </ContextMenu.Item>
-  {:else}
-    <ContextMenu.Item onSelect={() => (viewport = fitted)}>
-      <FitToScreen width="14" height="14" />
-      Fit to stage
-    </ContextMenu.Item>
-  {/if}
-{/snippet}
-
-{#snippet mainMenu(selection: MenuSelection)}
-  {#if menu}
-    {@render menu(selection, defaultMenu, center, fitBounds, (point) => (menuPreview = point))}
-  {:else}
-    {@render defaultMenu()}
-  {/if}
-{/snippet}
-
-{#snippet featureMenus(selection: MenuSelection)}
-  {#each menuSections as section, index (section.id)}
-    {#if menuSections.length > 2}
-      <ContextMenu.Sub>
-        <ContextMenu.SubTrigger>{section.label}</ContextMenu.SubTrigger>
-        <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
-          {@render section.content(selection)}
-        </ContextMenu.SubContent>
-      </ContextMenu.Sub>
-    {:else}
-      {#if index > 0}<ContextMenu.Separator />{/if}
-      <ContextMenu.Group>
-        <ContextMenu.GroupHeading>{section.label}</ContextMenu.GroupHeading>
-        {@render section.content(selection)}
-      </ContextMenu.Group>
-    {/if}
-  {/each}
-{/snippet}

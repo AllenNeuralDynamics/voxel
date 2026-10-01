@@ -1,5 +1,5 @@
 import datetime
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self
 
@@ -291,6 +291,43 @@ class Point2D(FrozenModel):
     y: float = Field(allow_inf_nan=False)
 
 
+class Bounds(FrozenModel):
+    """Axis-aligned XY bounds in micrometres."""
+
+    min: Point2D
+    max: Point2D
+
+    @property
+    def width(self) -> float:
+        return self.max.x - self.min.x
+
+    @property
+    def height(self) -> float:
+        return self.max.y - self.min.y
+
+    @classmethod
+    def envelope(cls, bounds: Iterable[Self]) -> Self | None:
+        values = list(bounds)
+        if not values:
+            return None
+        return cls(
+            min=Point2D(
+                x=min(bound.min.x for bound in values),
+                y=min(bound.min.y for bound in values),
+            ),
+            max=Point2D(
+                x=max(bound.max.x for bound in values),
+                y=max(bound.max.y for bound in values),
+            ),
+        )
+
+    @model_validator(mode="after")
+    def _check_bounds(self) -> Self:
+        if self.max.x <= self.min.x or self.max.y <= self.min.y:
+            raise ValueError("bounds must have positive width and height")
+        return self
+
+
 class ZRange(FrozenModel):
     """A fixed absolute Z range in micrometres."""
 
@@ -311,48 +348,42 @@ class ZRange(FrozenModel):
 type ZDefinition = ZRange
 
 
-class GridSettings(FrozenModel):
-    """Controls the grid generated for a tiled area."""
+class XYMode(StrEnum):
+    """How a task's stored XY points define acquisition coverage."""
 
-    overlap: float = Field(default=0.1, ge=0, lt=1)
-    anchor: Point2D
+    EXPLICIT_POINTS = "explicit_points"
+    BOUNDING_BOX = "bounding_box"
+    CONVEX_HULL = "convex_hull"
 
 
-class ExplicitPositions(FrozenModel):
-    """A task layout containing exact stage positions."""
+class XYDefinition(FrozenModel):
+    """XY source points and the method used to interpret them."""
 
-    type: Literal["positions"] = "positions"
+    mode: XYMode
     points: list[Point2D] = Field(min_length=1)
-
-    @field_validator("points")
-    @classmethod
-    def _unique_points(cls, points: list[Point2D]) -> list[Point2D]:
-        if len({(point.x, point.y) for point in points}) != len(points):
-            raise ValueError("explicit task positions must be unique")
-        return points
-
-
-class TiledArea(FrozenModel):
-    """A polygonal area filled with a grid of acquisition positions."""
-
-    type: Literal["area"] = "area"
-    points: list[Point2D] = Field(min_length=3)
-    grid: GridSettings
+    overlap: Point2D = Field(default_factory=lambda: Point2D(x=0.1, y=0.1))
 
     @model_validator(mode="after")
-    def _check_points(self) -> Self:
+    def _check_definition(self) -> Self:
         if len({(point.x, point.y) for point in self.points}) != len(self.points):
-            raise ValueError("area boundary points must be unique")
-        twice_area = sum(
-            current.x * following.y - following.x * current.y
-            for current, following in zip(self.points, [*self.points[1:], self.points[0]], strict=True)
-        )
-        if twice_area == 0:
-            raise ValueError("area boundary must enclose a non-zero area")
+            raise ValueError("xy points must be unique")
+        if not 0 <= self.overlap.x < 1 or not 0 <= self.overlap.y < 1:
+            raise ValueError("xy overlap must be at least 0 and less than 1 on both axes")
+        if self.mode is XYMode.BOUNDING_BOX:
+            if len(self.points) < 2:
+                raise ValueError("bounding-box mode requires at least two points")
+            if len({point.x for point in self.points}) < 2 or len({point.y for point in self.points}) < 2:
+                raise ValueError("bounding-box points must span positive width and height")
+        elif self.mode is XYMode.CONVEX_HULL:
+            if len(self.points) < 3:
+                raise ValueError("convex-hull mode requires at least three points")
+            first, second = self.points[:2]
+            if not any(
+                (second.x - first.x) * (point.y - first.y) != (second.y - first.y) * (point.x - first.x)
+                for point in self.points[2:]
+            ):
+                raise ValueError("convex-hull points must not be collinear")
         return self
-
-
-type TaskLayout = Annotated[ExplicitPositions | TiledArea, Field(discriminator="type")]
 
 
 class TileOrder(StrEnum):
@@ -367,7 +398,7 @@ class TileOrder(StrEnum):
     CUSTOM = "custom"
 
 
-class VolumeOrder(StrEnum):
+class IterationOrder(StrEnum):
     """Whether a task iterates positions or profiles in its outer loop."""
 
     POSITION_MAJOR = "position_major"
@@ -378,11 +409,11 @@ class AcquisitionTask(FrozenModel):
     """Persisted acquisition intent expanded into concrete volume tiles at runtime."""
 
     id: str = Field(min_length=1)
-    layout: TaskLayout
+    xy: XYDefinition
     profiles: list[str] = Field(min_length=1)
     z: ZDefinition
     traversal: TileOrder = TileOrder.SNAKE_ROW
-    volume_order: VolumeOrder = VolumeOrder.POSITION_MAJOR
+    iteration: IterationOrder = IterationOrder.POSITION_MAJOR
 
     @field_validator("profiles")
     @classmethod
@@ -394,11 +425,11 @@ class AcquisitionTask(FrozenModel):
 class TaskPatch(Patch):
     """Fields that may be changed on an existing acquisition task."""
 
-    layout: TaskLayout | None = None
+    xy: XYDefinition | None = None
     profiles: Annotated[list[str], Field(min_length=1)] | None = None
     z: ZDefinition | None = None
     traversal: TileOrder | None = None
-    volume_order: VolumeOrder | None = None
+    iteration: IterationOrder | None = None
 
 
 class WriterPatch(Patch):

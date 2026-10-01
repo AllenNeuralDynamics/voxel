@@ -5,15 +5,21 @@
   import { Button } from '$lib/kit';
   import type { Stage } from '$lib/model';
   import { NumericField } from '$lib/prop/numeric';
+  import type { SpatialUnitDefinition } from '$lib/spatial-units';
 
-  type Props = Omit<ComponentProps<typeof NumericField>, 'controls'> & {
+  type Props = Omit<
+    ComponentProps<typeof NumericField>,
+    'controls' | 'suffix' | 'step' | 'increment' | 'bigIncrement' | 'displayScale' | 'decimals'
+  > & {
     stage?: Stage | null;
     axis: 'x' | 'y' | 'z';
+    unit: SpatialUnitDefinition;
   };
 
   let {
     stage,
     axis,
+    unit,
     value = $bindable(null),
     disabled = false,
     oneditstart,
@@ -32,7 +38,19 @@
   }
 </script>
 
-<NumericField bind:value {disabled} {oneditstart} {oncommit} {...fieldProps}>
+<NumericField
+  bind:value
+  suffix={unit.label}
+  step={unit.step * unit.scale}
+  increment={unit.step * unit.scale}
+  bigIncrement={unit.bigStep * unit.scale}
+  displayScale={unit.scale}
+  decimals={unit.decimals}
+  {disabled}
+  {oneditstart}
+  {oncommit}
+  {...fieldProps}
+>
   {#snippet controls()}
     <Button
       variant="ghost"

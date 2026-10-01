@@ -15,7 +15,7 @@ from vxl.instrument import (
     InstrumentState,
     InstrumentStore,
 )
-from vxl.instrument.config import AcquisitionTask, ExplicitPositions, Point2D, WriterPatch, ZRange
+from vxl.instrument.config import AcquisitionTask, Point2D, WriterPatch, XYDefinition, XYMode, ZRange
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.system import System
 
@@ -116,7 +116,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             "plan": [
                 AcquisitionTask(
                     id="outside",
-                    layout=ExplicitPositions(points=[Point2D(x=101, y=50)]),
+                    xy=XYDefinition(mode=XYMode.EXPLICIT_POINTS, points=[Point2D(x=101, y=50)]),
                     profiles=["single_gfp"],
                     z=ZRange(start=-1, end=50),
                 )
@@ -167,7 +167,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
         "imaging.profile.sync.port_missing",
     }
     assert {violation.loc for violation in violations if violation.code == "state.stage_position.out_of_bounds"} == {
-        ("state", "plan", 0, "layout"),
+        ("state", "plan", 0, "xy"),
         ("state", "plan", 0, "z", "start"),
     }
 

@@ -3,7 +3,32 @@ import { getContext, setContext, type Snippet } from 'svelte';
 
 import type { Bounds, Orientation, Point, ViewTransform } from './geometry';
 
-export type MenuSelection = { point: Point; destination?: Point; hits: Konva.Shape[] } | { bounds: Bounds };
+export interface MenuSelection {
+  point: Point;
+  hits: Konva.Shape[];
+  region: Bounds | null;
+}
+
+export interface NavigationTarget {
+  id: string;
+  label: string;
+  point: Point;
+}
+
+export interface FitTarget {
+  id: string;
+  label: string;
+  bounds: Bounds;
+}
+
+export interface StageMenuSource {
+  id: string;
+  label?: string;
+  addTask?(selection: MenuSelection): NavigationTarget[];
+  goTo?(selection: MenuSelection): NavigationTarget[];
+  fit?(selection: MenuSelection): FitTarget[];
+  menu?(selection: MenuSelection): Snippet<[MenuSelection]> | undefined;
+}
 
 /** Feature-owned UI metadata; Konva owns rendering, hit detection, and dragging. */
 export interface StageFeature {
@@ -12,7 +37,6 @@ export interface StageFeature {
   readonly menuOrder?: number;
   readonly visible: boolean;
   setVisible(visible: boolean): void;
-  menu?(selection: MenuSelection): Snippet<[MenuSelection]> | undefined;
 }
 
 export interface StageContext {
@@ -31,6 +55,7 @@ export interface StageContext {
   project(point: Point): Point;
   unproject(point: Point): Point;
   register(feature: StageFeature): () => void;
+  registerMenuSource(source: StageMenuSource): () => void;
 }
 
 const KEY = Symbol('konva-stage');

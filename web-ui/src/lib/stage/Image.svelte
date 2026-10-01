@@ -62,8 +62,8 @@
     previousRegion = region;
   });
 
-  onMount(() =>
-    context.register({
+  onMount(() => {
+    const unregisterFeature = context.register({
       id,
       get label() {
         return label;
@@ -73,27 +73,34 @@
       },
       setVisible: (next) => {
         visible = next;
+      }
+    });
+    const unregisterMenu = context.registerMenuSource({
+      id,
+      get label() {
+        return label;
       },
       menu(selection) {
-        if ('bounds' in selection) {
-          return intersect(bounds, selection.bounds) && (menu || regionMenu) ? imageMenu : undefined;
-        }
+        if (!visible) return;
+        if (selection.region && intersect(bounds, selection.region) && (menu || regionMenu)) return imageMenu;
         return footprint && selection.hits.includes(footprint.node) ? imageMenu : undefined;
       }
-    })
-  );
+    });
+    return () => {
+      unregisterMenu();
+      unregisterFeature();
+    };
+  });
 </script>
 
 {#snippet imageMenu(selection: MenuSelection)}
-  {#if 'point' in selection}
-    <ContextMenu.Item onSelect={() => select(true)}>
-      <Crosshair width="14" height="14" />
-      Select
-    </ContextMenu.Item>
-  {/if}
+  <ContextMenu.Item onSelect={() => select(true)}>
+    <Crosshair width="14" height="14" />
+    Select
+  </ContextMenu.Item>
   {@render menu?.(selection)}
-  {#if 'bounds' in selection}
-    {@render regionMenu?.(selection.bounds)}
+  {#if selection.region}
+    {@render regionMenu?.(selection.region)}
   {/if}
 {/snippet}
 

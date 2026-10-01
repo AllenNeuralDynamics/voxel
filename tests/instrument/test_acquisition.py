@@ -19,9 +19,10 @@ from vxl.instrument import (
     AcquisitionRequest,
     AcquisitionTask,
     ActiveAcquisition,
-    ExplicitPositions,
     Instrument,
     Point2D,
+    XYDefinition,
+    XYMode,
     ZRange,
 )
 
@@ -71,7 +72,7 @@ async def writer(opened_instrument: Instrument, tmp_path: Path, monkeypatch: pyt
     await instrument.add_task(
         AcquisitionTask(
             id="task",
-            layout=ExplicitPositions(points=[Point2D(x=0, y=0)]),
+            xy=XYDefinition(mode=XYMode.EXPLICIT_POINTS, points=[Point2D(x=0, y=0)]),
             profiles=["single_gfp"],
             z=ZRange(start=0, end=0),
         )

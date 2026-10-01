@@ -39,22 +39,24 @@ from vxl.system import Remote, System, remote_store_fingerprint
 
 from .config import (
     AcquisitionTask,
+    Bounds,
     ChannelConfig,
     ChannelPatch,
     InstrumentConfig,
     InstrumentDefaults,
     InstrumentPreset,
     InstrumentState,
+    IterationOrder,
+    Point2D,
     ProfileConfig,
     ProfilePatch,
     RoutingRule,
     TaskPatch,
-    VolumeOrder,
     WriterPatch,
 )
 from .errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation, ViolationLoc
 from .metadata import ExperimentMetadata, resolve_metadata_class
-from .planning import Bounds, resolve_layout, resolve_z
+from .planning import resolve_xy, resolve_z
 from .store import PROMOTABLE_FIELDS, InstrumentStore
 
 logger = logging.getLogger(__name__)
@@ -886,8 +888,8 @@ class Instrument:
         for volume_index, volume in enumerate(self._compute_volumes()):
             task_loc = ("state", "plan", task_indices[volume.task])
             label = f"Task '{volume.task}' volume {volume_index + 1}"
-            check(volume.x, "x", (*task_loc, "layout"), f"{label} x")
-            check(volume.y, "y", (*task_loc, "layout"), f"{label} y")
+            check(volume.x, "x", (*task_loc, "xy"), f"{label} x")
+            check(volume.y, "y", (*task_loc, "xy"), f"{label} y")
             check(volume.z_start, "z", (*task_loc, "z", "start"), f"{label} z start")
             check(volume.z_end, "z", (*task_loc, "z", "end"), f"{label} z end")
         return violations
@@ -1299,10 +1301,8 @@ class Instrument:
                     case 270:
                         cx, cy, width, height = cy, -cx, height, width
                 profile_fovs[camera_id] = Bounds(
-                    min_x=cx - width / 2,
-                    min_y=cy - height / 2,
-                    max_x=cx + width / 2,
-                    max_y=cy + height / 2,
+                    min=Point2D(x=cx - width / 2, y=cy - height / 2),
+                    max=Point2D(x=cx + width / 2, y=cy + height / 2),
                 )
             fovs[profile_id] = profile_fovs
         return fovs
@@ -1337,8 +1337,8 @@ class Instrument:
             bounds = [bound for profile_id in task.profiles for bound in fovs.get(profile_id, {}).values()]
             tile_width = min((bound.width for bound in bounds), default=0.0)
             tile_height = min((bound.height for bound in bounds), default=0.0)
-            positions = resolve_layout(
-                task.layout,
+            positions = resolve_xy(
+                task.xy,
                 width=tile_width,
                 height=tile_height,
                 traversal=task.traversal,
@@ -1351,7 +1351,7 @@ class Instrument:
                 )
                 for point in positions
             ]
-            if task.volume_order is VolumeOrder.POSITION_MAJOR:
+            if task.iteration is IterationOrder.POSITION_MAJOR:
                 ordered = ((point, z, routes, profile) for point, z, routes in resolved for profile in task.profiles)
             else:
                 ordered = ((point, z, routes, profile) for profile in task.profiles for point, z, routes in resolved)

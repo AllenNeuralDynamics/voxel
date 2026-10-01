@@ -10,13 +10,11 @@
   let {
     preview,
     channel,
-    rect,
-    onactivate
+    rect
   }: {
     preview: PreviewSession;
     channel: PreviewChannel;
     rect: { x: number; y: number; width: number; height: number };
-    onactivate?: () => void;
   } = $props();
 
   const context = getStageContext();
@@ -97,6 +95,5 @@
     scaleX={context.orientation.x}
     scaleY={-context.orientation.y}
     globalCompositeOperation="lighter"
-    onpointerdblclick={() => onactivate?.()}
   />
 {/if}

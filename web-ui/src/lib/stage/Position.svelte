@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { Group, Line, Rect } from 'svelte-konva';
 
   import { watchTheme } from '$lib/themes/manager.svelte';
@@ -48,9 +48,22 @@
     });
   }
 
+  function gridCellTarget(point: Point) {
+    const target = destination(point);
+    return target ? [{ id: 'grid-cell', label: 'Grid cell', point: target }] : [];
+  }
+
+  onMount(() =>
+    context.registerMenuSource({
+      id: 'position-grid',
+      addTask: ({ point }) => gridCellTarget(point),
+      goTo: ({ point }) => gridCellTarget(point)
+    })
+  );
+
   const highlighted = $derived.by(() => {
     const selection = context.menuSelection;
-    if (selection) return 'point' in selection ? (context.menuPreview ?? selection.destination) : undefined;
+    if (selection) return context.menuPreview;
     if (!grid) return;
     const point = context.cursor;
     if (!point || context.selecting || (context.marquee && contains(context.marquee, point))) return;

@@ -1,47 +1,42 @@
 <script lang="ts">
+  import type Konva from 'konva';
+  import { untrack } from 'svelte';
   import { Group } from 'svelte-konva';
 
-  import { goto } from '$app/navigation';
-  import { resolve } from '$app/paths';
-  import { page } from '$app/state';
-  import { BoxSelect, Brush, CenterFocus, Crosshair, FitToScreen, Stop } from '$lib/icons';
+  import { Brush, CenterFocus, Crosshair, FitToScreen, Plus, Stop } from '$lib/icons';
   import { ContextMenu } from '$lib/kit';
   import {
     createAreaTask,
+    createPositionTask,
     getVoxelStation,
     NumericModel,
     type PlannedVolume,
-    planningFov,
-    rectanglePoints
+    planningFov
   } from '$lib/model';
-  import { prefs } from '$lib/prefs';
+  import { planOverlap, prefs } from '$lib/prefs';
   import { getPreviewContext } from '$lib/preview/session.svelte';
   import { formatSpatialDistance, formatSpatialValue } from '$lib/spatial-units';
   import { themes } from '$lib/themes/manager.svelte';
   import { displayName, pref, toastError } from '$lib/utils';
 
-  import { routingColor } from './colors';
   import Fov from './Fov.svelte';
   import type { Bounds, Point, Viewport } from './geometry';
+  import { Tasks } from './plan';
   import Position from './Position.svelte';
   import { getRegionSelection } from './region.svelte';
   import Routing from './Routing.svelte';
   import RoutingRegions from './RoutingRegions.svelte';
   import StageCanvas from './StageCanvas.svelte';
-  import Tasks from './Tasks.svelte';
 
   let { viewport = $bindable(null) }: { viewport?: Viewport | null } = $props();
 
   const app = getVoxelStation();
   const regionSelection = getRegionSelection();
-  const taskVisibility = pref<Record<string, boolean>>('stage:task-visible', {});
-  const acquisitionPathVisible = pref('stage:acquisition-path-visible', true);
   const routingRegionsVisible = pref('stage:routing-regions-visible', true);
-  let fovLayer = $state<Fov>();
-  let positionLayer = $state<Position>();
   let tasksLayer = $state<Tasks>();
-  let menuVolumes = $state.raw<ReturnType<Tasks['destinations']>>([]);
-  let menuGrid = $state.raw<Point | undefined>();
+  let taskChooser = $state.raw<{ screen: Point; tasks: { id: string; order: number }[] } | null>(null);
+  let editingTaskId = $state<string | null>(null);
+  let editingSessionId: string | null = null;
   const previews = getPreviewContext();
   const routingVisibility = pref<Record<string, boolean>>('stage:routing-visible', {});
   const taskColors = pref<Record<string, Partial<Record<'x' | 'y', string>>>>('stage:task-colors', {});
@@ -68,13 +63,19 @@
     const z = instrument.stage.z.position?.value;
     return z != null && Number.isFinite(z) ? { start: z, end: z } : null;
   });
-  const currentAreaTask = $derived.by(() => {
-    const task = instrument?.plan.find(({ id }) => id === page.params.taskId);
-    return task?.layout.type === 'area' ? task : null;
+  const editingTask = $derived.by(() => {
+    if (!editingTaskId) return null;
+    return instrument?.plan.find(({ id }) => id === editingTaskId) ?? null;
   });
-  const currentTaskNumber = $derived(
-    currentAreaTask ? (instrument?.plan.findIndex(({ id }) => id === currentAreaTask.id) ?? -1) + 1 : null
-  );
+  function taskTargets(volumes: ReturnType<Tasks['destinations']>): { id: string; order: number }[] {
+    const result: { id: string; order: number }[] = [];
+    for (const volume of volumes) {
+      if (result.some(({ id }) => id === volume.task)) continue;
+      const order = volume.taskOrder ?? (instrument?.plan.findIndex(({ id }) => id === volume.task) ?? -1) + 1;
+      if (order > 0) result.push({ id: volume.task, order });
+    }
+    return result;
+  }
   const commandedTarget = $derived.by(() => {
     const target = stage?.target;
     if (!target || !position) return null;
@@ -84,17 +85,20 @@
     return Math.abs(x - position.x) > 0.5 || Math.abs(y - position.y) > 0.5 ? { x, y } : null;
   });
   const fov = $derived(stage?.fov ? { width: stage.fov[0], height: stage.fov[1] } : null);
-  const liveBounds = $derived(
-    position && fov
-      ? {
-          minX: position.x - fov.width / 2,
-          maxX: position.x + fov.width / 2,
-          minY: position.y - fov.height / 2,
-          maxY: position.y + fov.height / 2
-        }
-      : null
-  );
-  const taskBounds = $derived(instrument?.plannedVolumes.length ? (tasksLayer?.extent() ?? null) : null);
+
+  const routingPalettes = {
+    light: ['#0369a1', '#a16207', '#7e22ce', '#047857'],
+    dark: ['#7dd3fc', '#fcd34d', '#d8b4fe', '#6ee7b7']
+  };
+
+  type RoutingSide = 'lower' | 'upper';
+
+  /** Map selected routing sides to two colors for one axis or four for both. */
+  export function routingColor(mode: 'light' | 'dark', x?: RoutingSide, y?: RoutingSide): string | undefined {
+    if (x === undefined && y === undefined) return;
+    const index = (x === 'upper' ? 1 : 0) + (y === 'upper' ? (x === undefined ? 1 : 2) : 0);
+    return routingPalettes[mode][index];
+  }
   const routingSplits = $derived(
     Array.from(instrument?.routingDimensions.values() ?? []).flatMap((dimension) =>
       dimension.axis && dimension.model instanceof NumericModel && Number.isFinite(dimension.model.value)
@@ -176,9 +180,44 @@
     };
   }
 
+  function withinTravelBounds(point: Point): boolean {
+    return (
+      !travelBounds ||
+      (point.x >= travelBounds.minX &&
+        point.x <= travelBounds.maxX &&
+        point.y >= travelBounds.minY &&
+        point.y <= travelBounds.maxY)
+    );
+  }
+
   function goToPosition(point: Point) {
     if (!stage || !travelBounds) return;
     toastError(stage.moveTo(clampPosition(point)));
+  }
+
+  function handleStageClick(hits: readonly Konva.Shape[], screen: Point): void {
+    if (hits.some((hit) => hit.hasName('task-geometry'))) return;
+    const tasks = taskTargets(tasksLayer?.destinations(hits) ?? []);
+    if (tasks.length === 1) {
+      taskChooser = null;
+      editingTaskId = tasks[0].id;
+    } else if (tasks.length > 1) {
+      taskChooser = { screen, tasks };
+    } else {
+      taskChooser = null;
+      editingTaskId = null;
+      regionSelection.clear();
+    }
+  }
+
+  function chooseTask(taskId: string): void {
+    taskChooser = null;
+    editingTaskId = taskId;
+  }
+
+  function stopEditing(): void {
+    taskChooser = null;
+    editingTaskId = null;
   }
 
   async function createTaskInRegion(bounds: Bounds) {
@@ -189,8 +228,8 @@
     if (!inst || !profile || !fov || !z || inst.mode === 'capture' || inst.edits.busy) return;
 
     const preferenceKey = `${inst.stationId}/${inst.id}`;
-    const overlap = prefs.plan.defaults.get()[preferenceKey]?.overlap ?? 0.1;
-    const task = createAreaTask(bounds, fov, overlap, profile, z);
+    const overlap = planOverlap(prefs.plan.defaults.get()[preferenceKey]?.overlap);
+    const task = createAreaTask(bounds, overlap, profile, z);
     await inst.addTask(task);
     prefs.plan.defaults.set({
       ...prefs.plan.defaults.get(),
@@ -198,36 +237,41 @@
     });
     regionSelection.clear();
     if (instrument !== inst) return;
-    await goto(
-      resolve('/stations/[stationId]/instruments/[instrumentId]/plan/[taskId]', {
-        stationId: inst.stationId,
-        instrumentId: inst.id,
-        taskId: task.id
-      })
-    );
+    editingTaskId = task.id;
   }
 
-  async function replaceTaskArea(bounds: Bounds) {
+  async function createTaskAtPosition(point: Point) {
     const inst = instrument;
-    const task = currentAreaTask;
-    if (!inst || !task || task.layout.type !== 'area' || inst.mode === 'capture' || inst.edits.busy) return;
-    const layout = task.layout;
+    const profile = areaProfile;
+    const z = areaZRange;
+    if (!inst || !profile || !z || inst.mode === 'capture' || inst.edits.busy) return;
 
-    await inst.updateTask(task.id, {
-      layout: { ...layout, points: rectanglePoints(bounds) }
-    });
+    const task = createPositionTask([point], profile, z);
+    await inst.addTask(task);
     const preferenceKey = `${inst.stationId}/${inst.id}`;
     const defaults = prefs.plan.defaults.get();
-    prefs.plan.defaults.set({
-      ...defaults,
-      [preferenceKey]: {
-        region: { ...bounds },
-        zRange: defaults[preferenceKey]?.zRange ?? { start: task.z.start, end: task.z.end },
-        overlap: defaults[preferenceKey]?.overlap ?? layout.grid.overlap
-      }
-    });
-    regionSelection.clear();
+    if (!defaults[preferenceKey]) {
+      prefs.plan.defaults.set({
+        ...defaults,
+        [preferenceKey]: { zRange: z, overlap: { x: 0.1, y: 0.1 } }
+      });
+    }
+    if (instrument === inst) editingTaskId = task.id;
   }
+
+  $effect(() => {
+    const sessionId = instrument?.sessionId ?? null;
+    if (sessionId === editingSessionId) return;
+    editingSessionId = sessionId;
+    editingTaskId = null;
+    taskChooser = null;
+  });
+
+  $effect(() => {
+    const taskId = editingTaskId;
+    const taskExists = !taskId || !!instrument?.plan.some(({ id }) => id === taskId);
+    if (!taskExists) untrack(stopEditing);
+  });
 
   function scaleBar(scale: number, width: number) {
     const targetUm = (width * 0.2) / scale;
@@ -244,7 +288,6 @@
     onblur={() => preview(null)}
     onSelect={() => goToPosition(target)}
   >
-    <Crosshair width="14" height="14" />
     {label}
   </ContextMenu.Item>
 {/snippet}
@@ -255,16 +298,33 @@
     orientation={stage.orientation}
     bind:viewport
     bind:marquee={() => regionSelection.bounds, (bounds) => regionSelection.setBounds(bounds)}
-    resolveDestination={(point, hits) => {
-      menuGrid = positionLayer?.destination(point);
-      menuVolumes = (tasksLayer?.destinations(hits) ?? []).map((volume) => ({
-        ...volume,
-        point: clampPosition(volume.point)
-      }));
-      return menuGrid ?? (menuVolumes.length === 1 ? menuVolumes[0].point : clampPosition(point));
-    }}
+    onstageclick={(_, hits, screen) => handleStageClick(hits, screen)}
+    onescape={stopEditing}
+    onmenuopen={() => (taskChooser = null)}
   >
-    {#snippet overlay(view, width, cursor)}
+    {#snippet overlay(view, width, height, cursor)}
+      {#if taskChooser}
+        {@const chooserHeight = 29 + taskChooser.tasks.length * 30}
+        <div
+          class="canvas-overlay-halo absolute z-20 w-32 overflow-hidden rounded-md border border-line-muted bg-floating py-1"
+          style:left={`${Math.max(8, Math.min(taskChooser.screen.x + 8, width - 136))}px`}
+          style:top={`${Math.max(8, Math.min(taskChooser.screen.y + 8, height - chooserHeight - 8))}px`}
+          role="menu"
+          aria-label="Edit task"
+        >
+          <div class="px-2 py-1 text-sm text-fg-muted">Edit task</div>
+          {#each taskChooser.tasks as task (task.id)}
+            <button
+              type="button"
+              class="flex h-7 w-full items-center px-2 text-left text-base text-fg hover:bg-element-hover"
+              role="menuitem"
+              onclick={() => chooseTask(task.id)}
+            >
+              Task {task.order}
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if cursor}
         {@const inBounds =
           !travelBounds ||
@@ -290,27 +350,94 @@
         <div class="h-1 rounded-full bg-fg-muted" style:width="{bar.barPx}px"></div>
       </div>
     {/snippet}
-    <!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
-    {#snippet menu(selection, canvasActions, center, fitBounds, previewDestination)}
-      {#if 'bounds' in selection}
-        {#if currentAreaTask && currentTaskNumber}
+    {#snippet menu(selection, taskTargets, goToTargets, fitTargets, center, fitBounds, previewDestination)}
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger><Plus width="14" height="14" />Add task</ContextMenu.SubTrigger>
+        <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
           <ContextMenu.Item
-            disabled={instrument.mode === 'capture' || instrument.edits.busy}
-            onSelect={() => toastError(replaceTaskArea(selection.bounds))}
+            disabled={instrument.mode === 'capture' ||
+              instrument.edits.busy ||
+              stage.anyMoving ||
+              !position ||
+              !areaProfile ||
+              !areaZRange}
+            onSelect={() => position && toastError(createTaskAtPosition(position))}
           >
-            <BoxSelect width="14" height="14" />
-            Replace Task {currentTaskNumber} area
+            Current stage position
           </ContextMenu.Item>
-        {/if}
-        <ContextMenu.Item
-          disabled={!areaProfile || !areaFov || !areaZRange || instrument.mode === 'capture' || instrument.edits.busy}
-          onSelect={() => toastError(createTaskInRegion(selection.bounds))}
-        >
-          <BoxSelect width="14" height="14" />
-          Create area task
+          <ContextMenu.Item
+            disabled={instrument.mode === 'capture' ||
+              instrument.edits.busy ||
+              !areaProfile ||
+              !areaZRange ||
+              !withinTravelBounds(selection.point)}
+            onSelect={() => toastError(createTaskAtPosition(selection.point))}
+          >
+            Clicked position
+          </ContextMenu.Item>
+          {#each taskTargets as target (target.id)}
+            <ContextMenu.Item
+              disabled={instrument.mode === 'capture' ||
+                instrument.edits.busy ||
+                !areaProfile ||
+                !areaZRange ||
+                !withinTravelBounds(target.point)}
+              onSelect={() => toastError(createTaskAtPosition(target.point))}
+            >
+              {target.label}
+            </ContextMenu.Item>
+          {/each}
+          {#if selection.region}
+            {@const selectedRegion = selection.region}
+            <ContextMenu.Item
+              disabled={instrument.mode === 'capture' ||
+                instrument.edits.busy ||
+                !areaProfile ||
+                !areaFov ||
+                !areaZRange}
+              onSelect={() => toastError(createTaskInRegion(selectedRegion))}
+            >
+              Selected region
+            </ContextMenu.Item>
+          {/if}
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+      {#if stage.anyMoving}
+        <ContextMenu.Item variant="destructive" onSelect={() => toastError(stage.halt())}>
+          <Stop width="14" height="14" />
+          Halt
         </ContextMenu.Item>
-        <ContextMenu.Separator />
-      {:else if colorGroups.length}
+      {:else}
+        <ContextMenu.Sub>
+          <ContextMenu.SubTrigger><Crosshair width="14" height="14" />Go to</ContextMenu.SubTrigger>
+          <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
+            {@render movementAction('Clicked position', clampPosition(selection.point), previewDestination)}
+            {#each goToTargets as target (target.id)}
+              {@render movementAction(target.label, clampPosition(target.point), previewDestination)}
+            {/each}
+          </ContextMenu.SubContent>
+        </ContextMenu.Sub>
+      {/if}
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger><FitToScreen width="14" height="14" />Fit</ContextMenu.SubTrigger>
+        <ContextMenu.SubContent class="min-w-44" sideOffset={8}>
+          <ContextMenu.Item onSelect={() => fitBounds(stageBounds)}>Stage</ContextMenu.Item>
+          {#each fitTargets as target (target.id)}
+            <ContextMenu.Item onSelect={() => fitBounds(target.bounds)}>{target.label}</ContextMenu.Item>
+          {/each}
+          {#if selection.region}
+            {@const selectedRegion = selection.region}
+            <ContextMenu.Item onSelect={() => fitBounds(selectedRegion)}>Selected region</ContextMenu.Item>
+          {/if}
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+      {#if position && fov}
+        <ContextMenu.Item onSelect={() => center(position)}>
+          <CenterFocus width="14" height="14" />
+          Recenter on live
+        </ContextMenu.Item>
+      {/if}
+      {#if colorGroups.length}
         {@const key = `${instrument.stationId}/${instrument.id}`}
         <ContextMenu.Sub>
           <ContextMenu.SubTrigger><Brush width="14" height="14" />Task colors</ContextMenu.SubTrigger>
@@ -338,91 +465,14 @@
             {/each}
           </ContextMenu.SubContent>
         </ContextMenu.Sub>
-        <ContextMenu.Separator />
-      {/if}
-      {#if 'point' in selection}
-        {#if menuGrid}
-          {@render movementAction('Go to grid cell', menuGrid, previewDestination)}
-        {/if}
-        {#if menuVolumes.length === 1}
-          {@render movementAction(`Go to Volume ${menuVolumes[0].order}`, menuVolumes[0].point, previewDestination)}
-        {:else if menuVolumes.length > 1}
-          <ContextMenu.Sub>
-            <ContextMenu.SubTrigger><Crosshair width="14" height="14" />Go to volume</ContextMenu.SubTrigger>
-            <ContextMenu.SubContent sideOffset={8}>
-              {#each menuVolumes as volume (volume.order)}
-                {@render movementAction(`Volume ${volume.order}`, volume.point, previewDestination)}
-              {/each}
-            </ContextMenu.SubContent>
-          </ContextMenu.Sub>
-        {/if}
-        {#if !menuGrid}
-          {@render movementAction(
-            menuVolumes.length ? 'Go to clicked position' : 'Go to position',
-            clampPosition(selection.point),
-            previewDestination
-          )}
-        {/if}
-      {/if}
-      {@render canvasActions()}
-      {#if 'point' in selection}
-        {#if taskBounds}
-          <ContextMenu.Item onSelect={() => fitBounds(taskBounds)}>
-            <FitToScreen width="14" height="14" />
-            Fit to tasks
-          </ContextMenu.Item>
-        {/if}
-        {#if position && fov}
-          <ContextMenu.Item onSelect={() => position && center(position)}>
-            <CenterFocus width="14" height="14" />
-            Recenter on live
-          </ContextMenu.Item>
-        {/if}
-        {#if stage.anyMoving}
-          <ContextMenu.Item variant="destructive" onSelect={() => toastError(stage.halt())}>
-            <Stop width="14" height="14" />
-            Halt
-          </ContextMenu.Item>
-        {/if}
       {/if}
     {/snippet}
     <RoutingRegions
       regions={routingRegions}
       bind:visible={() => routingRegionsVisible.get(), (value) => routingRegionsVisible.set(value)}
     />
-    <Fov
-      bind:this={fovLayer}
-      {preview}
-      bounds={liveBounds}
-      bind:visible={() => prefs.stage.liveVisible.get(), (value) => prefs.stage.liveVisible.set(value)}
-      onactivate={() => app.viewMode.set('fov')}
-    />
-    <Tasks
-      bind:this={tasksLayer}
-      plan={instrument.plan}
-      volumes={instrument.plannedVolumes}
-      profileFovs={instrument.profileFovs}
-      disabled={instrument.mode === 'capture' || instrument.edits.busy}
-      fill={taskColor}
-      bind:taskVisibility={() => taskVisibility.get(), (value) => taskVisibility.set(value)}
-      bind:pathVisible={() => acquisitionPathVisible.get(), (value) => acquisitionPathVisible.set(value)}
-      color={themes.resolvedMode === 'light' ? '#52525b' : '#d4d4d8'}
-      haloColor={themes.resolvedMode === 'light' ? '#ffffff' : '#18181b'}
-      onactivate={(point) => fovLayer?.activateAt(point)}
-      onpointedit={({ task: taskId, index, point, phase }) => {
-        if (phase !== 'end' || instrument.mode === 'capture') return;
-        const task = instrument.plan.find(({ id }) => id === taskId);
-        if (!task) return;
-        toastError(
-          instrument.updateTask(taskId, {
-            layout: {
-              ...task.layout,
-              points: task.layout.points.map((current, pointIndex) => (pointIndex === index ? point : current))
-            }
-          })
-        );
-      }}
-    />
+    <Fov {preview} bind:visible={() => prefs.stage.liveVisible.get(), (value) => prefs.stage.liveVisible.set(value)} />
+    <Tasks bind:this={tasksLayer} {instrument} editingTask={editingTask?.id ?? null} fill={taskColor} />
     <Group>
       {#each routingSplits as rule, index (rule.model)}
         {@const visibilityKey = `${instrument.stationId}/${instrument.id}/${rule.id}`}
@@ -446,7 +496,7 @@
         />
       {/each}
     </Group>
-    <Position bind:this={positionLayer} {position} {fov} target={commandedTarget} constrain={clampPosition} />
+    <Position {position} {fov} target={commandedTarget} constrain={clampPosition} />
   </StageCanvas>
 {:else}
   <div class="flex h-full items-center justify-center text-fg-muted">Waiting for stage limits…</div>
