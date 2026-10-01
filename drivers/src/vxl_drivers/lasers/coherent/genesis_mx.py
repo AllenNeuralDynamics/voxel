@@ -41,7 +41,6 @@ class GenesisMX(Laser):
 
         super().__init__(uid=uid, wavelength=wavelength)
 
-        self.enable()
         self.log.info(f"Initialized Genesis MX laser: serial={serial}, wavelength={wavelength}nm")
 
     def enable(self) -> None:

@@ -188,12 +188,12 @@
 
   <!-- Center the ui-xs toolbar, including its p-1 padding and panel border; the minimap expands below it. -->
   <div
-    class="pointer-events-none absolute top-[calc((var(--pane-header-height)-var(--ui-xs))/2-var(--spacing)-1px)] right-3 z-10 w-58"
+    class="pointer-events-none absolute top-[calc((var(--pane-header-height)-var(--ui-xs))/2-var(--spacing)-1px)] right-3 z-10 w-60"
   >
     <PreviewNavigationControls {previewer} />
   </div>
 
-  <div class="pointer-events-none absolute bottom-3 left-3 z-10 w-58">
+  <div class="pointer-events-none absolute bottom-3 left-3 z-10 w-60">
     <PreviewChannels {previewer} />
   </div>
 

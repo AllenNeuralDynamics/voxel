@@ -9,6 +9,7 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { activateDashboardWindow, isStationWindowRequest, stationWindowName } from '$lib/app-windows';
+  import { Deck } from '$lib/devices';
   import { Power, Redo, Undo } from '$lib/icons';
   import { Button, Dialog, Sidebar, Spinner } from '$lib/kit';
   import PaneDivider from '$lib/kit/PaneDivider.svelte';
@@ -20,7 +21,7 @@
   import CenterPane from './CenterPane.svelte';
   import ConnectionSplash from './ConnectionSplash.svelte';
   import InstrumentNavigation from './InstrumentNavigation.svelte';
-  import MonitorsPane from './MonitorsPane.svelte';
+  import RunButton from './RunButton.svelte';
   import StationMenu from './StationMenu.svelte';
 
   const { children } = $props();
@@ -354,7 +355,7 @@
     fallback: { min: 40 }
   });
 
-  const monitorsPane = createPaneSize(() => frameRef, {
+  const deckPane = createPaneSize(() => frameRef, {
     min: 28,
     default: 28,
     max: 28,
@@ -466,8 +467,13 @@
         </Pane>
         {#if app.instrument}
           <PaneDivider direction="vertical" />
-          <Pane {...monitorsPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
-            <MonitorsPane instrument={app.instrument} />
+          <Pane {...deckPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+            <header
+              class="flex h-pane-header shrink-0 items-center justify-end gap-3 border-b border-line-muted bg-elevated px-3"
+            >
+              <RunButton {app} class="min-w-0 flex-1 justify-center" />
+            </header>
+            <Deck instrument={app.instrument} />
           </Pane>
         {/if}
       </PaneGroup>

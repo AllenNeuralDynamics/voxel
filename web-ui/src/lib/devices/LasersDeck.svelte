@@ -2,8 +2,10 @@
   import { Button } from '$lib/kit';
   import Switch from '$lib/kit/Switch.svelte';
   import { type Instrument, LaserHandle } from '$lib/model';
+  import * as Numeric from '$lib/prop/numeric';
   import { cn, toastError } from '$lib/utils';
 
+  import DeckHeader from './DeckHeader.svelte';
   import { deviceIdentity } from './snippets.svelte';
 
   interface Props {
@@ -65,23 +67,22 @@
   }
 </script>
 
-<div class={cn('flex w-full min-w-68 flex-col py-2', className)}>
-  <div class="flex shrink-0 items-center gap-2 px-3 py-1">
-    <span class=" font-medium tracking-wide text-fg-muted uppercase">Lasers</span>
-    <div class="flex-1"></div>
-    <Button
-      variant="ghost"
-      size="xs"
-      disabled={!anyEnabled}
-      class={cn(anyEnabled ? 'text-danger' : 'opacity-50')}
-      onclick={stopAll}
-    >
-      Stop all
-    </Button>
-    <span class="font-mono text-[10px] text-fg-faint tabular-nums">{allLasers.length}</span>
-  </div>
+<div class={cn('flex w-full min-w-68 flex-col', className)}>
+  <DeckHeader title="Lasers" count={allLasers.length}>
+    {#snippet actions()}
+      <Button
+        variant="ghost"
+        size="xs"
+        disabled={!anyEnabled}
+        class={cn('text-sm font-normal', anyEnabled ? 'text-danger' : 'opacity-50')}
+        onclick={stopAll}
+      >
+        Stop all
+      </Button>
+    {/snippet}
+  </DeckHeader>
 
-  <div class="flex flex-col gap-4 px-3 py-2">
+  <div class="flex flex-col gap-4 px-3 pt-1 pb-3">
     {#if sortedLasers.length > 0}
       {#each sortedLasers as laser (laser.id)}
         {@render laserTile(laser)}
@@ -93,69 +94,91 @@
 </div>
 
 {#snippet laserTile(laser: LaserHandle)}
-  {@const setpoint = laser.powerSetpoint?.value}
+  {@const powerSetpoint = laser.powerSetpoint}
+  {@const setpoint = powerSetpoint?.value}
+  {@const powerUnits = laser.getProp('power_setpoint')?.units || laser.getProp('power')?.units || 'mW'}
   {@const measured = laser.power?.value}
   {@const wl = laser.wavelength?.value}
   <!-- {@const temp = laser.temperature?.value} -->
   {@const enabled = laser.isEnabled?.value === true}
   {@const channel = channelOf(laser.id)}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-line-muted bg-card">
+  <div class="flex flex-col overflow-hidden rounded-xs border border-line bg-card">
     <!-- row 1: identity + power readout + enable -->
     <div class="flex items-center gap-3 px-2.5 pt-2 pb-1.5">
       {@render deviceIdentity(wl ? `${wl} nm` : laser.id, channel)}
-      <span class="ml-auto font-mono text-[10px] text-fg-muted tabular-nums">
-        <span class="text-fg">{typeof measured === 'number' ? measured.toFixed(1) : '—'}</span>
-        / {typeof setpoint === 'number' ? setpoint.toFixed(0) : '—'} mW<!--{#if typeof temp === 'number'}
-          · {temp.toFixed(1)} °C{/if}-->
+      <span
+        class="focus-within:border-focused ml-auto inline-flex shrink-0 items-stretch overflow-hidden rounded-sm border border-control-line font-mono text-[10px] tabular-nums transition-colors"
+      >
+        <span class="inline-flex items-center px-1.5" title="Power setpoint">
+          {#if powerSetpoint}
+            <Numeric.Input
+              model={powerSetpoint}
+              disabled={powerSetpoint.disabled}
+              numCharacters={4}
+              align="left"
+              aria-label={`${laser.id} power setpoint (${powerUnits})`}
+              class="min-w-[6ch] px-0.5 text-fg disabled:opacity-50"
+            />
+          {:else}
+            <span class="w-[6ch] text-left text-fg-muted">—</span>
+          {/if}
+        </span>
+        <span
+          class="inline-flex items-center gap-1.5 border-l border-control-line bg-element-active px-1.5 text-fg"
+          title="Measured power"
+        >
+          <span class="min-w-[6ch] text-left text-fg">{typeof measured === 'number' ? measured.toFixed(1) : '—'}</span>
+          <span>{powerUnits}</span>
+        </span>
       </span>
       <Switch class="shrink-0" checked={enabled} onCheckedChange={() => toastError(laser.toggle())} size="xs" />
     </div>
 
     <!-- row 2: power graph + setpoint slider — full-bleed to the card edges, hairline dividers only -->
-    <div class="flex h-10 border-t border-line-faint" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
+    <div class="flex h-10 border-t border-line-muted" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
       <div class="min-w-0 flex-1">
         {@render graph(laser)}
       </div>
       {#if typeof setpoint === 'number'}
-        <div class="w-5 shrink-0 border-l border-line-faint">
-          {@render setpointSlider(laser, setpoint)}
+        {@const maxP = laser.maxPower || 1}
+        {@const py = 100 - ((laser.power?.value ?? 0) / maxP) * 100}
+        {@const sy = 100 - (setpoint / maxP) * 100}
+        {@const color = laser.color ?? 'var(--color-fg-muted)'}
+        <div class="w-5 shrink-0 border-l border-line-muted">
+          <div class="relative h-full w-full">
+            <svg
+              viewBox="0 0 10 100"
+              preserveAspectRatio="none"
+              class="pointer-events-none absolute inset-0 h-full w-full"
+            >
+              <rect x="0" y={py} width="10" height={100 - py} fill={color} opacity="0.3" />
+              <line x1="0" y1={py} x2="10" y2={py} stroke={color} stroke-width="1" vector-effect="non-scaling-stroke" />
+              <line
+                x1="0"
+                y1={sy}
+                x2="10"
+                y2={sy}
+                stroke={color}
+                stroke-width="1"
+                stroke-dasharray="4 3"
+                vector-effect="non-scaling-stroke"
+                opacity="0.8"
+              />
+            </svg>
+            <input
+              type="range"
+              class="setpoint-slider absolute inset-0 z-10 h-full w-full"
+              min={0}
+              max={maxP}
+              step={1}
+              value={setpoint}
+              disabled={laser.powerSetpoint?.disabled}
+              oninput={(e) => laser.powerSetpoint?.patch(parseFloat(e.currentTarget.value), { throttled: true })}
+            />
+          </div>
         </div>
       {/if}
     </div>
-  </div>
-{/snippet}
-
-{#snippet setpointSlider(laser: LaserHandle, setpoint: number)}
-  {@const maxP = laser.maxPower || 1}
-  {@const py = 100 - ((laser.power?.value ?? 0) / maxP) * 100}
-  {@const sy = 100 - (setpoint / maxP) * 100}
-  {@const color = laser.color ?? 'var(--color-fg-muted)'}
-  <div class="relative h-full w-full">
-    <svg viewBox="0 0 10 100" preserveAspectRatio="none" class="pointer-events-none absolute inset-0 h-full w-full">
-      <rect x="0" y={py} width="10" height={100 - py} fill={color} opacity="0.3" />
-      <line x1="0" y1={py} x2="10" y2={py} stroke={color} stroke-width="1" vector-effect="non-scaling-stroke" />
-      <line
-        x1="0"
-        y1={sy}
-        x2="10"
-        y2={sy}
-        stroke={color}
-        stroke-width="1"
-        stroke-dasharray="4 3"
-        vector-effect="non-scaling-stroke"
-        opacity="0.8"
-      />
-    </svg>
-    <input
-      type="range"
-      class="setpoint-slider absolute inset-0 z-10 h-full w-full"
-      min={0}
-      max={maxP}
-      step={1}
-      value={setpoint}
-      disabled={laser.powerSetpoint?.disabled}
-      oninput={(e) => laser.powerSetpoint?.patch(parseFloat(e.currentTarget.value), { throttled: true })}
-    />
   </div>
 {/snippet}
 

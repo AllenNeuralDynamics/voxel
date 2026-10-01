@@ -5,14 +5,16 @@
   import { type Channel, DiscreteAxisHandle, type Instrument } from '$lib/model';
   import { cn, displayName, toastError } from '$lib/utils';
 
+  import DeckHeader from './DeckHeader.svelte';
   import { channelDot, deviceIdentity } from './snippets.svelte';
 
   interface Props {
     instrument: Instrument;
     class?: string;
+    compact?: boolean;
   }
 
-  let { instrument, class: className }: Props = $props();
+  let { instrument, class: className, compact = true }: Props = $props();
 
   const allWheels = $derived(instrument.filterWheels);
 
@@ -86,57 +88,41 @@
   );
 </script>
 
-<div class={cn('flex w-full min-w-68 flex-col py-2', className)} style="--cell: 6.3rem">
-  <div class="flex shrink-0 items-center gap-2 px-3 py-1">
-    <span class=" font-medium tracking-wide text-fg-muted uppercase">Filter Wheels</span>
-    <div class="flex-1"></div>
-    <Button
-      variant="ghost"
-      size="xs"
-      disabled={!canRevert}
-      class={cn(canRevert ? 'text-danger' : 'opacity-50')}
-      onclick={revert}
-    >
-      Revert
-    </Button>
-    <span class="font-mono text-[10px] text-fg-faint tabular-nums">{sortedWheels.length}</span>
-  </div>
+<div class={cn('flex w-full min-w-68 flex-col', className)} style="--cell: 6.3rem">
+  <DeckHeader title="Filter wheels" count={sortedWheels.length}>
+    {#snippet actions()}
+      <Button
+        variant="ghost"
+        size="xs"
+        disabled={!canRevert}
+        class="text-sm font-normal"
+        title="Set filter wheels to the active profile's filters"
+        onclick={revert}
+      >
+        Restore
+      </Button>
+    {/snippet}
+  </DeckHeader>
 
-  <div class="flex flex-col gap-4 px-3 py-2">
-    {#if sortedWheels.length > 0}
-      {#each sortedWheels as wheel (wheel.id)}
-        {@render wheelRow(wheel)}
-      {/each}
-    {:else}
-      <p class=" text-fg-muted">No filter wheels.</p>
-    {/if}
-  </div>
-</div>
-
-{#snippet wheelRow(wheel: DiscreteAxisHandle)}
-  {@const slots = slotsOf(wheel)}
-  {@const current = displaySlot(wheel)}
-  {@const activeIdx = slots.findIndex((s) => s.slot === current)}
-  {@const serving = channelsOf(wheel.id)}
-  {@const centered = slots.find((s) => s.slot === current)?.name}
-  {@const filterOptions = slots
-    .filter((s): s is { slot: number; name: string } => s.name != null)
-    .map((s) => ({ value: s.name, label: s.name }))}
-  <div class="flex flex-col overflow-hidden rounded-xs border border-line-muted bg-card">
-    <!-- row 1: wheel identity + live filter picker (channel dot marks profile-declared filters) -->
-    <div class="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
+  {#snippet row1(wheel: DiscreteAxisHandle)}
+    {@const slots = slotsOf(wheel)}
+    {@const current = displaySlot(wheel)}
+    {@const filterOptions = slots
+      .filter((s): s is { slot: number; name: string } => s.name != null)
+      .map((s) => ({ value: s.name, label: s.name }))}
+    <div class={cn('flex items-center gap-2 pb-1.5', compact ? 'pt-1.5' : 'px-2.5 pt-2')}>
       {@render deviceIdentity(displayName(wheel.id))}
       <Select
         variant="ghost"
         size="xs"
         side="top"
         class="ml-auto w-42 tabular-nums"
-        value={centered ?? ''}
+        value={slots.find((s) => s.slot === current)?.name ?? ''}
         options={filterOptions}
         onchange={(name) => selectByName(wheel, name)}
       >
         {#snippet trailing(option)}
-          {@const chs = serving.filter((c) => declaredFor(c, wheel.id) === option.value)}
+          {@const chs = channelsOf(wheel.id).filter((c) => declaredFor(c, wheel.id) === option.value)}
           {#if chs.length}
             <span class="inline-flex items-center gap-1">
               {#each chs as ch (ch.id)}{@render channelDot(ch)}{/each}
@@ -145,8 +131,13 @@
         {/snippet}
       </Select>
     </div>
+  {/snippet}
 
-    <!-- row 2: filmstrip — cells slide so the live slot rests under the fixed center gate -->
+  {#snippet row2(wheel: DiscreteAxisHandle)}
+    {@const slots = slotsOf(wheel)}
+    {@const current = displaySlot(wheel)}
+    {@const activeIdx = slots.findIndex((s) => s.slot === current)}
+    {@const serving = channelsOf(wheel.id)}
     {#if slots.length > 0}
       <div class="relative h-7 overflow-hidden border-t border-line-faint">
         <div
@@ -186,5 +177,24 @@
     {:else}
       <p class="border-t border-line-faint px-2.5 py-2 text-[11px] text-fg-muted italic">No positions.</p>
     {/if}
+  {/snippet}
+
+  <div class={cn('flex flex-col px-3 pt-1 pb-3', !compact && 'gap-4')}>
+    {#if sortedWheels.length > 0}
+      {#if compact}
+        {#each sortedWheels as wheel (wheel.id)}
+          {@render row1(wheel)}
+        {/each}
+      {:else}
+        {#each sortedWheels as wheel (wheel.id)}
+          <div class="flex flex-col overflow-hidden rounded-xs border border-line-muted bg-card">
+            {@render row1(wheel)}
+            {@render row2(wheel)}
+          </div>
+        {/each}
+      {/if}
+    {:else}
+      <p class=" text-fg-muted">No filter wheels.</p>
+    {/if}
   </div>
-{/snippet}
+</div>

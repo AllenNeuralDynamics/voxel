@@ -13,7 +13,7 @@
 
 <!-- Primary device identity label (e.g. a laser's "488 nm" or a camera id). -->
 {#snippet deviceLabel(label: string)}
-  <span class="text-base font-medium text-fg tabular-nums">{label}</span>
+  <span class="text-base font-normal text-fg/80 tabular-nums">{label}</span>
 {/snippet}
 
 <!-- Emission-colored channel dot (muted when the channel has no emission); channel id on hover. -->
