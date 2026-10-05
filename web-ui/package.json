@@ -67,7 +67,7 @@
     "tailwind-merge": "^3.6.0",
     "uplot": "^1.6.32"
   },
-  "allowBuilds": {
+  "allowScripts": {
     "@tailwindcss/oxide": true,
     "esbuild": true,
     "msgpackr-extract": true

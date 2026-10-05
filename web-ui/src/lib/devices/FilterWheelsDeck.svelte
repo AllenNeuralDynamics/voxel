@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { watch } from 'runed';
-
   import { Button, Select } from '$lib/kit';
   import { type Channel, DiscreteAxisHandle, type Instrument } from '$lib/model';
   import { cn, displayName, toastError } from '$lib/utils';
@@ -38,54 +36,31 @@
     return map;
   });
 
+  const actualLabel = (wheel: DiscreteAxisHandle) => {
+    const state = wheel.state;
+    return state && !state.is_moving ? wheel.labelAt(state.position) : null;
+  };
   const canRevert = $derived(
-    sortedWheels.some((w) => profileFilters[w.id] != null && profileFilters[w.id] !== w.label)
+    sortedWheels.some((w) => profileFilters[w.id] != null && profileFilters[w.id] !== actualLabel(w))
   );
 
-  function slotsOf(wheel: DiscreteAxisHandle): { slot: number; name: string | null }[] {
-    return Object.entries(wheel.labels)
-      .map(([slot, name]) => ({ slot: Number(slot), name }))
-      .sort((a, b) => a.slot - b.slot);
-  }
-
-  // Optimistic target slot per wheel: the strip slides here on click, then reconciles to the live position.
-  let optimistic = $state<Record<string, number>>({});
-  const displaySlot = (wheel: DiscreteAxisHandle) => optimistic[wheel.id] ?? wheel.position?.value ?? 0;
-
-  function select(wheel: DiscreteAxisHandle, slot: number, name: string | null): void {
-    if (!name) return;
-    optimistic[wheel.id] = slot;
-    toastError(wheel.select(name));
-  }
-
-  function selectByName(wheel: DiscreteAxisHandle, name: string): void {
-    const slot = slotsOf(wheel).find((s) => s.name === name)?.slot;
-    if (slot != null) select(wheel, slot, name);
-  }
+  const displaySlot = (wheel: DiscreteAxisHandle) => {
+    const state = wheel.state;
+    return state?.is_moving ? (state.target ?? state.position) : (state?.position ?? state?.target);
+  };
+  const statusOf = (wheel: DiscreteAxisHandle) => {
+    const state = wheel.state;
+    if (state?.is_moving) return 'Moving';
+    return state?.position != null ? '' : state?.target != null ? 'Target' : 'Unknown';
+  };
 
   function revert(): void {
     for (const w of sortedWheels) {
       const target = profileFilters[w.id];
-      if (!target || target === w.label) continue;
-      const match = slotsOf(w).find((s) => s.name === target);
-      if (match) optimistic[w.id] = match.slot;
+      if (!target || target === actualLabel(w)) continue;
       toastError(w.select(target));
     }
   }
-
-  // Drop the optimistic target once the wheel arrives there or finishes a move, so external changes win.
-  const wasMoving: Record<string, boolean> = {};
-  watch(
-    () => sortedWheels.map((w) => `${w.id}:${w.position?.value}:${w.isMoving?.value ? 1 : 0}`).join(','),
-    () => {
-      for (const w of sortedWheels) {
-        const moving = w.isMoving?.value === true;
-        const arrived = w.position?.value === optimistic[w.id];
-        if (optimistic[w.id] != null && (arrived || (wasMoving[w.id] && !moving))) delete optimistic[w.id];
-        wasMoving[w.id] = moving;
-      }
-    }
-  );
 </script>
 
 <div class={cn('flex w-full min-w-68 flex-col', className)} style="--cell: 6.3rem">
@@ -105,21 +80,24 @@
   </DeckHeader>
 
   {#snippet row1(wheel: DiscreteAxisHandle)}
-    {@const slots = slotsOf(wheel)}
+    {@const slots = wheel.slots}
     {@const current = displaySlot(wheel)}
     {@const filterOptions = slots
-      .filter((s): s is { slot: number; name: string } => s.name != null)
-      .map((s) => ({ value: s.name, label: s.name }))}
+      .filter((s): s is { slot: number; label: string } => s.label != null)
+      .map((s) => ({ value: s.label, label: s.label }))}
     <div class={cn('flex items-center gap-2 pb-1.5', compact ? 'pt-1.5' : 'px-2.5 pt-2')}>
       {@render deviceIdentity(displayName(wheel.id))}
+      {#if statusOf(wheel)}
+        <span class="text-[10px] text-fg-muted">{statusOf(wheel)}</span>
+      {/if}
       <Select
         variant="ghost"
         size="xs"
         side="top"
         class="ml-auto w-42 tabular-nums"
-        value={slots.find((s) => s.slot === current)?.name ?? ''}
+        value={wheel.labelAt(current) ?? ''}
         options={filterOptions}
-        onchange={(name) => selectByName(wheel, name)}
+        onchange={(name) => toastError(wheel.select(name))}
       >
         {#snippet trailing(option)}
           {@const chs = channelsOf(wheel.id).filter((c) => declaredFor(c, wheel.id) === option.value)}
@@ -134,34 +112,39 @@
   {/snippet}
 
   {#snippet row2(wheel: DiscreteAxisHandle)}
-    {@const slots = slotsOf(wheel)}
+    {@const slots = wheel.slots}
     {@const current = displaySlot(wheel)}
-    {@const activeIdx = slots.findIndex((s) => s.slot === current)}
+    {@const activeIdx = Math.max(
+      0,
+      slots.findIndex((s) => s.slot === current)
+    )}
     {@const serving = channelsOf(wheel.id)}
     {#if slots.length > 0}
       <div class="relative h-7 overflow-hidden border-t border-line-faint">
-        <div
-          class="pointer-events-none absolute inset-y-1 left-1/2 w-(--cell) -translate-x-1/2 rounded-sm bg-element-selected shadow-sm"
-        ></div>
+        {#if current != null}
+          <div
+            class="pointer-events-none absolute inset-y-1 left-1/2 w-(--cell) -translate-x-1/2 rounded-sm bg-element-selected shadow-sm"
+          ></div>
+        {/if}
         <div
           class="absolute inset-y-1 left-1/2 flex gap-1 transition-transform duration-300 ease-out"
           style="transform: translateX(calc(-1 * ({activeIdx} * (var(--cell) + 0.25rem) + var(--cell) / 2)))"
         >
           {#each slots as s (s.slot)}
-            {@const cellChannels = s.name ? serving.filter((c) => declaredFor(c, wheel.id) === s.name) : []}
+            {@const cellChannels = s.label ? serving.filter((c) => declaredFor(c, wheel.id) === s.label) : []}
             <button
               type="button"
-              disabled={!s.name}
-              title={s.name ?? undefined}
-              onclick={() => select(wheel, s.slot, s.name)}
+              disabled={!s.label}
+              title={s.label ?? undefined}
+              onclick={() => toastError(wheel.move(s.slot))}
               class={cn(
                 'flex shrink-0 items-center justify-center rounded-sm border px-1.5 text-[10px] tracking-tight tabular-nums transition-colors',
-                s.name == null
+                s.label == null
                   ? 'border-dashed border-line-faint'
                   : cellChannels.length
                     ? 'border-line'
                     : 'border-line-faint',
-                s.name == null
+                s.label == null
                   ? 'text-fg-faint'
                   : s.slot === current
                     ? 'font-medium text-fg'
@@ -169,7 +152,7 @@
               )}
               style="width: var(--cell)"
             >
-              <span class="w-full truncate text-center">{s.name ?? '—'}</span>
+              <span class="w-full truncate text-center">{s.label ?? '—'}</span>
             </button>
           {/each}
         </div>

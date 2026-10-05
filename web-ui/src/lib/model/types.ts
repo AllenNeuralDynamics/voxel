@@ -32,6 +32,12 @@ export type IlluminationAssemblyConfig = OpticalAssemblyConfig;
 /** Discrete-axis device UID → selected position label. */
 export type DiscreteAxisPositions = Record<string, string>;
 
+export interface DiscreteAxisState {
+  readonly position: number | null;
+  readonly target: number | null;
+  readonly is_moving: boolean;
+}
+
 /** The selector positions that define one named optical route. */
 export interface OpticalRouteConfig {
   selectors: DiscreteAxisPositions;

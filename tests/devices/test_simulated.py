@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import pytest
 
+from vxl.devices.axes.simulated import SimulatedDiscreteAxis
 from vxl.devices.camera.simulated.simulated import SimulatedCamera
 from vxl.devices.laser.simulated import SimulatedLaser
 
@@ -13,6 +14,10 @@ from vxl.devices.laser.simulated import SimulatedLaser
         pytest.param(lambda delay: SimulatedCamera("camera", start_delay_s=delay), id="camera-start"),
         pytest.param(lambda delay: SimulatedCamera("camera", stop_delay_s=delay), id="camera-stop"),
         pytest.param(lambda delay: SimulatedLaser("laser", wavelength=488, enable_delay_s=delay), id="laser-enable"),
+        pytest.param(
+            lambda delay: SimulatedDiscreteAxis("selector", slots={0: "left", 1: "right"}, settle_seconds=delay),
+            id="discrete-settle",
+        ),
     ],
 )
 def test_simulated_device_rejects_invalid_delays(create_device: Callable[[float], object], delay: float) -> None:

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 from vxlib.asyncio import spawn
 
+from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.qt.ui.kit import Button
 
 from .graphic import WheelGraphic
@@ -84,20 +85,20 @@ class FilterWheelControl(QWidget):
             # Fetch device properties
             slot_count = await self._adapter.get("slot_count")
             labels = await self._adapter.get("labels")
-            position = await self._adapter.get("position")
+            state = DiscreteAxisState.model_validate(await self._adapter.get("state"))
 
             log.debug(
-                "FilterWheelControl init: slot_count=%s, labels=%s, position=%s",
+                "FilterWheelControl init: slot_count=%s, labels=%s, state=%s",
                 slot_count,
                 labels,
-                position,
+                state,
             )
 
             # Remove loading placeholder
             self._loading_label.deleteLater()
 
             # Build the real UI
-            self._build_wheel_ui(slot_count, labels, position)
+            self._build_wheel_ui(slot_count, labels, state)
             self._initialized = True
 
         except Exception:
@@ -108,7 +109,7 @@ class FilterWheelControl(QWidget):
         self,
         slot_count: int,
         labels: dict[int, str | None],
-        current_position: int,
+        state: DiscreteAxisState,
     ) -> None:
         """Build the wheel graphic and controls after fetching device info."""
         # Normalize labels dict (keys might be strings from JSON)
@@ -121,9 +122,6 @@ class FilterWheelControl(QWidget):
             hue_mapping=self._hue_mapping,
         )
         self._graphic.selected_changed.connect(self._on_slot_selected)
-
-        # Set initial position without animation
-        self._graphic.set_selected_slot_no_animation(current_position)
 
         self._layout.addWidget(self._graphic)
 
@@ -152,7 +150,7 @@ class FilterWheelControl(QWidget):
         row2 = QHBoxLayout()
 
         self._status_label = QLabel("")
-        self._update_status_label(current_position)
+        self._apply_state(state)
         row2.addWidget(self._status_label)
 
         row2.addStretch()
@@ -166,25 +164,33 @@ class FilterWheelControl(QWidget):
 
         self._layout.addLayout(controls_layout)
 
-    def _update_status_label(self, position: int) -> None:
-        """Update the status label with current position info."""
+    def _apply_state(self, state: DiscreteAxisState) -> None:
+        """Display feedback or an explicitly identified target."""
         if self._status_label is None or self._graphic is None:
             return
-        label = self._graphic.get_slot_label(position)
-        self._status_label.setText(f"Position {position}: {label}")
+        slot = state.target if state.is_moving and state.target is not None else state.position
+        if slot is None:
+            slot = state.target
+        if self._graphic.selected_slot != slot:
+            self._graphic.set_selected_slot_no_animation(slot)
+        if slot is None:
+            text = "Moving; position unknown" if state.is_moving else "Position unknown"
+        else:
+            label = self._graphic.get_slot_label(slot)
+            if state.is_moving:
+                prefix = "Moving to" if state.target is not None else "Moving; position"
+            else:
+                prefix = "Target" if state.position is None else "Position"
+            text = f"{prefix} {slot}: {label}"
+        self._status_label.setText(text)
 
     def _on_properties_changed(self, props: dict[str, Any]) -> None:
         """Handle property updates from the device."""
         if not self._initialized or self._graphic is None:
             return
 
-        if "position" in props:
-            position = int(props["position"])
-            # Only update if different from current graphic state
-            # to avoid fighting with user interactions
-            if self._graphic.selected_slot != position:
-                self._graphic.set_selected_slot_no_animation(position)
-            self._update_status_label(position)
+        if "state" in props:
+            self._apply_state(DiscreteAxisState.model_validate(props["state"]))
 
     def _on_slot_selected(self, slot: int) -> None:
         """Handle user selecting a slot in the graphic."""

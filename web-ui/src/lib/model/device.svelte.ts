@@ -17,7 +17,15 @@ import {
   Prop,
   type PropSnapshot
 } from './prop.svelte';
-import type { DeviceInterface, DeviceSnapshot, PropResult, PropResults, SensorROI, Signals } from './types';
+import type {
+  DeviceInterface,
+  DeviceSnapshot,
+  DiscreteAxisState,
+  PropResult,
+  PropResults,
+  SensorROI,
+  Signals
+} from './types';
 
 /**
  * A single device: its introspected interface plus a live, reactive cache of property models.
@@ -155,30 +163,25 @@ export class AxisHandle extends DeviceHandle {
   }
 }
 
-/** A fixed-position device (filter wheel, turret, slider): an int `position` plus a label map. */
+/** A discrete selector with feedback, command state, and configured slot labels. */
 export class DiscreteAxisHandle extends DeviceHandle {
-  position = $derived.by(() => this.typedProp('position', NumericModel));
-  isMoving = $derived.by(() => this.typedProp('is_moving', BoolModel));
+  state = $derived(this.getProp('state')?.value as DiscreteAxisState | undefined);
+  labels = $derived((this.getProp('labels')?.value ?? {}) as Record<number, string | null>);
+  slots = $derived(
+    Object.entries(this.labels)
+      .map(([slot, label]) => ({ slot: Number(slot), label }))
+      .sort((a, b) => a.slot - b.slot)
+  );
 
-  /** The current slot's label, or null at an unlabeled slot. */
-  label = $derived.by<string | null>(() => {
-    const v = this.getProp('label')?.value;
-    return typeof v === 'string' ? v : null;
-  });
+  labelAt(slot: number | null | undefined): string | null {
+    return slot == null ? null : (this.labels[slot] ?? null);
+  }
 
-  /** Slot index → label (null for unlabeled slots). */
-  labels = $derived.by<Record<string, string | null>>(() => {
-    const v = this.getProp('labels')?.value;
-    return v && typeof v === 'object' ? (v as Record<string, string | null>) : {};
-  });
-
-  /** Move to a slot by index. */
   move(slot: number): Promise<unknown> {
     return this.runCommand('move', [slot], { wait: false });
   }
 
-  /** Move to a slot by label. */
-  select(label: string): Promise<unknown> {
+  select(label: string | null): Promise<unknown> {
     return this.runCommand('select', [label], { wait: false });
   }
 

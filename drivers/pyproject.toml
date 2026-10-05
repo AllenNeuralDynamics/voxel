@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Optomechanics drivers
+thorlabs = ["pylablib>=1.4.5"]
 opto-icc = ["optoICC"]
 opto-kummenberg = ["optoKummenberg"]
 # Laser drivers

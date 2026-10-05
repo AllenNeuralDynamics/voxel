@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from rigup import BuildConfig, build_objects
 from vxl.devices.axes.continuous import ContinuousAxis
-from vxl.devices.axes.discrete.base import DiscreteAxis
+from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
 
 
 class MappedSlot(BaseModel):
@@ -24,8 +24,7 @@ class MappedDiscreteAxis(DiscreteAxis):
     """Present fixed positions on any injected continuous axis as discrete slots.
 
     The adapter borrows the underlying axis; rigup remains responsible for closing
-    that device. A position read raises when the physical axis is not within the
-    configured tolerance of any slot rather than reporting a false selection.
+    that device. Positions outside every slot's tolerance resolve to ``None``.
     """
 
     def __init__(
@@ -47,35 +46,43 @@ class MappedDiscreteAxis(DiscreteAxis):
         self._axis = axis
         self._specs = specs
         self._tolerance = float(tolerance)
+        self._target: int | None = None
 
     @property
-    def position(self) -> int:
+    def state(self) -> DiscreteAxisState:
+        is_moving = self._axis.is_moving
         physical_position = self._axis.position
+        return DiscreteAxisState(
+            position=self._slot_at(physical_position),
+            target=self._target,
+            is_moving=is_moving,
+        )
+
+    def _slot_at(self, physical_position: float) -> int | None:
         candidates = [
             (abs(physical_position - spec.position), index)
             for index, spec in self._specs.items()
             if abs(physical_position - spec.position) <= self._tolerance
         ]
-        if not candidates:
-            raise RuntimeError(
-                f"{self._axis.uid} position {physical_position} {self._axis.units} is not within "
-                f"{self._tolerance} of a mapped slot"
-            )
-        return min(candidates)[1]
-
-    @property
-    def is_moving(self) -> bool:
-        return self._axis.is_moving
+        return min(candidates)[1] if candidates else None
 
     def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
         try:
             target = self._specs[slot].position
         except KeyError as exc:
             raise ValueError(f"Invalid slot {slot}; valid slots are {sorted(self._specs)}") from exc
-        self._axis.move_abs(target, wait=wait, timeout_s=timeout)
+        self._axis.move_abs(target, wait=False)
+        self._target = slot
+        if wait:
+            self.await_movement(timeout)
 
     def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
-        self._axis.go_home(wait=wait, timeout_s=timeout)
+        home_position = self._axis.home
+        target = self._slot_at(home_position) if home_position is not None else None
+        self._axis.go_home(wait=False)
+        self._target = target
+        if wait:
+            self.await_movement(timeout)
 
     def halt(self) -> None:
         self._axis.halt()

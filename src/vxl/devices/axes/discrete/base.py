@@ -1,18 +1,28 @@
 from abc import abstractmethod
 from collections.abc import Mapping
 
+from pydantic import BaseModel
+
 from rigup import describe
 from vxl.devices.axes.base import Axis
 from vxl.devices.base import DeviceType
 
 
-class DiscreteAxis(Axis):
-    """Base class for discrete position devices.
+class DiscreteAxisState(BaseModel, frozen=True):
+    """Discrete-axis feedback and command state.
 
-    Provides interface for devices with a fixed set of positions,
-    such as filter wheels, objective turrets, or dichroic sliders.
-    Handles label-to-index mapping in the base class.
+    ``position`` is a feedback-resolved slot or ``None``. ``target`` retains the
+    last successfully issued slot across arrival, halt, timeout, and external moves.
+    Both indices are zero-based; an unset target is ``None``.
     """
+
+    position: int | None
+    target: int | None
+    is_moving: bool
+
+
+class DiscreteAxis(Axis):
+    """Named discrete slots with synchronous motion commands and streamed state."""
 
     __DEVICE_TYPE__ = DeviceType.DISCRETE_AXIS
 
@@ -22,13 +32,9 @@ class DiscreteAxis(Axis):
         slots: Mapping[int | str, str | None],
         slot_count: int | None = None,
     ) -> None:
-        """Initialize a discrete axis device.
+        """Define zero-based slots, inferring slot count from the largest index when omitted.
 
-        Args:
-            uid: Unique identifier for this device.
-            slots: Mapping of slot index to label. Keys can be int or str (YAML compatibility).
-                   e.g., {0: "GFP", 1: "RFP", 2: "Cy5", 3: None}
-            slot_count: Total number of slots. If None, inferred from max slot index + 1.
+        String keys are normalized to integers; missing labels remain ``None``.
         """
         super().__init__(uid=uid)
 
@@ -49,63 +55,37 @@ class DiscreteAxis(Axis):
     @property
     @describe(label="Slot Count", desc="Total number of physical slots.")
     def slot_count(self) -> int:
-        """Total number of available slots."""
+        """Physical slot count."""
         return self._slot_count
 
     @property
     @describe(label="Labels", desc="Map of slot index to human-readable label.")
     def labels(self) -> Mapping[int, str | None]:
-        """Map of slot index to human-readable label (or None if unlabeled)."""
+        """Slot labels; ``None`` denotes an unlabeled slot."""
         return self._labels
 
     @property
     @abstractmethod
-    @describe(label="Position", desc="Current slot index (0-indexed).", stream=True)
-    def position(self) -> int:
-        """Current slot index (0-based)."""
-
-    @property
-    @describe(label="Current Label", desc="Human-readable label of current position.", stream=True)
-    def label(self) -> str | None:
-        """Current slot label (derived from position)."""
-        return self._labels.get(self.position)
-
-    @property
-    @abstractmethod
-    @describe(label="Is Moving", desc="Whether the device is currently moving.", stream=True)
-    def is_moving(self) -> bool:
-        """Whether the device is currently moving."""
+    @describe(label="State", desc="Current slot, last commanded slot, and movement status.", stream=True)
+    def state(self) -> DiscreteAxisState:
+        """Read a coherent snapshot; propagate communication errors."""
 
     # Motion commands ________________________________________________________________________________________________
 
     @abstractmethod
     @describe(label="Move", desc="Move to a slot by index.", stream=True)
     def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
-        """Move to a slot by index.
+        """Command a slot, optionally waiting for completion.
 
-        Args:
-            slot: Target slot index (0-based).
-            wait: If True, block until movement is complete.
-            timeout: Maximum time to wait in seconds (only used if wait=True).
-
-        Raises:
-            ValueError: If an invalid slot is specified.
-            TimeoutError: If wait is True and the move does not settle within timeout.
+        ``timeout`` bounds the wait in seconds. Invalid slots raise ``ValueError``;
+        an expired wait raises ``TimeoutError``.
         """
 
     @describe(label="Select", desc="Move to a slot by label.", stream=True)
     def select(self, label: str | None, *, wait: bool = False, timeout: float | None = None) -> None:
-        """Move to a slot by label.
+        """Command the first slot matching ``label``; ``None`` selects the first unlabeled slot.
 
-        Args:
-            label: Slot label/name. None moves to first unlabeled slot.
-            wait: If True, block until movement is complete.
-            timeout: Maximum time to wait in seconds (only used if wait=True).
-
-        Raises:
-            KeyError: If label not found.
-            ValueError: If an invalid slot is specified.
-            TimeoutError: If the move operation times out.
+        Missing labels raise ``KeyError``. Wait and timeout semantics match ``move``.
         """
         if label is None:
             # Choose first unlabeled slot
@@ -122,44 +102,25 @@ class DiscreteAxis(Axis):
     @abstractmethod
     @describe(label="Home", desc="Home/calibrate the device.", stream=True)
     def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
-        """Home/calibrate the device.
-
-        Args:
-            wait: If True, block until movement is complete.
-            timeout: Maximum time to wait in seconds (only used if wait=True).
-        """
+        """Home the axis using the wait and timeout semantics of ``move``."""
 
     @abstractmethod
     @describe(label="Halt", desc="Emergency stop - halt all motion immediately.", stream=True)
     def halt(self) -> None:
-        """Emergency stop - halt all motion immediately."""
+        """Halt motion immediately."""
 
     @abstractmethod
     @describe(label="Await Movement", desc="Wait until the device stops moving.", stream=True)
     def await_movement(self, timeout: float | None = None) -> None:
-        """Wait until the device stops moving.
+        """Wait for idle; ``timeout`` is in seconds, with ``None`` unbounded.
 
-        Args:
-            timeout: Maximum time to wait in seconds. None means wait indefinitely.
-
-        Raises:
-            TimeoutError: If movement does not complete within timeout.
+        An expired wait raises ``TimeoutError``.
         """
 
     # Helper methods _________________________________________________________________________________________________
 
     def index_of(self, label: str) -> int:
-        """Lookup label -> first matching slot index.
-
-        Args:
-            label: Slot label to find.
-
-        Returns:
-            Slot index for the label.
-
-        Raises:
-            KeyError: If the label is not found.
-        """
+        """Return the first slot matching ``label``; raise ``KeyError`` if absent."""
         for i in range(self._slot_count):
             if self._labels.get(i) == label:
                 return i

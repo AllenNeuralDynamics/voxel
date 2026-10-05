@@ -661,18 +661,22 @@ export class Instrument {
         return value != null && Number.isFinite(value) ? (value < model.value ? 'lower' : 'upper') : undefined;
       },
       get current() {
-        const settled = selectorIds.every((uid) => {
+        const positions = new SvelteMap<string, string>();
+        for (const uid of selectorIds) {
           const handle = selector(uid);
-          return handle?.isMoving?.value === false && handle.label !== null;
-        });
-        if (!settled) return undefined;
+          const state = handle?.state;
+          if (!handle || !state || state.is_moving || state.position === null) return undefined;
+          const label = handle.labelAt(state.position);
+          if (label == null) return undefined;
+          positions.set(uid, label);
+        }
         const matches = routes.filter((route) =>
-          Object.entries(assignments[route].selectors).every(([uid, label]) => selector(uid)?.label === label)
+          Object.entries(assignments[route].selectors).every(([uid, label]) => positions.get(uid) === label)
         );
         return matches.length === 1 ? matches[0] : undefined;
       },
       get moving() {
-        return selectorIds.some((uid) => selector(uid)?.isMoving?.value === true);
+        return selectorIds.some((uid) => selector(uid)?.state?.is_moving === true);
       }
     };
   }

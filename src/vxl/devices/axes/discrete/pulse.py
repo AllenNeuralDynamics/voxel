@@ -3,7 +3,7 @@ from collections.abc import Mapping
 
 from vxl.devices.daq.on_demand import OnDemandAO, OnDemandDO
 
-from .base import DiscreteAxis
+from .base import DiscreteAxis, DiscreteAxisState
 
 _DEFAULT_ACTIVE_VOLTAGE = 5.0
 _DEFAULT_INACTIVE_VOLTAGE = 0.0
@@ -18,8 +18,9 @@ class PulseDiscreteAxis(DiscreteAxis):
     active level for ``_PULSE_DURATION_S`` while forcing every other line to the
     inactive level, then returns all lines to inactive — one batch write per phase,
     so exactly one line is ever asserted. The wheel controller reads the pulse as a
-    position select. Open-loop: position reflects the last commanded slot, not sensed
-    feedback.
+    position select. Feedback is unavailable: ``state.position`` remains ``None``;
+    ``state.target`` records the last issued selection. Movement status covers pulse
+    execution, with physical settling unobserved.
 
     The generator may be an ``OnDemandAO`` or ``OnDemandDO``. The pulse is
     software-timed and claims no clock or trigger. Analog levels default to 5 V
@@ -29,8 +30,7 @@ class PulseDiscreteAxis(DiscreteAxis):
 
     The axis owns its generator for its lifetime. ``halt`` returns every line to the
     rest level without releasing the generator; ``close`` resets it and releases its
-    resources. Homes to slot 0 at construction so the position is commanded, never
-    assumed.
+    resources. Commands slot 0 at construction.
     """
 
     def __init__(
@@ -98,17 +98,13 @@ class PulseDiscreteAxis(DiscreteAxis):
         if missing:
             raise ValueError(f"{generator.uid} has no output for slot(s) {missing}; outputs: {sorted(available)}")
 
-        self._position = 0
+        self._target: int | None = None
         self._is_moving = False
         self.move(0)
 
     @property
-    def position(self) -> int:
-        return self._position
-
-    @property
-    def is_moving(self) -> bool:
-        return self._is_moving
+    def state(self) -> DiscreteAxisState:
+        return DiscreteAxisState(position=None, target=self._target, is_moving=self._is_moving)
 
     def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
         del wait, timeout  # the pulse is synchronous and fixed-duration; nothing to wait on
@@ -120,9 +116,9 @@ class PulseDiscreteAxis(DiscreteAxis):
             # One batch write drives the selected line active and every other line
             # inactive. A second write returns all lines to inactive.
             self._set_levels(slot)
+            self._target = slot
             time.sleep(_PULSE_DURATION_S)
             self._set_levels(None)
-            self._position = slot
         finally:
             self._is_moving = False
 
@@ -155,8 +151,8 @@ class PulseDiscreteAxis(DiscreteAxis):
             self._is_moving = False
 
     def await_movement(self, timeout: float | None = None) -> None:
-        start = time.time()
+        start = time.monotonic()
         while self._is_moving:
-            if timeout is not None and (time.time() - start) > timeout:
+            if timeout is not None and (time.monotonic() - start) >= timeout:
                 raise TimeoutError("Movement did not complete within timeout")
             time.sleep(0.01)

@@ -127,9 +127,16 @@ class WheelGraphic(QWidget):
         slot = int(min(max(slot, lo), hi))
         self._rotate_to_position(slot=slot, clockwise=None)
 
-    def set_selected_slot_no_animation(self, slot: int) -> None:
+    def set_selected_slot_no_animation(self, slot: int | None) -> None:
         """Set the selected slot without animation (for syncing with device state)."""
-        if slot not in self.slots:
+        if slot is not None and slot not in self.slots:
+            return
+        self._animation_timer.stop()
+        self._is_animating = False
+        self._pending_slot = None
+        if slot is None:
+            self._selected_slot = None
+            self.update_svg()
             return
         self._selected_slot = slot
         # Calculate angle to put this slot at 12 o'clock
@@ -196,7 +203,7 @@ class WheelGraphic(QWidget):
 
         # Clear previous slot positions
         self.slot_positions = []
-        highlighted_slot = self._nearest_top_slot()
+        highlighted_slot = self._nearest_top_slot() if self._selected_slot is not None or self._is_animating else None
         for slot_idx in self.slots:
             # Angle step from 0..N-1 based on offset
             base_angle = (360 / self._num_slots) * self._normalized_index(slot_idx)

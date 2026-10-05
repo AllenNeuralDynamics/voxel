@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from rigup import BuildConfig
+from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.mapped import MappedDiscreteAxis, OwnedMappedDiscreteAxis
 from vxl.devices.axes.simulated import SimulatedContinuousAxis
 
@@ -28,17 +29,15 @@ def test_mapped_axis_delegates_motion_and_resolves_slot() -> None:
         tolerance=0.5,
     )
 
-    assert mapped.position == 0
-    assert mapped.label == "left"
+    assert mapped.state == DiscreteAxisState(position=0, target=None, is_moving=False)
 
     mapped.select("right", wait=True)
 
     assert continuous.position == 100
-    assert mapped.position == 1
-    assert mapped.label == "right"
+    assert mapped.state == DiscreteAxisState(position=1, target=1, is_moving=False)
 
 
-def test_mapped_axis_rejects_unknown_physical_position() -> None:
+def test_mapped_axis_reports_unknown_position_and_preserves_commanded_target() -> None:
     continuous = make_axis()
     mapped = MappedDiscreteAxis(
         uid="selector",
@@ -49,10 +48,15 @@ def test_mapped_axis_rejects_unknown_physical_position() -> None:
         },
         tolerance=0.5,
     )
-    continuous.set_logical_position(50)
+    continuous.move_abs(50, wait=True)
+    assert mapped.state == DiscreteAxisState(position=None, target=None, is_moving=False)
 
-    with pytest.raises(RuntimeError, match="not within"):
-        _ = mapped.position
+    mapped.move(1, wait=True)
+    continuous.move_abs(0, wait=True)
+    assert mapped.state == DiscreteAxisState(position=0, target=1, is_moving=False)
+
+    mapped.home(wait=True)
+    assert mapped.state == DiscreteAxisState(position=0, target=0, is_moving=False)
 
 
 def test_mapped_axis_rejects_overlapping_slots_and_extra_fields() -> None:
@@ -110,8 +114,7 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
     mapped.close()
     mapped.close()
 
-    assert mapped.position == 1
-    assert mapped.label == "right"
+    assert mapped.state == DiscreteAxisState(position=1, target=1, is_moving=False)
     assert close_calls == 1
 
 
@@ -123,3 +126,30 @@ def test_owned_mapped_axis_preserves_nested_build_failure() -> None:
             slots={0: {"label": "left", "position": 0}},
             tolerance=0.5,
         )
+
+
+def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+    continuous = make_axis()
+    mapped = MappedDiscreteAxis(
+        uid="selector",
+        axis=continuous,
+        slots={0: {"position": 0}, 1: {"position": 100}},
+        tolerance=0.5,
+    )
+
+    def timeout(timeout_s: float | None = None) -> None:
+        raise TimeoutError(timeout_s)
+
+    monkeypatch.setattr(continuous, "await_movement", timeout)
+    with pytest.raises(TimeoutError):
+        mapped.move(1, wait=True, timeout=0)
+    continuous.halt()
+    assert mapped.state.target == 1
+
+    def reject(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("command rejected")
+
+    monkeypatch.setattr(continuous, "move_abs", reject)
+    with pytest.raises(RuntimeError, match="command rejected"):
+        mapped.move(0)
+    assert mapped.state.target == 1

@@ -91,6 +91,7 @@ Oxxius lasers sharing a controller use `vxl_drivers.lasers.oxxius.OxxiusHub` as 
 | ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
 | Micronix MMC-100 controller | `vxl_drivers.axes.mmc.MMCHub` | Serial support included |
 | Micronix MMC-100 linear axis | `vxl_drivers.axes.mmc.MMCLinearAxis` | Configured with an `MMCHub` |
+| Thorlabs MFF101 flip mount | `vxl_drivers.axes.thorlabs.MFF101` | `thorlabs` extra |
 
 ## Install vendor support
 

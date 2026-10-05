@@ -1,4 +1,4 @@
-import threading
+import math
 import time
 from threading import Event, Thread
 from typing import Any
@@ -11,6 +11,7 @@ from vxl.devices.axes.continuous import (
     TTLStepperConfig,
 )
 from vxl.devices.axes.discrete import DiscreteAxis
+from vxl.devices.axes.discrete.base import DiscreteAxisState
 
 
 class SimulatedTTLStepper(TTLStepper):
@@ -278,9 +279,11 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         if not (0 <= start_pos < self.slot_count):
             raise ValueError("start_pos out of range")
 
-        self._position = start_pos
-        self._is_moving = False
         self._settle = float(settle_seconds)
+        if not math.isfinite(self._settle) or self._settle < 0:
+            raise ValueError("settle_seconds must be finite and non-negative")
+        self._state = DiscreteAxisState(position=start_pos, target=None, is_moving=False)
+        self._settle_deadline: float | None = None
         self.log.debug(
             "SimulatedDiscreteAxis %s: Initialized at position %s with %s slots",
             uid,
@@ -290,66 +293,42 @@ class SimulatedDiscreteAxis(DiscreteAxis):
 
     # --------- state ----------
     @property
-    def position(self) -> int:
-        return self._position
-
-    @property
-    def is_moving(self) -> bool:
-        return self._is_moving
+    def state(self) -> DiscreteAxisState:
+        if self._settle_deadline is not None and time.monotonic() >= self._settle_deadline:
+            self._state = DiscreteAxisState(position=self._state.target, target=self._state.target, is_moving=False)
+            self._settle_deadline = None
+        return self._state
 
     # --------- commands ----------
     def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
-        del timeout  # unused in simulation
         if not (0 <= slot < self.slot_count):
             msg = f"Invalid slot {slot}; valid range is 0..{self.slot_count - 1}"
             raise ValueError(msg)
 
-        self._is_moving = True
-        self._position = slot
-
-        if wait:
-            time.sleep(self._settle)
-            self._is_moving = False
-            self.log.debug(
-                "SimulatedDiscreteAxis %s: Move completed (blocking), is_moving=False",
-                self.uid,
-            )
+        if self.state.position == slot or self._settle == 0:
+            self._state = DiscreteAxisState(position=slot, target=slot, is_moving=False)
+            self._settle_deadline = None
         else:
-            # non-blocking path: schedule reset
-            self.log.debug(
-                "SimulatedDiscreteAxis %s: Scheduling non-blocking move completion in %s seconds",
-                self.uid,
-                self._settle,
-            )
-            threading.Timer(self._settle, self._finish_move).start()
-
-    def _finish_move(self) -> None:
-        self.log.debug(
-            "SimulatedDiscreteAxis %s: Move completed (non-blocking), is_moving=False",
-            self.uid,
-        )
-        self._is_moving = False
+            self._state = DiscreteAxisState(position=None, target=slot, is_moving=True)
+            self._settle_deadline = time.monotonic() + self._settle
+        if wait:
+            self.await_movement(timeout)
 
     def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
         self.log.debug("SimulatedDiscreteAxis %s: home() called - moving to slot 0", self.uid)
         self.move(0, wait=wait, timeout=timeout)
 
     def halt(self) -> None:
-        """Emergency stop - halt all motion immediately."""
-        self.log.debug("SimulatedDiscreteAxis %s: halt() called - stopping motion", self.uid)
-        self._is_moving = False
+        """Halt motion, retaining the target and any resolved position."""
+        state = self.state
+        self._settle_deadline = None
+        self._state = DiscreteAxisState(position=state.position, target=state.target, is_moving=False)
 
     def await_movement(self, timeout: float | None = None) -> None:
-        """Wait until the device stops moving.
-
-        Args:
-            timeout: Maximum time to wait in seconds. None means wait indefinitely.
-
-        Raises:
-            TimeoutError: If movement does not complete within timeout.
-        """
-        start = time.time()
-        while self._is_moving:
-            if timeout is not None and (time.time() - start) > timeout:
+        """Wait for idle using a monotonic timeout in seconds."""
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        while self.state.is_moving:
+            now = time.monotonic()
+            if deadline is not None and now >= deadline:
                 raise TimeoutError("Movement did not complete within timeout")
-            time.sleep(0.01)
+            time.sleep(min(0.01, deadline - now) if deadline is not None else 0.01)

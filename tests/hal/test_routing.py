@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from rigup import Result
+from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.hal.core import RouteDimension
 from vxl.hal.errors import HALError
 from vxl.hal.topology import OpticalRouteDefinition
@@ -15,20 +16,22 @@ if TYPE_CHECKING:
     from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 
 
-def _selector(label, moving):
+def _selector(position, moving, *, target=0):
     props = {
-        "label": Result.ok(SimpleNamespace(value=label)),
-        "is_moving": Result.ok(SimpleNamespace(value=moving)),
+        "state": Result.ok(
+            SimpleNamespace(value=DiscreteAxisState(position=position, target=target, is_moving=moving).model_dump())
+        ),
+        "labels": Result.ok(SimpleNamespace(value={"0": "left", "1": "right", "2": None})),
     }
     return SimpleNamespace(props=SimpleNamespace(get=AsyncMock(return_value=props)))
 
 
 @pytest.mark.parametrize(
-    ("label", "moving", "expected"),
-    [("left", False, "left"), ("left", True, None), ("left", None, None), (None, False, None), ("right", False, None)],
+    ("position", "moving", "expected"),
+    [(0, False, "left"), (0, True, None), (None, False, None), (2, False, None), (1, False, None)],
 )
 async def test_current_route_reads_all_selectors_and_requires_a_unique_stationary_match(
-    label, moving, expected
+    position, moving, expected
 ) -> None:
     routes = {
         "left": OpticalRouteDefinition(selectors={"a": "left", "b": "left"}),
@@ -37,14 +40,40 @@ async def test_current_route_reads_all_selectors_and_requires_a_unique_stationar
     dimension = RouteDimension(
         uid="side",
         selectors={
-            "a": cast("DiscreteAxisHandle", _selector("left", False)),
-            "b": cast("DiscreteAxisHandle", _selector(label, moving)),
+            "a": cast("DiscreteAxisHandle", _selector(0, False)),
+            "b": cast("DiscreteAxisHandle", _selector(position, moving)),
         },
         _definitions=routes,
     )
     assert await dimension.current_route() == expected
     if expected is not None:
         assert await replace(dimension, _definitions={**routes, "alias": routes[expected]}).current_route() is None
+
+
+async def test_selection_requires_feedback_even_when_target_matches() -> None:
+    selector = _selector(None, False, target=0)
+    selector.select = AsyncMock()
+    dimension = RouteDimension(
+        uid="side",
+        selectors={"a": cast("DiscreteAxisHandle", selector)},
+        _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
+    )
+    with pytest.raises(ExceptionGroup) as caught:
+        await dimension.select("left")
+    assert isinstance(caught.value.exceptions[0], HALError)
+    assert "settled label is None" in str(caught.value.exceptions[0])
+
+
+async def test_current_route_propagates_read_failure() -> None:
+    selector = _selector(0, False)
+    selector.props.get.side_effect = RuntimeError("connection lost")
+    dimension = RouteDimension(
+        uid="side",
+        selectors={"a": cast("DiscreteAxisHandle", selector)},
+        _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
+    )
+    with pytest.raises(RuntimeError, match="connection lost"):
+        await dimension.current_route()
 
 
 async def test_selection_waits_for_all_failures_and_identifies_the_selectors() -> None:

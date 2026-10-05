@@ -5,8 +5,11 @@ import logging
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
+from pydantic import TypeAdapter
+
 from rigup import DeviceHandle, DeviceInterface, Rig
 from vxl.devices.axes import ContinuousAxisHandle
+from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.camera import CameraHandle
 from vxl.devices.daq.clocked import SignalGeneratorHandle
@@ -17,6 +20,7 @@ from .topology import HardwareTopology, OpticalRouteDefinition
 logger = logging.getLogger(__name__)
 
 _CAMERA_GEOMETRY_PROPERTIES = ("pixel_size_um", "sensor_size_px")
+_SELECTOR_LABELS = TypeAdapter(dict[int, str | None])
 
 
 @dataclass(frozen=True)
@@ -85,11 +89,11 @@ class RouteDimension:
 
     @staticmethod
     async def _read_position(handle: DiscreteAxisHandle) -> str | None:
-        """Read movement before label in one device request; expose only a settled label."""
-        props = await handle.props.get("is_moving", "label")
-        moving = props["is_moving"].unwrap().value
-        label = props["label"].unwrap().value
-        return label if moving is False and isinstance(label, str) else None
+        """Resolve a stationary feedback position to its configured label."""
+        props = await handle.props.get("state", "labels")
+        state = DiscreteAxisState.model_validate(props["state"].unwrap().value)
+        labels = _SELECTOR_LABELS.validate_python(props["labels"].unwrap().value)
+        return labels.get(state.position) if not state.is_moving and state.position is not None else None
 
 
 class HAL:

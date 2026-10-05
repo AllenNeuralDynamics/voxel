@@ -2,14 +2,11 @@
 
 import asyncio
 
-from pydantic import TypeAdapter
 from rigup.device.handle import Adapter, DeviceProperty
 
 from rigup import DeviceHandle
-from vxl.devices.axes.discrete.base import DiscreteAxis
+from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
 
-_LABEL_ADAPTER = TypeAdapter(str | None)
-_BOOL_ADAPTER = TypeAdapter(bool)
 _POLL_INTERVAL = 0.05
 
 
@@ -18,8 +15,7 @@ class DiscreteAxisHandle(DeviceHandle[DiscreteAxis]):
 
     def __init__(self, adapter: Adapter[DiscreteAxis]) -> None:
         super().__init__(adapter)
-        self.label: DeviceProperty[str | None] = self.props.property("label", _LABEL_ADAPTER.validate_python)
-        self.is_moving: DeviceProperty[bool] = self.props.property("is_moving", _BOOL_ADAPTER.validate_python)
+        self.state: DeviceProperty[DiscreteAxisState] = self.props.property("state", DiscreteAxisState.model_validate)
 
     async def select(self, label: str | None, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Select a label, optionally waiting for idle without occupying the device worker.
@@ -31,7 +27,7 @@ class DiscreteAxisHandle(DeviceHandle[DiscreteAxis]):
         if wait:
             async with asyncio.timeout(timeout_s):
                 # Read directly: property streaming need not be enabled for this handle.
-                while await self.is_moving.get():  # noqa: ASYNC110
+                while (await self.state.get()).is_moving:  # noqa: ASYNC110
                     await asyncio.sleep(_POLL_INTERVAL)
 
     async def halt(self) -> None:
