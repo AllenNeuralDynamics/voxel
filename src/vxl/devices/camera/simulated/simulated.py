@@ -6,7 +6,7 @@ from typing import ClassVar, cast, final
 import numpy as np
 from vxlib.vector import IVec2D, Vec2D
 
-from rigup import enumerated, enumerated_int, numeric
+from rigup import enumerated, numeric, numeric_int
 from vxl.devices.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
@@ -97,7 +97,7 @@ class SimulatedCamera(Camera):
     def pixel_format(self, pixel_format: str) -> None:
         self._pixel_format = cast("PixelFormat", pixel_format)
 
-    @enumerated_int(options=BINNING_OPTIONS)
+    @numeric_int(options=BINNING_OPTIONS)
     def binning(self) -> int:
         return self._binning
 

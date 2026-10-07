@@ -3,10 +3,12 @@
 import math
 from typing import Any
 
+import pytest
 from pydantic import BaseModel
 from rigup.device.props import (
     NumericFloat,
     NumericInt,
+    PropertyModel,
     numeric,
     numeric_int,
 )
@@ -202,3 +204,91 @@ class TestNumericIntPropertyDecorator:
         d = Device()
         d.value = 7
         assert d._v == 8
+
+
+@pytest.mark.parametrize(("decorate", "initial", "selected"), [(numeric, 0.0, 25.5), (numeric_int, 0, 25)])
+def test_options_validate_reads_and_writes_with_dynamic_metadata(decorate: Any, initial, selected):
+    class Device:
+        def __init__(self):
+            self.choices = [initial, selected]
+            self.applied = initial
+            self.writes = []
+
+        def _get_value(self):
+            return self.applied
+
+        def _set_value(self, value):
+            self.writes.append(value)
+            self.applied = value
+
+        value = decorate(options=lambda self: self.choices)(_get_value).setter(_set_value)
+
+    device = Device()
+    snapshot = device.value
+    model = PropertyModel.from_value(snapshot)
+    assert model.kind == ("float" if decorate is numeric else "integer")
+    assert model.options == [initial, selected]
+    assert model.minimum is model.maximum is model.step is None
+
+    device.value = selected
+    assert device.writes == [selected]
+    assert type(device.writes[0]) is type(selected)
+    with pytest.raises(ValueError, match="not in allowed options"):
+        device.value = 12
+    assert device.writes == [selected]
+
+    device.choices[:] = [initial]
+    assert snapshot.options == (initial, selected)
+    with pytest.raises(ValueError, match="not in allowed options"):
+        _ = device.value
+    with pytest.raises(ValueError, match="not in allowed options"):
+        device.value = selected
+    assert device.writes == [selected]
+
+    device.value = initial
+    assert device.value.options == (initial,)
+
+
+@pytest.mark.parametrize("decorate", [numeric, numeric_int])
+@pytest.mark.parametrize("constraint", ["minimum", "maximum", "step"])
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_mixed_constraint_forms_fail_when_creating_decorator(decorate, constraint, dynamic):
+    def unexpected_callback(_):
+        pytest.fail("Constraint callbacks must not run during declaration")
+
+    value = unexpected_callback if dynamic else 0
+    options = unexpected_callback if dynamic else [0, 100]
+    with pytest.raises(TypeError, match="either options or minimum/maximum/step"):
+        decorate(**{constraint: value}, options=options)
+
+
+@pytest.mark.parametrize("value_type", [NumericFloat, NumericInt])
+def test_options_are_strict_and_empty_options_allow_no_values(value_type):
+    with pytest.raises(ValueError, match="not in allowed options"):
+        value_type(1.5, options=[0, 1, 2])
+    with pytest.raises(ValueError, match="not in allowed options"):
+        value_type(0, options=[])
+    with pytest.raises(TypeError, match="either options or minimum/maximum/step"):
+        value_type(0, minimum=0, options=[0, 100])
+
+
+def test_options_survive_pydantic_json_roundtrip():
+    class Values(BaseModel):
+        f: NumericFloat
+        i: NumericInt
+
+    values = Values.model_validate(
+        {
+            "f": {"value": 0.25, "options": [0.0, 0.25, 1.0]},
+            "i": {"value": 2, "options": [1, 2, 4]},
+        }
+    )
+    restored = Values.model_validate_json(values.model_dump_json())
+    assert type(restored.f) is NumericFloat
+    assert type(restored.i) is NumericInt
+    assert restored.f == 0.25
+    assert restored.i == 2
+    assert restored.f.options == (0.0, 0.25, 1.0)
+    assert restored.i.options == (1, 2, 4)
+    assert restored.f.to_property_model().options == [0.0, 0.25, 1.0]
+    assert restored.i.to_property_model().options == [1, 2, 4]

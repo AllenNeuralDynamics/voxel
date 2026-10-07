@@ -6,7 +6,7 @@ the value classes ``NumericFloat`` and ``NumericInt``.
 
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, Protocol, Self, overload
 
 from pydantic_core import core_schema
@@ -15,6 +15,13 @@ from ._common import PropertyKind, PropertyModel, get_descriptor_logger
 
 type _Number = float | int
 type _Dynamic[N: _Number] = N | Callable[[Any], N]
+type _Options[N: _Number] = Sequence[N] | Callable[[Any], Sequence[N]]
+
+
+def _check_constraint_forms(minimum: object, maximum: object, step: object, options: object) -> None:
+    """Reject mixed range and option declarations without evaluating callbacks."""
+    if options is not None and any(constraint is not None for constraint in (minimum, maximum, step)):
+        raise TypeError("numeric properties accept either options or minimum/maximum/step, not both")
 
 
 class _Numeric[N: _Number](ABC):
@@ -45,6 +52,7 @@ class _Numeric[N: _Number](ABC):
     minimum: N | None
     maximum: N | None
     step: N | None
+    options: tuple[N, ...] | None
 
     @classmethod
     @abstractmethod
@@ -83,7 +91,14 @@ class _Numeric[N: _Number](ABC):
         minimum: N | None = None,
         maximum: N | None = None,
         step: N | None = None,
+        *,
+        options: Sequence[N] | None = None,
     ) -> Self:
+        _check_constraint_forms(minimum, maximum, step, options)
+        choices = tuple(options) if options is not None else None
+        if choices is not None and value not in choices:
+            raise ValueError(f"Value {value!r} is not in allowed options: {choices}")
+
         # ``base`` is float or int. Typed as Any so the call to ``base.__new__(cls, v)``
         # accepts cls — the type checker can't see that subclasses inherit from
         # float/int (the leaf type isn't visible from this generic mixin).
@@ -103,9 +118,12 @@ class _Numeric[N: _Number](ABC):
         obj.minimum = minimum
         obj.maximum = maximum
         obj.step = step
+        obj.options = choices
         return obj
 
     def __str__(self) -> str:
+        if self.options is not None:
+            return f"{super().__str__()} (options={self.options})"
         return f"{super().__str__()} (min={self.minimum}, max={self.maximum}, step={self.step})"
 
     def to_property_model(self) -> PropertyModel:
@@ -115,6 +133,7 @@ class _Numeric[N: _Number](ABC):
             minimum=self.minimum,
             maximum=self.maximum,
             step=self.step,
+            options=list(self.options) if self.options is not None else None,
         )
 
     @classmethod
@@ -129,17 +148,20 @@ class _Numeric[N: _Number](ABC):
         if isinstance(v, cls):
             return v
         if isinstance(v, dict):
-            return cls(v["value"], v.get("minimum"), v.get("maximum"), v.get("step"))
+            return cls(v["value"], v.get("minimum"), v.get("maximum"), v.get("step"), options=v.get("options"))
         return cls(v)
 
     def _serialize(self) -> dict[str, Any]:
-        return {
+        result = {
             "kind": type(self).kind,
             "value": self._native(),
             "minimum": self.minimum,
             "maximum": self.maximum,
             "step": self.step,
         }
+        if self.options is not None:
+            result["options"] = list(self.options)
+        return result
 
 
 class NumericFloat(_Numeric[float], float):
@@ -165,6 +187,7 @@ class NumericProtocol[N: _Number](Protocol):
     minimum: N | None
     maximum: N | None
     step: N | None
+    options: tuple[N, ...] | None
 
 
 class NumericProperty[N: _Number](property, ABC):
@@ -175,13 +198,17 @@ class NumericProperty[N: _Number](property, ABC):
         minimum: _Dynamic[N] | None = None,
         maximum: _Dynamic[N] | None = None,
         step: _Dynamic[N] | None = None,
+        *,
+        options: _Options[N] | None = None,
     ) -> None:
+        _check_constraint_forms(minimum, maximum, step, options)
         property.__init__(self, fget, fset)
         self._fget: Callable[[Any], N] = fget
         self._fset: Callable[[Any, N], None] | None = fset
         self._min = minimum
         self._max = maximum
         self._step = step
+        self._options = options if options is None or callable(options) else tuple(options)
         self.log = get_descriptor_logger(fget=fget)
 
     def get_minimum(self, instance: object) -> N | None:
@@ -194,6 +221,10 @@ class NumericProperty[N: _Number](property, ABC):
         if not self._step:
             return None
         return self._unwrap_dynamic_attribute(self._step, instance)
+
+    def get_options(self, instance: object) -> Sequence[N] | None:
+        """Resolve the allowed values for this instance."""
+        return self._unwrap_dynamic_attribute(self._options, instance)
 
     @overload
     def __get__(self, obj: None, objtype: type | None = ...) -> Self: ...
@@ -214,7 +245,7 @@ class NumericProperty[N: _Number](property, ABC):
         self._full_name = f"{owner.__name__}.{name}"
 
     def setter(self, fset: Callable[[Any, N], None]) -> Self:
-        return type(self)(self._fget, fset, self._min, self._max, self._step)
+        return type(self)(self._fget, fset, self._min, self._max, self._step, options=self._options)
 
     @staticmethod
     def _unwrap_dynamic_attribute(attr: Any, obj: object) -> Any:
@@ -238,12 +269,15 @@ class NumericFloatProperty(NumericProperty[float]):
             self.get_minimum(obj),
             self.get_maximum(obj),
             self.get_step(obj),
+            options=self.get_options(obj),
         )
 
     def __set__(self, obj: object, value: float) -> None:
         if self._fset is None:
             raise AttributeError("can't set attribute")
-        adjusted_value = NumericFloat(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
+        adjusted_value = NumericFloat(
+            value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj), options=self.get_options(obj)
+        )
         if value != adjusted_value:
             self.log.warning("Value %s was adjusted to %s to match constraints", value, adjusted_value)
         self._fset(obj, float(adjusted_value))
@@ -264,23 +298,45 @@ class NumericIntProperty(NumericProperty[int]):
             self.get_minimum(obj),
             self.get_maximum(obj),
             self.get_step(obj),
+            options=self.get_options(obj),
         )
 
     def __set__(self, obj: object, value: int) -> None:
         if self._fset is None:
             raise AttributeError("can't set attribute")
-        adjusted_value = NumericInt(value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj))
+        adjusted_value = NumericInt(
+            value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj), options=self.get_options(obj)
+        )
         if value != adjusted_value:
             self.log.warning("Value %s was adjusted to %s to match constraints", value, adjusted_value)
         self._fset(obj, int(adjusted_value))
+
+
+@overload
+def numeric(
+    minimum: _Dynamic[float] | None = None,
+    maximum: _Dynamic[float] | None = None,
+    step: _Dynamic[float] | None = None,
+) -> Callable[[Callable[..., float]], NumericFloatProperty]: ...
+
+
+@overload
+def numeric(*, options: _Options[float]) -> Callable[[Callable[..., float]], NumericFloatProperty]: ...
 
 
 def numeric(
     minimum: _Dynamic[float] | None = None,
     maximum: _Dynamic[float] | None = None,
     step: _Dynamic[float] | None = None,
+    *,
+    options: _Options[float] | None = None,
 ) -> Callable[[Callable[..., float]], NumericFloatProperty]:
-    """Declare a numeric (float) property with optional constraints.
+    """Declare a float property with range constraints or explicit options.
+
+    Options may be a sequence or an instance callback. Combining options with
+    minimum, maximum, or step raises TypeError when the decorator is created.
+    Values outside the options raise ValueError; range constraints retain
+    their clamping and snapping behavior.
 
     Example::
 
@@ -289,23 +345,42 @@ def numeric(
             return self._power
     """
 
+    _check_constraint_forms(minimum, maximum, step, options)
+
     def decorator(func: Callable[..., float]) -> NumericFloatProperty:
         return NumericFloatProperty(
             fget=func,
             minimum=minimum,
             maximum=maximum,
             step=step,
+            options=options,
         )
 
     return decorator
+
+
+@overload
+def numeric_int(
+    minimum: _Dynamic[int] | None = None,
+    maximum: _Dynamic[int] | None = None,
+    step: _Dynamic[int] | None = None,
+) -> Callable[[Callable[..., int]], NumericIntProperty]: ...
+
+
+@overload
+def numeric_int(*, options: _Options[int]) -> Callable[[Callable[..., int]], NumericIntProperty]: ...
 
 
 def numeric_int(
     minimum: _Dynamic[int] | None = None,
     maximum: _Dynamic[int] | None = None,
     step: _Dynamic[int] | None = None,
+    *,
+    options: _Options[int] | None = None,
 ) -> Callable[[Callable[..., int]], NumericIntProperty]:
-    """Declare a numeric (int) property with optional constraints.
+    """Declare an integer property with range constraints or explicit options.
+
+    Options use the same declaration and validation rules as numeric.
 
     Example::
 
@@ -314,12 +389,15 @@ def numeric_int(
             return self._channel
     """
 
+    _check_constraint_forms(minimum, maximum, step, options)
+
     def decorator(func: Callable[..., int]) -> NumericIntProperty:
         return NumericIntProperty(
             fget=func,
             minimum=minimum,
             maximum=maximum,
             step=step,
+            options=options,
         )
 
     return decorator

@@ -64,6 +64,9 @@ class Laser(Device[LaserState]):
 `stream=True` asks the controller to poll the property and publish changed observations. It is appropriate for live
 telemetry, not for events that require lossless delivery.
 
+See the [device properties guide](src/rigup/device/props/README.md) for decorators, validation,
+and property metadata for clients.
+
 ## Build and use a rig
 
 `RigConfig` is a Pydantic model; an application may construct it directly or validate configuration loaded from

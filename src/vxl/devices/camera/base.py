@@ -25,7 +25,7 @@ from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
 from vxlib.vector import IVec2D, Vec2D
 
-from rigup import Device, DeviceController, describe, enumerated, enumerated_int, numeric
+from rigup import Device, DeviceController, describe, enumerated, numeric, numeric_int
 from vxl.devices.base import DeviceType
 from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
 from vxl.system import System, remote_store_fingerprint
@@ -585,7 +585,7 @@ class Camera(Device):
         """Get the pixel type of the camera."""
         return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
 
-    @enumerated_int(options=BINNING_OPTIONS)
+    @numeric_int(options=BINNING_OPTIONS)
     @abstractmethod
     @describe(label="Binning", stream=True)
     def binning(self) -> int:

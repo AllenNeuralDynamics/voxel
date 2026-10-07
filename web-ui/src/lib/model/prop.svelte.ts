@@ -53,9 +53,10 @@ export interface PropOptions<T> {
 }
 
 /**
- * Mirrors the backend PropertyModel payload (with snake_case fields translated
- * to camelCase). `kind` and `value` are always present; subclass-specific fields
- * are optional and consumed only by the model that cares about them.
+ * Mirrors the backend PropertyModel payload. `kind` describes the value type;
+ * non-null `options` selects discrete choices for strings, integers, or floats.
+ * Otherwise, numeric properties use minimum/maximum/step. Constraints can change
+ * without a value change; an empty options list permits no choices.
  */
 export interface PropSnapshot<T> {
   kind: PropertyKind;
@@ -157,7 +158,7 @@ export class BoolModel extends BasePropModel<boolean> {
 
 /**
  * Property model for values constrained to a fixed set of options.
- * Maps to backend `kind='string' | 'integer'` payloads with `options` set.
+ * Maps to backend `kind='string' | 'integer' | 'float'` payloads with `options` set.
  *
  * Operations:
  *   - `select(value)` — patch to value if it's in the current options (warns + no-op otherwise)
@@ -540,7 +541,7 @@ export type AnyPropModel =
 export function createPropModel(snapshot: PropSnapshot<unknown>, opts: PropOptions<unknown> = {}): AnyPropModel {
   const { disabled, onPatch } = opts;
   if (snapshot.options != null) {
-    if (snapshot.kind === 'integer') {
+    if (snapshot.kind === 'integer' || snapshot.kind === 'float') {
       return new EnumeratedModel<number>(snapshot.value as number, snapshot.options as number[], {
         disabled,
         onPatch: onPatch as ((v: number) => void) | undefined
