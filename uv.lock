@@ -2967,6 +2967,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pydantic" },
     { name = "pyserial" },
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "vxl" },
     { name = "vxlib" },
@@ -2978,6 +2979,9 @@ coherent-laser = [
 ]
 egrabber-camera = [
     { name = "egrabber" },
+]
+mpds-calibration = [
+    { name = "matplotlib" },
 ]
 obis-laser = [
     { name = "obis-laser" },
@@ -2994,6 +2998,9 @@ pycobolt-laser = [
 thorlabs = [
     { name = "pylablib" },
 ]
+thorlabs-power-meter = [
+    { name = "pyvisa" },
+]
 vortran-laser = [
     { name = "vortran-laser" },
 ]
@@ -3006,6 +3013,7 @@ requires-dist = [
     { name = "aaopto-aotf", specifier = ">=0.0.11" },
     { name = "coherent-lasers", marker = "extra == 'coherent-laser'", url = "https://github.com/AllenNeuralDynamics/coherent-lasers/releases/download/v0.1.0/coherent_lasers-0.1.0-py3-none-any.whl" },
     { name = "egrabber", marker = "extra == 'egrabber-camera'", url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/egrabber-24.09.0.5-py2.py3-none-any.whl" },
+    { name = "matplotlib", marker = "extra == 'mpds-calibration'", specifier = ">=3.10" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "obis-laser", marker = "extra == 'obis-laser'", git = "https://github.com/AllenNeuralDynamics/obis-laser.git" },
     { name = "optoicc", marker = "extra == 'opto-icc'", url = "https://github.com/waltermwaniki/voxel-wheels/releases/download/v1/optoICC-2.0.4922-py3-none-any.whl" },
@@ -3014,13 +3022,15 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.9" },
     { name = "pylablib", marker = "extra == 'thorlabs'", specifier = ">=1.4.5" },
     { name = "pyserial", specifier = ">=3.5" },
+    { name = "pyvisa", marker = "extra == 'thorlabs-power-meter'", specifier = ">=1.16.2" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "vortran-laser", marker = "extra == 'vortran-laser'", git = "https://github.com/AllenNeuralDynamics/vortran_laser.git" },
     { name = "vxl", editable = "." },
     { name = "vxlib", editable = "vxlib" },
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
-provides-extras = ["thorlabs", "opto-icc", "opto-kummenberg", "coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
+provides-extras = ["thorlabs", "opto-icc", "opto-kummenberg", "thorlabs-power-meter", "mpds-calibration", "coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
 
 [[package]]
 name = "vxl-records"

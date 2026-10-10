@@ -19,6 +19,7 @@ import {
 } from './device.svelte';
 import { createEditQueue } from './edit-queue.svelte';
 import { Inpainter } from './inpaint.svelte';
+import { ProfileLinks } from './profile-links.svelte';
 import { type EditContext, EnumeratedModel, NumericModel } from './prop.svelte';
 import { SnapshotStore } from './snapshots.svelte';
 import type {
@@ -74,10 +75,12 @@ export interface Channel {
 export interface DeviceDivergence {
   /** Saved rw prop values for this device (`profile.props[id]`); empty if never saved. */
   saved: Record<string, unknown>;
-  /** rw prop names that need saving — diverged from the saved value, or never saved. */
-  dirty: Set<string>;
-  /** Camera ROI needs saving (cameras only). */
-  roiDirty: boolean;
+  /** Writable properties whose user edits are saved automatically. */
+  autosave: Set<string>;
+  /** Properties whose live values differ from existing saved values. */
+  changed: Set<string>;
+  /** Live camera ROI differs from the profile's ROI. */
+  roiChanged: boolean;
 }
 
 /** A stable routing editor with derived rule choice and hardware observations. */
@@ -102,7 +105,7 @@ function propValueDiverged(saved: unknown, current: unknown): boolean {
   return saved !== current;
 }
 
-/** Whether a live ROI needs saving against the profile-saved one (never-saved counts as dirty). */
+/** Compare live ROI to the saved ROI, defaulting to the full sensor when absent. */
 function roiDiffers(
   saved: SensorROI | undefined,
   live: SensorROI | undefined,
@@ -110,8 +113,7 @@ function roiDiffers(
 ): boolean {
   if (!live) return false;
   if (!saved) {
-    // The backend stores no ROI for a full-sensor crop (its implicit default), so an absent saved
-    // ROI means "full sensor" — a live ROI is only dirty here if it's an unsaved *crop*.
+    // Profiles without an explicit ROI use the full sensor.
     if (!sensor) return false;
     return !(live.x === 0 && live.y === 0 && live.w === sensor.x && live.h === sensor.y);
   }
@@ -244,6 +246,7 @@ export class Instrument {
   default = $state.raw<InstrumentDefaults>(undefined as unknown as InstrumentDefaults);
 
   readonly devices = new SvelteMap<string, DeviceHandle>();
+  readonly links = new ProfileLinks();
   /** Session-owned rule editors; numeric values and bounds are in micrometres. */
   readonly routingDimensions = new SvelteMap<string, RoutingDimension>();
 
@@ -321,25 +324,30 @@ export class Instrument {
     });
   });
 
-  // Per-device divergence from the active profile, keyed by device id, over the *settable* devices:
-  // channel camera/laser/aux + sync AO — never filter wheels (driven by commands) or stage. A never-saved
-  // rw prop counts as dirty (so a freshly-configured device is savable). Drives save gating + propRow.
+  // Saved-value comparisons and autosave policy for active-profile devices.
   readonly divergence = $derived.by<Map<string, DeviceDivergence>>(() => {
     const out = new SvelteMap<string, DeviceDivergence>();
     const profile = this.activeProfile;
     if (!profile) return out;
+    const configs = {
+      ...this.hal.devices,
+      ...Object.fromEntries(Object.values(this.hal.nodes).flatMap((node) => Object.entries(node.devices)))
+    };
     const add = (device: DeviceHandle): void => {
       if (out.has(device.id)) return;
       const saved = profile.props[device.id] ?? {};
-      const dirty = new SvelteSet<string>();
+      const selection = configs[device.id]?.autosave ?? [];
+      const autosave = new SvelteSet<string>();
+      const changed = new SvelteSet<string>();
       for (const [name, prop] of device.props) {
         if (prop.access !== 'rw' || name === 'roi' || name === 'roi_grid') continue;
-        if (!(name in saved) || propValueDiverged(saved[name], prop.value)) dirty.add(name);
+        if (selection === '*' || selection.includes(name)) autosave.add(name);
+        if (Object.hasOwn(saved, name) && propValueDiverged(saved[name], prop.value)) changed.add(name);
       }
-      const roiDirty =
+      const roiChanged =
         device instanceof CameraHandle &&
         roiDiffers(profile.rois[device.id], device.roi.value, device.sensorSizePx ?? undefined);
-      out.set(device.id, { saved, dirty, roiDirty });
+      out.set(device.id, { saved, autosave, changed, roiChanged });
     };
     for (const ch of this.activeChannels) {
       add(ch.camera);
@@ -352,12 +360,6 @@ export class Instrument {
         if (device) add(device);
       }
     return out;
-  });
-
-  /** Whether any settable device has unsaved changes — gates "Save Current". */
-  readonly profileDirty = $derived.by<boolean>(() => {
-    for (const d of this.divergence.values()) if (d.dirty.size > 0 || d.roiDirty) return true;
-    return false;
   });
 
   /** Resolved JSON schema for the active `metadata_cls`; re-fetched from the backend when it changes. */
@@ -410,6 +412,7 @@ export class Instrument {
     const sz = this.#stageAxis('z');
     if (!sx || !sy || !sz) throw new Error('Instrument stage must map all three (X/Y/Z) axes');
     this.stage = new Stage(sx, sy, sz, () => this.fov, DEFAULT_STAGE_ORIENTATION);
+    this.#syncProfileLinks();
     this.#syncRoutingDimensions();
     void this.#syncMetadataSchema();
   }
@@ -444,8 +447,17 @@ export class Instrument {
         );
       this.devices.get(id)?.replaceProperties(this.#resultsFrom(state));
     }
+    this.#syncProfileLinks();
     this.#syncRoutingDimensions();
     void this.#syncMetadataSchema();
+  }
+
+  #syncProfileLinks(): void {
+    this.links.sync(
+      this.activeProfileId,
+      this.activeChannels.map((channel) => channel.camera),
+      this.activeChannels.map((channel) => channel.laser)
+    );
   }
 
   #statusFrom(session: SessionView): InstrumentStatus {
@@ -513,10 +525,6 @@ export class Instrument {
 
   applySettings(): Promise<void> {
     return this.#client.post(`${this.#base}/settings/apply`);
-  }
-
-  saveSettings(): Promise<void> {
-    return this.#client.post(`${this.#base}/settings/save`);
   }
 
   applyRoutingRule(dimension?: string): Promise<void> {
@@ -616,6 +624,7 @@ export class Instrument {
   }
 
   dispose(): void {
+    this.links.clear();
     for (const dimension of this.routingDimensions.values()) dimension.model.dispose();
     this.routingDimensions.clear();
     for (const device of this.devices.values()) device.dispose();

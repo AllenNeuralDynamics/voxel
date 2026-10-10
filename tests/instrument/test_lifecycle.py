@@ -7,6 +7,7 @@ from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 
 from rigup import CommandRequest, DeviceInterface, DeviceProps
+from vxl.devices.laser.simulated import SimulatedLaser
 from vxl.instrument import (
     AcquisitionMode,
     AcquisitionRequest,
@@ -18,6 +19,22 @@ from vxl.instrument import (
 from vxl.instrument.config import AcquisitionTask, Point2D, WriterPatch, XYDefinition, XYMode, ZRange
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.system import System
+
+
+async def test_imaging_requires_digital_support_before_any_source_is_enabled(
+    instrument: Instrument, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instrument.hardware_config.devices["laser_488"].init["modulation_modes"] = ["software"]
+    enabled = []
+
+    def enable(source, *, wait=False):
+        enabled.append((source.uid, wait))
+
+    monkeypatch.setattr(SimulatedLaser, "source_enable", enable)
+    with pytest.raises(StartupError) as caught:
+        await instrument.open()
+    assert [v.code for v in caught.value.violations] == ["imaging.laser.digital_unsupported"]
+    assert not enabled
 
 
 def test_violation_serializes_for_api_responses() -> None:
@@ -145,11 +162,14 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
 
     hal = SimpleNamespace(
         topology=instrument._hal.topology,
+        lasers={},
         device_interfaces={"camera_1": camera_interface, "daq": daq_interface},
         signal_generators={"daq": SimpleNamespace(ports=Cell({"camera_1": "ao0", "aotf_1": "ao1"}))},
         stage=SimpleNamespace(x=axis(), y=axis(), z=axis()),
     )
     with monkeypatch.context() as patch:
+        # This reduced interface exercises profile validation, not autosave policy.
+        patch.setattr(instrument.hardware_config.devices["camera_1"], "autosave", [])
         patch.setattr(instrument_store, "_value", state)
         patch.setattr(instrument, "_hal", hal)
         with pytest.raises(StartupError) as raised:

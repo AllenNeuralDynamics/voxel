@@ -6,6 +6,7 @@ export interface DeviceConfig {
   target: string;
   init?: Record<string, unknown>;
   defaults?: Record<string, unknown> | null;
+  autosave?: '*' | string[];
 }
 
 /** Stage axis → device-id mapping. */

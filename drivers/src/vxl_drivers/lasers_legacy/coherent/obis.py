@@ -9,7 +9,7 @@ from rigup.device.props import enumerated, numeric
 from serial import Serial
 
 from rigup import describe
-from vxl.devices.laser.base import Laser
+from vxl_drivers.lasers_legacy.base import Laser
 
 
 class ModulationMode(StrEnum):

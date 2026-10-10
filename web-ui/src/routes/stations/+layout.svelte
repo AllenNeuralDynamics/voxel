@@ -402,32 +402,7 @@
         <Sidebar.Content>
           <InstrumentNavigation instrumentId={selectedInstrumentId || app.activeName || undefined} />
         </Sidebar.Content>
-        {#if app.instrument}
-          <Sidebar.Footer class="flex-row gap-1 border-t border-line-muted bg-element-bg/40 p-2">
-            {#each ['undo', 'redo'] as const as action (action)}
-              {@const label = action === 'undo' ? 'Undo' : 'Redo'}
-              {@const edit = app.instrument.history[`${action}_label`]}
-              {@const title = edit === null ? `Nothing to ${action}` : `${label}: ${edit}`}
-              <span class="min-w-0 flex-1" {title}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  class="w-full text-base disabled:opacity-40"
-                  aria-label={title}
-                  disabled={!canReplayHistory || edit === null}
-                  onclick={() => replayHistory(action)}
-                >
-                  {#if action === 'undo'}
-                    <Undo />
-                  {:else}
-                    <Redo />
-                  {/if}
-                  {label}
-                </Button>
-              </span>
-            {/each}
-          </Sidebar.Footer>
-        {:else if instrumentId && app.stationStatus !== 'closing'}
+        {#if !app.instrument && instrumentId && app.stationStatus !== 'closing'}
           <Sidebar.Footer class="gap-1 border-t border-line-muted bg-element-bg/40 p-2">
             <Button
               variant="default"
@@ -462,7 +437,34 @@
         <PaneDivider direction="vertical" />
         <Pane {...viewerPane} class="grid min-w-0 grid-rows-[minmax(0,1fr)]">
           <div class="flex min-h-0 min-w-0 flex-col overflow-hidden">
-            <CenterPane />
+            <CenterPane>
+              {#snippet historyControls()}
+                {#if app.instrument}
+                  {#each ['undo', 'redo'] as const as action (action)}
+                    {@const label = action === 'undo' ? 'Undo' : 'Redo'}
+                    {@const edit = app.instrument.history[`${action}_label`]}
+                    {@const title = edit === null ? `Nothing to ${action}` : `${label}: ${edit}`}
+                    <span class="shrink-0" {title}>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        class="h-6 text-sm text-fg-muted disabled:opacity-40"
+                        aria-label={title}
+                        disabled={!canReplayHistory || edit === null}
+                        onclick={() => replayHistory(action)}
+                      >
+                        {#if action === 'undo'}
+                          <Undo />
+                        {:else}
+                          <Redo />
+                        {/if}
+                        {label}
+                      </Button>
+                    </span>
+                  {/each}
+                {/if}
+              {/snippet}
+            </CenterPane>
           </div>
         </Pane>
         {#if app.instrument}

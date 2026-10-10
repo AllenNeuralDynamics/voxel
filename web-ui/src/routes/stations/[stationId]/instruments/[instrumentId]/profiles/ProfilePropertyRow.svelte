@@ -3,6 +3,7 @@
 
   import { type DeviceHandle, type Instrument, NumericModel, type Prop } from '$lib/model';
   import { formatPropValue, PropInput } from '$lib/prop';
+  import LinkIndicator from '$lib/prop/LinkIndicator.svelte';
   import { cn, displayName, toastError } from '$lib/utils';
 
   interface Props {
@@ -18,10 +19,10 @@
   const name = $derived(prop.info.name);
   const label = $derived(prop.label || displayName(name));
   const divergence = $derived(instrument.divergence.get(device.id));
-  const needsSave = $derived(divergence?.dirty.has(name) ?? false);
+  const autosave = $derived(divergence?.autosave.has(name) ?? false);
   const hasSaved = $derived(divergence ? Object.hasOwn(divergence.saved, name) : false);
   const saved = $derived(divergence?.saved[name]);
-  const isDiverged = $derived(needsSave && hasSaved);
+  const isDiverged = $derived(divergence?.changed.has(name) ?? false);
   const disabled = $derived(!device.connected || Boolean(device.error) || prop.model.disabled);
   const stepHint = $derived(prop.model instanceof NumericModel ? prop.model.step : null);
 
@@ -44,9 +45,15 @@
   <div class={cn('flex min-w-0 items-center gap-2 text-fg-muted', compact ? 'text-sm' : 'leading-none')}>
     <span class={compact ? 'wrap-anywhere' : 'truncate'} title={prop.info.desc ?? ''}>{label}</span>
     {@render labelActions?.()}
-    <span class={cn('size-1 shrink-0 rounded-full bg-primary-soft', !needsSave && 'invisible')} aria-hidden="true"
-    ></span>
-    {#if needsSave}<span class="sr-only">Unsaved changes</span>{/if}
+    <LinkIndicator {instrument} deviceId={device.id} property={name} />
+    {#if autosave}
+      <span class="text-xs text-fg-faint" title="Edits save automatically to the active profile">Autosave</span>
+    {/if}
+    {#if isDiverged}
+      <span class="size-1 shrink-0 rounded-full bg-primary-soft" title="Differs from saved profile" aria-hidden="true"
+      ></span>
+      <span class="sr-only">Differs from saved profile</span>
+    {/if}
   </div>
   <PropInput model={prop.model} size="xs" {disabled} />
   <button

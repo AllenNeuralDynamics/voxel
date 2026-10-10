@@ -2,6 +2,8 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { IDBKeyVal } from '$lib/utils/idb';
 
+import type { ModulationMode } from './device.svelte';
+
 export interface SnapshotChannel {
   label: string;
   colormap: string | null;
@@ -16,8 +18,11 @@ export interface SnapshotChannel {
   };
   illumination?: {
     deviceId: string;
-    powerSetpoint?: number;
-    power?: number;
+    sourcePowerSetpointMw?: number;
+    sourcePowerMw?: number | null;
+    outputLevelPercent?: number;
+    outputPowerMw?: number | null;
+    modulationMode?: ModulationMode;
   };
 }
 

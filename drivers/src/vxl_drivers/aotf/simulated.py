@@ -1,6 +1,6 @@
 """Simulated AOTF driver for testing without hardware."""
 
-from vxl.devices.aotf.base import AOTF, BlankingMode
+from vxl_drivers.aotf.base import AOTF, BlankingMode
 
 # Simulates an 8-channel AOTF (common MPDS configuration)
 _NUM_CHANNELS = 8

@@ -1,5 +1,5 @@
 /** App-level store (`VoxelApp`) + the active-instrument store (`Instrument`) and its device handles. */
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 import { wavelengthToColor } from '$lib/colors.svelte';
 import { toastError } from '$lib/utils';
@@ -17,15 +17,7 @@ import {
   Prop,
   type PropSnapshot
 } from './prop.svelte';
-import type {
-  DeviceInterface,
-  DeviceSnapshot,
-  DiscreteAxisState,
-  PropResult,
-  PropResults,
-  SensorROI,
-  Signals
-} from './types';
+import type { DeviceInterface, DeviceSnapshot, DiscreteAxisState, PropResults, SensorROI, Signals } from './types';
 
 /**
  * A single device: its introspected interface plus a live, reactive cache of property models.
@@ -190,67 +182,125 @@ export class DiscreteAxisHandle extends DeviceHandle {
   }
 }
 
-type Sample = { t: number; v: number };
+/** Software observation time in monotonic milliseconds; null marks unavailable telemetry. */
+export type LaserSample = { t: number; v: number | null };
+export type ModulationMode = 'software' | 'digital' | 'analog';
 
-/** Rolling telemetry window + point cap, shared by laser power and camera stream sparklines. */
-const HISTORY_WINDOW_MS = 60_000;
-const HISTORY_MAX = 600;
-
-/** Whether a wire result carries a value (vs. an error envelope). */
-const isFresh = (r: PropResult | undefined): boolean => r != null && r.ok;
-
-/** Append a sample, dropping points older than the window (keeping one just outside so the trace spans the left edge), capped at `max` points. */
-function pushSample(series: Sample[], t: number, v: number, windowMs = HISTORY_WINDOW_MS, max = HISTORY_MAX): Sample[] {
-  const cutoff = t - windowMs;
-  const next = [...series, { t, v }];
-  let start = 0;
-  while (start < next.length - 1 && next[start + 1].t < cutoff) start++;
-  const windowed = start > 0 ? next.slice(start) : next;
-  return windowed.length > max ? windowed.slice(-max) : windowed;
-}
+const LASER_TRACES = {
+  source_power_setpoint_mw: 'sourceSetpointHistory',
+  source_power_mw: 'sourcePowerHistory',
+  output_power_mw: 'outputPowerHistory',
+  output_level_percent: 'outputLevelHistory'
+} as const;
 
 export class LaserHandle extends DeviceHandle {
-  static readonly HISTORY_WINDOW_MS = HISTORY_WINDOW_MS;
-  static readonly HISTORY_MAX = HISTORY_MAX;
+  static readonly HISTORY_WINDOW_MS = 5 * 60_000;
+  static readonly HISTORY_MAX = 3000;
 
-  powerHistory = $state<Sample[]>([]);
-  setpointHistory = $state<Sample[]>([]);
+  sourceSetpointHistory = $state<LaserSample[]>([]);
+  sourcePowerHistory = $state<LaserSample[]>([]);
+  outputPowerHistory = $state<LaserSample[]>([]);
+  outputLevelHistory = $state<LaserSample[]>([]);
 
-  power = $derived.by(() => this.typedProp('power', NumericModel));
-  powerSetpoint = $derived.by(() => this.typedProp('power_setpoint', NumericModel));
-  isEnabled = $derived.by(() => this.typedProp('is_enabled', BoolModel));
+  // Keep the property metadata and either range or discrete-choice editor model.
+  sourcePowerSetpoint = $derived(this.getProp('source_power_setpoint_mw'));
+  outputLevel = $derived(this.getProp('output_level_percent'));
+  sourcePower = $derived(this.getProp('source_power_mw'));
+  outputPower = $derived(this.getProp('output_power_mw'));
+  modulationMode = $derived(this.getProp('modulation_mode'));
+  sourceEnabled = $derived.by(() => this.typedProp('is_source_enabled', BoolModel));
+  outputEnabled = $derived.by(() => this.typedProp('is_output_enabled', BoolModel));
   wavelength = $derived.by(() => this.typedProp('wavelength', NumericModel));
-  temperature = $derived.by(() => this.typedProp('temperature_c', NumericModel));
+  temperature = $derived(this.getProp('temperature_c'));
+
+  /** False in analog mode, where edits only store the level for later use. */
+  outputLevelActive = $derived(this.modulationMode?.value === 'software' || this.modulationMode?.value === 'digital');
+
+  readonly pendingCommands = new SvelteSet<string>();
+  readonly pendingProperties = new SvelteMap<string, number>();
+  isBusy = $derived(this.pendingCommands.size > 0 || this.pendingProperties.size > 0);
+
+  /** Count overlapping writes so pending state lasts until every request completes. */
+  override async setProps(properties: Record<string, unknown>): Promise<void> {
+    const names = Object.keys(properties);
+    for (const name of names) this.pendingProperties.set(name, (this.pendingProperties.get(name) ?? 0) + 1);
+    try {
+      await super.setProps(properties);
+    } finally {
+      for (const name of names) {
+        const remaining = this.pendingProperties.get(name)! - 1;
+        if (remaining) this.pendingProperties.set(name, remaining);
+        else this.pendingProperties.delete(name);
+      }
+    }
+  }
 
   color = $derived.by((): string | undefined => {
     const wl = this.wavelength?.value;
     return typeof wl === 'number' ? wavelengthToColor(wl) : undefined;
   });
 
-  hasHistory = $derived(this.powerHistory.length > 1);
-  maxPower = $derived(this.powerSetpoint?.max ?? this.power?.max ?? 100);
-
-  enable(): Promise<unknown> {
-    return this.runCommand('enable');
+  enableSource(wait = true): Promise<unknown> {
+    return this.runCommand('source_enable', [], { wait });
   }
 
-  disable(): Promise<unknown> {
-    return this.runCommand('disable');
+  disableSource(): Promise<unknown> {
+    return this.runCommand('source_disable');
   }
 
-  toggle(): Promise<unknown> {
-    return this.isEnabled?.value ? this.disable() : this.enable();
+  /** Requires existing source permission; does not generate external modulation signals. */
+  enableOutput(wait = true): Promise<unknown> {
+    return this.runCommand('output_enable', [], { wait });
   }
 
-  /** Record measured power and setpoint into their time-series whenever their values change. */
-  protected observe(results: PropResults): void {
-    const t = performance.now();
-    const r = results.results;
-    if (isFresh(r.power) && typeof this.power?.value === 'number') {
-      this.powerHistory = pushSample(this.powerHistory, t, this.power.value);
+  disableOutput(): Promise<unknown> {
+    return this.runCommand('output_disable');
+  }
+
+  setModulationMode(mode: ModulationMode): Promise<unknown> {
+    return this.runCommand('set_modulation_mode', [], { value: mode });
+  }
+
+  /** Tracks control transactions, not optical readiness. Errors propagate to the caller. */
+  override async runCommand(
+    name: string,
+    args: unknown[] = [],
+    kwargs: Record<string, unknown> = {}
+  ): Promise<unknown> {
+    if (this.pendingCommands.has(name)) throw new Error(`${name} is already running`);
+    this.pendingCommands.add(name);
+    try {
+      return await super.runCommand(name, args, kwargs);
+    } finally {
+      this.pendingCommands.delete(name);
     }
-    if (isFresh(r.power_setpoint) && typeof this.powerSetpoint?.value === 'number') {
-      this.setpointHistory = pushSample(this.setpointHistory, t, this.powerSetpoint.value);
+  }
+
+  override replaceProperties(results?: PropResults): void {
+    super.replaceProperties(results);
+    // Full feed views also establish missing/error/disconnected gaps and resume unchanged readings after reconnect.
+    this.#recordTelemetry(results, true);
+  }
+
+  protected override observe(results: PropResults): void {
+    this.#recordTelemetry(results);
+  }
+
+  #recordTelemetry(results?: PropResults, complete = false): void {
+    const t = performance.now();
+    for (const [name, history] of Object.entries(LASER_TRACES)) {
+      const result = results?.results[name];
+      if (!complete && !result) continue;
+      const raw = this.connected && result?.ok ? result.value.value : null;
+      const v = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+      const series = this[history];
+      // Repeated values remain sample-and-hold, including repeated unavailable readings.
+      if (series.length && series[series.length - 1].v === v) continue;
+      const next = [...series, { t, v }];
+      const cutoff = t - LaserHandle.HISTORY_WINDOW_MS;
+      let start = 0;
+      while (start < next.length - 1 && next[start + 1].t < cutoff) start++;
+      this[history] = next.slice(Math.max(start, next.length - LaserHandle.HISTORY_MAX));
     }
   }
 }

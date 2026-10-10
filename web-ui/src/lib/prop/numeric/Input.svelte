@@ -8,6 +8,8 @@
   type OwnProps = {
     model: NumericSource;
     decimals?: number;
+    /** Maximum displayed significant digits when decimals is omitted; edits retain their precision. */
+    significantDigits?: number;
     /** Model units per displayed unit. */
     displayScale?: number;
     numCharacters?: number;
@@ -23,6 +25,7 @@
   let {
     model: source,
     decimals,
+    significantDigits = 15,
     displayScale = 1,
     numCharacters = 4,
     align = 'left',
@@ -42,7 +45,7 @@
     const value = model.value / displayScale;
     if (decimals !== undefined) return value.toFixed(decimals);
     if (!Number.isFinite(value)) return String(value);
-    return parseFloat(value.toPrecision(15)).toString();
+    return parseFloat(value.toPrecision(significantDigits)).toString();
   });
 
   function handleInput(e: Event) {

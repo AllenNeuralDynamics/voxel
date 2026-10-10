@@ -1,7 +1,8 @@
 <script lang="ts">
   import { Button } from '$lib/kit';
   import Switch from '$lib/kit/Switch.svelte';
-  import { type Instrument, LaserHandle } from '$lib/model';
+  import { EnumeratedModel, type Instrument, LaserHandle, type LaserSample, NumericModel } from '$lib/model';
+  import { PropInput } from '$lib/prop';
   import * as Numeric from '$lib/prop/numeric';
   import { cn, toastError } from '$lib/utils';
 
@@ -17,7 +18,7 @@
 
   // Graph geometry: arbitrary viewBox width (stretched to fit) and the rolling time window.
   const W = 1000;
-  const WINDOW_MS = LaserHandle.HISTORY_WINDOW_MS;
+  const WINDOW_MS = 60_000;
 
   const allLasers = $derived([...instrument.lasers.values()]);
 
@@ -30,7 +31,7 @@
     ...allLasers.filter((l) => channelOf(l.id) === undefined)
   ]);
 
-  const anyEnabled = $derived(allLasers.some((l) => l.isEnabled?.value === true));
+  const anyEnabled = $derived(allLasers.some((l) => l.outputEnabled?.value === true));
 
   // Smooth-scroll ticker: advance the graphs' right edge each frame. Recording itself is stream-driven
   // in LaserHandle, so history keeps filling even while this component is unmounted; only the scroll pauses.
@@ -47,23 +48,41 @@
 
   function stopAll(): void {
     for (const laser of allLasers) {
-      if (laser.isEnabled?.value === true) toastError(laser.disable());
+      if (laser.outputEnabled?.value === true) toastError(laser.disableOutput());
     }
   }
 
-  // Event-driven history is a sample-and-hold signal: a value stays put until the next event. Draw it as a
-  // staircase — hold flat at (t_next, v_prev), then jump vertically to v_next — so a return to a prior level
-  // reads as a square edge rather than a diagonal ramp across the idle gap.
-  function stepPoints(
-    samples: { t: number; v: number }[],
-    toX: (t: number) => string,
-    toY: (v: number) => string
-  ): string {
-    let pts = `${toX(samples[0].t)},${toY(samples[0].v)}`;
-    for (let i = 1; i < samples.length; i++) {
-      pts += ` ${toX(samples[i].t)},${toY(samples[i - 1].v)} ${toX(samples[i].t)},${toY(samples[i].v)}`;
+  function sourceScale(laser: LaserHandle): number {
+    const model = laser.sourcePowerSetpoint?.model;
+    const maximum = model instanceof NumericModel ? model.max : null;
+    const options =
+      model instanceof EnumeratedModel ? model.options.filter((v): v is number => typeof v === 'number') : [];
+    return Math.max(
+      1,
+      maximum ?? 0,
+      ...options,
+      ...laser.sourcePowerHistory.flatMap((sample) => (sample.v == null ? [] : [sample.v])),
+      ...laser.sourceSetpointHistory.flatMap((sample) => (sample.v == null ? [] : [sample.v]))
+    );
+  }
+
+  // Hold reported values until the next observation; unavailable readings break the line.
+  function stepSegments(samples: LaserSample[], toX: (t: number) => string, toY: (v: number) => string): string[] {
+    const segments: string[] = [];
+    let points = '';
+    let previous: number | null = null;
+    for (const sample of samples) {
+      if (previous != null) points += ` ${toX(sample.t)},${toY(previous)}`;
+      if (sample.v == null) {
+        if (points) segments.push(points);
+        points = '';
+      } else {
+        points += ` ${toX(sample.t)},${toY(sample.v)}`;
+      }
+      previous = sample.v;
     }
-    return pts;
+    if (previous != null) segments.push(`${points} ${W},${toY(previous)}`);
+    return segments;
   }
 </script>
 
@@ -94,13 +113,14 @@
 </div>
 
 {#snippet laserTile(laser: LaserHandle)}
-  {@const powerSetpoint = laser.powerSetpoint}
+  {@const powerSetpoint = laser.sourcePowerSetpoint}
   {@const setpoint = powerSetpoint?.value}
-  {@const powerUnits = laser.getProp('power_setpoint')?.units || laser.getProp('power')?.units || 'mW'}
-  {@const measured = laser.power?.value}
+  {@const numericSetpoint = powerSetpoint?.model instanceof NumericModel ? powerSetpoint.model : undefined}
+  {@const powerUnits = powerSetpoint?.units || 'mW'}
+  {@const measured = laser.sourcePower?.value}
   {@const wl = laser.wavelength?.value}
   <!-- {@const temp = laser.temperature?.value} -->
-  {@const enabled = laser.isEnabled?.value === true}
+  {@const enabled = laser.outputEnabled?.value === true}
   {@const channel = channelOf(laser.id)}
   <div class="flex flex-col overflow-hidden rounded-xs border border-line bg-card">
     <!-- row 1: identity + power readout + enable -->
@@ -109,39 +129,49 @@
       <span
         class="focus-within:border-focused ml-auto inline-flex shrink-0 items-stretch overflow-hidden rounded-sm border border-control-line font-mono text-[10px] tabular-nums transition-colors"
       >
-        <span class="inline-flex items-center px-1.5" title="Power setpoint">
-          {#if powerSetpoint}
+        <span class="inline-flex items-center px-1.5" title="Source power setpoint">
+          {#if numericSetpoint}
             <Numeric.Input
-              model={powerSetpoint}
-              disabled={powerSetpoint.disabled}
+              model={numericSetpoint}
+              disabled={numericSetpoint.disabled || powerSetpoint?.access !== 'rw'}
               numCharacters={4}
               align="left"
-              aria-label={`${laser.id} power setpoint (${powerUnits})`}
+              aria-label={`${laser.id} source power setpoint (${powerUnits})`}
               class="min-w-[6ch] px-0.5 text-fg disabled:opacity-50"
             />
+          {:else if powerSetpoint}
+            <PropInput model={powerSetpoint.model} disabled={powerSetpoint.access !== 'rw'} size="xs" />
           {:else}
             <span class="w-[6ch] text-left text-fg-muted">—</span>
           {/if}
         </span>
         <span
           class="inline-flex items-center gap-1.5 border-l border-control-line bg-element-active px-1.5 text-fg"
-          title="Measured power"
+          title="Source-reported power"
         >
           <span class="min-w-[6ch] text-left text-fg">{typeof measured === 'number' ? measured.toFixed(1) : '—'}</span>
           <span>{powerUnits}</span>
         </span>
       </span>
-      <Switch class="shrink-0" checked={enabled} onCheckedChange={() => toastError(laser.toggle())} size="xs" />
+      <span title="Output permission; external modulation may still block light">
+        <Switch
+          class="shrink-0"
+          checked={enabled}
+          disabled={laser.isBusy || instrument.mode === 'capture' || (!enabled && laser.sourceEnabled?.value !== true)}
+          onCheckedChange={(checked) => toastError(checked ? laser.enableOutput() : laser.disableOutput())}
+          size="xs"
+        />
+      </span>
     </div>
 
     <!-- row 2: power graph + setpoint slider — full-bleed to the card edges, hairline dividers only -->
-    <div class="flex h-10 border-t border-line-muted" {@attach laser.powerSetpoint?.wheel ?? (() => {})}>
+    <div class="flex h-10 border-t border-line-muted" {@attach numericSetpoint?.wheel ?? (() => {})}>
       <div class="min-w-0 flex-1">
         {@render graph(laser)}
       </div>
-      {#if typeof setpoint === 'number'}
-        {@const maxP = laser.maxPower || 1}
-        {@const py = 100 - ((laser.power?.value ?? 0) / maxP) * 100}
+      {#if typeof setpoint === 'number' && numericSetpoint && numericSetpoint.min != null && numericSetpoint.max != null}
+        {@const maxP = sourceScale(laser)}
+        {@const py = typeof measured === 'number' ? 100 - (measured / maxP) * 100 : null}
         {@const sy = 100 - (setpoint / maxP) * 100}
         {@const color = laser.color ?? 'var(--color-fg-muted)'}
         <div class="w-5 shrink-0 border-l border-line-muted">
@@ -151,8 +181,18 @@
               preserveAspectRatio="none"
               class="pointer-events-none absolute inset-0 h-full w-full"
             >
-              <rect x="0" y={py} width="10" height={100 - py} fill={color} opacity="0.3" />
-              <line x1="0" y1={py} x2="10" y2={py} stroke={color} stroke-width="1" vector-effect="non-scaling-stroke" />
+              {#if py != null}
+                <rect x="0" y={py} width="10" height={100 - py} fill={color} opacity="0.3" />
+                <line
+                  x1="0"
+                  y1={py}
+                  x2="10"
+                  y2={py}
+                  stroke={color}
+                  stroke-width="1"
+                  vector-effect="non-scaling-stroke"
+                />
+              {/if}
               <line
                 x1="0"
                 y1={sy}
@@ -168,12 +208,12 @@
             <input
               type="range"
               class="setpoint-slider absolute inset-0 z-10 h-full w-full"
-              min={0}
-              max={maxP}
-              step={1}
+              min={numericSetpoint.min}
+              max={numericSetpoint.max}
+              step={numericSetpoint.step ?? 'any'}
               value={setpoint}
-              disabled={laser.powerSetpoint?.disabled}
-              oninput={(e) => laser.powerSetpoint?.patch(parseFloat(e.currentTarget.value), { throttled: true })}
+              disabled={numericSetpoint.disabled || powerSetpoint?.access !== 'rw'}
+              oninput={(e) => numericSetpoint.patch(parseFloat(e.currentTarget.value), { throttled: true })}
             />
           </div>
         </div>
@@ -183,36 +223,20 @@
 {/snippet}
 
 {#snippet graph(laser: LaserHandle)}
-  {@const maxP = laser.maxPower || 1}
+  {@const maxP = sourceScale(laser)}
   {@const color = laser.color ?? 'var(--color-fg-muted)'}
   {@const tStart = now - WINDOW_MS}
   {@const toX = (t: number) => (((t - tStart) / WINDOW_MS) * W).toFixed(1)}
   {@const toY = (v: number) => (100 - (v / maxP) * 100).toFixed(1)}
-  {@const power = laser.powerHistory}
-  {@const setpoint = laser.setpointHistory}
+  {@const power = laser.sourcePowerHistory}
+  {@const setpoint = laser.sourceSetpointHistory}
   <svg viewBox="0 0 {W} 100" preserveAspectRatio="none" class="h-full w-full">
-    {#if power.length > 0}
-      {@const line = stepPoints(power, toX, toY)}
-      {@const edgeY = toY(power[power.length - 1].v)}
-      <polygon
-        points="{toX(power[0].t)},100 {line} {W},{edgeY} {W},100"
-        fill={color}
-        fill-opacity="0.3"
-        stroke="none"
-      />
+    {#each stepSegments(power, toX, toY) as points, index (index)}
+      <polyline {points} fill="none" stroke={color} stroke-width="1" vector-effect="non-scaling-stroke" />
+    {/each}
+    {#each stepSegments(setpoint, toX, toY) as points, index (index)}
       <polyline
-        points="{line} {W},{edgeY}"
-        fill="none"
-        stroke={color}
-        stroke-width="1"
-        vector-effect="non-scaling-stroke"
-      />
-    {/if}
-    {#if setpoint.length > 0}
-      {@const line = stepPoints(setpoint, toX, toY)}
-      {@const edgeY = toY(setpoint[setpoint.length - 1].v)}
-      <polyline
-        points="{line} {W},{edgeY}"
+        {points}
         fill="none"
         stroke={color}
         stroke-width="1"
@@ -220,7 +244,7 @@
         vector-effect="non-scaling-stroke"
         opacity="0.8"
       />
-    {/if}
+    {/each}
   </svg>
 {/snippet}
 

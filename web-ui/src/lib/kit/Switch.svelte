@@ -38,6 +38,7 @@
   import { Switch as SwitchPrimitive } from 'bits-ui';
 
   interface Props extends SwitchVariants {
+    'aria-label'?: string;
     checked?: boolean;
     onCheckedChange?: (checked: boolean) => void;
     disabled?: boolean;
@@ -46,6 +47,7 @@
   }
 
   let {
+    'aria-label': ariaLabel,
     checked = $bindable(false),
     onCheckedChange,
     disabled = false,
@@ -57,6 +59,13 @@
   const styles = $derived(switchVariants({ size }));
 </script>
 
-<SwitchPrimitive.Root bind:checked {onCheckedChange} {disabled} {style} class={styles.root({ class: className })}>
+<SwitchPrimitive.Root
+  aria-label={ariaLabel}
+  bind:checked
+  {onCheckedChange}
+  {disabled}
+  {style}
+  class={styles.root({ class: className })}
+>
   <SwitchPrimitive.Thumb class={styles.thumb()} />
 </SwitchPrimitive.Root>

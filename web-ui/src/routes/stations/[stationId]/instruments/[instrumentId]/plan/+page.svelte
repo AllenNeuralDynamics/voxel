@@ -13,6 +13,9 @@
   import { getRegionSelection } from '$lib/stage/region.svelte';
   import { toastError } from '$lib/utils';
 
+  import AcquisitionProgress from './AcquisitionProgress.svelte';
+  import PastAcquisitions from './PastAcquisitions.svelte';
+
   const taskRoute = '/stations/[stationId]/instruments/[instrumentId]/plan/[taskId]';
 
   const app = getVoxelStation();
@@ -147,7 +150,7 @@
       </Button>
     {/snippet}
   </PageHeader>
-  <div class="min-h-0 flex-1 overflow-hidden px-4 pb-5">
+  <div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-5">
     {#if instrument}
       {#if instrument.plan.length}
         <Sortable.Root
@@ -155,7 +158,6 @@
           key={(task) => task.id}
           onReorder={reorderTasks}
           layout="vertical"
-          containerClass="h-full"
           class="space-y-2"
         >
           {#snippet item(task: AcquisitionTask, index: number)}
@@ -207,5 +209,7 @@
     {:else}
       <p class="text-base text-fg-muted">Open this instrument to view its plan.</p>
     {/if}
+    <AcquisitionProgress {...routeParams} />
+    <PastAcquisitions {...routeParams} />
   </div>
 </div>

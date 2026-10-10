@@ -18,41 +18,34 @@ hal:
               laser_730: ao7
               camera_1: ao4
               camera_2: ao5
-              aotf_1: ao6
-        aotf_1:
-          target: vxl.devices.aotf.simulated.SimulatedAotf
-          init: { blanking_mode: "external" }
         laser_405:
-          target: &aotf_laser_target vxl.devices.laser.simulated.SimulatedAOTFShutteredLaser
+          target: &laser_target vxl.devices.laser.simulated.SimulatedLaser
+          autosave: [source_power_setpoint_mw, output_level_percent]
           init:
             wavelength: 405
-            aotf: aotf_1
-            aotf_channel: 1
-            aotf_frequency_mhz: 110.5
+            source_enable_delay_s: 1
         laser_488:
-          target: *aotf_laser_target
+          target: *laser_target
+          autosave: [source_power_setpoint_mw, output_level_percent]
           init:
             wavelength: 488
-            aotf: aotf_1
-            aotf_channel: 2
-            aotf_frequency_mhz: 98.2
+            source_enable_delay_s: 1
         laser_561:
-          target: *aotf_laser_target
+          target: *laser_target
+          autosave: [source_power_setpoint_mw, output_level_percent]
           init:
             wavelength: 561
-            aotf: aotf_1
-            aotf_channel: 3
-            aotf_frequency_mhz: 87.4
+            source_enable_delay_s: 1
         laser_640:
-          target: *aotf_laser_target
+          target: *laser_target
+          autosave: [source_power_setpoint_mw, output_level_percent]
           init:
             wavelength: 640
-            aotf: aotf_1
-            aotf_channel: 4
-            aotf_frequency_mhz: 78.6
+            source_enable_delay_s: 1
         laser_730:
           target: vxl.devices.laser.simulated.SimulatedLaser
-          init: { wavelength: 730 }
+          autosave: [source_power_setpoint_mw, output_level_percent]
+          init: { wavelength: 730, source_enable_delay_s: 1 }
         fw_detection_shared:
           target: &fw_target vxl.devices.axes.simulated.SimulatedDiscreteAxis
           init:
@@ -92,6 +85,7 @@ hal:
       devices:
         camera_1: &sim_camera
           target: vxl.devices.camera.simulated.SimulatedCamera
+          autosave: [exposure_time_ms, binning, pixel_format]
           init:
             frame_source:
               sensor_size_px: "10640,14192"
@@ -219,6 +213,15 @@ default:
     profiles:
       dapi_gfp:
         channels: ["dapi", "gfp"]
+        props:
+          laser_405:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Simultaneous DAPI (cam1) and GFP (cam2) imaging"
         sync:
@@ -243,13 +246,17 @@ default:
                 type: pulse
                 voltage: { min: 0.0, max: 5.0 }
                 window: { min: 0.12, max: 0.92 }
-              aotf_1: &aotf_blanking_waveform
-                type: pulse
-                voltage: { min: 0.0, max: 5.0 }
-                window: { min: 0.05, max: 0.95 }
-
       dapi_cy5:
         channels: ["dapi", "cy5"]
+        props:
+          laser_405:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          laser_640:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Simultaneous DAPI (cam1) and Cy5 (cam2) imaging"
         sync:
@@ -262,10 +269,17 @@ default:
               laser_405: *laser_waveform_ch1
               camera_2: *camera_waveform_ch2
               laser_640: *laser_waveform_ch2
-              aotf_1: *aotf_blanking_waveform
-
       gfp_rfp:
         channels: ["gfp", "rfp"]
+        props:
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          laser_561:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Simultaneous GFP (cam2) and RFP (cam1) imaging"
         sync:
@@ -278,10 +292,17 @@ default:
               laser_561: *laser_waveform_ch1
               camera_2: *camera_waveform_ch2
               laser_488: *laser_waveform_ch2
-              aotf_1: *aotf_blanking_waveform
-
       rfp_cy5:
         channels: ["rfp", "cy5"]
+        props:
+          laser_561:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          laser_640:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Simultaneous RFP (cam1) and Cy5 (cam2) imaging"
         sync:
@@ -294,10 +315,13 @@ default:
               laser_561: *laser_waveform_ch1
               camera_2: *camera_waveform_ch2
               laser_640: *laser_waveform_ch2
-              aotf_1: *aotf_blanking_waveform
-
       single_dapi:
         channels: ["dapi"]
+        props:
+          laser_405:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Single DAPI channel for nuclear staining"
         sync:
@@ -308,10 +332,13 @@ default:
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_405: *laser_waveform_ch1
-              aotf_1: *aotf_blanking_waveform
-
       single_gfp:
         channels: ["gfp"]
+        props:
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Single GFP channel imaging"
         sync:
@@ -322,10 +349,13 @@ default:
             waveforms:
               camera_2: *camera_waveform_ch1
               laser_488: *laser_waveform_ch1
-              aotf_1: *aotf_blanking_waveform
-
       single_rfp:
         channels: ["rfp"]
+        props:
+          laser_561:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Single RFP channel imaging"
         sync:
@@ -336,10 +366,13 @@ default:
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_561: *laser_waveform_ch1
-              aotf_1: *aotf_blanking_waveform
-
       single_cy5:
         channels: ["cy5"]
+        props:
+          laser_640:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Single Cy5 far-red channel imaging"
         sync:
@@ -350,10 +383,13 @@ default:
             waveforms:
               camera_2: *camera_waveform_ch1
               laser_640: *laser_waveform_ch1
-              aotf_1: *aotf_blanking_waveform
-
       single_nir:
         channels: ["nir"]
+        props:
+          laser_730:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Single NIR channel for iRFP/miRFP imaging"
 

@@ -146,6 +146,25 @@ Device UIDs must be unique across the complete rig. A constructor argument may r
 UID, but both devices must occupy the same process. Independent targets within a dependency layer can initialize in
 parallel; devices sharing a target class initialize sequentially to protect SDKs with shared process state.
 
+Each device entry also accepts `autosave: [property_name, ...]` or `autosave: "*"` (default: `[]`).
+This is application-owned persistence policy, carried through local and remote configuration. Rigup does not
+save property edits or pass this field to driver constructors; the application decides how to use it.
+
+### Composition lifecycle and access
+
+Injected devices are borrowed: rigup owns their lifecycle. Each registered device has its own worker; calls made
+directly to an injected object bypass that object's controller. Shared hardware locks can serialize transactions,
+but do not coordinate a composition's saved settings with direct component writes.
+
+Two follow-ups remain:
+
+- Close dependents before their dependencies. Local nodes currently close devices in construction order, which
+  closes borrowed components first. Dependency-aware teardown should be addressed separately from device API
+  migrations; until then, composition cleanup must tolerate components that have already shut down.
+- Define how direct component writes are coordinated while a composition is operating, including whether to
+  restrict them or reconcile the composition's state afterward. Constructor injection does not establish ownership
+  of those writes.
+
 ## Run a remote node
 
 Start the daemon on the device host, using the node ID declared by the controlling rig:

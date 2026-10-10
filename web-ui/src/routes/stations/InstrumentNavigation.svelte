@@ -96,6 +96,14 @@
 {#if instrumentId}
   <Sidebar.Menu class="px-2 py-1">
     {@render navigationItem({
+      label: 'Home',
+      href: resolve('/stations/[stationId]/instruments/[instrumentId]/home', routeParams)
+    })}
+    {@render navigationItem({
+      label: 'Profile',
+      href: resolve('/stations/[stationId]/instruments/[instrumentId]/profile', routeParams)
+    })}
+    {@render navigationItem({
       label: 'Instrument',
       href: resolve('/stations/[stationId]/instruments/[instrumentId]', routeParams)
     })}

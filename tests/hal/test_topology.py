@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from rigup import BuildConfig
+from rigup import DeviceConfig
 from vxl.hal.topology import DetectionAssembly, HardwareTopology, IlluminationAssembly, OpticalRouting, StageAxes
 
 
@@ -11,18 +11,18 @@ def _hal_config(
     illumination_routing: set[str] | None = None,
 ) -> HardwareTopology:
     devices = {
-        uid: BuildConfig(target="builtins.object")
+        uid: DeviceConfig(target="builtins.object")
         for uid in ("camera", "laser", "transmitted", "x_axis", "y_axis", "z_axis")
     }
-    devices["selector"] = BuildConfig(
+    devices["selector"] = DeviceConfig(
         target="vxl.devices.axes.simulated.SimulatedDiscreteAxis",
         init={"slots": {0: "left", 1: "right"}},
     )
-    devices["ni_selector"] = BuildConfig(
+    devices["ni_selector"] = DeviceConfig(
         target="vxl.devices.axes.discrete.ni.NiDiscreteAxis",
         init={"slots": {0: {"pin": "ao0", "label": "sample"}}},
     )
-    devices["route_selector"] = BuildConfig(
+    devices["route_selector"] = DeviceConfig(
         target="vxl.devices.axes.simulated.SimulatedDiscreteAxis",
         init={"slots": {0: "left", 1: "right"}},
     )

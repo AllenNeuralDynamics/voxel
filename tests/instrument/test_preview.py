@@ -8,6 +8,139 @@ from vxl.preview import PreviewFrame, PreviewLayer, PreviewSourceEmission, Previ
 from vxl.preview.protocol import StagePosition
 
 
+@pytest.fixture
+def preview_operations(opened_instrument: Instrument, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Keep real laser commands; record camera/DAQ boundaries without starting frame workers."""
+    events = []
+
+    def record(label):
+        async def run():
+            events.append(label)
+
+        return run
+
+    def record_laser(laser):
+        original = laser.call
+
+        async def call(command, *args, **kwargs):
+            events.append(f"{laser.uid}.{command}")
+            if command in {"source_enable", "output_enable"}:
+                assert kwargs["wait"] is True
+            return await original(command, *args, **kwargs)
+
+        monkeypatch.setattr(laser, "call", call)
+
+    for laser in opened_instrument._hal.lasers.values():
+        record_laser(laser)
+    camera = opened_instrument._hal.cameras["camera_1"]
+    daq = opened_instrument._hal.signal_generators["daq"]
+    for handle, name, label in (
+        (camera, "start_preview", "camera.start"),
+        (camera, "stop_preview", "camera.stop"),
+        (daq, "start", "daq.start"),
+        (daq, "stop", "daq.stop"),
+    ):
+        monkeypatch.setattr(handle, name, record(label))
+    return events
+
+
+async def test_preview_orders_output_and_preserves_selection_on_reconfiguration(
+    opened_instrument: Instrument, preview_operations: list[str]
+) -> None:
+    instrument, events = opened_instrument, preview_operations
+    laser = instrument._hal.lasers["laser_488"]
+    assert (await laser.props.get("is_source_enabled")).ok["is_source_enabled"].value
+    await instrument.select_route("excitation_side", "left")
+    await instrument.start_preview(["gfp"])
+    assert events.index("laser_488.set_modulation_mode") < events.index("camera.start")
+    assert events.index("camera.start") < events.index("laser_488.output_enable") < events.index("daq.start")
+    assert (await laser.props.get("modulation_mode")).ok["modulation_mode"].value == "digital"
+
+    events.clear()
+    await instrument.select_route("excitation_side", "right")
+    assert events.index("laser_488.output_disable") < events.index("daq.stop") < events.index("camera.stop")
+    assert events.index("camera.stop") < events.index("camera.start")
+    assert [ch.uid for ch in instrument._preview_channels] == ["gfp"]
+    await instrument.apply_settings()
+    assert [ch.uid for ch in instrument._preview_channels] == ["gfp"]
+    await instrument.set_active_profile("single_rfp")
+    assert [ch.uid for ch in instrument._preview_channels] == ["rfp"]
+    await instrument.stop_preview()
+    for laser in instrument._hal.lasers.values():
+        props = (await laser.props.get("is_source_enabled", "is_output_enabled")).ok
+        assert props["is_source_enabled"].value
+        assert not props["is_output_enabled"].value
+    await instrument.close()
+    assert "laser_488.source_disable" in events
+    assert "laser_561.source_disable" in events
+
+
+@pytest.mark.parametrize("transition", ["profile", "route"])
+async def test_failed_reconfiguration_leaves_preview_stopped(
+    opened_instrument: Instrument, preview_operations: list[str], monkeypatch: pytest.MonkeyPatch, transition: str
+) -> None:
+    instrument, events = opened_instrument, preview_operations
+    await instrument.select_route("excitation_side", "left")
+    await instrument.start_preview()
+    events.clear()
+
+    async def fail(*_args):
+        raise RuntimeError("configuration failed")
+
+    if transition == "profile":
+        monkeypatch.setattr(instrument, "_apply_settings", fail)
+        with pytest.raises(RuntimeError, match="configuration failed"):
+            await instrument.set_active_profile("single_rfp")
+    else:
+        monkeypatch.setattr(type(instrument._hal.routing["excitation_side"]), "select", fail)
+        with pytest.raises(ExceptionGroup):
+            await instrument.select_route("excitation_side", "right")
+    assert instrument.mode.value is AcquisitionMode.IDLE
+    assert "camera.stop" in events
+    assert "camera.start" not in events
+    for laser in instrument._hal.lasers.values():
+        assert not (await laser.props.get("is_output_enabled")).ok["is_output_enabled"].value
+
+
+async def test_failed_daq_start_inhibits_output_and_stops_camera(
+    opened_instrument: Instrument, preview_operations: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instrument, events = opened_instrument, preview_operations
+    await instrument.select_route("excitation_side", "left")
+
+    async def fail():
+        events.append("daq.fail")
+        raise RuntimeError("DAQ failed")
+
+    monkeypatch.setattr(instrument._hal.signal_generators["daq"], "start", fail)
+    with pytest.raises(ExceptionGroup):
+        await instrument.start_preview()
+    assert events[-3:] == ["laser_488.output_disable", "daq.stop", "camera.stop"]
+    assert instrument.mode.value is AcquisitionMode.IDLE
+    assert not instrument._preview_channels
+
+
+async def test_output_inhibition_failure_does_not_skip_daq_and_camera_stop(
+    opened_instrument: Instrument, preview_operations: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instrument, events = opened_instrument, preview_operations
+    await instrument.select_route("excitation_side", "left")
+    await instrument.start_preview()
+    laser = instrument._hal.lasers["laser_488"]
+    original = laser.call
+
+    async def fail(command, *args, **kwargs):
+        if command == "output_disable":
+            raise RuntimeError("inhibition failed")
+        return await original(command, *args, **kwargs)
+
+    monkeypatch.setattr(laser, "call", fail)
+    with pytest.raises(ExceptionGroup):
+        await instrument.stop_preview()
+    assert events[-2:] == ["daq.stop", "camera.stop"]
+    assert instrument.mode.value is AcquisitionMode.IDLE
+
+
 async def test_preview_rejects_stale_source_generation(opened_instrument: Instrument) -> None:
     instrument = opened_instrument
     source_frames: list[PreviewSourceEmission] = []

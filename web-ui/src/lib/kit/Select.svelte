@@ -75,6 +75,7 @@
   import { cn } from '$lib/utils';
 
   interface Props<T extends string = string> extends SelectVariants {
+    'aria-label'?: string;
     value: T;
     options: SelectOption<T>[];
     onchange?: (value: T) => void;
@@ -93,10 +94,12 @@
     side?: 'top' | 'bottom' | 'left' | 'right';
     sideOffset?: number;
     align?: 'start' | 'center' | 'end';
+    itemClass?: string;
     class?: string;
   }
 
   let {
+    'aria-label': ariaLabel,
     value = $bindable(),
     options,
     onchange,
@@ -113,6 +116,7 @@
     side = 'bottom',
     sideOffset = 4,
     align = 'start',
+    itemClass,
     variant = 'filled',
     size = 'md',
     class: className = ''
@@ -139,7 +143,7 @@
 </script>
 
 <SelectPrimitive.Root type="single" {value} onValueChange={handleChange} {items} disabled={disabled || loading}>
-  <SelectPrimitive.Trigger class={cn(styles.trigger(), className)}>
+  <SelectPrimitive.Trigger aria-label={ariaLabel} class={cn(styles.trigger(), className)}>
     {#if prefix}<span class="shrink-0 text-fg-muted">{prefix}</span>{/if}
     <span class={cn('flex min-w-0 flex-1 items-center gap-1.5', prefix && 'justify-end')}>
       {#if leading && selected}{@render leading(selected)}{/if}
@@ -172,7 +176,7 @@
               <SelectPrimitive.Item
                 value={option.value}
                 label={option.label}
-                class={cn(styles.item(), option.description ? 'items-start' : 'items-center')}
+                class={cn(styles.item(), option.description ? 'items-start' : 'items-center', itemClass)}
               >
                 {#if showCheckmark}
                   <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center text-primary">

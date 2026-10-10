@@ -2,12 +2,18 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { buildDeviceTopology, buildDeviceUsageIndex, resolveDeviceConfig } from '$lib/device-topology';
+  import CameraControlCard from '$lib/devices/CameraControlCard.svelte';
+  import CameraControlCard2 from '$lib/devices/CameraControlCard2.svelte';
+  import LaserControlCard from '$lib/devices/LaserControlCard.svelte';
+  import LaserControlCard2 from '$lib/devices/LaserControlCard2.svelte';
+  import { ChevronDown } from '$lib/icons';
   import { resolveInstrumentView } from '$lib/instrument-view';
-  import { getVoxelStation } from '$lib/model';
+  import { CameraHandle, getVoxelStation, LaserHandle } from '$lib/model';
   import PageHeader from '$lib/PageHeader.svelte';
   import { cn, displayName } from '$lib/utils';
 
   import DeviceControls from './DeviceControls.svelte';
+  import LaserTelemetry from './LaserTelemetry.svelte';
 
   const app = getVoxelStation();
   const stationId = $derived(page.params.stationId ?? '');
@@ -18,6 +24,11 @@
   const hal = $derived(activeInstrument?.hal ?? selected?.config?.hal ?? null);
   const imaging = $derived(activeInstrument?.imaging ?? selected?.state?.imaging ?? null);
   const device = $derived(deviceId ? activeInstrument?.devices.get(deviceId) : undefined);
+  const activeChannels = $derived(
+    activeInstrument?.activeChannels.filter(
+      (channel) => channel.camera.id === deviceId || channel.laser.id === deviceId
+    ) ?? []
+  );
   const topology = $derived(hal && imaging ? buildDeviceTopology(hal, imaging) : null);
   const deviceUsages = $derived(hal ? buildDeviceUsageIndex(hal) : new Map());
   const entry = $derived(deviceId ? (topology?.get(deviceId) ?? null) : null);
@@ -138,13 +149,48 @@
 {/snippet}
 
 <div class="flex h-full min-h-0 min-w-0 flex-col bg-canvas">
-  <PageHeader items={[{ label: 'Devices' }, { label: deviceId ? displayName(deviceId) : 'Device' }]} />
+  <PageHeader items={[{ label: 'Devices' }, { label: deviceId ? displayName(deviceId) : 'Device' }]}>
+    {#snippet trailing()}
+      {#if device instanceof LaserHandle}
+        <span class="text-sm text-fg-muted">{device.wavelength?.value ?? '—'} nm</span>
+        <span
+          class={cn('size-1.5 shrink-0 rounded-full', device.connected ? 'bg-success' : 'bg-fg-faint')}
+          title={device.connected ? 'Connected' : 'Disconnected'}
+        ></span>
+      {/if}
+    {/snippet}
+  </PageHeader>
   <div class="min-h-0 flex-1 overflow-y-auto">
     {#if id && deviceId && hal}
       {#if entry && config}
-        <div class="w-full max-w-4xl space-y-8 px-4 pb-4">
+        <div
+          class={cn('@container w-full max-w-4xl px-4 pb-4', device instanceof LaserHandle ? 'space-y-4' : 'space-y-8')}
+        >
+          {#if activeInstrument && activeChannels.length > 0}
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span class="text-fg-muted">Active profile</span>
+              <a
+                class="text-fg hover:underline"
+                href={resolve('/stations/[stationId]/instruments/[instrumentId]/profiles/[profileId]/overview', {
+                  stationId,
+                  instrumentId: id,
+                  profileId: activeInstrument.activeProfileId
+                })}>{activeInstrument.activeProfile?.label || displayName(activeInstrument.activeProfileId)}</a
+              >
+              {#each activeChannels as channel (channel.id)}
+                <a
+                  class="text-fg-muted hover:underline"
+                  href={resolve('/stations/[stationId]/instruments/[instrumentId]/channels/[channelId]', {
+                    stationId,
+                    instrumentId: id,
+                    channelId: channel.id
+                  })}>{channel.label}</a
+                >
+              {/each}
+            </div>
+          {/if}
           {#if device?.connected}
-            <DeviceControls {device} />
+            {#key device.id}<DeviceControls {device} instrument={activeInstrument} />{/key}
           {:else}
             <section class="py-1">
               <div class="min-w-0">
@@ -158,11 +204,20 @@
                 </p>
               </div>
             </section>
+            {#if device instanceof LaserHandle}<LaserTelemetry laser={device} />{/if}
           {/if}
 
-          <section id="details" class="rounded-lg border border-line-muted p-3">
-            <h3 class="mb-3 text-sm font-medium text-fg-muted">Details</h3>
-            <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1.5">
+          <details
+            id="details"
+            class="group rounded-lg border border-line-muted p-3"
+            open={!(device instanceof LaserHandle)}
+          >
+            <summary class="flex cursor-pointer list-none items-center justify-between text-base text-fg"
+              >Details<ChevronDown
+                class="size-3.5 -rotate-90 text-fg-muted transition-transform group-open:rotate-0"
+              /></summary
+            >
+            <dl class="mt-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1.5">
               <dt class="font-medium text-fg-muted">Role</dt>
               <dd class="text-fg">{displayName(entry.role)}</dd>
 
@@ -173,6 +228,15 @@
 
               <dt class="font-medium text-fg-muted">Driver</dt>
               <dd class="truncate font-mono text-fg" title={config.target}>{config.target}</dd>
+
+              <dt class="font-medium text-fg-muted">Autosave</dt>
+              <dd class="text-fg">
+                {config.autosave === '*'
+                  ? 'All writable properties'
+                  : config.autosave?.length
+                    ? config.autosave.join(', ')
+                    : 'None'}
+              </dd>
 
               <dt class="font-medium text-fg-muted">Runtime</dt>
               <dd class="flex min-w-0 items-baseline gap-2 text-fg">
@@ -193,7 +257,7 @@
                 <dd class="min-w-0 pt-3">{@render configValue(config.defaults, 'defaults', 0)}</dd>
               {/if}
             </dl>
-          </section>
+          </details>
 
           {#if entry.referencedBy.length > 0}
             <section class="rounded-lg border border-line-muted p-3">
@@ -204,6 +268,18 @@
                 {/each}
               </ul>
             </section>
+          {/if}
+          {#if device instanceof LaserHandle && activeInstrument}
+            {#key device.id}
+              <LaserControlCard laser={device} instrument={activeInstrument} />
+              <LaserControlCard2 laser={device} instrument={activeInstrument} />
+            {/key}
+          {/if}
+          {#if device instanceof CameraHandle && activeInstrument}
+            {#key device.id}
+              <CameraControlCard camera={device} instrument={activeInstrument} />
+              <CameraControlCard2 camera={device} instrument={activeInstrument} />
+            {/key}
           {/if}
         </div>
       {:else}

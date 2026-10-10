@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Popover } from 'bits-ui';
   import { Pane, PaneGroup } from 'paneforge';
+  import type { Snippet } from 'svelte';
   import { fade } from 'svelte/transition';
 
   import { Select } from '$lib/kit';
@@ -14,6 +15,8 @@
   import { SPATIAL_UNIT_OPTIONS } from '$lib/spatial-units';
   import { StageControls, StageView, type Viewport } from '$lib/stage';
   import { cn, createPaneSize } from '$lib/utils';
+
+  let { historyControls }: { historyControls: Snippet } = $props();
 
   const app = getVoxelStation();
   const previews = getPreviewContext();
@@ -114,7 +117,10 @@
     <footer
       class="grid min-h-pane-footer shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-line-muted bg-surface px-3 py-2 @min-[72rem]/center-pane:grid-cols-[minmax(max-content,1fr)_auto_minmax(0,48rem)]"
     >
-      <div class="col-start-1 row-start-1 flex items-center gap-2">
+      <div class="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-2">
+        <div class="flex items-center gap-1">
+          {@render historyControls()}
+        </div>
         <button
           type="button"
           aria-pressed={logsOpen}

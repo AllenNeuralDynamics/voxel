@@ -1,15 +1,17 @@
 <script lang="ts">
-  import { ChevronDown } from '$lib/icons';
+  import { ChevronDown, ContentSaveOutline } from '$lib/icons';
   import { Collapsible, JsonView } from '$lib/kit';
-  import type { DeviceHandle, PropertyInfo } from '$lib/model';
+  import type { DeviceHandle, Instrument, PropertyInfo } from '$lib/model';
   import { formatPropDisplay, isStructuredValue, PropInput } from '$lib/prop';
+  import LinkIndicator from '$lib/prop/LinkIndicator.svelte';
 
   interface Props {
     device: DeviceHandle;
     exclude?: string[];
+    instrument?: Instrument;
   }
 
-  const { device, exclude = [] }: Props = $props();
+  const { device, exclude = [], instrument }: Props = $props();
   const properties = $derived.by(() => {
     const entries = (Object.entries(device.interface?.properties ?? {}) as Array<[string, PropertyInfo]>).filter(
       ([name]) => !exclude.includes(name)
@@ -34,7 +36,15 @@
       <div class="grid gap-2">
         {#each properties.editable as [name, info] (name)}
           <div class="flex items-center justify-between gap-6">
-            <span class="shrink-0 text-fg" title={info.desc ?? ''}>{info.label}</span>
+            <span class="flex shrink-0 items-center gap-1 text-fg" title={info.desc ?? ''}
+              >{info.label}
+              <LinkIndicator {instrument} deviceId={device.id} property={name} />
+              {#if instrument?.divergence.get(device.id)?.autosave.has(name)}
+                <span class="ml-1 inline-flex" title="Autosaved to the active profile"
+                  ><ContentSaveOutline class="size-3 text-fg-faint" /></span
+                >
+              {/if}
+            </span>
             <div class="w-full max-w-64 min-w-0">
               <PropInput model={device.getProp(name)?.model} size="sm" />
             </div>

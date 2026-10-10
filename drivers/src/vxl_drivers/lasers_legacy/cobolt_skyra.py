@@ -6,7 +6,7 @@ from pycobolt import CoboltLaser
 from rigup.device.props import enumerated, numeric
 
 from rigup import describe
-from vxl.devices.laser.base import Laser
+from vxl_drivers.lasers_legacy.base import Laser
 
 
 class Cmd(StrEnum):

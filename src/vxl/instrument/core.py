@@ -4,8 +4,8 @@ import getpass
 import logging
 import math
 import uuid
-from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
-from contextlib import suppress
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping, Sequence
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
@@ -30,7 +30,7 @@ from vxlib.schema import FrozenModel
 
 from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from vxl.devices.camera import CameraHandle, CaptureState
+from vxl.devices.camera import CameraHandle, CaptureState, SensorROI
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
@@ -54,12 +54,27 @@ from .config import (
     TaskPatch,
     WriterPatch,
 )
-from .errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation, ViolationLoc
+from .errors import (
+    InstrumentBusyError,
+    OperationRejectedError,
+    SettingsPersistenceError,
+    StartupError,
+    Violation,
+    ViolationLoc,
+)
 from .metadata import ExperimentMetadata, resolve_metadata_class
 from .planning import resolve_xy, resolve_z
 from .store import PROMOTABLE_FIELDS, InstrumentStore
 
 logger = logging.getLogger(__name__)
+
+
+async def _gather_hardware[T](*calls: Awaitable[T]) -> list[T]:
+    """Finish every hardware call before reporting failures, so cleanup cannot race preparation."""
+    results = await asyncio.gather(*calls, return_exceptions=True)
+    if errors := [result for result in results if isinstance(result, BaseException)]:
+        raise BaseExceptionGroup("Hardware operations failed", errors)
+    return [result for result in results if not isinstance(result, BaseException)]
 
 
 class AcquisitionMode(StrEnum):
@@ -108,23 +123,19 @@ class Channel:
     camera: CameraHandle
     laser: DeviceHandle
 
-    async def start_preview(self) -> None:
-        "Enable this channel's laser and start its camera's preview."
-        await self.laser.call("enable")
-        await self.camera.start_preview()
+    async def prepare_laser(self) -> None:
+        """Establish digital modulation and accommodate source startup with output inhibited."""
+        await self.disable_laser_output()
+        await self.laser.call("set_modulation_mode", "digital")
+        await self.laser.call("source_enable", wait=True)
 
-    async def stop_preview(self) -> None:
-        "Disable this channel's laser and stop its camera's preview."
-        await self.laser.call("disable")
-        await self.camera.stop_preview()
+    async def enable_laser_output(self) -> None:
+        """Permit output, waiting for deferred startup in source-only implementations."""
+        await self.laser.call("output_enable", wait=True)
 
-    async def enable_laser(self) -> None:
-        """Enable this channel's laser."""
-        await self.laser.call("enable")
-
-    async def disable_laser(self) -> None:
-        """Disable this channel's laser."""
-        await self.laser.call("disable")
+    async def disable_laser_output(self) -> None:
+        """Inhibit output while retaining source permission."""
+        await self.laser.call("output_disable")
 
 
 class Instrument:
@@ -274,10 +285,15 @@ class Instrument:
                 await self._refresh_device_props()
                 self._validate_startup()
                 self._channels = self._build_channels()
+                await self._inhibit_laser_outputs()
                 await self._discover_remote_stores()
                 for camera in self._hal.cameras.values():
                     self.fov.add_triggers(camera.frame_area_um)
                 await self._apply_profile(self._active_profile_id.value)
+                # Start warming imaging sources without waiting or permitting output.
+                await _gather_hardware(
+                    *(self._hal.lasers[uid].call("source_enable", wait=False) for uid in self._imaging_laser_ids())
+                )
                 for cam_id, camera in self._hal.cameras.items():
                     await self._subscribe_camera(cam_id, camera)
                 await self.profile_fovs.refresh()
@@ -296,7 +312,12 @@ class Instrument:
         for unsub in self._device_unsubs:
             unsub()
         self._device_unsubs = []
-        await self.stop_preview()
+        results = list(await asyncio.gather(self.stop_preview(), return_exceptions=True))
+        results.extend(
+            await asyncio.gather(
+                *(laser.call("source_disable") for laser in self._hal.lasers.values()), return_exceptions=True
+            )
+        )
         for unsub in self._preview_unsubs:
             unsub()
         self._preview_unsubs = []
@@ -306,6 +327,8 @@ class Instrument:
         self._remote_stores = {}
         async with self._lock:
             await self._history.clear()
+        if errors := [result for result in results if isinstance(result, BaseException)]:
+            raise BaseExceptionGroup("Instrument shutdown failed", errors)
 
     async def start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
         """Start preview for selected channels, defaulting to all active-profile channels."""
@@ -330,14 +353,16 @@ class Instrument:
         return await handle.props.get(*names)
 
     async def set_device_properties(self, device_id: str, properties: Mapping[str, Any]) -> PropResults:
-        """Set device properties while idle or previewing."""
+        """Apply user edits and autosave selected accepted values in the active profile."""
         async with self._lock:
             self._ensure_mode(
                 "set device properties",
                 AcquisitionMode.IDLE,
                 AcquisitionMode.PREVIEW,
             )
-            return await self._device(device_id).props.set(**properties)
+            results = await self._device(device_id).props.set(**properties)
+            await self._autosave_properties(device_id, results)
+            return results
 
     async def execute_device_command(
         self,
@@ -346,14 +371,27 @@ class Instrument:
         args: Sequence[Any] = (),
         kwargs: Mapping[str, Any] | None = None,
     ) -> Result[Any]:
-        """Execute a device command while idle or previewing."""
+        """Execute a user command; persist applied ROIs for active-profile cameras."""
         async with self._lock:
             self._ensure_mode(
                 "execute a device command",
                 AcquisitionMode.IDLE,
                 AcquisitionMode.PREVIEW,
             )
-            return await self._device(device_id).run_command(command, *args, **dict(kwargs or {}))
+            result = await self._device(device_id).run_command(command, *args, **dict(kwargs or {}))
+            if (
+                result.is_ok
+                and command in {"update_roi", "reset_roi"}
+                and device_id in self._hal.cameras
+                and self._channel_for_camera(device_id) is not None
+            ):
+                roi = SensorROI.model_validate(result.unwrap())
+                profile = self.active_profile
+                await self._persist_device_edit(
+                    device_id,
+                    profile.model_copy(update={"rois": {**profile.rois, device_id: roi}}),
+                )
+            return result
 
     async def move_stage(
         self,
@@ -426,14 +464,8 @@ class Instrument:
             )
             if profile_id == self._active_profile_id.value:
                 return profile_id  # already active — avoid preview flicker and hardware churn
-            was_previewing = self._mode.value == AcquisitionMode.PREVIEW
-            if was_previewing:
-                await self._stop_preview()
-            try:
+            async with self._pause_preview_for_reconfiguration(preserve_channels=False):
                 await self._apply_profile(profile_id)
-            finally:
-                if was_previewing:
-                    await self._start_preview()  # restored even on failure (on the rolled-back profile)
             return profile_id
 
     async def apply_settings(self) -> None:
@@ -444,38 +476,8 @@ class Instrument:
                 AcquisitionMode.IDLE,
                 AcquisitionMode.PREVIEW,
             )
-            await self._apply_settings()
-
-    async def save_settings(self) -> None:
-        """Save current device properties and camera ROIs in the active profile."""
-        async with self._lock:
-            self._ensure_mode(
-                "save device settings",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
-            profile = self.active_profile
-            settable = self._settable_devices()
-            props = {**profile.props}
-            rois = {**profile.rois}
-
-            for device_id in sorted(settable):
-                if device_id not in self._hal.devices:
-                    continue
-                captured = await self._hal.devices[device_id].props.get_values("rw")
-                captured.pop("roi", None)
-                if captured:
-                    props[device_id] = captured
-                if device_id in self._hal.cameras:
-                    camera = self._hal.cameras[device_id]
-                    roi = await camera.roi.get()
-                    sensor = camera.sensor_size_px.value
-                    if sensor is not None and roi.x == 0 and roi.y == 0 and roi.w == sensor.x and roi.h == sensor.y:
-                        rois.pop(device_id, None)  # full sensor → store nothing; activate falls back to reset_roi
-                    else:
-                        rois[device_id] = roi
-
-            await self._update_active_profile_config(profile.model_copy(update={"props": props, "rois": rois}))
+            async with self._pause_preview_for_reconfiguration():
+                await self._apply_settings()
 
     async def update_signals(self, generator_uid: str, signals: Signals) -> None:
         """Apply a signal-generator configuration and save it in the active profile."""
@@ -758,12 +760,60 @@ class Instrument:
     def _validate_startup(self) -> None:
         """Validate persisted state against hardware capabilities established by HAL."""
         violations = [
+            *self._laser_modulation_violations(),
+            *self._autosave_policy_violations(self._hal.device_interfaces),
             *self._profile_interface_violations(self._hal.device_interfaces),
             *self._signal_port_violations(),
             *self._stage_position_violations(),
         ]
         if violations:
             raise StartupError(violations)
+
+    def _imaging_laser_ids(self) -> set[str]:
+        imaging = self._store.value.imaging
+        return {imaging.channels[ch].illumination for profile in imaging.profiles.values() for ch in profile.channels}
+
+    def _laser_modulation_violations(self) -> list[Violation]:
+        violations = []
+        for uid in sorted(self._imaging_laser_ids()):
+            laser = self._hal.lasers.get(uid)
+            if laser is None:  # HAL reports unavailable or incorrectly classified devices.
+                continue
+            mode = laser.props.cache.get("modulation_mode")
+            if mode is None or "digital" not in (mode.options or []):
+                violations.append(
+                    Violation(
+                        code="imaging.laser.digital_unsupported",
+                        msg=f"Imaging laser '{uid}' must support digital modulation.",
+                        loc=("hal", "illumination", uid),
+                    )
+                )
+        return violations
+
+    def _autosave_policy_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
+        """Reject explicit autosave names that cannot be persisted as writable properties."""
+        topology = self._hal.topology
+        groups = [(None, topology.devices), *((uid, node.devices) for uid, node in topology.nodes.items())]
+        violations = []
+        for node_id, devices in groups:
+            for device_id, config in devices.items():
+                interface = interfaces.get(device_id)
+                if config.autosave == "*" or interface is None:
+                    continue
+                loc: ViolationLoc = ("hal", "devices", device_id, "autosave")
+                if node_id is not None:
+                    loc = ("hal", "nodes", node_id, "devices", device_id, "autosave")
+                for index, name in enumerate(config.autosave):
+                    info = interface.properties.get(name)
+                    if info is None or info.access != "rw":
+                        violations.append(
+                            Violation(
+                                code="device.autosave.not_writable",
+                                msg=f"Autosave requires a writable property: '{device_id}.{name}'.",
+                                loc=(*loc, index),
+                            )
+                        )
+        return violations
 
     def _profile_interface_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
         violations = []
@@ -950,6 +1000,28 @@ class Instrument:
         expected = " or ".join(mode.value for mode in allowed)
         raise InstrumentBusyError(f"Unable to {operation}: requires mode {expected}; current mode is {current.value}")
 
+    async def _inhibit_laser_outputs(self) -> None:
+        await _gather_hardware(*(laser.call("output_disable") for laser in self._hal.lasers.values()))
+
+    @asynccontextmanager
+    async def _pause_preview_for_reconfiguration(self, *, preserve_channels: bool = True) -> AsyncIterator[None]:
+        """Inhibit output and pause preview; resume only after success. Caller holds the lock."""
+        was_previewing = self._mode.value == AcquisitionMode.PREVIEW
+        channel_ids = [ch.uid for ch in self._preview_channels] if preserve_channels else None
+        if was_previewing:
+            await self._stop_preview()
+        await self._inhibit_laser_outputs()
+        try:
+            yield
+        except BaseException:
+            try:
+                await self._inhibit_laser_outputs()
+            except Exception:
+                logger.exception("Failed to inhibit output after reconfiguration failure")
+            raise
+        if was_previewing:
+            await self._start_preview(channel_ids)
+
     async def _start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
         """Start preview for the active profile. Caller holds ``self._lock``."""
         if self._mode.value != AcquisitionMode.IDLE:
@@ -970,26 +1042,23 @@ class Instrument:
         self._preview_positions.clear()
         self._preview_channels = chans
 
-        results = await asyncio.gather(*(ch.start_preview() for ch in chans), return_exceptions=True)
-        started = 0
-        for ch, result in zip(chans, results, strict=True):
-            if isinstance(result, BaseException):
-                logger.error("Channel %s failed to start preview", ch.uid, exc_info=result)
-            else:
-                started += 1
-
-        if started == 0:
-            self._preview_channels = []
-            raise RuntimeError("Preview failed to start on every channel")
-
-        await self._reset_preview()
-
-        with suppress(NotImplementedError, RuntimeError):
-            await self._hal.stage.scanning_axis.reset_ttl_stepper()
-
-        await self._start_signal_generators()
-        await self._mode.set(AcquisitionMode.PREVIEW)
-        logger.info("Preview started (%d cameras)", started)
+        try:
+            await self._inhibit_laser_outputs()
+            await _gather_hardware(*(ch.prepare_laser() for ch in chans))
+            await _gather_hardware(*(ch.camera.start_preview() for ch in chans))
+            await self._reset_preview()
+            with suppress(NotImplementedError, RuntimeError):
+                await self._hal.stage.scanning_axis.reset_ttl_stepper()
+            await _gather_hardware(*(ch.enable_laser_output() for ch in chans))
+            await self._start_signal_generators()
+            await self._mode.set(AcquisitionMode.PREVIEW)
+        except BaseException:
+            try:
+                await self._stop_preview()
+            except Exception:
+                logger.exception("Preview startup cleanup failed")
+            raise
+        logger.info("Preview started (%d channels)", len(chans))
 
     async def _stop_preview(self) -> None:
         """Stop capture while retaining valid cached preview sources. Caller holds ``self._lock``.
@@ -1002,13 +1071,12 @@ class Instrument:
             return
         chans, self._preview_channels = self._preview_channels, []
 
-        results = await asyncio.gather(*(ch.stop_preview() for ch in chans), return_exceptions=True)
-        for ch, result in zip(chans, results, strict=True):
-            if isinstance(result, BaseException):
-                logger.error("Channel %s failed to stop preview", ch.uid, exc_info=result)
-
-        await self._stop_signal_generators()
+        results = await asyncio.gather(*(ch.disable_laser_output() for ch in chans), return_exceptions=True)
+        results.extend(await asyncio.gather(self._stop_signal_generators(), return_exceptions=True))
+        results.extend(await asyncio.gather(*(ch.camera.stop_preview() for ch in chans), return_exceptions=True))
         await self._mode.set(AcquisitionMode.IDLE)
+        if errors := [result for result in results if isinstance(result, BaseException)]:
+            raise BaseExceptionGroup("Preview shutdown failed", errors)
         logger.info("Preview stopped")
 
     async def _reset_preview(self) -> None:
@@ -1086,24 +1154,8 @@ class Instrument:
         if not routes:
             return
 
-        preview_channels = list(self._preview_channels) if self._mode.value == AcquisitionMode.PREVIEW else []
-        if preview_channels:
-            await asyncio.gather(*(channel.disable_laser() for channel in preview_channels))
-        # Await every dimension before reporting failure or restoring illumination.
-        results = await asyncio.gather(
-            *(self._hal.routing[uid].select(route) for uid, route in routes.items()),
-            return_exceptions=True,
-        )
-        errors: list[Exception] = []
-        for result in results:
-            if isinstance(result, BaseException):
-                if not isinstance(result, Exception):
-                    raise result
-                errors.append(result)
-        if errors:
-            raise ExceptionGroup("Optical routing failed", errors)
-        if preview_channels:
-            await asyncio.gather(*(channel.enable_laser() for channel in preview_channels))
+        async with self._pause_preview_for_reconfiguration():
+            await _gather_hardware(*(self._hal.routing[uid].select(route) for uid, route in routes.items()))
 
     async def _apply_profile(self, profile_id: str) -> None:
         """Drive hardware to a saved profile config and invalidate the previous preview stream.
@@ -1160,11 +1212,11 @@ class Instrument:
 
     async def _start_signal_generators(self) -> None:
         handles = [self._hal.signal_generators[uid] for uid in self.active_profile.sync]
-        await asyncio.gather(*(h.start() for h in handles))
+        await _gather_hardware(*(h.start() for h in handles))
 
     async def _stop_signal_generators(self) -> None:
         handles = [self._hal.signal_generators[uid] for uid in self.active_profile.sync]
-        await asyncio.gather(*(h.stop() for h in handles))
+        await _gather_hardware(*(h.stop() for h in handles))
 
     async def _run_setup_commands(self) -> None:
         for device_id, commands in self.active_profile.setup.items():
@@ -1178,6 +1230,32 @@ class Instrument:
         profile_id = self._active_profile_id.value
         imaging = imaging.model_copy(update={"profiles": {**imaging.profiles, profile_id: profile}})
         await self._store.update(imaging=imaging)
+
+    async def _autosave_properties(self, device_id: str, results: PropResults) -> None:
+        """Persist selected user edits only; workflow writes use device handles directly."""
+        selection = self._hal.topology.device_configs[device_id].autosave
+        if not selection or device_id not in self._settable_devices():
+            return
+        interface = self._hal.device_interfaces[device_id]
+        updates = {
+            name: model.value
+            for name, model in results.ok.items()
+            if (info := interface.properties.get(name)) is not None
+            and info.access == "rw"
+            and (selection == "*" or name in selection)
+        }
+        if updates:
+            profile = self.active_profile
+            props = {**profile.props, device_id: {**profile.props.get(device_id, {}), **updates}}
+            await self._persist_device_edit(device_id, profile.model_copy(update={"props": props}))
+
+    async def _persist_device_edit(self, device_id: str, profile: ProfileConfig) -> None:
+        """Report persistence failures after an accepted hardware edit without rolling it back."""
+        try:
+            await self._update_active_profile_config(profile)
+        except OSError as error:
+            msg = f"Device '{device_id}' accepted the change, but profile settings could not be saved: {error}"
+            raise SettingsPersistenceError(msg) from error
 
     async def _undoable_edit[T](
         self,
@@ -1440,8 +1518,7 @@ class Instrument:
     async def _execute_volume(self, manifest: AcquisitionManifest, volume_index: int) -> AcquisitionManifest:
         """Execute and persist the complete lifecycle of one manifest volume.
 
-        Cleanup always disables lasers, resets the stepper, and finalizes the writers, so cancellation
-        leaves hardware safe and the partial stack finalized.
+        Cleanup inhibits laser output, stops DAQ generation, resets the stepper, and finalizes writers.
         """
         volume = manifest.volumes[volume_index]
         manifest = await self._records.acquisitions.start_volume(manifest.id, volume_index=volume_index)
@@ -1451,10 +1528,8 @@ class Instrument:
             phase=AcquisitionPhase.CONFIGURING,
             frames_captured=0,
         )
-        await self._apply_profile(volume.profile)
-
         settings = self._store.value.output
-        channels = self.active_channels
+        channels = {uid: self._channels[uid] for uid in self._store.value.imaging.profiles[volume.profile].channels}
         scanning_axis = self._hal.stage.scanning_axis
         num_frames = volume.frames_total
         batch_z = settings.batch_z
@@ -1466,8 +1541,11 @@ class Instrument:
         frames_done = 0
         capture_error: BaseException | None = None
         try:
+            await self._inhibit_laser_outputs()
+            await self._apply_profile(volume.profile)
+            await _gather_hardware(*(ch.prepare_laser() for ch in channels.values()))
             await self._update_acquisition(manifest, phase=AcquisitionPhase.POSITIONING)
-            await asyncio.gather(
+            await _gather_hardware(
                 self._hal.stage.x.move_abs(volume.x, wait=True),
                 self._hal.stage.y.move_abs(volume.y, wait=True),
                 self._hal.stage.z.move_abs(volume.z_start, wait=True),
@@ -1490,7 +1568,7 @@ class Instrument:
                         settings=settings,
                     )
                 )
-            opened = await asyncio.gather(*init_coros)
+            opened = await _gather_hardware(*init_coros)
             locations = dict(zip(channels, opened, strict=True))
             await self._reset_preview()
             manifest = await self._records.acquisitions.register_datasets(
@@ -1500,14 +1578,15 @@ class Instrument:
             )
             await self._update_acquisition(manifest)
 
-            await asyncio.gather(*(ch.enable_laser() for ch in channels.values()))
             await self._update_acquisition(manifest, phase=AcquisitionPhase.CAPTURING)
 
             for batch_idx in range(math.ceil(num_frames / batch_z)):
                 frames_in_batch = min(batch_z, num_frames - batch_idx * batch_z)
                 # begin_batch waits for a free writer slot and arms the camera before returning,
                 # so the signal generator is safe to fire once these resolve.
-                await asyncio.gather(*(ch.camera.begin_batch(frames_in_batch) for ch in channels.values()))
+                await _gather_hardware(*(ch.camera.begin_batch(frames_in_batch) for ch in channels.values()))
+                if batch_idx == 0:
+                    await _gather_hardware(*(ch.enable_laser_output() for ch in channels.values()))
                 await self._start_signal_generators()
                 while True:
                     states = await asyncio.gather(*(ch.camera.capture_state() for ch in channels.values()))
@@ -1555,12 +1634,14 @@ class Instrument:
                     "Cleanup also failed for task %s / profile %s", volume.task, volume.profile, exc_info=error
                 )
             raise capture_error.with_traceback(capture_error.__traceback__)
-        raise ExceptionGroup(f"writer cleanup failed for task {volume.task} / profile {volume.profile}", cleanup_errors)
+        raise ExceptionGroup(
+            f"capture cleanup failed for task {volume.task} / profile {volume.profile}", cleanup_errors
+        )
 
     async def _teardown_capture(self, chans: list[Channel], scanning_axis: ContinuousAxisHandle) -> list[Exception]:
-        """Cleanup after a volume, regardless of how capture exited: disable lasers, reset the stepper,
-        then drain and close every writer. Every camera is attempted; writer-close failures are returned
-        so the caller cannot mark the dataset complete.
+        """Inhibit output, stop DAQ, reset the stepper, then drain and close every writer.
+
+        Attempt every cleanup step and report failures so the caller cannot mark the volume complete.
 
         Close runs in the background on each node; this polls ``capture_state`` until every camera
         reports ``CLOSED``. Each poll is a short RPC, so a hung/dead node surfaces via its timeout
@@ -1576,11 +1657,20 @@ class Instrument:
                         errors.append(result if isinstance(result, Exception) else RuntimeError(str(result)))
             return errors
 
-        _report("disable_laser", await asyncio.gather(*(ch.disable_laser() for ch in chans), return_exceptions=True))
+        errors = _report(
+            "disable_laser_output",
+            await asyncio.gather(*(ch.disable_laser_output() for ch in chans), return_exceptions=True),
+            collect=True,
+        )
+        try:
+            await self._stop_signal_generators()
+        except Exception as error:
+            logger.exception("cleanup: stopping signal generators failed")
+            errors.append(error)
         with suppress(NotImplementedError, RuntimeError):
             await scanning_axis.reset_ttl_stepper()
         close_results = await asyncio.gather(*(ch.camera.close_stack() for ch in chans), return_exceptions=True)
-        errors = _report("close_stack", close_results, collect=True)
+        errors.extend(_report("close_stack", close_results, collect=True))
         pending = [ch for ch, result in zip(chans, close_results, strict=True) if not isinstance(result, BaseException)]
         while pending:
             states = await asyncio.gather(*(ch.camera.capture_state() for ch in pending), return_exceptions=True)

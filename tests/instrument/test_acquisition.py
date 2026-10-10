@@ -138,3 +138,31 @@ async def test_writer_close_failure_marks_dataset_and_acquisition_failed(
     assert dataset.locations[0].status is LocationStatus.FAILED
     assert writer.released
     assert instrument.mode.value is AcquisitionMode.IDLE
+
+
+async def test_profile_preparation_failure_still_stops_daq_and_finalizes_volume(
+    opened_instrument: Instrument,
+    records: SQLiteRecords,
+    writer: _Writer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instrument = opened_instrument
+    stopped = []
+
+    async def fail():
+        raise RuntimeError("profile preparation failed")
+
+    async def stop():
+        stopped.append(True)
+
+    monkeypatch.setattr(instrument, "_apply_settings", fail)
+    monkeypatch.setattr(instrument._hal.signal_generators["daq"], "stop", stop)
+    started = await instrument.start_acquisition(AcquisitionRequest(storage=StorageSpec(path=PurePosixPath("run"))))
+    await asyncio.wait_for(instrument.wait_acquisition(), timeout=5)
+    manifest = await records.acquisitions.get(started.id)
+    assert manifest.status is AcquisitionStatus.FAILED
+    assert manifest.volumes[0].status is VolumeStatus.FAILED
+    assert stopped
+    assert writer.released
+    laser = instrument._hal.lasers["laser_488"]
+    assert not (await laser.props.get("is_output_enabled")).ok["is_output_enabled"].value

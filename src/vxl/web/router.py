@@ -472,11 +472,6 @@ async def apply_settings(instrument: InstrumentDep) -> None:
     await instrument.apply_settings()
 
 
-@instrument_router.post("/settings/save", status_code=204)
-async def save_settings(instrument: InstrumentDep) -> None:
-    await instrument.save_settings()
-
-
 @instrument_router.post("/routing/apply", status_code=204)
 async def apply_routing_rule(instrument: InstrumentDep, dimension: str | None = None) -> None:
     """Apply the rule for one dimension, or all dimensions when omitted."""

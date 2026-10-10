@@ -5,7 +5,7 @@ from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
 from rigup.device.props import numeric
 from rigup.device.schema import describe
 
-from vxl.devices.laser.base import Laser
+from vxl_drivers.lasers_legacy.base import Laser
 
 
 class GenesisMX(Laser):

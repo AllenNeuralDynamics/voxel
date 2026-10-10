@@ -22,7 +22,7 @@ export class LinkGroup<M extends { group?: LinkGroup<M> }> {
     if (model.group === this) model.group = undefined;
   }
 
-  /** Detach every member; used when the owning UI surface unmounts or the active profile changes. */
+  /** Detach every member when unlinked, the active profile changes, or the session closes. */
   dissolve(): void {
     for (const m of [...this.members]) this.remove(m);
   }

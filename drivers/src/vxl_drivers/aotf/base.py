@@ -2,7 +2,6 @@ from abc import abstractmethod
 from enum import StrEnum
 
 from rigup import Device, describe
-from vxl.devices.base import DeviceType
 
 
 class ChannelCollisionError(Exception):
@@ -27,7 +26,7 @@ class AOTF(Device):
     which tracks channel assignments and prevents collisions.
     """
 
-    __DEVICE_TYPE__ = DeviceType.AOTF
+    __DEVICE_TYPE__ = "aotf"
 
     def __init__(self, uid: str) -> None:
         super().__init__(uid=uid)

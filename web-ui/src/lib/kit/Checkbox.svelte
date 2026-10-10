@@ -38,6 +38,7 @@
     disabled?: boolean;
     style?: string;
     class?: string;
+    'aria-label'?: string;
   }
 
   let {
@@ -47,6 +48,7 @@
     disabled = false,
     size = 'md',
     style,
+    'aria-label': ariaLabel,
     class: className = ''
   }: Props = $props();
 
@@ -70,6 +72,7 @@
   onCheckedChange={handleChange}
   {disabled}
   {style}
+  aria-label={ariaLabel}
   class={checkboxVariants({ size, class: className })}
 >
   {#if checked}

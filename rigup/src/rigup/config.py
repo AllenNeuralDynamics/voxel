@@ -33,7 +33,12 @@ from .build import BuildConfig
 
 NodeKind = Literal["subprocess", "remote"]
 
-DeviceConfig = BuildConfig
+
+class DeviceConfig(BuildConfig):
+    """Device construction and application-owned property persistence policy."""
+
+    autosave: Literal["*"] | list[str] = Field(default_factory=list)
+
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "*"}
 

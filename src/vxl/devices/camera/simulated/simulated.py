@@ -1,6 +1,7 @@
 import math
 import time
 from collections.abc import Mapping
+from random import randint
 from typing import ClassVar, cast, final
 
 import numpy as np
@@ -25,6 +26,13 @@ from vxl.devices.camera.simulated.frame_source import FrameSource, FrameSourceCo
 
 @final
 class SimulatedCamera(Camera):
+    """Frame simulator with configurable synthetic buffer telemetry.
+
+    Buffer occupancy walks by at most one frame per update interval while streaming.
+    Counts do not model a queue or allocate frame storage.
+    Fill-range percentages are rounded to whole frames; equal endpoints give a fixed fill.
+    """
+
     _min_width: ClassVar[int] = 64
     _min_height: ClassVar[int] = 64
     _roi_step_width_px: int = 16
@@ -50,13 +58,28 @@ class SimulatedCamera(Camera):
         frame_source: FrameSource | FrameSourceConfig | Mapping[str, object] | None = None,
         start_delay_s: float = 2.0,
         stop_delay_s: float = 1.0,
+        buffer_size_frames: int = 16,
+        buffer_fill_range_percent: tuple[float, float] = (50.0, 75.0),
+        buffer_update_interval_s: float = 5.0,
     ) -> None:
         if any(not math.isfinite(delay) or delay < 0 for delay in (start_delay_s, stop_delay_s)):
             raise ValueError("Camera operation delays must be finite and non-negative")
+        if isinstance(buffer_size_frames, bool) or not isinstance(buffer_size_frames, int) or buffer_size_frames <= 0:
+            raise ValueError("buffer_size_frames must be a positive integer")
+        low, high = buffer_fill_range_percent
+        if not 0 <= low <= high <= 100:
+            raise ValueError("buffer_fill_range_percent must satisfy 0 <= low <= high <= 100")
+        if not math.isfinite(buffer_update_interval_s) or buffer_update_interval_s <= 0:
+            raise ValueError("buffer_update_interval_s must be finite and positive")
         super().__init__(uid=uid)
         # Model blocking hardware calls; set both to zero for fast simulations.
         self._start_delay_s = start_delay_s
         self._stop_delay_s = stop_delay_s
+        self._buffer_size_frames = buffer_size_frames
+        self._buffer_fill_frames = (round(buffer_size_frames * low / 100), round(buffer_size_frames * high / 100))
+        self._buffer_occupied_frames = round(sum(self._buffer_fill_frames) / 2)
+        self._buffer_update_interval_s = buffer_update_interval_s
+        self._last_buffer_update = time.monotonic()
         self._frame_source = create_frame_source(frame_source)
         self._roi_width_px = self.sensor_size_px.x
         self._roi_height_px = self.sensor_size_px.y
@@ -156,11 +179,18 @@ class SimulatedCamera(Camera):
         # Use actual measured frame rate if available, otherwise use configured rate
         fps = self._actual_frame_rate_fps if self._actual_frame_rate_fps > 0 else self._frame_rate_hz
         frame_time_s = 1 / fps if fps > 0 else 1.0
+        now = time.monotonic()
+        if now - self._last_buffer_update >= self._buffer_update_interval_s:
+            low, high = self._buffer_fill_frames
+            step = randint(-1, 1)  # noqa: S311
+            self._buffer_occupied_frames = max(low, min(high, self._buffer_occupied_frames + step))
+            self._last_buffer_update = now
+        occupied = self._buffer_occupied_frames
 
         return StreamInfo(
             frame_index=self._frame_count,
-            input_buffer_size=0,
-            output_buffer_size=0,
+            input_buffer_size=self._buffer_size_frames - occupied,
+            output_buffer_size=occupied,
             dropped_frames=0,
             data_rate_mbs=self.frame_size_mb / frame_time_s if frame_time_s > 0 else 0,
             frame_rate_fps=fps,
@@ -191,6 +221,7 @@ class SimulatedCamera(Camera):
         self._frame_count = 0
         self._requested_frame_count = frame_count if frame_count is not None else -1
         self._last_grab_frame_time = 0
+        self._last_buffer_update = time.monotonic()
         frame_msg = f"{frame_count}" if frame_count else "infinite"
         self.log.debug("started, acquiring %s frames", frame_msg)
 

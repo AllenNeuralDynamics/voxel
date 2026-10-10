@@ -55,5 +55,9 @@ export const prefs = {
   logs: {
     minLevel: pref<LogLevel>('ui:logs:min-level', 'info'),
     wrap: pref('ui:logs:wrap', false)
+  },
+
+  laserPlot: {
+    windowMs: pref('ui:laser-plot:window-ms', 60_000)
   }
 } as const;

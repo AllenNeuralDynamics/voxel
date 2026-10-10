@@ -1,27 +1,21 @@
 <script lang="ts">
   import { watch } from 'runed';
-  import { onDestroy } from 'svelte';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import { SvelteSet } from 'svelte/reactivity';
 
   import { page } from '$app/state';
-  import { ChevronDown, ChevronRight, InformationOutline, Link, LinkOff } from '$lib/icons';
+  import { ChevronDown, ChevronRight, InformationOutline } from '$lib/icons';
   import { resolveInstrumentView } from '$lib/instrument-view';
   import { Button, JsonView } from '$lib/kit';
   import {
-    type AnyPropModel,
-    BoolModel,
     type CameraHandle,
     type DeviceHandle,
-    EnumeratedModel,
     type FilterSetting,
     getVoxelStation,
     type LaserHandle,
-    LinkGroup,
-    NumericModel,
-    Prop,
-    RoiModel
+    Prop
   } from '$lib/model';
   import PageHeader from '$lib/PageHeader.svelte';
+  import LinkIndicator from '$lib/prop/LinkIndicator.svelte';
   import { SpinBox } from '$lib/prop/numeric';
   import { cn, displayName, toastError } from '$lib/utils';
 
@@ -78,112 +72,12 @@
     return null;
   });
 
-  interface Linkable {
-    name: string;
-    label: string;
-    models: (AnyPropModel | RoiModel)[];
-  }
-
   let roiExpanded = $state(false);
   const expandedDevices = new SvelteSet<string>();
 
   function defaultPinned(type: string | undefined): string[] {
     return type === 'continuous_axis' ? ['position'] : [];
   }
-
-  function sharedRwProps(devices: DeviceHandle[]): Linkable[] {
-    const candidates = new SvelteMap<string, { label: string; models: AnyPropModel[] }>();
-    for (const device of new Set(devices)) {
-      if (!device.interface) continue;
-      for (const [name, info] of Object.entries(device.interface.properties)) {
-        if (info.access !== 'rw') continue;
-        const prop = device.getProp(name);
-        if (!prop) continue;
-        const entry = candidates.get(name);
-        if (!entry) {
-          candidates.set(name, { label: info.label || displayName(name), models: [prop.model] });
-        } else if (entry.models[0].constructor === prop.model.constructor) {
-          entry.models.push(prop.model);
-        }
-      }
-    }
-    return [...candidates.entries()]
-      .filter(([, value]) => value.models.length >= 2)
-      .map(([name, value]) => ({ name, label: value.label, models: value.models }));
-  }
-
-  const linkGroupsByKind = $derived.by<{ kind: 'camera' | 'laser'; items: Linkable[] }[]>(() => {
-    if (!channel) return [];
-    const channels = instrument?.activeChannels ?? [];
-    const cameras = channels.map((candidate) => candidate.camera);
-    const cameraItems = sharedRwProps(cameras);
-    const roiModels = [...new Set(cameras)].map((camera) => camera.roi);
-    if (roiModels.length >= 2) cameraItems.push({ name: 'roi', label: 'Sensor ROI', models: roiModels });
-    return [
-      { kind: 'camera' as const, items: cameraItems },
-      { kind: 'laser' as const, items: sharedRwProps(channels.map((candidate) => candidate.laser)) }
-    ].filter((group) => group.items.length > 0);
-  });
-
-  const linkableByModel = $derived.by(() => {
-    const models = new SvelteMap<AnyPropModel | RoiModel, { key: string; models: (AnyPropModel | RoiModel)[] }>();
-    for (const group of linkGroupsByKind) {
-      for (const item of group.items) {
-        const key = `${group.kind}:${item.name}`;
-        for (const model of item.models) models.set(model, { key, models: item.models });
-      }
-    }
-    return models;
-  });
-
-  const linkGroups = new SvelteMap<string, { dissolve(): void }>();
-
-  function createLink(key: string, models: (AnyPropModel | RoiModel)[]): void {
-    const first = models[0];
-    if (first instanceof RoiModel) {
-      const group = new LinkGroup<RoiModel>();
-      for (const model of models) if (model instanceof RoiModel) group.add(model);
-      linkGroups.set(key, group);
-    } else if (first instanceof NumericModel) {
-      const group = new LinkGroup<NumericModel>();
-      for (const model of models) if (model instanceof NumericModel) group.add(model);
-      linkGroups.set(key, group);
-    } else if (first instanceof EnumeratedModel) {
-      const group = new LinkGroup<EnumeratedModel<string | number>>();
-      for (const model of models) {
-        if (model instanceof EnumeratedModel) group.add(model as EnumeratedModel<string | number>);
-      }
-      linkGroups.set(key, group);
-    } else if (first instanceof BoolModel) {
-      const group = new LinkGroup<BoolModel>();
-      for (const model of models) if (model instanceof BoolModel) group.add(model);
-      linkGroups.set(key, group);
-    }
-  }
-
-  function toggleLink(key: string, models: (AnyPropModel | RoiModel)[]): void {
-    const existing = linkGroups.get(key);
-    if (existing) {
-      existing.dissolve();
-      linkGroups.delete(key);
-    } else {
-      createLink(key, models);
-    }
-  }
-
-  watch(
-    () =>
-      `${id ?? ''}:${channelId}:${instrument?.activeProfileId ?? ''}::${linkGroupsByKind
-        .flatMap((group) => group.items.map((item) => `${group.kind}:${item.name}`))
-        .join(',')}`,
-    () => {
-      for (const group of linkGroups.values()) group.dissolve();
-      linkGroups.clear();
-      for (const group of linkGroupsByKind) {
-        for (const item of group.items) createLink(`${group.kind}:${item.name}`, item.models);
-      }
-    }
-  );
 
   watch(
     () => `${id ?? ''}:${channelId}:${activeInstrument?.activeProfileId ?? ''}`,
@@ -192,34 +86,11 @@
       expandedDevices.clear();
     }
   );
-
-  onDestroy(() => {
-    for (const group of linkGroups.values()) group.dissolve();
-    linkGroups.clear();
-  });
 </script>
 
 {#snippet propRow(prop: Prop, device: DeviceHandle)}
-  {@const link = linkableByModel.get(prop.model)}
   {#if instrument}
-    <ProfilePropertyRow {instrument} {device} {prop}>
-      {#snippet labelActions()}
-        {#if link}
-          {@const linked = linkGroups.has(link.key)}
-          <button
-            type="button"
-            class={cn(
-              'flex shrink-0 cursor-pointer transition-colors',
-              linked ? 'text-fg' : 'text-fg-faint hover:text-fg'
-            )}
-            title={linked ? 'Linked across devices — click to unlink' : 'Link across devices'}
-            onclick={() => toggleLink(link.key, link.models)}
-          >
-            {#if linked}<Link width="10" height="10" />{:else}<LinkOff width="10" height="10" />{/if}
-          </button>
-        {/if}
-      {/snippet}
-    </ProfilePropertyRow>
+    <ProfilePropertyRow {instrument} {device} {prop} />
   {/if}
 {/snippet}
 
@@ -238,8 +109,7 @@
   {@const roi = cameraHandle.roi.value}
   {@const grid = cameraHandle.roi.grid}
   {@const sensor = cameraHandle.sensorSizePx}
-  {@const roiDirty = instrument?.divergence.get(cameraHandle.id)?.roiDirty ?? false}
-  {@const roiLink = linkableByModel.get(cameraHandle.roi)}
+  {@const roiChanged = instrument?.divergence.get(cameraHandle.id)?.roiChanged ?? false}
   <div class="space-y-2">
     {#each props as prop (prop.info.name)}
       {@render propRow(prop, cameraHandle)}
@@ -255,21 +125,16 @@
             class="flex cursor-pointer items-center gap-2 transition-colors hover:text-fg"
             onclick={() => (roiExpanded = !roiExpanded)}>Sensor ROI</button
           >
-          {#if roiLink}
-            {@const linked = linkGroups.has(roiLink.key)}
-            <button
-              type="button"
-              class={cn(
-                'flex shrink-0 cursor-pointer transition-colors',
-                linked ? 'text-fg' : 'text-fg-faint hover:text-fg'
-              )}
-              title={linked ? 'Linked across cameras — click to unlink' : 'Link across cameras'}
-              onclick={() => toggleLink(roiLink.key, roiLink.models)}
-            >
-              {#if linked}<Link width="10" height="10" />{:else}<LinkOff width="10" height="10" />{/if}
-            </button>
+          <LinkIndicator {instrument} deviceId={cameraHandle.id} property="roi" />
+          <span class="text-xs text-fg-faint" title="ROI edits save automatically to the active profile">Autosave</span>
+          {#if roiChanged}
+            <span
+              class="size-1 shrink-0 rounded-full bg-primary-soft"
+              title="ROI differs from saved profile"
+              aria-hidden="true"
+            ></span>
+            <span class="sr-only">ROI differs from saved profile</span>
           {/if}
-          <span class={cn('size-1 shrink-0 rounded-full bg-primary-soft', !roiDirty && 'invisible')}></span>
           <button
             type="button"
             class="ml-auto flex cursor-pointer transition-colors hover:text-fg"
@@ -502,7 +367,6 @@
   {#if instrument && channel}
     <footer class="flex h-10 shrink-0 items-center justify-end gap-1.5 border-t border-line-muted px-4">
       <Button variant="outline" size="xs" onclick={() => toastError(instrument.applySettings())}>Apply Saved</Button>
-      <Button variant="outline" size="xs" onclick={() => toastError(instrument.saveSettings())}>Save Current</Button>
     </footer>
   {/if}
 </section>

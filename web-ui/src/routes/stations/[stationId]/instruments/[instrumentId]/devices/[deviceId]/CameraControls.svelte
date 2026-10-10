@@ -1,8 +1,9 @@
 <script lang="ts">
   import { Button } from '$lib/kit';
-  import type { CameraHandle } from '$lib/model';
+  import type { CameraHandle, Instrument } from '$lib/model';
   import { prefs } from '$lib/prefs';
   import { Enumerated, PropInput } from '$lib/prop';
+  import LinkIndicator from '$lib/prop/LinkIndicator.svelte';
   import { SpinBox } from '$lib/prop/numeric';
   import { formatSpatialValue, getSpatialUnit } from '$lib/spatial-units';
   import { cn } from '$lib/utils';
@@ -12,9 +13,10 @@
 
   interface Props {
     camera: CameraHandle;
+    instrument?: Instrument | null;
   }
 
-  const { camera }: Props = $props();
+  const { camera, instrument }: Props = $props();
   const propertyCount = $derived(Object.keys(camera.interface?.properties ?? {}).length);
   const customProperties = [
     'exposure_time_ms',
@@ -78,7 +80,10 @@
           {#if camera.exposure}
             {@const info = camera.interface?.properties?.['exposure_time_ms']}
             <div class="grid gap-1">
-              <span class="font-medium text-fg-muted">{info?.label ?? 'Exposure'}</span>
+              <span class="flex items-center gap-1.5 font-medium text-fg-muted"
+                >{info?.label ?? 'Exposure'}
+                <LinkIndicator {instrument} deviceId={camera.id} property="exposure_time_ms" />
+              </span>
               <PropInput model={camera.exposure} size="xs" />
             </div>
           {/if}
@@ -87,7 +92,10 @@
             {#if camera.pixelFormat}
               {@const info = camera.interface?.properties?.['pixel_format']}
               <div class="grid gap-1">
-                <span class="font-medium text-fg-muted">{info?.label ?? 'Pixel Format'}</span>
+                <span class="flex items-center gap-1.5 font-medium text-fg-muted"
+                  >{info?.label ?? 'Pixel Format'}
+                  <LinkIndicator {instrument} deviceId={camera.id} property="pixel_format" />
+                </span>
                 <PropInput model={camera.pixelFormat} size="xs" />
               </div>
             {/if}
@@ -95,7 +103,10 @@
             {#if camera.binning}
               {@const info = camera.interface?.properties?.['binning']}
               <div class="grid gap-1">
-                <span class="font-medium text-fg-muted">{info?.label ?? 'Binning'}</span>
+                <span class="flex items-center gap-1.5 font-medium text-fg-muted"
+                  >{info?.label ?? 'Binning'}
+                  <LinkIndicator {instrument} deviceId={camera.id} property="binning" />
+                </span>
                 <Enumerated.Select model={camera.binning} formatLabel={(option) => `${option}x${option}`} size="xs" />
               </div>
             {/if}
@@ -103,7 +114,10 @@
 
           <div class="space-y-3">
             <div class="flex items-baseline justify-between gap-4">
-              <h4 class="text-sm font-medium text-fg-muted">Sensor ROI</h4>
+              <h4 class="flex items-center gap-1.5 text-sm font-medium text-fg-muted">
+                Sensor ROI
+                <LinkIndicator {instrument} deviceId={camera.id} property="roi" />
+              </h4>
               {#if frameSize}
                 <span class="font-mono text-fg-muted">
                   {frameSize.x} &times; {frameSize.y} px{#if frameSizeMb != null}
@@ -263,7 +277,7 @@
         </div>
       </div>
 
-      <GenericProperties device={camera} exclude={customProperties} />
+      <GenericProperties device={camera} exclude={customProperties} instrument={instrument ?? undefined} />
     </div>
   {:else}
     <p class="text-fg-muted">This device does not expose any live properties.</p>
