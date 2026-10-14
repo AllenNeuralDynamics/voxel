@@ -73,6 +73,7 @@ members = [
     "omezarr",
     "bench",
     "records",
+    "barseq",
 ]
 
 [tool.uv.sources]
@@ -101,6 +102,7 @@ testpaths = [
     "records/tests",
     "rigup/tests",
     "vxlib/tests",
+    "barseq/tests",
 ]
 markers = [
     "slow: integration-flavored tests (ZMQ networking, zarr I/O); excluded from pre-push, run in CI",
