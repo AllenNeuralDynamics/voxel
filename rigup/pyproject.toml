@@ -11,6 +11,9 @@ dependencies = [
     "msgpack>=1.0.0",
     "pydantic>=2.12.0",
     "pyzmq>=27.1.0",
+    # pyzmq's asyncio sockets need add_reader, which the Windows Proactor loop lacks; with tornado
+    # installed pyzmq bridges it on a selector thread (Proactor is still required for subprocess nodes).
+    "tornado>=6.1; sys_platform == 'win32'",
     "vxlib",
 ]
 
