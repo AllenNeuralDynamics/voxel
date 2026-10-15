@@ -32,7 +32,10 @@ async def run(node_id: str, address: NodeAddress) -> None:
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, daemon.request_shutdown)
+        try:
+            loop.add_signal_handler(sig, daemon.request_shutdown)
+        except NotImplementedError:  # Windows event loops have no signal handlers; hop onto the loop instead
+            signal.signal(sig, lambda *_: loop.call_soon_threadsafe(daemon.request_shutdown))
 
     await daemon.serve_until_shutdown()
     await daemon.stop()
