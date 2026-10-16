@@ -19,11 +19,11 @@ dependencies = [
 #barseq = "barseq.cli:main"
 
 [tool.uv.sources]
-vxl = { workspace = true }
-vxlib = { workspace = true }
-rigup = { workspace = true }
-vxl-records = { workspace = true }
-ome-zarr-writer = { workspace = true }
+vxl = { path = "../..", editable = true }
+vxlib = { path = "../../vxlib", editable = true }
+rigup = { path = "../../rigup", editable = true }
+vxl-records = { path = "../../records", editable = true }
+ome-zarr-writer = { path = "../../omezarr", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
