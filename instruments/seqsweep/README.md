@@ -1,10 +1,11 @@
-# barseq
+# SeqSweep
 
 **TDI strip-scan acquisition for the BARSeq microscope, built on Voxel's libraries.**
 
-This is the imaging component of [BARseq](https://github.com/AllenInstitute/BARseq). The BARseq orchestrator
-coordinates sequencing cycles across fluidics ([Mixology](https://github.com/AllenNeuralDynamics/brainwasher))
-and imaging (this package), and reaches this package through the `vxl_wrapper` adapter in the BARseq repo.
+SeqSweep is the imaging instrument of [BARseq](https://github.com/AllenInstitute/BARseq). The BARseq
+orchestrator coordinates sequencing cycles across fluidics (SeqFlow, on
+[Mixology](https://github.com/AllenNeuralDynamics/brainwasher)) and imaging (SeqSweep), and talks to SeqSweep
+over one_liner: run `uv run seqsweep` to serve it.
 
 This package uses Voxel as a set of building blocks rather than as an application:
 
