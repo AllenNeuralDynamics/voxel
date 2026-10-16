@@ -2,14 +2,18 @@
 
 **TDI strip-scan acquisition for the BARSeq microscope, built on Voxel's libraries.**
 
+This is the imaging component of [BARseq](https://github.com/AllenInstitute/BARseq). The BARseq orchestrator
+coordinates sequencing cycles across fluidics ([Mixology](https://github.com/AllenNeuralDynamics/brainwasher))
+and imaging (this package), and reaches this package through the `vxl_wrapper` adapter in the BARseq repo.
+
 This package uses Voxel as a set of building blocks rather than as an application:
 
 | Voxel library | Used for |
 | --- | --- |
-| [`rigup`](../rigup/) | Device RPC: WS1 devices run in-process, each acquisition workstation runs a node |
+| [`rigup`](../../rigup/) | Device RPC: WS1 devices run in-process, each acquisition workstation runs a node |
 | `vxl.devices` | `Camera` + `CameraController` (OME-Zarr writer, preview, storage checks), axis and laser contracts |
-| [`ome_zarr_writer`](../omezarr/) | Streaming each camera's Z-stack of strips to OME-Zarr on its own workstation |
-| [`vxl_records`](../records/) | Acquisition manifests (one volume per strip) and captured logs in SQLite |
+| [`ome_zarr_writer`](../../omezarr/) | Streaming each camera's Z-stack of strips to OME-Zarr on its own workstation |
+| [`vxl_records`](../../records/) | Acquisition manifests (one volume per strip) and captured logs in SQLite |
 
 Voxel's `Instrument`/`Station` layer is not used. Its acquisition model (NI-DAQ waveforms as the timing
 master, frame-by-frame Z-stacks) doesn't match an ACS-mastered continuous TDI scan.
