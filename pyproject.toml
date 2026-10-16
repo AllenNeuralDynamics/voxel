@@ -73,6 +73,7 @@ members = [
     "omezarr",
     "bench",
     "records",
+    "instruments/barseq",
 ]
 
 [tool.uv.sources]
