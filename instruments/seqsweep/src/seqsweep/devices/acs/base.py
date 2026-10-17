@@ -23,9 +23,9 @@ class ScanDirection(StrEnum):
 class ScanPassConfig(FrozenModel):
     """One strip pass along the scan axis (µm, µm/s)."""
 
-    start_um: float
-    end_um: float
-    velocity_um_s: float = Field(gt=0)
+    start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
+    end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
+    velocity_um_s: float = Field(gt=0, description="Constant stage speed during imaging")
     line_pitch_um: float = Field(gt=0, description="Stage travel per camera line trigger")
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
 
