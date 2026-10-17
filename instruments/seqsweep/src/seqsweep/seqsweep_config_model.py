@@ -51,22 +51,31 @@ class SeqSweepHardwareTopology(RigConfig, frozen=True):
 class SeqSweepDefaults(FrozenModel):
     """Baseline run settings (``default``): the pass to run and how many times."""
 
-    scan: ScanPassConfig
-    passes: int = Field(default=2, ge=1)
+    scan: ScanPassConfig = Field(description="Geometry and gating of one strip pass along the scan axis")
+    passes: int = Field(
+        default=2, ge=1, description="Passes per run; they alternate forward and reverse (bidirectional scan)"
+    )
     # TODO: pass timeouts, Z planes, strips
 
 
 class SeqSweepInstrumentConfig(BaseModel):
-    """A complete SeqSweep setup: the hardware blueprint (``hal``) and the baseline run settings (``default``)."""
+    """SeqSweep setup: the hardware blueprint (``hal``) and the baseline run settings (``default``)."""
 
     name: str = Field(default="seqsweep", min_length=1, description="Label for this setup in logs")
-    hal: SeqSweepHardwareTopology
-    default: SeqSweepDefaults
+    hal: SeqSweepHardwareTopology = Field(
+        description="Hardware blueprint: rigup devices and nodes, plus the role each device plays"
+    )
+    default: SeqSweepDefaults = Field(
+        description="Baseline run settings, used when a job from the orchestrator leaves a value unset"
+    )
 
 
 class SeqSweepSystemConfig(SeqSweepInstrumentConfig, validate_assignment=True):
     """The ``seqsweep`` ficus namespace: the instrument config plus the one_liner server and logging."""
 
-    router_server_kwargs: RouterServerPortConfig = Field(default_factory=RouterServerPortConfig)
+    router_server_kwargs: RouterServerPortConfig = Field(
+        default_factory=RouterServerPortConfig,
+        description="Ports the one_liner RouterServer binds (RPC and broadcast)",
+    )
     router_server_api: RouterServerConfig
     logging: LoggingConfig
