@@ -11,11 +11,7 @@ Skeleton: the public API and models are final; the hardware side is still TODO.
 """
 
 import logging
-from pathlib import Path
-from typing import Any, Literal, Self
-
-from pydantic import Field
-from vxlib.schema import FrozenModel
+from typing import Any, Self
 
 
 # TODO SeqSweep should use Rig up
