@@ -22,6 +22,24 @@ router_server_api:
       obj_name: "seqsweep"
       attr_name: "check_job_status"
 
+# hal: the hardware blueprint (SeqSweepHardwareTopology) — rigup devices/nodes plus the role each device plays.
+hal:
+  devices:
+    acs:
+      target: seqsweep.devices.acs.simulated_acs.SimulatedAcsController
+      init:
+        gate_outputs:
+          laser_532: OUT0
+        time_scale: 1.0
+  scan_controller: acs
+  # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles
 
-# TODO: add rig up config
-# devices:
+# default: the baseline run settings (SeqSweepDefaults) — one strip pass and how many times to run it.
+default:
+  scan:
+    start_um: 0
+    end_um: 2000
+    velocity_um_s: 10000
+    line_pitch_um: 0.5
+    lasers: [laser_532]
+  passes: 2

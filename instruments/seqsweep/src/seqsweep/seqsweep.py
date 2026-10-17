@@ -1,21 +1,5 @@
-"""SeqSweep: BARseq's imaging instrument, the job-level API the BARseq orchestrator drives.
-
-``SeqSweep`` is hosted by ``seqsweep`` (``scripts/seqsweep_main.py``) on a one_liner RouterServer, under the
-name ``seqsweep``. It mirrors SeqFlow's job contract (``start_run`` / ``check_job_status`` / ``get_job`` /
-``pause`` / ``resume_run`` / ``reset``), so the orchestrator drives imaging the same way as fluidics.
-
-Its methods are synchronous, for RPC servers that call from their own threads, and take and return plain
-dicts so they cross the wire as-is.
-
-Skeleton: the public API and models are final; the hardware side is still TODO.
-"""
-
 import logging
-from pathlib import Path
-from typing import Any, Literal, Self
-
-from pydantic import Field
-from vxlib.schema import FrozenModel
+from typing import Any, Self
 
 
 # TODO SeqSweep should use Rig up
