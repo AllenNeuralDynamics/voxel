@@ -1,6 +1,6 @@
 [project]
 name = "seqsweep"
-version = "0.2.0"
+version = "0.3.0"
 description = "SeqSweep: BARseq's TDI line-scan imaging instrument, built on Voxel's rigup, device, writer, and records libraries"
 readme = "README.md"
 requires-python = ">=3.13"
