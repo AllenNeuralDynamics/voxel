@@ -1,5 +1,10 @@
+import asyncio
 import logging
 from typing import Any, Self
+
+from rigup import Rig
+
+from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 
 # TODO SeqSweep should use Rig up
@@ -10,23 +15,34 @@ class SeqSweep:
     moves ``running`` → ``finished`` / ``paused`` / ``failed``; ``reset()`` returns to ``idle`` from any state.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: SeqSweepInstrumentConfig) -> None:
         self.log = logging.getLogger("seqsweep")
-        self.open()  # TODO Call Rig up's open() method
-        # TODO: load SeqSweepInstrumentConfig from default location
+        self.config = config
+        self._rig: Rig | None = None
+        self.open()
         # TODO: private asyncio loop thread, lock for _status/_job, pause event, scan task
 
     # ==================== Lifecycle ====================
 
     def open(self) -> None:
-        """Start the scanner's event loop and open the rig. Raises if any device fails to build."""
-        # TODO: start the loop thread, open the rig, check the scan-controller role
-        pass
+        """Open the rig. Raises if any device fails to build."""
+        if self._rig is not None:
+            return
+        rig = Rig(self.config.hal, name=self.config.name)
+        asyncio.run(rig.open())  # TODO: replace with the loop thread
+        if rig.build_errors:
+            asyncio.run(rig.close())
+            raise RuntimeError(f"Failed to build devices: {rig.build_errors}")
+        self._rig = rig
+        self.log.info("Rig open with devices: %s", sorted(rig.devices))
 
     def close(self) -> None:
-        """Abort any running scan, close the rig and stop the event loop. Safe to call more than once."""
-        # TODO: cancel the scan task, close the rig, stop and join the loop thread
-        pass
+        """Close the rig. Safe to call more than once."""
+        # TODO: cancel the scan task first
+        if self._rig is None:
+            return
+        asyncio.run(self._rig.close())
+        self._rig = None
 
     def __enter__(self) -> Self:
         self.open()
