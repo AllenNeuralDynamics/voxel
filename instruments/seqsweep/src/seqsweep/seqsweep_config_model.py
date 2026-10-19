@@ -73,9 +73,6 @@ class SeqSweepInstrumentConfig(BaseModel):
 class SeqSweepSystemConfig(SeqSweepInstrumentConfig, validate_assignment=True):
     """The ``seqsweep`` ficus namespace: the instrument config plus the one_liner server and logging."""
 
-    router_server_kwargs: RouterServerPortConfig = Field(
-        default_factory=RouterServerPortConfig,
-        description="Ports the one_liner RouterServer binds (RPC and broadcast)",
-    )
+    router_server_kwargs: RouterServerPortConfig = Field(default_factory=RouterServerPortConfig)
     router_server_api: RouterServerConfig
     logging: LoggingConfig
