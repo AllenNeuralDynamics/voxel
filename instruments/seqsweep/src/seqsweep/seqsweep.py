@@ -1,21 +1,10 @@
-"""SeqSweep: BARseq's imaging instrument, the job-level API the BARseq orchestrator drives.
-
-``SeqSweep`` is hosted by ``seqsweep`` (``scripts/seqsweep_main.py``) on a one_liner RouterServer, under the
-name ``seqsweep``. It mirrors SeqFlow's job contract (``start_run`` / ``check_job_status`` / ``get_job`` /
-``pause`` / ``resume_run`` / ``reset``), so the orchestrator drives imaging the same way as fluidics.
-
-Its methods are synchronous, for RPC servers that call from their own threads, and take and return plain
-dicts so they cross the wire as-is.
-
-Skeleton: the public API and models are final; the hardware side is still TODO.
-"""
-
+import asyncio
 import logging
-from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Any, Self
 
-from pydantic import Field
-from vxlib.schema import FrozenModel
+from rigup import Rig
+
+from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 
 # TODO SeqSweep should use Rig up
@@ -26,23 +15,34 @@ class SeqSweep:
     moves ``running`` → ``finished`` / ``paused`` / ``failed``; ``reset()`` returns to ``idle`` from any state.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: SeqSweepInstrumentConfig) -> None:
         self.log = logging.getLogger("seqsweep")
-        self.open()  # TODO Call Rig up's open() method
-        # TODO: load SeqSweepInstrumentConfig from default location
+        self.config = config
+        self._rig: Rig | None = None
+        self.open()
         # TODO: private asyncio loop thread, lock for _status/_job, pause event, scan task
 
     # ==================== Lifecycle ====================
 
     def open(self) -> None:
-        """Start the scanner's event loop and open the rig. Raises if any device fails to build."""
-        # TODO: start the loop thread, open the rig, check the scan-controller role
-        pass
+        """Open the rig. Raises if any device fails to build."""
+        if self._rig is not None:
+            return
+        rig = Rig(self.config.hal, name=self.config.name)
+        asyncio.run(rig.open())  # TODO: replace with the loop thread
+        if rig.build_errors:
+            asyncio.run(rig.close())
+            raise RuntimeError(f"Failed to build devices: {rig.build_errors}")
+        self._rig = rig
+        self.log.info("Rig open with devices: %s", sorted(rig.devices))
 
     def close(self) -> None:
-        """Abort any running scan, close the rig and stop the event loop. Safe to call more than once."""
-        # TODO: cancel the scan task, close the rig, stop and join the loop thread
-        pass
+        """Close the rig. Safe to call more than once."""
+        # TODO: cancel the scan task first
+        if self._rig is None:
+            return
+        asyncio.run(self._rig.close())
+        self._rig = None
 
     def __enter__(self) -> Self:
         self.open()

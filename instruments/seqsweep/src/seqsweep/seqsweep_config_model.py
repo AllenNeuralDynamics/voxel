@@ -1,8 +1,11 @@
-from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from one_liner.models import RouterServerConfig  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from vxlib.schema import FrozenModel
+
+from rigup import RigConfig
+from seqsweep.devices.acs.base import ScanPassConfig
 
 
 class HandlerConfig(BaseModel):
@@ -27,11 +30,49 @@ class RouterServerPortConfig(BaseModel):
     broadcast_port: int = 5556
 
 
-class SeqSweepSystemConfig(BaseModel, validate_assignment=True):
+class SeqSweepHardwareTopology(RigConfig, frozen=True):
+    """The hardware blueprint (``hal``): a rig (``devices`` + ``nodes``, inherited) plus the role each device
+    plays. Mirrors Voxel's ``HardwareTopology``: loaded once, never edited at runtime."""
+
+    scan_controller: str = Field(description="UID of the scan controller in the rig")
+    # TODO: cameras, lasers, z_axis roles
+
+    @property
+    def device_uids(self) -> set[str]:
+        return set(self.devices) | {uid for node in self.nodes.values() for uid in node.devices}
+
+    @model_validator(mode="after")
+    def _check_roles(self) -> Self:
+        if self.scan_controller not in self.device_uids:
+            raise ValueError(f"scan_controller '{self.scan_controller}' is not a device in the rig")
+        return self
+
+
+class SeqSweepDefaults(FrozenModel):
+    """Baseline run settings (``default``): the pass to run and how many times."""
+
+    scan: ScanPassConfig = Field(description="Geometry and gating of one strip pass along the scan axis")
+    passes: int = Field(
+        default=2, ge=1, description="Passes per run; they alternate forward and reverse (bidirectional scan)"
+    )
+    # TODO: pass timeouts, Z planes, strips
+
+
+class SeqSweepInstrumentConfig(BaseModel):
+    """SeqSweep setup: the hardware blueprint (``hal``) and the baseline run settings (``default``)."""
+
+    name: str = Field(default="seqsweep", min_length=1, description="Label for this setup in logs")
+    hal: SeqSweepHardwareTopology = Field(
+        description="Hardware blueprint: rigup devices and nodes, plus the role each device plays"
+    )
+    default: SeqSweepDefaults = Field(
+        description="Baseline run settings, used when a job from the orchestrator leaves a value unset"
+    )
+
+
+class SeqSweepSystemConfig(SeqSweepInstrumentConfig, validate_assignment=True):
+    """The ``seqsweep`` ficus namespace: the instrument config plus the one_liner server and logging."""
+
     router_server_kwargs: RouterServerPortConfig = Field(default_factory=RouterServerPortConfig)
     router_server_api: RouterServerConfig
-    scanner_config: Path = Field(
-        default=Path("simulated-local.seqsweep.yaml"),
-        description="SeqSweep config file, relative to the configs directory",
-    )
     logging: LoggingConfig
