@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from vxl.instrument import AcquisitionMode, Instrument
+from vxl.instrument import IdleActivity, Instrument, OperationRejectedError, PreviewActivity
 from vxl.preview import PreviewFrame, PreviewLayer, PreviewSourceEmission, PreviewViewport
 from vxl.preview.protocol import StagePosition
 
@@ -44,6 +44,11 @@ def preview_operations(opened_instrument: Instrument, monkeypatch: pytest.Monkey
     return events
 
 
+def _previewing(instrument: Instrument) -> tuple[str, ...]:
+    activity = instrument.activity.value
+    return activity.channels if isinstance(activity, PreviewActivity) else ()
+
+
 async def test_preview_orders_output_and_preserves_selection_on_reconfiguration(
     opened_instrument: Instrument, preview_operations: list[str]
 ) -> None:
@@ -51,7 +56,9 @@ async def test_preview_orders_output_and_preserves_selection_on_reconfiguration(
     laser = instrument._hal.lasers["laser_488"]
     assert (await laser.props.get("is_source_enabled")).ok["is_source_enabled"].value
     await instrument.select_route("excitation_side", "left")
-    await instrument.start_preview(["gfp"])
+    await instrument.set_preview_channels(["gfp"])
+    await instrument.start_preview()
+    assert _previewing(instrument) == ("gfp",)
     assert events.index("laser_488.set_modulation_mode") < events.index("camera.start")
     assert events.index("camera.start") < events.index("laser_488.output_enable") < events.index("daq.start")
     assert (await laser.props.get("modulation_mode")).ok["modulation_mode"].value == "digital"
@@ -60,11 +67,11 @@ async def test_preview_orders_output_and_preserves_selection_on_reconfiguration(
     await instrument.select_route("excitation_side", "right")
     assert events.index("laser_488.output_disable") < events.index("daq.stop") < events.index("camera.stop")
     assert events.index("camera.stop") < events.index("camera.start")
-    assert [ch.uid for ch in instrument._preview_channels] == ["gfp"]
+    assert _previewing(instrument) == ("gfp",)
     await instrument.apply_settings()
-    assert [ch.uid for ch in instrument._preview_channels] == ["gfp"]
+    assert _previewing(instrument) == ("gfp",)
     await instrument.set_active_profile("single_rfp")
-    assert [ch.uid for ch in instrument._preview_channels] == ["rfp"]
+    assert _previewing(instrument) == ("rfp",)
     await instrument.stop_preview()
     for laser in instrument._hal.lasers.values():
         props = (await laser.props.get("is_source_enabled", "is_output_enabled")).ok
@@ -95,7 +102,7 @@ async def test_failed_reconfiguration_leaves_preview_stopped(
         monkeypatch.setattr(type(instrument._hal.routing["excitation_side"]), "select", fail)
         with pytest.raises(ExceptionGroup):
             await instrument.select_route("excitation_side", "right")
-    assert instrument.mode.value is AcquisitionMode.IDLE
+    assert isinstance(instrument.activity.value, IdleActivity)
     assert "camera.stop" in events
     assert "camera.start" not in events
     for laser in instrument._hal.lasers.values():
@@ -116,8 +123,7 @@ async def test_failed_daq_start_inhibits_output_and_stops_camera(
     with pytest.raises(ExceptionGroup):
         await instrument.start_preview()
     assert events[-3:] == ["laser_488.output_disable", "daq.stop", "camera.stop"]
-    assert instrument.mode.value is AcquisitionMode.IDLE
-    assert not instrument._preview_channels
+    assert isinstance(instrument.activity.value, IdleActivity)
 
 
 async def test_output_inhibition_failure_does_not_skip_daq_and_camera_stop(
@@ -138,7 +144,29 @@ async def test_output_inhibition_failure_does_not_skip_daq_and_camera_stop(
     with pytest.raises(ExceptionGroup):
         await instrument.stop_preview()
     assert events[-2:] == ["daq.stop", "camera.stop"]
-    assert instrument.mode.value is AcquisitionMode.IDLE
+    assert isinstance(instrument.activity.value, IdleActivity)
+
+
+@pytest.mark.usefixtures("preview_operations")
+async def test_preview_channels_restart_preview_and_reset_with_the_profile(opened_instrument: Instrument) -> None:
+    instrument = opened_instrument
+    await instrument.select_route("excitation_side", "left")
+    assert instrument.preview_channels.value == ("gfp",)
+    with pytest.raises(OperationRejectedError, match="Not in the active profile: rfp"):
+        await instrument.set_preview_channels(["rfp"])
+
+    await instrument.start_preview()
+    assert _previewing(instrument) == ("gfp",)
+    await instrument.set_preview_channels([])
+    assert instrument.preview_channels.value == ()
+    assert isinstance(instrument.activity.value, IdleActivity)
+    with pytest.raises(OperationRejectedError, match="No channels to preview"):
+        await instrument.start_preview()
+
+    await instrument.set_active_profile("single_rfp")
+    assert instrument.preview_channels.value == ("rfp",)
+    await instrument.set_active_profile("single_gfp")
+    assert instrument.preview_channels.value == ("gfp",)
 
 
 async def test_preview_rejects_stale_source_generation(opened_instrument: Instrument) -> None:
@@ -159,9 +187,9 @@ async def test_preview_rejects_stale_source_generation(opened_instrument: Instru
         await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
         assert source_frames[-1] == ("gfp", PreviewLayer.OVERVIEW, source_packet, None)
 
-        preview_revision = instrument.preview_revision.value
+        stream_revision = instrument.stream_revision.value
         await instrument.set_active_profile("single_rfp")
-        assert instrument.preview_revision.value == preview_revision + 1
+        assert instrument.stream_revision.value == stream_revision + 1
         await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
         assert len(source_frames) == 1
         source_packet = PreviewFrame.from_source(
@@ -205,8 +233,7 @@ async def test_preview_position_survives_stop_but_not_stream_reset(
         await instrument._emit_preview_frame("camera_1", layer, packet)
 
     try:
-        await instrument._mode.set(AcquisitionMode.PREVIEW)
-        instrument._preview_channels = list(instrument.active_channels.values())
+        await instrument._activity.set(PreviewActivity(channels=tuple(instrument.active_channels)))
         await emit(3, PreviewLayer.OVERVIEW)
         assert delivered[-1][3] == StagePosition(x=10, y=20, z=30)
         await instrument.stop_preview()
@@ -216,7 +243,7 @@ async def test_preview_position_survives_stop_but_not_stream_reset(
         await emit(4)
         assert delivered[-1][3] is None  # An unseen cached frame must not acquire a post-stop position.
 
-        await instrument._mode.set(AcquisitionMode.PREVIEW)
+        await instrument._activity.set(PreviewActivity(channels=tuple(instrument.active_channels)))
         for frame_idx in range(5, 22):
             await emit(frame_idx)
         assert len(instrument._preview_positions["camera_1"]) == 16

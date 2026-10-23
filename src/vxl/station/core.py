@@ -168,15 +168,15 @@ class Station:
                     id=session_id,
                     instrument_name=instrument_name,
                 )
-                self._session_teardowns.append(instrument.mode.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.activity.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.active_profile_id.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.preview_revision.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.preview_channels.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.stream_revision.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.fov.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.state.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.history.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.profile_fovs.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.planned_volumes.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.acquisition.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.default.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.device_props_updates.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.preview.subscribe(self._feed.publish_preview))
@@ -352,9 +352,10 @@ class Station:
                 {
                     **instrument.state.value.model_dump(),
                     "config": instrument.config,
-                    "mode": instrument.mode.value,
+                    "activity": instrument.activity.value,
                     "active_profile_id": instrument.active_profile_id.value,
-                    "preview_revision": instrument.preview_revision.value,
+                    "preview_channels": list(instrument.preview_channels.value),
+                    "stream_revision": instrument.stream_revision.value,
                     "fov": instrument.fov.cache,
                     "profile_fovs": instrument.profile_fovs.value,
                     "planned_volumes": instrument.planned_volumes.value,
@@ -365,7 +366,6 @@ class Station:
                         )
                         for device_id, interface in instrument.device_interfaces.items()
                     },
-                    "acquisition": instrument.acquisition.value,
                     "history": instrument.history.value,
                     "remote_stores": dict(instrument.remote_stores),
                 }

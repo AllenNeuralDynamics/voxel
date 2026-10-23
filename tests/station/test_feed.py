@@ -4,7 +4,7 @@ import pytest
 from vxlib.history import HistoryState
 from vxlib.reactivity import Cell
 
-from vxl.instrument import AcquisitionMode, InstrumentConfig
+from vxl.instrument import IdleActivity, InstrumentConfig
 from vxl.station import (
     InstrumentView,
     SessionInfo,
@@ -28,15 +28,15 @@ def session(instrument_config: InstrumentConfig) -> SessionView:
         instrument=InstrumentView(
             **instrument_config.default.model_dump(),
             config=instrument_config,
-            mode=AcquisitionMode.IDLE,
+            activity=IdleActivity(),
             active_profile_id="single_gfp",
-            preview_revision=0,
+            preview_channels=["gfp"],
+            stream_revision=0,
             fov=None,
             history=HistoryState(),
             profile_fovs={},
             planned_volumes=[],
             devices={},
-            acquisition=None,
             remote_stores={},
         ),
     )

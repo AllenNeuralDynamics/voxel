@@ -1,34 +1,29 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { resolve } from '$app/paths';
+  import { getPageInstrument } from '$lib/context.svelte';
+  import { displayName } from '$lib/core/utils';
+  import PageFallback from '$lib/shell/PageFallback.svelte';
 
-  import { page } from '$app/state';
-  import { resolveInstrumentView } from '$lib/instrument-view';
-  import { getVoxelStation } from '$lib/model';
-  import { displayName } from '$lib/utils';
+  import type { LayoutProps } from './$types';
 
-  interface Props {
-    children: Snippet;
-  }
+  let { children, params }: LayoutProps = $props();
 
-  let { children }: Props = $props();
-
-  const app = getVoxelStation();
-  const instrumentId = $derived(page.params.instrumentId ?? '');
-  const instrument = $derived(app.activeName === instrumentId ? app.instrument : null);
-  const selected = $derived(resolveInstrumentView(app.discovery, { kind: 'instrument', name: instrumentId }));
-  const profileId = $derived(page.params.profileId ?? '');
-  const profile = $derived((instrument?.state ?? selected?.state)?.imaging.profiles[profileId]);
-  const operatingPage = $derived(Boolean(page.params.generatorId));
+  const selected = getPageInstrument();
+  const profile = $derived(selected.imaging?.profiles[params.profileId]);
+  const label = $derived(profile?.label || displayName(params.profileId));
+  const items = $derived([
+    { label: 'Profiles', href: resolve('/stations/[stationId]/instruments/[instrumentId]/profiles', selected.params) },
+    { label }
+  ]);
+  // The sync page edits the active profile's waveforms, so it opens only for the active profile. Without this, the
+  // link of another profile would show the active profile's waveforms under its name.
+  const operatingPage = $derived(Boolean(params.generatorId));
 </script>
 
 {#if !profile}
-  <div class="flex h-full items-center justify-center text-fg-muted">
-    Profile “{displayName(profileId)}” is not available.
-  </div>
-{:else if operatingPage && instrument?.activeProfileId !== profileId}
-  <div class="flex h-full items-center justify-center p-4 text-sm text-fg-muted">
-    {profile.label || displayName(profileId)} is not active. Activate it to access operating controls.
-  </div>
+  <PageFallback {items}>Profile “{label}” is not available.</PageFallback>
+{:else if operatingPage && selected.open?.activeProfileId !== params.profileId}
+  <PageFallback {items}>{label} is not active. Activate it to access operating controls.</PageFallback>
 {:else}
   {@render children()}
 {/if}

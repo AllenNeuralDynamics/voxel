@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, ValidationError
 from vxl_records import (
@@ -25,7 +25,7 @@ from vxl_records import (
 )
 from vxlib.history import Change, HistoryState, UndoHistory
 from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
-from vxlib.reactivity import Cell, Computed, Emitter, ReactiveQuery, Readable, Subscribable
+from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Readable, Subscribable
 from vxlib.schema import FrozenModel
 
 from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
@@ -77,12 +77,6 @@ async def _gather_hardware[T](*calls: Awaitable[T]) -> list[T]:
     return [result for result in results if not isinstance(result, BaseException)]
 
 
-class AcquisitionMode(StrEnum):
-    IDLE = "idle"
-    PREVIEW = "preview"
-    CAPTURE = "capture"
-
-
 class AcquisitionRequest(BaseModel):
     """Parameters of an acquisition run. Shared by the instrument API and web request body."""
 
@@ -109,6 +103,31 @@ class ActiveAcquisition(FrozenModel):
     volume_index: int = Field(ge=0)
     phase: AcquisitionPhase
     frames_captured: int = Field(default=0, ge=0)
+
+
+class IdleActivity(FrozenModel):
+    """No preview or capture is running."""
+
+    kind: Literal["idle"] = "idle"
+
+
+class PreviewActivity(FrozenModel):
+    """Preview streams the listed channels."""
+
+    kind: Literal["preview"] = "preview"
+    channels: tuple[str, ...] = Field(min_length=1)
+
+
+class CaptureActivity(FrozenModel):
+    """A capture owns the hardware and streams the channels of the volume it is capturing."""
+
+    kind: Literal["capture"] = "capture"
+    channels: tuple[str, ...] = ()  # empty until the first volume is configured
+    acquisition: ActiveAcquisition | None = None  # None until the durable manifest exists
+
+
+# What the instrument is doing: the single source for preview and capture state.
+Activity = Annotated[IdleActivity | PreviewActivity | CaptureActivity, Field(discriminator="kind")]
 
 
 @dataclass(frozen=True)
@@ -149,18 +168,25 @@ class Instrument:
         self._system = system if system is not None else System()
         self._remote_stores: dict[str, Remote] = {}
         self._active_profile_id = Cell[str](next(iter(self._store.value.imaging.profiles)))
+        # Channels the user turned off for preview; reset whenever the active profile changes.
+        self._preview_excluded = Cell[frozenset[str]](frozenset())
+        self._preview_channels = Computed[tuple[str, ...]](
+            self._store,
+            self._active_profile_id,
+            self._preview_excluded,
+            fn=self._compute_preview_channels,
+        )
         self._channels: dict[str, Channel] = {}
-        self._preview_channels: list[Channel] = []
         self._preview_unsubs: list[Teardown] = []
         self._device_unsubs: list[Teardown] = []
         self._device_props_updates = Emitter[tuple[str, DeviceProps]]()
         self._preview = Emitter[PreviewSourceEmission]()
-        self._preview_revision = Cell(0)
+        self._stream_revision = Cell(0)
         self._preview_source_ids: dict[str, str] = {}
         self._preview_positions: dict[str, dict[int, StagePosition | None]] = {}
         self._viewport = PreviewViewport()
-        self._mode = Cell[AcquisitionMode](AcquisitionMode.IDLE)
-        self._acquisition = Cell[ActiveAcquisition | None](None)
+        self._activity = Cell[Activity](IdleActivity())
+        self._busy = Derived(self._activity, fn=lambda activity: isinstance(activity, CaptureActivity))
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
         self._history = UndoHistory()
         self._acq_task: asyncio.Task[None] | None = None  # the in-flight acquisition run, if any
@@ -227,14 +253,19 @@ class Instrument:
         return {ch_id: self._channels[ch_id] for ch_id in self.active_profile.channels if ch_id in self._channels}
 
     @property
-    def mode(self) -> Readable[AcquisitionMode]:
-        """Acquisition mode as a read-only reactive view."""
-        return self._mode
+    def activity(self) -> Readable[Activity]:
+        """What the instrument is doing: idle, previewing, or capturing, with that activity's details."""
+        return self._activity
 
     @property
-    def acquisition(self) -> Readable[ActiveAcquisition | None]:
-        """The current acquisition snapshot, or ``None`` when no run is active."""
-        return self._acquisition
+    def busy(self) -> Readable[bool]:
+        """Whether a capture owns the hardware, so manual changes are rejected."""
+        return self._busy
+
+    @property
+    def preview_channels(self) -> Readable[tuple[str, ...]]:
+        """Active-profile channels that preview runs, in profile order."""
+        return self._preview_channels
 
     @property
     def history(self) -> Readable[HistoryState]:
@@ -247,9 +278,9 @@ class Instrument:
         return self._preview
 
     @property
-    def preview_revision(self) -> Readable[int]:
-        """Session-local revision identifying the current preview sources."""
-        return self._preview_revision
+    def stream_revision(self) -> Readable[int]:
+        """Session-local revision of the camera streams; it changes whenever earlier frames become stale."""
+        return self._stream_revision
 
     @property
     def device_props(self) -> dict[str, DeviceProps]:
@@ -330,15 +361,35 @@ class Instrument:
         if errors := [result for result in results if isinstance(result, BaseException)]:
             raise BaseExceptionGroup("Instrument shutdown failed", errors)
 
-    async def start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
-        """Start preview for selected channels, defaulting to all active-profile channels."""
+    async def start_preview(self) -> None:
+        """Start preview for the preview channels."""
         async with self._lock:
-            await self._start_preview(channel_ids)
+            await self._start_preview()
 
     async def stop_preview(self) -> None:
         """Stop preview if it is running."""
         async with self._lock:
             await self._stop_preview()
+
+    async def set_preview_channels(self, channel_ids: Collection[str]) -> None:
+        """Choose which active-profile channels preview runs, restarting a running preview with them.
+
+        A running preview stops when no channel remains.
+        """
+        async with self._lock:
+            self._ensure_not_busy("change the preview channels")
+            channels = self.active_profile.channels
+            if unknown := sorted(set(channel_ids) - set(channels)):
+                raise OperationRejectedError(f"Not in the active profile: {', '.join(unknown)}")
+            excluded = frozenset(uid for uid in channels if uid not in channel_ids)
+            if excluded == self._preview_excluded.value:
+                return
+            previewing = isinstance(self._activity.value, PreviewActivity)
+            if previewing:
+                await self._stop_preview()
+            await self._preview_excluded.set(excluded)
+            if previewing and self._preview_channels.value:
+                await self._start_preview()
 
     def update_viewport(self, viewport: PreviewViewport | None = None) -> None:
         """Update the active cameras' viewport, or reapply it when omitted."""
@@ -355,11 +406,7 @@ class Instrument:
     async def set_device_properties(self, device_id: str, properties: Mapping[str, Any]) -> PropResults:
         """Apply user edits and autosave selected accepted values in the active profile."""
         async with self._lock:
-            self._ensure_mode(
-                "set device properties",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("set device properties")
             results = await self._device(device_id).props.set(**properties)
             await self._autosave_properties(device_id, results)
             return results
@@ -373,11 +420,7 @@ class Instrument:
     ) -> Result[Any]:
         """Execute a user command; persist applied ROIs for active-profile cameras."""
         async with self._lock:
-            self._ensure_mode(
-                "execute a device command",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("execute a device command")
             result = await self._device(device_id).run_command(command, *args, **dict(kwargs or {}))
             if (
                 result.is_ok
@@ -403,11 +446,7 @@ class Instrument:
     ) -> None:
         """Move the supplied stage axes in micrometers, optionally waiting for completion."""
         async with self._lock:
-            self._ensure_mode(
-                "move the stage",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("move the stage")
             stage = self._hal.stage
             moves = [
                 axis.move_abs(position, wait=wait)
@@ -434,7 +473,7 @@ class Instrument:
     async def select_route(self, dimension: str, route: str) -> None:
         """Select a route without changing the persisted rule."""
         async with self._lock:
-            self._ensure_mode("select route", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._ensure_not_busy("select route")
             self._routing_scope(dimension)
             if route not in self._hal.topology.optical_routing.root[dimension].routes:
                 raise OperationRejectedError(f"No optical route '{dimension}.{route}'")
@@ -443,7 +482,7 @@ class Instrument:
     async def apply_routing_rule(self, dimension: str | None = None) -> None:
         """Read the current XY position and apply one dimension's rule, or all rules, once."""
         async with self._lock:
-            self._ensure_mode("apply routing rule", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._ensure_not_busy("apply routing rule")
             dimensions = self._routing_scope(dimension)
             if not dimensions:
                 return
@@ -457,32 +496,24 @@ class Instrument:
     async def set_active_profile(self, profile_id: str) -> str:
         """Apply a saved profile to hardware, restarting preview if it was running."""
         async with self._lock:
-            self._ensure_mode(
-                "select the active profile",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("select the active profile")
             if profile_id == self._active_profile_id.value:
                 return profile_id  # already active — avoid preview flicker and hardware churn
-            async with self._pause_preview_for_reconfiguration(preserve_channels=False):
+            async with self._pause_preview_for_reconfiguration():
                 await self._apply_profile(profile_id)
             return profile_id
 
     async def apply_settings(self) -> None:
         """Apply the active profile's saved device properties and camera ROIs to hardware."""
         async with self._lock:
-            self._ensure_mode(
-                "apply device settings",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("apply device settings")
             async with self._pause_preview_for_reconfiguration():
                 await self._apply_settings()
 
     async def update_signals(self, generator_uid: str, signals: Signals) -> None:
         """Apply a signal-generator configuration and save it in the active profile."""
         async with self._lock:
-            self._ensure_mode("update synchronized outputs", AcquisitionMode.IDLE)
+            self._ensure_idle("update synchronized outputs")
             handle = self._hal.signal_generators.get(generator_uid)
             if handle is None:
                 raise OperationRejectedError(f"Signal generator '{generator_uid}' not provisioned")
@@ -525,11 +556,7 @@ class Instrument:
         Retain compatible field values; use schema defaults if validation fails.
         """
         async with self._lock:
-            self._ensure_mode(
-                "change the metadata schema",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("change the metadata schema")
             cls = resolve_metadata_class(schema) if isinstance(schema, str) else schema
             carried = {k: v for k, v in self._store.value.metadata.items() if k in cls.model_fields}
             try:
@@ -545,11 +572,7 @@ class Instrument:
         ``include`` defaults to all ``PROMOTABLE_FIELDS``; other defaults remain unchanged.
         """
         async with self._lock:
-            self._ensure_mode(
-                "save instrument defaults",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("save instrument defaults")
             await self._store.save_as_default(include)
 
     async def restore_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
@@ -558,11 +581,7 @@ class Instrument:
         ``include`` defaults to all ``PROMOTABLE_FIELDS``; the plan, metadata, and excluded fields remain unchanged.
         """
         async with self._lock:
-            self._ensure_mode(
-                "restore instrument defaults",
-                AcquisitionMode.IDLE,
-                AcquisitionMode.PREVIEW,
-            )
+            self._ensure_not_busy("restore instrument defaults")
             await self._store.restore_default(include)
             await self._history.clear()
 
@@ -572,7 +591,7 @@ class Instrument:
         Retain specimen metadata when its schema is unchanged; otherwise use the new schema's defaults.
         """
         async with self._lock:
-            self._ensure_mode("apply an instrument preset", AcquisitionMode.IDLE)
+            self._ensure_idle("apply an instrument preset")
             active_profile_id = self._active_profile_id.value
             next_profile_id = (
                 active_profile_id
@@ -582,6 +601,7 @@ class Instrument:
             await self._store.apply_preset(preset)
             await self._history.clear()
             await self._active_profile_id.set(next_profile_id)
+            await self._preview_excluded.set(frozenset())
 
     async def add_task(self, task: AcquisitionTask) -> Change[list[AcquisitionTask]]:
         """Append a task and return the resulting plan change."""
@@ -639,27 +659,27 @@ class Instrument:
     async def undo(self) -> None:
         """Undo the last recorded edit without driving hardware."""
         async with self._lock:
-            self._ensure_mode("undo", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._ensure_not_busy("undo")
             await self._history.undo()
 
     async def redo(self) -> None:
         """Replay the next recorded edit without driving hardware."""
         async with self._lock:
-            self._ensure_mode("redo", AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._ensure_not_busy("redo")
             await self._history.redo()
 
     async def start_acquisition(self, request: AcquisitionRequest) -> AcquisitionManifest:
         """Start a background acquisition and return its durable manifest.
 
         Capture the requested tasks, or all tasks if omitted, in traversal order. Validate camera storage
-        access before creating the acquisition record; progress is published through ``acquisition``.
+        access before creating the acquisition record; progress is published through ``activity``.
         """
         storage = request.storage
-        # Snapshot state and enter CAPTURE in one locked transition, so an edit cannot commit between
-        # planning and freezing the run state. The lock is released before preflight and capture; CAPTURE
-        # then rejects every other state transition.
+        # Snapshot state and enter the capture activity in one locked transition, so an edit cannot commit
+        # between planning and freezing the run state. The lock is released before preflight and capture; the
+        # busy capture then rejects every other state transition.
         async with self._lock:
-            if self._mode.value == AcquisitionMode.CAPTURE:
+            if self._busy.value:
                 raise InstrumentBusyError("An acquisition is already in progress")
             state = self._store.value
             known = {task.id for task in state.plan}
@@ -673,9 +693,8 @@ class Instrument:
             ]
             if not volumes:
                 raise OperationRejectedError("No tasks planned — add tasks before acquiring")
-            if self._mode.value == AcquisitionMode.PREVIEW:
-                await self._stop_preview()
-            await self._mode.set(AcquisitionMode.CAPTURE)
+            await self._stop_preview()
+            await self._activity.set(CaptureActivity())
         try:
             # Preflight: every camera in the plan must be able to write `storage`, tested on its own node
             # (round-trip write). Any failure raises here — before a manifest, motion, or capture.
@@ -708,7 +727,7 @@ class Instrument:
                 logger.exception("Failed to open the log window for acquisition %s", manifest.id)
             manifest = await self._records.acquisitions.start_acquisition(manifest.id)
         except BaseException:
-            await self._mode.set(AcquisitionMode.IDLE)
+            await self._activity.set(IdleActivity())
             raise
 
         acquisition = ActiveAcquisition(
@@ -717,15 +736,17 @@ class Instrument:
             volume_index=0,
             phase=AcquisitionPhase.CONFIGURING,
         )
-        await self._acquisition.set(acquisition)
+        await self._activity.set(CaptureActivity(acquisition=acquisition))
         self._acq_task = asyncio.create_task(self._execute_acquisition(manifest))
         return manifest
 
     async def stop_acquisition(self) -> None:
         """Cancel the active acquisition and await its cleanup."""
         if (task := self._acq_task) is not None and not task.done():
-            if (acquisition := self._acquisition.value) is not None:
-                await self._acquisition.set(acquisition.model_copy(update={"phase": AcquisitionPhase.STOPPING}))
+            activity = self._activity.value
+            if isinstance(activity, CaptureActivity) and (acquisition := activity.acquisition) is not None:
+                stopping = acquisition.model_copy(update={"phase": AcquisitionPhase.STOPPING})
+                await self._activity.set(activity.model_copy(update={"acquisition": stopping}))
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
@@ -993,21 +1014,25 @@ class Instrument:
             self._hal.topology,
         )
 
-    def _ensure_mode(self, operation: str, *allowed: AcquisitionMode) -> None:
-        current = self._mode.value
-        if current in allowed:
-            return
-        expected = " or ".join(mode.value for mode in allowed)
-        raise InstrumentBusyError(f"Unable to {operation}: requires mode {expected}; current mode is {current.value}")
+    def _ensure_not_busy(self, operation: str) -> None:
+        if self._busy.value:
+            raise InstrumentBusyError(f"Unable to {operation} while a capture is running")
+
+    def _ensure_idle(self, operation: str) -> None:
+        activity = self._activity.value
+        if not isinstance(activity, IdleActivity):
+            raise InstrumentBusyError(f"Unable to {operation} while {activity.kind} is running")
 
     async def _inhibit_laser_outputs(self) -> None:
         await _gather_hardware(*(laser.call("output_disable") for laser in self._hal.lasers.values()))
 
     @asynccontextmanager
-    async def _pause_preview_for_reconfiguration(self, *, preserve_channels: bool = True) -> AsyncIterator[None]:
-        """Inhibit output and pause preview; resume only after success. Caller holds the lock."""
-        was_previewing = self._mode.value == AcquisitionMode.PREVIEW
-        channel_ids = [ch.uid for ch in self._preview_channels] if preserve_channels else None
+    async def _pause_preview_for_reconfiguration(self) -> AsyncIterator[None]:
+        """Inhibit output and pause preview; resume with the preview channels only after success.
+
+        Caller holds the lock.
+        """
+        was_previewing = isinstance(self._activity.value, PreviewActivity)
         if was_previewing:
             await self._stop_preview()
         await self._inhibit_laser_outputs()
@@ -1020,16 +1045,15 @@ class Instrument:
                 logger.exception("Failed to inhibit output after reconfiguration failure")
             raise
         if was_previewing:
-            await self._start_preview(channel_ids)
+            await self._start_preview()
 
-    async def _start_preview(self, channel_ids: Sequence[str] | None = None) -> None:
-        """Start preview for the active profile. Caller holds ``self._lock``."""
-        if self._mode.value != AcquisitionMode.IDLE:
+    async def _start_preview(self) -> None:
+        """Start preview for the preview channels. Caller holds ``self._lock``."""
+        if not isinstance(self._activity.value, IdleActivity):
             logger.warning("Preview or Acquisition already running")
             return
         channels = self.active_channels
-        all_chans = channels.values()
-        chans = list(all_chans if channel_ids is None else [channels[ch] for ch in channel_ids if ch in channels])
+        chans = [channels[uid] for uid in self._preview_channels.value if uid in channels]
         if not chans:
             raise OperationRejectedError("No channels to preview")
         routing = self._hal.routing
@@ -1040,7 +1064,6 @@ class Instrument:
             )
         self._preview_source_ids.clear()
         self._preview_positions.clear()
-        self._preview_channels = chans
 
         try:
             await self._inhibit_laser_outputs()
@@ -1051,39 +1074,42 @@ class Instrument:
                 await self._hal.stage.scanning_axis.reset_ttl_stepper()
             await _gather_hardware(*(ch.enable_laser_output() for ch in chans))
             await self._start_signal_generators()
-            await self._mode.set(AcquisitionMode.PREVIEW)
+            await self._activity.set(PreviewActivity(channels=tuple(ch.uid for ch in chans)))
         except BaseException:
             try:
-                await self._stop_preview()
+                await self._teardown_preview(chans)
             except Exception:
                 logger.exception("Preview startup cleanup failed")
             raise
         logger.info("Preview started (%d channels)", len(chans))
 
     async def _stop_preview(self) -> None:
-        """Stop capture while retaining valid cached preview sources. Caller holds ``self._lock``.
+        """Stop a running preview while retaining valid cached preview sources. Caller holds ``self._lock``.
 
-        Safe to call in any mode: _preview_channels is non-empty only while previewing (start_preview
-        bails unless IDLE; acquisition stops preview before entering CAPTURE), so this early-returns
-        during a capture and never flips the mode out from under a running acquisition.
+        Does nothing unless preview is running, so it never ends a capture.
         """
-        if not self._preview_channels:
+        activity = self._activity.value
+        if not isinstance(activity, PreviewActivity):
             return
-        chans, self._preview_channels = self._preview_channels, []
+        try:
+            await self._teardown_preview([self._channels[uid] for uid in activity.channels])
+        finally:
+            await self._activity.set(IdleActivity())
+        logger.info("Preview stopped")
 
+    async def _teardown_preview(self, chans: Sequence[Channel]) -> None:
+        """Inhibit output, stop generation, then stop the cameras; finish every step before reporting failures."""
         results = await asyncio.gather(*(ch.disable_laser_output() for ch in chans), return_exceptions=True)
         results.extend(await asyncio.gather(self._stop_signal_generators(), return_exceptions=True))
         results.extend(await asyncio.gather(*(ch.camera.stop_preview() for ch in chans), return_exceptions=True))
-        await self._mode.set(AcquisitionMode.IDLE)
         if errors := [result for result in results if isinstance(result, BaseException)]:
             raise BaseExceptionGroup("Preview shutdown failed", errors)
-        logger.info("Preview stopped")
 
     async def _reset_preview(self) -> None:
         """Invalidate preview, establish every new camera source identity, then resume delivery."""
         self._preview_source_ids.clear()
         self._preview_positions.clear()
-        await self._preview_revision.set(self._preview_revision.value + 1)
+        await self._stream_revision.set(self._stream_revision.value + 1)
         cameras = {channel.camera.uid: channel.camera for channel in self.active_channels.values()}
         source_ids = await asyncio.gather(*(camera.reset_preview_stream() for camera in cameras.values()))
         self._preview_source_ids = dict(zip(cameras, source_ids, strict=True))
@@ -1124,7 +1150,7 @@ class Instrument:
             x, y, z = stage.x.position.value, stage.y.position.value, stage.z.position.value
             position = None
             if (
-                self._mode.value != AcquisitionMode.IDLE
+                not isinstance(self._activity.value, IdleActivity)
                 and x is not None
                 and y is not None
                 and z is not None
@@ -1162,8 +1188,8 @@ class Instrument:
 
         The hardware steps read the active profile via the Cell, so the id is set first and rolled back
         on failure — it always names the last fully-applied profile. Requires exclusive access, guaranteed
-        either by holding ``self._lock`` (the ``set_active_profile`` path) or by ``CAPTURE`` mode (the
-        ``start_acquisition`` loop, where every other transition bails).
+        either by holding ``self._lock`` (the ``set_active_profile`` path) or by a busy capture (the
+        ``start_acquisition`` loop, where every other transition bails). A new profile previews all its channels.
         """
         if profile_id not in self._store.value.imaging.profiles:
             raise OperationRejectedError(f"No such profile '{profile_id}'")
@@ -1179,6 +1205,8 @@ class Instrument:
         except Exception:
             await self._active_profile_id.set(previous_id)
             raise
+        if profile_id != previous_id:
+            await self._preview_excluded.set(frozenset())
 
     async def _apply_settings(self) -> None:
         """Apply the active profile's saved settings. Caller owns the runtime transition."""
@@ -1270,7 +1298,7 @@ class Instrument:
         Writers return committed values and never record history or reacquire the lock.
         """
         async with self._lock:
-            self._ensure_mode(label.lower(), AcquisitionMode.IDLE, AcquisitionMode.PREVIEW)
+            self._ensure_not_busy(label.lower())
             change = await write(prepare())
             await self._history.record(label, change, write, merge_key=edit_id)
             return change
@@ -1343,6 +1371,15 @@ class Instrument:
                 await self._store.update(plan=plan)
                 return Change(before=current, after=self._store.value.plan[index])
         raise OperationRejectedError(f"No such task '{task.id}'")
+
+    def _compute_preview_channels(self) -> tuple[str, ...]:
+        """Active-profile channels the user has not turned off for preview."""
+        # A preset replaces the profiles a moment before the active profile follows.
+        profile = self._store.value.imaging.profiles.get(self._active_profile_id.value)
+        if profile is None:
+            return ()
+        excluded = self._preview_excluded.value
+        return tuple(uid for uid in profile.channels if uid not in excluded)
 
     def _compute_profile_fovs(self) -> dict[str, dict[str, Bounds]]:
         """Resolve each saved profile ROI into specimen-space detection FOVs."""
@@ -1456,7 +1493,8 @@ class Instrument:
         phase: AcquisitionPhase | None = None,
         frames_captured: int | None = None,
     ) -> ActiveAcquisition:
-        current = self._acquisition.value
+        capture = self._capture_activity()
+        current = capture.acquisition
         if current is None:
             raise RuntimeError("cannot update acquisition state when no run is active")
         if current.id != manifest.id:
@@ -1468,8 +1506,14 @@ class Instrument:
             phase=current.phase if phase is None else phase,
             frames_captured=current.frames_captured if frames_captured is None else frames_captured,
         )
-        await self._acquisition.set(updated)
+        await self._activity.set(capture.model_copy(update={"acquisition": updated}))
         return updated
+
+    def _capture_activity(self) -> CaptureActivity:
+        activity = self._activity.value
+        if not isinstance(activity, CaptureActivity):
+            raise RuntimeError("no capture is running")
+        return activity
 
     async def _execute_acquisition(self, manifest: AcquisitionManifest) -> None:
         """Execute every volume in a running manifest and finalize the acquisition."""
@@ -1508,8 +1552,7 @@ class Instrument:
             for cam_id, result in zip(self._hal.cameras, released, strict=True):
                 if isinstance(result, BaseException):
                     logger.warning("release_writer failed for %s: %r", cam_id, result)
-            await self._mode.set(AcquisitionMode.IDLE)
-            await self._acquisition.set(None)
+            await self._activity.set(IdleActivity())
             try:
                 await self._records.logs.close_acquisition_window(manifest.id)
             except Exception:
@@ -1570,6 +1613,7 @@ class Instrument:
                 )
             opened = await _gather_hardware(*init_coros)
             locations = dict(zip(channels, opened, strict=True))
+            await self._activity.set(self._capture_activity().model_copy(update={"channels": tuple(channels)}))
             await self._reset_preview()
             manifest = await self._records.acquisitions.register_datasets(
                 manifest.id,
@@ -1600,7 +1644,7 @@ class Instrument:
         except BaseException as error:
             capture_error = error
 
-        active = self._acquisition.value
+        active = self._capture_activity().acquisition
         if active is not None and active.phase is not AcquisitionPhase.STOPPING:
             await self._update_acquisition(manifest, phase=AcquisitionPhase.FINALIZING)
         cleanup_errors = await self._teardown_capture(list(channels.values()), scanning_axis)

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import { cn } from '$lib/utils';
+  import { cn } from '$lib/core/utils';
 
   interface Props {
     for?: string;
@@ -14,7 +14,7 @@
 </script>
 
 {#if forId}
-  <label for={forId} {title} class={cn('text-base text-fg-muted', className)}>{@render children()}</label>
+  <label for={forId} {title} class={cn('text-sm text-fg-muted', className)}>{@render children()}</label>
 {:else}
-  <span {title} class={cn('text-base text-fg-muted', className)}>{@render children()}</span>
+  <span {title} class={cn('text-sm text-fg-muted', className)}>{@render children()}</span>
 {/if}
