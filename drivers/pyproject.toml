@@ -15,14 +15,21 @@ dependencies = [
     "pydantic>=2.11.9",
     "rich>=15.0.0",
     "aaopto-aotf>=0.0.11",
+    "pyyaml>=6.0",
 ]
+
+[project.scripts]
+vxl-calibrate-mpds = "vxl_drivers.lasers.mpds.cli:main"
 
 [project.optional-dependencies]
 # Optomechanics drivers
 thorlabs = ["pylablib>=1.4.5"]
 opto-icc = ["optoICC"]
 opto-kummenberg = ["optoKummenberg"]
+# Power meter drivers
+thorlabs-power-meter = ["pyvisa>=1.16.2"]
 # Laser drivers
+mpds-calibration = ["matplotlib>=3.10"]
 coherent-laser = ["coherent-lasers"]
 obis-laser = ["obis-laser"]
 vortran-laser = ["vortran-laser"]

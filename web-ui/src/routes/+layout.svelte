@@ -1,13 +1,13 @@
 <script lang="ts">
   import './layout.css';
+  // Applies the saved theme before any page renders.
+  import '$lib/kit/themes';
 
-  import { createHotkeySequence } from '@tanstack/svelte-hotkeys';
   import { onMount } from 'svelte';
 
-  import favicon from '$lib/assets/favicon.svg';
+  import { reportFailure } from '$lib/core/failures';
   import { Toaster, Tooltip } from '$lib/kit';
-  import { AppearanceSheet, themes } from '$lib/themes';
-  import { toastError } from '$lib/utils';
+  import favicon from '$lib/shell/favicon.svg';
 
   const { children } = $props();
 
@@ -21,8 +21,7 @@
     await navigator.serviceWorker.register('/sw.js');
   }
 
-  onMount(() => toastError(configureServiceWorker()));
-  createHotkeySequence(['Mod+K', 'T'], () => (themes.pickerOpen = true));
+  onMount(() => reportFailure(configureServiceWorker()));
 </script>
 
 <svelte:head>
@@ -34,5 +33,4 @@
   {@render children()}
 </Tooltip.Provider>
 
-<AppearanceSheet bind:open={themes.pickerOpen} />
-<Toaster position="bottom-left" />
+<Toaster position="top-center" />

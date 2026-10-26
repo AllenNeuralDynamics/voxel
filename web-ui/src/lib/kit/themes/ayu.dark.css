@@ -1,0 +1,63 @@
+/* Ayu Dark, based on the Zed "Ayu Dark" theme by Zed Industries. */
+
+[data-theme='ayu'].dark {
+  --canvas: #0d1016;
+  --shell: #272a30;
+  --pane: #1f2127;
+  --raised: #2e323a;
+  --floating: #34373f;
+  --tint: #bfbdb60f;
+  --tint-hover: #bfbdb61a;
+  --overlay: #1f2127cc;
+  --backdrop: #000000aa;
+  --raised-shadow: 0 0 0 1px var(--line-faint);
+  --floating-shadow: 0 0 0 1px var(--line-faint), 0 14px 36px #00000080;
+
+  --element-bg: #bfbdb60d;
+  --element-hover: #bfbdb616;
+  --element-active: #bfbdb628;
+  --element-selected: #bfbdb61f;
+  --track: #bfbdb626;
+
+  --fg: #bfbdb6;
+  --fg-muted: #a5a4a1;
+  --fg-faint: #828280;
+
+  --line: #bfbdb658;
+  --line-muted: #bfbdb646;
+  --line-faint: #bfbdb62c;
+  --line-selected: #bfbdb68b;
+
+  --focus: #5786aa;
+
+  --accent: #5ac1fe;
+  --on-accent: #0d1016;
+  --accent-hover: #6fd5ff;
+  --accent-muted: #104a69;
+  --accent-tint: #003855;
+  --accent-fg: #5ac1fe;
+
+  --danger: #ef7177;
+  --on-danger: #0d1016;
+  --danger-hover: #ff8489;
+  --danger-muted: #974146;
+  --danger-tint: #48161b;
+  --danger-fg: #f8797e;
+
+  --success: #aad84c;
+  --on-success: #0d1016;
+  --success-hover: #bdec62;
+  --success-muted: #69882a;
+  --success-tint: #294113;
+  --success-fg: #aad84c;
+
+  --warning: #feb454;
+  --on-warning: #0d1016;
+  --warning-hover: #ffc869;
+  --warning-muted: #a26e26;
+  --warning-tint: #572815;
+  --warning-fg: #feb454;
+
+  --scrollbar-thumb: #bfbdb64c;
+  --scrollbar-thumb-hover: #2d2f34;
+}

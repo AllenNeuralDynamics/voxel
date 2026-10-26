@@ -5,7 +5,7 @@ from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from rigup.device.props import enumerated, enumerated_int, numeric
+from rigup.device.props import enumerated, numeric, numeric_int
 from vxlib.vector import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
@@ -138,7 +138,7 @@ class XimeaCamera(Camera):
 
     # ==================== Binning ====================
 
-    @enumerated_int(options=lambda self: self._binning_options)
+    @numeric_int(options=lambda self: self._binning_options)
     def binning(self) -> int:
         """Get the binning mode of the camera."""
         raw: str = _to_str(self._camera.get_downsampling())

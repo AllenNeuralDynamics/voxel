@@ -239,7 +239,7 @@ class Realtime:
     def _get_preview_identity(state: StationState) -> tuple[object, int] | None:
         if state.session is None:
             return None
-        return state.session.info.id, state.session.instrument.preview_revision
+        return state.session.info.id, state.session.instrument.stream_revision
 
 
 __all__ = ["PreviewViewportUpdate", "Realtime"]

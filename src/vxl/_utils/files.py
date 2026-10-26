@@ -7,17 +7,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-import yaml
 from pydantic import BaseModel
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.emitter import RoundTripEmitter
+from ruamel.yaml.error import MarkedYAMLError
 from ruamel.yaml.events import MappingEndEvent
-
-try:
-    from yaml import CSafeLoader as _YamlLoader
-except ImportError:
-    from yaml import SafeLoader as _YamlLoader
 
 _REPLACE_ATTEMPTS = 5
 _REPLACE_BASE_DELAY_S = 0.05
@@ -106,12 +101,25 @@ class _FlowMapEmitter(RoundTripEmitter):
         super().expect_flow_mapping_key()
 
 
-def load_yaml[T: BaseModel](path: Path, model_cls: type[T]) -> T:
+def load_yaml(path: Path) -> Any:
+    """Parse a YAML file as plain data; repeated keys and syntax errors raise a one-line ``ValueError``.
+
+    Reading uses the same YAML 1.2 rules and Python parser as :func:`save_yaml`, so saved values such as
+    ``no`` or ``1e-05`` load back unchanged.
+    """
+    try:
+        return YAML(typ="safe", pure=True).load(path.read_text(encoding="utf-8"))
+    except MarkedYAMLError as exc:
+        mark = exc.problem_mark or exc.context_mark
+        line = f" line {mark.line + 1}" if mark is not None else ""
+        raise ValueError(f"{path.name}{line}: {exc.problem or exc.context}") from exc
+
+
+def load_and_validate_yaml[T: BaseModel](path: Path, model_cls: type[T]) -> T:
     """Load and validate a YAML file into ``model_cls``."""
     if not path.exists():
         raise FileNotFoundError(f"No {model_cls.__name__} found at {path}")
-    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_YamlLoader)
-    return model_cls.model_validate(data)
+    return model_cls.model_validate(load_yaml(path))
 
 
 def _apply_collection_style(value: Any, *, inline_limit: int = 100) -> Any:
@@ -177,4 +185,4 @@ def save_yaml(path: Path, model: BaseModel) -> None:
     atomic_write(path, buffer.getvalue())
 
 
-__all__ = ["load_yaml", "save_yaml"]
+__all__ = ["load_and_validate_yaml", "load_yaml", "save_yaml"]

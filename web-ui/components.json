@@ -6,9 +6,9 @@
   },
   "aliases": {
     "components": "$lib/kit/cn",
-    "utils": "$lib/utils",
+    "utils": "$lib/core/utils",
     "ui": "$lib/kit/cn",
-    "hooks": "$lib/hooks",
+    "hooks": "$lib/core/utils",
     "lib": "$lib"
   },
   "typescript": true,

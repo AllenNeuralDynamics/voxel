@@ -137,6 +137,10 @@ class _SelectRoute(BaseModel):
     route: str
 
 
+class _PreviewChannels(BaseModel):
+    channel_ids: list[str]
+
+
 async def _get_preset(station: Station, preset_id: UUID) -> PresetRecord:
     try:
         return await station.records.presets.get(preset_id)
@@ -472,11 +476,6 @@ async def apply_settings(instrument: InstrumentDep) -> None:
     await instrument.apply_settings()
 
 
-@instrument_router.post("/settings/save", status_code=204)
-async def save_settings(instrument: InstrumentDep) -> None:
-    await instrument.save_settings()
-
-
 @instrument_router.post("/routing/apply", status_code=204)
 async def apply_routing_rule(instrument: InstrumentDep, dimension: str | None = None) -> None:
     """Apply the rule for one dimension, or all dimensions when omitted."""
@@ -571,6 +570,11 @@ async def start_preview(instrument: InstrumentDep) -> None:
 @instrument_router.post("/preview/stop", status_code=204)
 async def stop_preview(instrument: InstrumentDep) -> None:
     await instrument.stop_preview()
+
+
+@instrument_router.put("/preview/channels", status_code=204)
+async def set_preview_channels(body: _PreviewChannels, instrument: InstrumentDep) -> None:
+    await instrument.set_preview_channels(body.channel_ids)
 
 
 @instrument_router.get("/devices/{device_id}/properties")

@@ -1,4 +1,19 @@
-from vxl.instrument.config import InstrumentConfig
+import re
+
+import pytest
+from pydantic import ValidationError
+
+from vxl.instrument.config import ImagingProtocol, InstrumentConfig
+
+
+@pytest.mark.parametrize(("section", "kind"), [("channels", "Channel id"), ("profiles", "Profile id")])
+def test_channel_and_profile_ids_are_safe_in_dataset_paths(
+    instrument_config: InstrumentConfig, section: str, kind: str
+) -> None:
+    data = instrument_config.default.imaging.model_dump()
+    data[section]["../escape"] = next(iter(data[section].values()))
+    with pytest.raises(ValidationError, match=re.escape(f"{kind} '../escape' may use only")):
+        ImagingProtocol.model_validate(data)
 
 
 def test_channel_filters_use_discrete_axis_position_validation(instrument_config: InstrumentConfig) -> None:

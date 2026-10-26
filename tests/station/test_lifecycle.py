@@ -10,9 +10,9 @@ from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
 from rigup import DeviceInterface, DeviceProps
 from vxl.instrument import (
-    AcquisitionMode,
-    ActiveAcquisition,
+    Activity,
     Bounds,
+    IdleActivity,
     Instrument,
     InstrumentConfig,
     InstrumentState,
@@ -32,8 +32,8 @@ class FakeInstrument:
         self.open_release: asyncio.Event | None = None
         self.state = Cell(InstrumentState(**config.default.model_dump()))
         self.default = Cell(config.default)
-        self.mode = Cell(AcquisitionMode.IDLE)
-        self.acquisition = Cell[ActiveAcquisition | None](None)
+        self.activity = Cell[Activity](IdleActivity())
+        self.preview_channels = Cell[tuple[str, ...]](())
         self.active_profile_id = Cell(next(iter(self.state.value.imaging.profiles)))
         self.history = Cell(HistoryState())
         self.device_interfaces: dict[str, DeviceInterface] = {}
@@ -41,7 +41,7 @@ class FakeInstrument:
         self.remote_stores = {}
         self.device_props_updates = Emitter[tuple[str, DeviceProps]]()
         self.preview = Emitter[PreviewSourceEmission]()
-        self.preview_revision = Cell(0)
+        self.stream_revision = Cell(0)
         self.config = config
         self.hardware_config = config.hal
         self.fov = ReactiveQuery(fn=self._get_fov)
@@ -173,7 +173,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(
     delivered: list[tuple[str, PreviewLayer, bytes]] = []
     unsubscribe = station.feed.frames.subscribe(delivered.append)
     session = await station.open_session("instrument")
-    await instrument.preview_revision.set(1)
+    await instrument.stream_revision.set(1)
     state_view = await station.feed.snapshot()
     position = StagePosition(x=1, y=2, z=3)
     await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"VXPS", position))
@@ -192,7 +192,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(
     assert snapshot.session is not None
     assert snapshot.session.info.id == session.id
     assert snapshot.session.info.instrument_name == session.instrument_name
-    assert snapshot.session.instrument.preview_revision == 1
+    assert snapshot.session.instrument.stream_revision == 1
     assert snapshot.error == "OSError: close failed"
     await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"ignored", None))
     assert len(delivered) == 1

@@ -1,0 +1,63 @@
+/* Ayu Light, based on the Zed "Ayu Light" theme by Zed Industries. */
+
+[data-theme='ayu'] {
+  --canvas: #fcfcfc;
+  --shell: #ececed;
+  --pane: #ececed;
+  --raised: #fcfcfc;
+  --floating: #fcfcfc;
+  --tint: #5c61660f;
+  --tint-hover: #5c61661a;
+  --overlay: #ececedcc;
+  --backdrop: #00000040;
+  --raised-shadow: 0 0 0 1px #5c61660d, 0 1px 2px #5c61660f, 0 3px 10px #5c61660d;
+  --floating-shadow: 0 0 0 1px var(--line-faint), 0 2px 6px #5c616614, 0 12px 32px #5c616624;
+
+  --element-bg: #5c61660a;
+  --element-hover: #5c616611;
+  --element-active: #5c61661d;
+  --element-selected: #5c616617;
+  --track: #5c616626;
+
+  --fg: #5c6166;
+  --fg-muted: #626569;
+  --fg-faint: #808385;
+
+  --line: #5c616695;
+  --line-muted: #5c616677;
+  --line-faint: #5c61664b;
+  --line-selected: #5c6166b7;
+
+  --focus: #77879c;
+
+  --accent: #017cc0;
+  --on-accent: #ffffff;
+  --accent-hover: #006aad;
+  --accent-muted: #9ee7ff;
+  --accent-tint: #d5f3fe;
+  --accent-fg: #006eb1;
+
+  --danger: #c64e4f;
+  --on-danger: #ffffff;
+  --danger-hover: #b13b3e;
+  --danger-muted: #e79a97;
+  --danger-tint: #ffe3e1;
+  --danger-fg: #b73f43;
+
+  --success: #588200;
+  --on-success: #ffffff;
+  --success-hover: #477000;
+  --success-muted: #9bb979;
+  --success-tint: #e9efd2;
+  --success-fg: #4d7600;
+
+  --warning: #f1ad49;
+  --on-warning: #464a4f;
+  --warning-hover: #ffc05e;
+  --warning-muted: #d5aa7c;
+  --warning-tint: #ffeeda;
+  --warning-fg: #9a5b00;
+
+  --scrollbar-thumb: #5c61664c;
+  --scrollbar-thumb-hover: #dfe0e1;
+}

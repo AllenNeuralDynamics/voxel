@@ -1,0 +1,63 @@
+/* JetBrains Dark, based on the Zed "JetBrains Dark" theme by Artem Evsevev (jetbrains-themes). */
+
+[data-theme='jetbrains'].dark {
+  --canvas: #191a1c;
+  --shell: #2f3033;
+  --pane: #26282b;
+  --raised: #35383c;
+  --floating: #3d4045;
+  --tint: #dfe1e50f;
+  --tint-hover: #dfe1e51a;
+  --overlay: #26282bcc;
+  --backdrop: #000000aa;
+  --raised-shadow: 0 0 0 1px var(--line-faint);
+  --floating-shadow: 0 0 0 1px var(--line-faint), 0 14px 36px #00000080;
+
+  --element-bg: #dfe1e515;
+  --element-hover: #dfe1e520;
+  --element-active: #dfe1e534;
+  --element-selected: #dfe1e52c;
+  --track: #dfe1e526;
+
+  --fg: #dfe1e5;
+  --fg-muted: #b3b4b6;
+  --fg-faint: #909399;
+
+  --line: #dfe1e548;
+  --line-muted: #dfe1e538;
+  --line-faint: #dfe1e523;
+  --line-selected: #dfe1e576;
+
+  --focus: #4d87fa;
+
+  --accent: #1d5cd6;
+  --on-accent: #dfe1e5;
+  --accent-hover: #0749c1;
+  --accent-muted: #415d90;
+  --accent-tint: #293852;
+  --accent-fg: #6bafff;
+
+  --danger: #bb2943;
+  --on-danger: #dfe1e5;
+  --danger-hover: #a60a33;
+  --danger-muted: #98484e;
+  --danger-tint: #402929;
+  --danger-fg: #ff8894;
+
+  --success: #317039;
+  --on-success: #dfe1e5;
+  --success-hover: #1e5f28;
+  --success-muted: #3e6441;
+  --success-tint: #253627;
+  --success-fg: #7abb7f;
+
+  --warning: #f2c55c;
+  --on-warning: #191a1c;
+  --warning-hover: #e5b335;
+  --warning-muted: #aa8837;
+  --warning-tint: #665014;
+  --warning-fg: #f2c55c;
+
+  --scrollbar-thumb: #ffffff26;
+  --scrollbar-thumb-hover: #ffffff40;
+}

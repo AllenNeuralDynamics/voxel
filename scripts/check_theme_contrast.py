@@ -11,7 +11,7 @@ the 3:1 non-text rule, so a flagged `border` row is informational.
 
 Usage:
     uv run scripts/check_theme_contrast.py
-    uv run scripts/check_theme_contrast.py web-ui/src/lib/themes/jetbrains.dark.css
+    uv run scripts/check_theme_contrast.py web-ui/src/lib/kit/themes/jetbrains.dark.css
     uv run scripts/check_theme_contrast.py --only-fails
 """
 

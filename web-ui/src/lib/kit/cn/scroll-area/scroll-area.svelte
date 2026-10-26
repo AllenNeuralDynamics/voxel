@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ScrollArea as ScrollAreaPrimitive } from 'bits-ui';
 
-  import { cn, type WithoutChild, type WithoutChildrenOrChild } from '$lib/utils';
+  import { cn, type WithoutChild, type WithoutChildrenOrChild } from '$lib/core/utils';
 
   import Scrollbar from './scroll-area-scrollbar.svelte';
 
@@ -37,7 +37,7 @@
     tabindex={0}
     {...viewportProps}
     class={cn(
-      'min-h-0 min-w-0 flex-1 rounded-[inherit] outline-none focus-visible:ring-1 focus-visible:ring-border-focused focus-visible:ring-inset',
+      'min-h-0 min-w-0 flex-1 rounded-[inherit] outline-none focus-visible:ring-1 focus-visible:ring-focus focus-visible:ring-inset',
       viewportProps.class
     )}
   >

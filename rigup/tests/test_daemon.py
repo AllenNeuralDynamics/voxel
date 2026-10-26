@@ -92,7 +92,7 @@ class TestDaemonDeviceLifecycle:
             Action.BUILD_DEVICES,
             BuildDevicesRequest(
                 devices={
-                    "dev_a": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0}),
+                    "dev_a": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0}, autosave="*"),
                     "dev_b": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
                 }
             ),

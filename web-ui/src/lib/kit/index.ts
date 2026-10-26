@@ -1,9 +1,10 @@
-/**
- * Low-level UI primitive components.
- */
+/** Our UI parts, and the shadcn groups from `./cn` that pages use. */
 
+export { default as Badge } from './Badge.svelte';
+export { default as Checkbox } from './bool/Checkbox.svelte';
+export { default as Switch } from './bool/Switch.svelte';
 export { default as Button, type ButtonVariants, buttonVariants } from './Button.svelte';
-export { default as Checkbox, type CheckboxVariants, checkboxVariants } from './Checkbox.svelte';
+export { default as Chip } from './Chip.svelte';
 export * as Breadcrumb from './cn/breadcrumb';
 export * as Collapsible from './cn/collapsible';
 export * as ContextMenu from './cn/context-menu';
@@ -11,20 +12,25 @@ export * as Dialog from './cn/dialog';
 export * as DropdownMenu from './cn/dropdown-menu';
 export * as HoverCard from './cn/hover-card';
 export * as ScrollArea from './cn/scroll-area';
-export * as Sheet from './cn/sheet';
-export * as Sidebar from './cn/sidebar';
 export { Toaster } from './cn/sonner';
 export { Spinner } from './cn/spinner';
 export * as Tooltip from './cn/tooltip';
+export { default as CollapsibleSection } from './CollapsibleSection.svelte';
 export { default as ColorPicker } from './ColorPicker.svelte';
+export { default as RadioBar } from './enumerated/RadioBar.svelte';
+export { default as Select } from './enumerated/Select.svelte';
 export { default as Field } from './Field.svelte';
 export { default as JsonView } from './JsonView.svelte';
 export { default as Label } from './Label.svelte';
+export { numberDisplay, type NumberProps, type RangeProps, type SliderProps } from './numeric/number.svelte';
+export { default as NumberBox } from './numeric/NumberBox.svelte';
+export { default as NumberInput } from './numeric/NumberInput.svelte';
+export { default as NumberSlider } from './numeric/NumberSlider.svelte';
+export { default as Slider } from './numeric/Slider.svelte';
+export { default as SpinBox } from './numeric/SpinBox.svelte';
 export { default as PaneDivider } from './PaneDivider.svelte';
-export { default as Rename, type RenameVariants, renameVariants } from './Rename.svelte';
-export { default as Select, type SelectVariants, selectVariants } from './Select.svelte';
-export { default as Slider } from './Slider.svelte';
-export { default as Switch, type SwitchVariants, switchVariants } from './Switch.svelte';
-export { default as TagInput, type TagInputVariants, tagInputVariants } from './TagInput.svelte';
-export { default as TextArea, type TextAreaVariants, textAreaVariants } from './TextArea.svelte';
-export { default as TextInput, type TextInputVariants, textInputVariants } from './TextInput.svelte';
+export { default as Section } from './Section.svelte';
+export { default as TagInput } from './TagInput.svelte';
+export { type TextProps } from './text/text.svelte';
+export { default as TextArea } from './text/TextArea.svelte';
+export { default as TextBox } from './text/TextBox.svelte';

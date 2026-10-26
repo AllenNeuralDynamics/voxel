@@ -17,7 +17,7 @@ from starlette.types import Receive, Scope, Send
 
 from vxl._utils.logging import configure_logging, get_uvicorn_log_config
 from vxl.hal import HALStartupError
-from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError
+from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, SettingsPersistenceError, StartupError
 from vxl.station import InstrumentTemplates, Station
 from vxl.system import StationConfig, System, load_voxel_env
 
@@ -55,6 +55,10 @@ def _register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InstrumentBusyError)
     async def _on_instrument_busy(_request: Request, error: InstrumentBusyError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(error)})
+
+    @app.exception_handler(SettingsPersistenceError)
+    async def _on_settings_persistence(_request: Request, error: SettingsPersistenceError) -> JSONResponse:
+        return JSONResponse(status_code=500, content={"detail": str(error)})
 
     def startup_error_response(error: StartupError | HALStartupError) -> JSONResponse:
         details: list[dict[str, Any]] = [

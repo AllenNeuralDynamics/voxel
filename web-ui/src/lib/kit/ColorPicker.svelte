@@ -2,33 +2,32 @@
   import type { PopoverContentProps } from 'bits-ui';
   import { Popover } from 'bits-ui';
 
-  import { isValidHex } from '$lib/colors.svelte';
+  import { isValidHex } from '$lib/kit/themes/colors';
+
+  import { useValue } from './value.svelte';
 
   interface Props {
-    color: string;
+    value: string;
+    /** Gets each color you pick. A failed save shows a toast and puts back `value`. */
+    onChange: (value: string) => unknown;
     presetColors?: string[];
-    onColorChange: (color: string) => void;
     align?: PopoverContentProps['align'];
+    /** Names the swatch for screen readers. */
+    label?: string;
   }
 
-  let { color = $bindable('#ffffff'), presetColors = [], onColorChange, align = 'start' }: Props = $props();
+  let { value, onChange, presetColors = [], align = 'start', label = 'Pick color' }: Props = $props();
 
-  let customColorInput = $state(color);
+  const control = useValue<string>(() => ({ value, onChange }));
+  let customColorInput = $derived(control.value);
 
   function handlePresetClick(hexColor: string) {
-    color = hexColor;
-    customColorInput = hexColor;
-    onColorChange(hexColor);
+    void control.change(hexColor);
   }
 
   function handleCustomColorChange(e: Event) {
     const input = e.target as HTMLInputElement;
-    const newColor = input.value;
-    if (isValidHex(newColor)) {
-      color = newColor;
-      customColorInput = newColor;
-      onColorChange(newColor);
-    }
+    if (isValidHex(input.value)) void control.change(input.value);
   }
 
   function handleCustomInputChange(e: Event) {
@@ -37,28 +36,23 @@
   }
 
   function handleCustomInputBlur() {
-    if (isValidHex(customColorInput)) {
-      color = customColorInput;
-      onColorChange(customColorInput);
+    if (isValidHex(customColorInput) && customColorInput !== control.value) {
+      void control.change(customColorInput);
     } else {
       // Reset to current valid color if invalid
-      customColorInput = color;
+      customColorInput = control.value;
     }
   }
 </script>
 
 <Popover.Root>
   <Popover.Trigger
-    class="h-2.5 w-2.5 rounded-full border border-control-line transition-all hover:border-control-line-hover"
-    style="background-color: {color}"
-    aria-label="Pick color"
+    class="size-2.5  rounded-full border border-control-line transition-all hover:border-control-line-hover"
+    style="background-color: {control.value}"
+    aria-label={label}
   />
 
-  <Popover.Content
-    class="z-50 rounded-md border border-line-muted bg-floating p-2 shadow-xl outline-none"
-    sideOffset={4}
-    {align}
-  >
+  <Popover.Content class="z-50 frame-floating p-2 outline-none" sideOffset={4} {align}>
     {#if presetColors.length > 0}
       <!-- Preset colors -->
       <div class="mb-2">
@@ -67,9 +61,9 @@
             <button
               type="button"
               onclick={() => handlePresetClick(presetColor)}
-              class="h-5 w-5 rounded-full border transition-all hover:scale-110 {color.toLowerCase() ===
+              class="size-5 rounded-full border transition-all hover:scale-110 {control.value.toLowerCase() ===
               presetColor.toLowerCase()
-                ? 'border-focused ring-focused ring-1'
+                ? 'border-line-selected ring-1 ring-line-selected'
                 : 'border-control-line hover:border-control-line-hover'}"
               style="background-color: {presetColor}"
               aria-label="Select preset color"
@@ -85,7 +79,7 @@
         <!-- Native color picker -->
         <input
           type="color"
-          value={color}
+          value={control.value}
           oninput={handleCustomColorChange}
           class="h-6 w-8 cursor-pointer rounded border border-control-line bg-element-bg"
         />
@@ -97,7 +91,7 @@
           onblur={handleCustomInputBlur}
           placeholder="#ff00ff"
           size="7"
-          class="focus:border-focused h-6 min-w-0 rounded border border-control-line bg-element-bg px-1.5 font-mono text-base text-fg placeholder-fg-muted focus:outline-none"
+          class="h-6 min-w-0 rounded border border-control-line bg-element-bg px-1.5 font-mono text-base text-fg placeholder-fg-muted focus:border-focus focus:outline-none"
         />
       </div>
     </div>
