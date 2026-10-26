@@ -6,7 +6,7 @@ toggle (drives :meth:`Instrument.start_preview` / :meth:`Instrument.stop_preview
 (camera + laser) bound to the ``DevicesStore`` adapters.
 
 Sections are (re)built on the ``DevicesStore.ready`` signal and whenever the active profile changes;
-the preview button tracks ``instrument.mode``. The panel owns its reactive subscriptions and detaches
+the preview button tracks ``instrument.activity``. The panel owns its reactive subscriptions and detaches
 them in :meth:`teardown` (the instrument outlives this window).
 """
 
@@ -19,7 +19,7 @@ from vxlib.fmt import display_name
 from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
 from vxl._utils.color import Color
-from vxl.instrument import AcquisitionMode, Instrument
+from vxl.instrument import Activity, Instrument, PreviewActivity
 from vxl.instrument.config import ChannelConfig
 from vxl.instrument.core import Channel
 from vxl.qt.devices import DevicesStore
@@ -108,11 +108,11 @@ class ChannelsPanel(QWidget):
 
         self._refresh_profiles()
         self._rebuild_sections()
-        self._sync_preview_button(instrument.mode.value)
+        self._sync_preview_button(instrument.activity.value)
 
         self._devices.ready.connect(self._rebuild_sections)
         self._unsubs.append(instrument.active_profile_id.subscribe(self._on_active_profile))
-        self._unsubs.append(instrument.mode.subscribe(self._sync_preview_button))
+        self._unsubs.append(instrument.activity.subscribe(self._sync_preview_button))
 
     def _refresh_profiles(self) -> None:
         """Populate the profile selector from instrument state, selecting the active profile."""
@@ -151,16 +151,16 @@ class ChannelsPanel(QWidget):
         spawn(self._instrument.set_active_profile(profile_id), log=log)
 
     def _on_preview_clicked(self) -> None:
-        if self._instrument.mode.value == AcquisitionMode.PREVIEW:
+        if isinstance(self._instrument.activity.value, PreviewActivity):
             spawn(self._instrument.stop_preview(), log=log)
         else:
             spawn(self._instrument.start_preview(), log=log)
 
-    def _sync_preview_button(self, mode: AcquisitionMode) -> None:
-        previewing = mode == AcquisitionMode.PREVIEW
+    def _sync_preview_button(self, activity: Activity) -> None:
+        previewing = isinstance(activity, PreviewActivity)
         self._preview_btn.setText("Stop Preview" if previewing else "Start Preview")
         self._preview_btn.fmt(Button.Fmt.danger() if previewing else Button.Fmt.primary())
-        self._preview_btn.setEnabled(mode != AcquisitionMode.CAPTURE)  # engine busy during a capture
+        self._preview_btn.setEnabled(not self._instrument.busy.value)
 
     def teardown(self) -> None:
         """Detach all subscriptions. Called when the control window closes."""

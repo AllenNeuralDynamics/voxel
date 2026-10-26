@@ -2,8 +2,8 @@
   import { ContextMenu as ContextMenuPrimitive } from 'bits-ui';
   import type { Snippet } from 'svelte';
 
-  import { LucideCheck as CheckIcon } from '$lib/icons';
-  import { cn, type WithoutChildrenOrChild } from '$lib/utils';
+  import { cn, type WithoutChildrenOrChild } from '$lib/core/utils';
+  import { Check as CheckIcon } from '$lib/kit/icons';
 
   let {
     ref = $bindable(null),
@@ -23,7 +23,7 @@
   bind:indeterminate
   data-slot="context-menu-checkbox-item"
   class={cn(
-    "relative flex cursor-default items-center gap-2 rounded-sm py-1.5 ps-8 pe-2 text-lg outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-element-hover data-highlighted:text-fg [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+    "relative flex cursor-default items-center gap-2 rounded-sm py-1.5 ps-8 pe-2 text-base outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-element-hover data-highlighted:text-fg [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
     className
   )}
   {...restProps}

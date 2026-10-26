@@ -1,6 +1,6 @@
 from .driver import Device, DeviceController, PublishBytesFn, PublishTypedFn, StreamCallback
 from .handle import Adapter, DeviceHandle, DeviceProperties, DeviceProperty, DeviceProps
-from .props import PropertyModel, enumerated, enumerated_int, numeric, numeric_int
+from .props import PropertyModel, enumerated, numeric, numeric_int
 from .schema import CommandRequest, DeviceInterface, PropResults, Result, Results, describe
 
 __all__ = [
@@ -22,7 +22,6 @@ __all__ = [
     "StreamCallback",
     "describe",
     "enumerated",
-    "enumerated_int",
     "numeric",
     "numeric_int",
 ]

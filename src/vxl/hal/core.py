@@ -105,7 +105,6 @@ class HAL:
 
         self.cameras: dict[str, CameraHandle] = {}
         self.lasers: dict[str, DeviceHandle] = {}
-        self.aotfs: dict[str, DeviceHandle] = {}
         self.continuous_axes: dict[str, ContinuousAxisHandle] = {}
         self.discrete_axes: dict[str, DiscreteAxisHandle] = {}
         self.fws: dict[str, DiscreteAxisHandle] = {}
@@ -170,7 +169,6 @@ class HAL:
         await asyncio.gather(*(camera.close_preview_updates() for camera in self.cameras.values()))
         self.cameras.clear()
         self.lasers.clear()
-        self.aotfs.clear()
         self.continuous_axes.clear()
         self.discrete_axes.clear()
         self.fws.clear()
@@ -219,8 +217,6 @@ class HAL:
                     self.signal_generators[uid] = SignalGeneratorHandle.wrap(handle)
                 case "laser":
                     self.lasers[uid] = handle
-                case "aotf":
-                    self.aotfs[uid] = handle
                 case "continuous_axis":
                     self.continuous_axes[uid] = ContinuousAxisHandle.wrap(handle)
                 case "discrete_axis":

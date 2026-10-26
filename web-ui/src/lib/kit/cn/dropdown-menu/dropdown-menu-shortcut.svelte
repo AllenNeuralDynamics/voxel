@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from 'svelte/elements';
 
-  import { cn, type WithElementRef } from '$lib/utils';
+  import { cn, type WithElementRef } from '$lib/core/utils';
 
   let {
     ref = $bindable(null),
@@ -14,7 +14,7 @@
 <span
   bind:this={ref}
   data-slot="dropdown-menu-shortcut"
-  class={cn('ms-auto text-lg tracking-widest text-fg-muted', className)}
+  class={cn('ms-auto text-sm tracking-widest text-fg-muted', className)}
   {...restProps}
 >
   {@render children?.()}

@@ -16,7 +16,6 @@ from .device import (
     StreamCallback,
     describe,
     enumerated,
-    enumerated_int,
     numeric,
     numeric_int,
 )
@@ -47,7 +46,6 @@ __all__ = [
     "build_objects_async",
     "describe",
     "enumerated",
-    "enumerated_int",
     "numeric",
     "numeric_int",
 ]

@@ -30,10 +30,15 @@ class InstrumentBusyError(InstrumentError):
     """Raised when an operation is unavailable in the instrument's current mode."""
 
 
+class SettingsPersistenceError(InstrumentError):
+    """Raised when saving profile settings fails after hardware accepted an edit."""
+
+
 __all__ = [
     "InstrumentBusyError",
     "InstrumentError",
     "OperationRejectedError",
+    "SettingsPersistenceError",
     "StartupError",
     "Violation",
     "ViolationLoc",

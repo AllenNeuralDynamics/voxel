@@ -99,12 +99,12 @@ instrument close clear these associations. The camera-owned VXPS packet and deli
 
 The browser stage view keeps one image per visible channel, placed using its overview's `position_um` and the
 physical FOV recorded when that overview was accepted. Stopping preview preserves those images; stage movement
-does not reposition them. Restart/reset clears them through the existing preview revision. Frames without a
+does not reposition them. Restart/reset clears them through the stream revision. Frames without a
 known position remain usable in the FOV view but are not placed on the stage.
 
 `StationFeed.frames` emits the packed `VXPD` packets. Qt subscribes in process, while the web adapter forwards them
 over the dedicated preview WebSocket. Consumers correlate `state_cursor` with the reliable station-state stream,
-use the session identity and `preview_revision` to invalidate old display generations, and reject stale or
+use the session identity and `stream_revision` to invalidate old display generations, and reject stale or
 out-of-order frames.
 
 Every layer, including `overview`, is positioned from `source_rect_px`. The `layer` field selects replacement

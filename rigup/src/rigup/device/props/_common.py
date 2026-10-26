@@ -21,6 +21,14 @@ class PropertyModelProtocol(Protocol):
 
 
 class PropertyModel[T: str | int | float | bool](BaseModel):
+    """A property value and its resolved constraints, shared by all clients.
+
+    ``kind`` describes the value type. Non-null ``options`` restricts choices
+    for strings, integers, or floats; an empty list permits no values. Numeric
+    consumers must check options before using minimum/maximum/step. Constraints
+    may change between observations even when the value stays the same.
+    """
+
     kind: PropertyKind = "generic"
     value: Any
     minimum: float | None = None

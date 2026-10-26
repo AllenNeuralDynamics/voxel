@@ -1,0 +1,16 @@
+/* ── Theme imports ─────────────────────────────────────────────────────
+ * base.css provides the Default theme with :root (light) and .dark variants.
+ * roles.css turns the colors of any theme into roles, such as control lines, and holds the looks.
+ * Additional themes use [data-theme="name"] selectors and only apply when active.
+ * ───────────────────────────────────────────────────────────────────── */
+
+@import './base.css';
+@import './roles.css';
+@import './jetbrains.light.css';
+@import './jetbrains.dark.css';
+@import './github.light.css';
+@import './github.dark.css';
+@import './ayu.light.css';
+@import './ayu.dark.css';
+@import './catppuccin.latte.css';
+@import './catppuccin.mocha.css';

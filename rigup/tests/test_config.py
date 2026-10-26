@@ -3,8 +3,26 @@
 import pytest
 from pydantic import ValidationError
 from rigup.build import BuildConfig
-from rigup.config import NodeConfig, RigConfig
+from rigup.config import DeviceConfig, NodeConfig, RigConfig
 from rigup.device import CommandRequest
+from rigup.protocol import BuildDevicesRequest
+
+
+def test_autosave_policy_survives_config_and_build_request_roundtrips():
+    cfg = RigConfig(
+        devices={"local": DeviceConfig(target="some.Device", autosave=["power"])},
+        nodes={
+            "remote": NodeConfig(
+                kind="remote",
+                address="tcp://10.0.0.2:5555",
+                devices={"camera": DeviceConfig(target="some.Camera", autosave="*")},
+            )
+        },
+    )
+    restored = RigConfig.model_validate_json(cfg.model_dump_json())
+    assert restored.devices["local"].autosave == ["power"]
+    request = BuildDevicesRequest(devices=restored.nodes["remote"].devices)
+    assert BuildDevicesRequest.model_validate_json(request.model_dump_json()).devices["camera"].autosave == "*"
 
 
 class TestNodeConfigKindAutofill:

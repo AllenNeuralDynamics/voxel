@@ -1,8 +1,8 @@
 """Two-way bindings between kit widgets and device properties.
 
 The device analog of :mod:`vxl.qt.state.bind` (which binds to instrument ``JsonCursor`` state): these bind a
-kit widget to a device property exposed by a :class:`DeviceHandleQt`. Enumerated **options** and numeric
-**bounds** come from the property's cached model (:meth:`DeviceHandleQt.model` — populated from the
+kit widget to a device property exposed by a :class:`DeviceHandleQt`. Discrete **options** (including
+numeric choices) or numeric **bounds** come from the cached model (:meth:`DeviceHandleQt.model` — populated from the
 property stream, so they're device-native and handle dynamic options); the value reflects the stream,
 and edits are pushed back via ``adapter.set``.
 
@@ -61,7 +61,7 @@ class _SelectBinder(_PropertyBinder):
 
     def _reflect(self, model: Any) -> None:
         with QSignalBlocker(self._select):
-            if model.options:
+            if model.options is not None:
                 self._select.set_options(list(model.options), model.value)
             else:
                 self._select.set_value(model.value)

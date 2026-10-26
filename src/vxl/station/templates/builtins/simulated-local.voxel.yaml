@@ -15,30 +15,25 @@ hal:
           laser_488: ao0
           laser_561: ao1
           camera_1: ao2
-          aotf_1: ao3
     camera_1:
       target: vxl.devices.camera.simulated.SimulatedCamera
+      autosave: [exposure_time_ms, binning, pixel_format]
       init:
         frame_source:
           sensor_size_px: "10640,14192"
           pixel_size_um: "3.76,3.76"
-    aotf_1:
-      target: vxl.devices.aotf.simulated.SimulatedAotf
-      init: { blanking_mode: "external" }
     laser_488:
-      target: &aotf_laser_target vxl.devices.laser.simulated.SimulatedAOTFShutteredLaser
+      target: &laser_target vxl.devices.laser.simulated.SimulatedLaser
+      autosave: [source_power_setpoint_mw, output_level_percent]
       init:
         wavelength: 488
-        aotf: aotf_1
-        aotf_channel: 1
-        aotf_frequency_mhz: 98.2
+        source_enable_delay_s: 1
     laser_561:
-      target: *aotf_laser_target
+      target: *laser_target
+      autosave: [source_power_setpoint_mw, output_level_percent]
       init:
         wavelength: 561
-        aotf: aotf_1
-        aotf_channel: 2
-        aotf_frequency_mhz: 87.4
+        source_enable_delay_s: 1
     fw_emission:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
       init:
@@ -111,6 +106,11 @@ default:
     profiles:
       single_gfp:
         channels: ["gfp"]
+        props:
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         sync:
           daq:
@@ -126,13 +126,14 @@ default:
                 type: pulse
                 voltage: { min: 0.0, max: 5.0 }
                 window: { min: 0.1, max: 0.9 }
-              aotf_1: &aotf_blanking_waveform
-                type: pulse
-                voltage: { min: 0.0, max: 5.0 }
-                window: { min: 0.05, max: 0.95 }
         desc: "Single GFP channel"
       single_rfp:
         channels: ["rfp"]
+        props:
+          laser_561:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         sync:
           daq:
@@ -145,7 +146,6 @@ default:
                 type: pulse
                 voltage: { min: 0.0, max: 5.0 }
                 window: { min: 0.1, max: 0.9 }
-              aotf_1: *aotf_blanking_waveform
         desc: "Single RFP channel"
 
 

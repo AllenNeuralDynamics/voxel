@@ -1,18 +1,19 @@
 <script lang="ts">
   import { Toaster as Sonner, type ToasterProps as SonnerProps } from 'svelte-sonner';
 
-  import { CircleCheck, Info, Loader2, OctagonX, TriangleAlert } from '$lib/icons';
+  import { CircleCheck, Info, Loader, OctagonX, TriangleAlert } from '$lib/kit/icons';
+  import { themes } from '$lib/kit/themes/manager.svelte';
 
   let { ...restProps }: SonnerProps = $props();
 </script>
 
 <Sonner
-  theme="dark"
+  theme={themes.resolvedMode}
   class="toaster group"
-  style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-line-muted);"
+  style="--normal-bg: var(--color-floating); --normal-text: var(--color-fg); --normal-border: var(--color-line-muted);"
   {...restProps}
   >{#snippet loadingIcon()}
-    <Loader2 class="size-4 animate-spin" />
+    <Loader class="size-4 animate-spin" />
   {/snippet}
   {#snippet successIcon()}
     <CircleCheck class="size-4" />
