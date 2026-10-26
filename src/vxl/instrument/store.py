@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from vxlib.reactivity import Cell, Readable, Subscribable
 
-from vxl._utils.files import atomic_write, load_yaml, save_yaml
+from vxl._utils.files import atomic_write, load_and_validate_yaml, save_yaml
 
 from .config import InstrumentConfig, InstrumentDefaults, InstrumentPreset, InstrumentState
 from .errors import OperationRejectedError, StartupError, Violation
@@ -43,7 +43,7 @@ type Inspected[T: BaseModel] = Annotated[Loaded[T] | Missing | Invalid[T], Field
 def _load_model[T: BaseModel](path: Path, model: type[T], source: str) -> tuple[Inspected[T], tuple[Violation, ...]]:
     """Load one persisted model, returning structured violations instead of raising."""
     try:
-        return Loaded(value=load_yaml(path, model)), ()
+        return Loaded(value=load_and_validate_yaml(path, model)), ()
     except FileNotFoundError:
         return Missing(), ()
     except ValidationError as exc:

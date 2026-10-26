@@ -1,0 +1,63 @@
+/* Catppuccin Latte, based on the Zed "Catppuccin Latte" theme (Catppuccin extension, mauve accent). */
+
+[data-theme='catppuccin'] {
+  --canvas: #eff1f5;
+  --shell: #e6e9ef;
+  --pane: #e6e9ef;
+  --raised: #eff1f5;
+  --floating: #eff1f5;
+  --tint: #4c4f690f;
+  --tint-hover: #4c4f691a;
+  --overlay: #e6e9efcc;
+  --backdrop: #00000040;
+  --raised-shadow: 0 0 0 1px #4c4f690d, 0 1px 2px #4c4f690f, 0 3px 10px #4c4f690d;
+  --floating-shadow: 0 0 0 1px var(--line-faint), 0 2px 6px #4c4f6914, 0 12px 32px #4c4f6924;
+
+  --element-bg: #4c4f6917;
+  --element-hover: #4c4f692d;
+  --element-active: #4c4f693e;
+  --element-selected: #4c4f6936;
+  --track: #4c4f6926;
+
+  --fg: #4c4f69;
+  --fg-muted: #5b5e76;
+  --fg-faint: #777b88;
+
+  --line: #4c4f6983;
+  --line-muted: #4c4f6969;
+  --line-faint: #4c4f6942;
+  --line-selected: #4c4f69a6;
+
+  --focus: #6579ed;
+
+  --accent: #8839ef;
+  --on-accent: #eff1f5;
+  --accent-hover: #771dda;
+  --accent-muted: #d6c7ff;
+  --accent-tint: #e3dfef;
+  --accent-fg: #8230e7;
+
+  --danger: #d20f39;
+  --on-danger: #eff1f5;
+  --danger-hover: #bc0028;
+  --danger-muted: #e78586;
+  --danger-tint: #d20f391f;
+  --danger-fg: #b90026;
+
+  --success: #177f00;
+  --on-success: #eff1f5;
+  --success-hover: #006d00;
+  --success-muted: #87b87d;
+  --success-tint: #40a02b1f;
+  --success-fg: #007100;
+
+  --warning: #df8e1d;
+  --on-warning: #33354e;
+  --warning-hover: #f3a139;
+  --warning-muted: #d1a47d;
+  --warning-tint: #df8e1d1f;
+  --warning-fg: #994e00;
+
+  --scrollbar-thumb: #acb0be80;
+  --scrollbar-thumb-hover: #9ca0b0;
+}

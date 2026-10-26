@@ -1,277 +1,155 @@
-import math
-import random
-import time
+"""Simulation of source and output controls with configurable power noise."""
 
-from rigup import describe, numeric
-from vxl.devices.aotf.base import AOTF
-from vxl.devices.laser.base import Laser
+from math import isfinite
+from random import gauss
+from time import monotonic, sleep
+from typing import override
+
+from rigup import numeric
+
+from .base import Laser
+from .source import ModulationMode
 
 
 class SimulatedLaser(Laser):
+    """Independent source and ideal attenuation using the saved level in every mode.
+
+    Starts disabled at zero power/level in the first supported mode. Source startup
+    can be delayed; attenuation has no settling delay. External DAQ signals are not
+    simulated, so digital and analog power readings follow software-mode behavior.
+    Each power read samples Gaussian noise; power_noise_percent is its standard
+    deviation as a percentage of the source setpoint. Zero disables noise.
+    """
+
     def __init__(
         self,
         uid: str,
         *,
-        wavelength: int,
-        max_power_mw: float = 1000.0,
-        enable_delay_s: float = 3.0,
+        wavelength: float,
+        max_power_mw: float = 100.0,
+        modulation_modes: tuple[ModulationMode | str, ...] = tuple(ModulationMode),
+        source_enable_delay_s: float = 0.0,
+        power_noise_percent: float = 0.5,
     ) -> None:
-        if not math.isfinite(enable_delay_s) or enable_delay_s < 0:
-            raise ValueError("Laser enable delay must be finite and non-negative")
-        self._enable_delay_s = enable_delay_s
+        if isinstance(wavelength, bool) or not isfinite(wavelength) or wavelength <= 0:
+            raise ValueError("wavelength must be finite and positive in nm")
+        if not isfinite(max_power_mw) or max_power_mw <= 0:
+            raise ValueError("max_power_mw must be finite and positive")
+        if not isfinite(source_enable_delay_s) or source_enable_delay_s < 0:
+            raise ValueError("source_enable_delay_s must be finite and non-negative")
+        if not isfinite(power_noise_percent) or power_noise_percent < 0:
+            raise ValueError("power_noise_percent must be finite and non-negative")
+        if not modulation_modes or any(mode not in tuple(ModulationMode) for mode in modulation_modes):
+            raise ValueError("modulation_modes must contain software, digital, or analog choices")
+        super().__init__(uid=uid)
+        self._wavelength = float(wavelength)
         self._max_power_mw = max_power_mw
-        self._power_setpoint_mw = 10.0
-        self._is_enabled = False
-        self._temperature = 20.0
-        super().__init__(uid=uid, wavelength=wavelength)
-
-    def enable(self) -> None:
-        if self.is_enabled:
-            return
-        self.log.debug("Enabling laser")
-        time.sleep(self._enable_delay_s)
-        self._is_enabled = True
-
-    def disable(self) -> None:
-        self.log.debug("Disabling laser")
-        self._is_enabled = False
+        self._modulation_modes = tuple(ModulationMode(mode) for mode in modulation_modes)
+        self._modulation_mode = self._modulation_modes[0]
+        self._source_enabled = False
+        self._source_enable_delay_s = source_enable_delay_s
+        self._power_noise_percent = power_noise_percent
+        self._source_ready_at = 0.0
+        self._output_enabled = False
+        self._power_setpoint_mw = 0.0
+        self._output_level_percent = 0.0
+        self._closed = False
 
     @property
-    def is_enabled(self) -> bool:
-        return self._is_enabled
+    @override
+    def wavelength(self) -> float:
+        """Configured nominal wavelength of the simulated source."""
+        return self._wavelength
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
-    def power_setpoint(self) -> float:
+    @override
+    def source_enable(self, *, wait: bool = False) -> None:
+        """Begin startup once; optionally wait for its remaining duration."""
+        self._ensure_open()
+        if not self._source_enabled:
+            self._source_ready_at = monotonic() + self._source_enable_delay_s
+            self._source_enabled = True
+        if wait:
+            self._wait_for_source()
+
+    def source_disable(self) -> None:
+        self._output_enabled = False
+        self._source_enabled = False
+
+    @property
+    def is_source_enabled(self) -> bool:
+        return self._source_enabled
+
+    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw)
+    def source_power_setpoint_mw(self) -> float:
         return self._power_setpoint_mw
 
-    @power_setpoint.setter
-    def power_setpoint(self, value: float) -> None:
+    @source_power_setpoint_mw.setter
+    def source_power_setpoint_mw(self, value: float) -> None:
+        self._ensure_open()
         self._power_setpoint_mw = value
-        self.log.debug("power setpoint changed to %s mW", value)
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
-    def power(self) -> float:
-        if not self._is_enabled:
+    def source_power_mw(self) -> float:
+        """Zero while disabled/starting, otherwise a fresh noisy reading around the setpoint."""
+        if not self._source_enabled or monotonic() < self._source_ready_at:
             return 0.0
-        return random.gauss(self._power_setpoint_mw, 0.1)
+        if self._power_noise_percent == 0 or self._power_setpoint_mw == 0:
+            return self._power_setpoint_mw
+        deviation = self._power_setpoint_mw * self._power_noise_percent / 100.0
+        return max(0.0, gauss(self._power_setpoint_mw, deviation))
+
+    def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
+        return self._modulation_modes
+
+    def _read_modulation_mode(self) -> ModulationMode:
+        return self._modulation_mode
+
+    def _configure_modulation_mode(self, mode: ModulationMode) -> None:
+        self._ensure_open()
+        self._modulation_mode = mode
+
+    @override
+    def output_enable(self, *, wait: bool = False) -> None:
+        """Permit output; optionally wait for source startup."""
+        self._ensure_open()
+        if not self._source_enabled:
+            raise RuntimeError("source permission is required before enabling output")
+        self._output_enabled = True
+        if wait:
+            self._wait_for_source()
+
+    def output_disable(self) -> None:
+        self._output_enabled = False
 
     @property
-    def temperature_c(self) -> float:
-        return self._temperature + random.gauss(0, 0.1)
+    def is_output_enabled(self) -> bool:
+        return self._output_enabled
 
+    @numeric(minimum=0.0, maximum=100.0)
+    def output_level_percent(self) -> float:
+        return self._output_level_percent
 
-class SimulatedAOTFShutteredLaser(Laser):
-    """Laser with internal power control, using AOTF only for fast shuttering.
-
-    The laser has its own power control (simulated here), but uses an AOTF
-    channel for fast on/off modulation synchronized with camera/DAQ timing.
-    The laser stays "hot" when disabled - only blocked by the AOTF.
-
-    Args:
-        uid: Unique identifier for this laser device.
-        wavelength: Laser wavelength in nm.
-        aotf: Reference to the AOTF device (resolved by rigup from device ID).
-        aotf_channel: Channel number on the AOTF (1-indexed).
-        aotf_frequency_mhz: RF frequency for optimal diffraction at this wavelength.
-        max_power_mw: Maximum laser power in mW.
-    """
-
-    def __init__(
-        self,
-        uid: str,
-        wavelength: int,
-        aotf: AOTF,
-        aotf_channel: int,
-        aotf_frequency_mhz: float,
-        max_power_mw: float = 1000.0,
-    ) -> None:
-        self._aotf = aotf
-        self._aotf_channel = aotf_channel
-        self._aotf_frequency_mhz = aotf_frequency_mhz
-        self._max_power_mw = max_power_mw
-        self._power_setpoint_mw: float = 10.0
-        self._temperature = 25.0
-
-        # Register with the AOTF
-        self._aotf.register_channel(uid, aotf_channel)
-
-        # Set the calibrated frequency and max power for passthrough
-        self._aotf.set_frequency(aotf_channel, aotf_frequency_mhz)
-        self._aotf.set_power_dbm(aotf_channel, self._aotf.max_power_dbm)  # Max transmission
-
-        super().__init__(uid=uid, wavelength=wavelength)
-
-        self.log.info(
-            f"Initialized SimulatedAOTFShutteredLaser: wavelength={wavelength}nm, "
-            f"aotf={aotf.uid} channel={aotf_channel}",
-        )
-
-    def get_aotf(self) -> "AOTF":
-        return self._aotf
+    @output_level_percent.setter
+    def output_level_percent(self, value: float) -> None:
+        self._ensure_open()
+        self._output_level_percent = value
 
     @property
-    def aotf(self) -> "str":
-        """Get the AOTF device controlling this laser."""
-        return self._aotf.uid
-
-    @property
-    def aotf_channel(self) -> int:
-        """Get the AOTF channel number."""
-        return self._aotf_channel
-
-    def enable(self) -> None:
-        """Enable laser output by opening the AOTF shutter."""
-        self._aotf.enable_channel(self._aotf_channel)
-        self.log.debug("Enabled (AOTF shutter open)")
-
-    def disable(self) -> None:
-        """Disable laser output by closing the AOTF shutter."""
-        self._aotf.disable_channel(self._aotf_channel)
-        self.log.debug("Disabled (AOTF shutter closed)")
-
-    @property
-    def is_enabled(self) -> bool:
-        """Check if the AOTF shutter is open."""
-        return self._aotf.get_channel_state(self._aotf_channel)
-
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
-    def power_setpoint(self) -> float:
-        """Get the commanded power setpoint in mW (controlled by laser, not AOTF)."""
-        return self._power_setpoint_mw
-
-    @power_setpoint.setter
-    def power_setpoint(self, value: float) -> None:
-        """Set the commanded power setpoint in mW."""
-        self._power_setpoint_mw = value
-        self.log.debug(f"Power setpoint changed to {value} mW")
-
-    @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
-    def power(self) -> float:
-        """Get the measured output power in mW (zero when AOTF shutter closed)."""
-        if not self.is_enabled:
+    def output_power_mw(self) -> float:
+        """A fresh source reading attenuated by the saved level, independent of mode."""
+        if not self._output_enabled:
             return 0.0
-        return random.gauss(self._power_setpoint_mw, 0.1)
+        return self.source_power_mw * self._output_level_percent / 100.0
 
-    @property
-    def temperature_c(self) -> float:
-        """Get laser temperature."""
-        return self._temperature + random.gauss(0, 0.1)
+    def close(self) -> None:
+        """Clear both permissions and prevent subsequent configuration or enabling."""
+        self.source_disable()
+        self._closed = True
 
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("laser is closed")
 
-class SimulatedAOTFModulatedLaser(Laser):
-    """Laser with no serial control - AOTF handles all modulation.
-
-    For lasers that are passive sources (always on at constant power) with
-    no serial/USB interface. The AOTF provides both on/off control and
-    power modulation via its RF power setting.
-
-    Args:
-        uid: Unique identifier for this laser device.
-        wavelength: Laser wavelength in nm.
-        aotf: Reference to the AOTF device (resolved by rigup from device ID).
-        aotf_channel: Channel number on the AOTF (1-indexed).
-        aotf_frequency_mhz: RF frequency for optimal diffraction at this wavelength.
-    """
-
-    def __init__(
-        self,
-        uid: str,
-        wavelength: int,
-        aotf: AOTF,
-        aotf_channel: int,
-        aotf_frequency_mhz: float,
-    ) -> None:
-        self._aotf = aotf
-        self._aotf_channel = aotf_channel
-        self._aotf_frequency_mhz = aotf_frequency_mhz
-        self._power_setpoint_dbm: float = 0.0
-
-        # Register with the AOTF
-        self._aotf.register_channel(uid, aotf_channel)
-
-        # Set the calibrated frequency
-        self._aotf.set_frequency(aotf_channel, aotf_frequency_mhz)
-
-        super().__init__(uid=uid, wavelength=wavelength)
-
-        self.log.info(
-            f"Initialized SimulatedAOTFModulatedLaser: wavelength={wavelength}nm, "
-            f"aotf={aotf.uid} channel={aotf_channel}, "
-            f"frequency={aotf_frequency_mhz}MHz",
-        )
-
-    def get_aotf(self) -> "AOTF":
-        return self._aotf
-
-    @property
-    def aotf(self) -> "str":
-        """Get the AOTF device controlling this laser."""
-        return self._aotf.uid
-
-    @property
-    def aotf_channel(self) -> int:
-        """Get the AOTF channel number."""
-        return self._aotf_channel
-
-    @property
-    @describe(label="AOTF Frequency", units="MHz", desc="RF frequency for this wavelength.")
-    def aotf_frequency_mhz(self) -> float:
-        """Get the calibrated AOTF frequency."""
-        return self._aotf_frequency_mhz
-
-    def enable(self) -> None:
-        """Enable laser output by enabling the AOTF channel."""
-        self._aotf.set_power_dbm(self._aotf_channel, self._power_setpoint_dbm)
-        self._aotf.enable_channel(self._aotf_channel)
-        self.log.debug(f"Enabled (AOTF channel {self._aotf_channel})")
-
-    def disable(self) -> None:
-        """Disable laser output by disabling the AOTF channel."""
-        self._aotf.disable_channel(self._aotf_channel)
-        self.log.debug(f"Disabled (AOTF channel {self._aotf_channel})")
-
-    @property
-    def is_enabled(self) -> bool:
-        """Check if the AOTF channel is enabled."""
-        return self._aotf.get_channel_state(self._aotf_channel)
-
-    @numeric(
-        minimum=lambda self: self._aotf.min_power_dbm,
-        maximum=lambda self: self._aotf.max_power_dbm,
-        step=lambda self: self._aotf.power_step_dbm,
-    )
-    @describe(label="Power Setpoint", units="dBm", desc="Commanded AOTF RF power.", stream=True)
-    def power_setpoint(self) -> float:
-        """Get the commanded power setpoint in dBm."""
-        return self._power_setpoint_dbm
-
-    @power_setpoint.setter
-    def power_setpoint(self, value: float) -> None:
-        """Set the commanded power setpoint in dBm."""
-        self._power_setpoint_dbm = value
-        if self.is_enabled:
-            self._aotf.set_power_dbm(self._aotf_channel, value)
-        self.log.debug(f"Power setpoint changed to {value} dBm")
-
-    @property
-    @describe(label="Power", units="dBm", desc="Measured AOTF RF power.", stream=True)
-    def power(self) -> float:
-        """Get the measured AOTF RF output power in dBm (zero when channel disabled)."""
-        if not self.is_enabled:
-            return 0.0
-        return self._aotf.get_power_dbm(self._aotf_channel)
-
-    @property
-    def temperature_c(self) -> float | None:
-        """Temperature not available for AOTF-only controlled lasers."""
-        return None
-
-    def set_aotf_frequency(self, frequency_mhz: float) -> None:
-        """Update the AOTF frequency for recalibration."""
-        self._aotf_frequency_mhz = frequency_mhz
-        self._aotf.set_frequency(self._aotf_channel, frequency_mhz)
-        self.log.info(f"AOTF frequency updated to {frequency_mhz} MHz")
+    def _wait_for_source(self) -> None:
+        if remaining := max(0.0, self._source_ready_at - monotonic()):
+            sleep(remaining)

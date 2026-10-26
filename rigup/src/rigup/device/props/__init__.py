@@ -1,15 +1,13 @@
 from ._common import PropertyModel as PropertyModel
-from ._enumerated import EnumeratedInt, EnumeratedString, enumerated, enumerated_int
+from ._enumerated import EnumeratedString, enumerated
 from ._numeric import NumericFloat, NumericInt, numeric, numeric_int
 
 __all__ = [
-    "EnumeratedInt",
     "EnumeratedString",
     "NumericFloat",
     "NumericInt",
     "PropertyModel",
     "enumerated",
-    "enumerated_int",
     "numeric",
     "numeric_int",
 ]
@@ -52,7 +50,7 @@ if __name__ == "__main__":
         def mode(self, value: str) -> None:
             self._mode = value
 
-        @enumerated_int(options=[1, 2, 3])
+        @numeric_int(options=[1, 2, 3])
         def preset(self) -> int:
             return self._preset
 
@@ -74,5 +72,8 @@ if __name__ == "__main__":
     logger.info(channel.mode)
 
     logger.info(channel.preset)  # 1
-    channel.preset = 4  # ignored, not in options
+    try:
+        channel.preset = 4  # raises, not in options
+    except ValueError as error:
+        logger.info("Rejected preset: %s", error)
     logger.info(channel.preset)

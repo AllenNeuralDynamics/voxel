@@ -1,0 +1,63 @@
+/* Catppuccin Mocha, based on the Zed "Catppuccin Mocha" theme (Catppuccin extension, mauve accent). */
+
+[data-theme='catppuccin'].dark {
+  --canvas: #181825;
+  --shell: #262739;
+  --pane: #1e1e2e;
+  --raised: #2e3041;
+  --floating: #4c4f62;
+  --tint: #cdd6f40f;
+  --tint-hover: #cdd6f41a;
+  --overlay: #181825cc;
+  --backdrop: #000000aa;
+  --raised-shadow: 0 0 0 1px var(--line-faint);
+  --floating-shadow: 0 0 0 1px var(--line-faint), 0 14px 36px #00000080;
+
+  --element-bg: #cdd6f40a;
+  --element-hover: #cdd6f40f;
+  --element-active: #cdd6f418;
+  --element-selected: #cdd6f414;
+  --track: #cdd6f426;
+
+  --fg: #cdd6f4;
+  --fg-muted: #bbc3df;
+  --fg-faint: #9a9fb6;
+
+  --line: #cdd6f459;
+  --line-muted: #cdd6f43c;
+  --line-faint: #cdd6f421;
+  --line-selected: #cdd6f494;
+
+  --focus: #b4befe;
+
+  --accent: #cba6f7;
+  --on-accent: #1e1e2e;
+  --accent-hover: #deb9ff;
+  --accent-muted: #614e78;
+  --accent-tint: #37323d;
+  --accent-fg: #d9b3ff;
+
+  --danger: #f38ba8;
+  --on-danger: #1e1e2e;
+  --danger-hover: #ff9ebb;
+  --danger-muted: #955868;
+  --danger-tint: #f38ba81f;
+  --danger-fg: #ffc1de;
+
+  --success: #a6e3a1;
+  --on-success: #1e1e2e;
+  --success-hover: #b9f7b4;
+  --success-muted: #698866;
+  --success-tint: #a6e3a119;
+  --success-fg: #adeaa8;
+
+  --warning: #f9e2af;
+  --on-warning: #1e1e2e;
+  --warning-hover: #fff6c2;
+  --warning-muted: #94876c;
+  --warning-tint: #f9e2af16;
+  --warning-fg: #f9e2af;
+
+  --scrollbar-thumb: #585b7080;
+  --scrollbar-thumb-hover: #6c7086;
+}

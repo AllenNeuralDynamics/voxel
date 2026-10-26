@@ -4,7 +4,7 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from rigup.device.props import enumerated, enumerated_int, numeric
+from rigup.device.props import enumerated, numeric, numeric_int
 from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
@@ -121,7 +121,7 @@ class PCOCamera(Camera):
 
     # ==================== Binning ====================
 
-    @enumerated_int(options=PCO_BINNING_OPTIONS)
+    @numeric_int(options=PCO_BINNING_OPTIONS)
     def binning(self) -> int:
         """Get the binning mode of the camera."""
         return self._pco.sdk.get_binning()["binning x"]

@@ -6,6 +6,12 @@ web-ui is the Svelte application served by `vxl.web`. It covers the instrument l
 inspection and configuration, acquisition planning and execution, preview rendering, and recorded acquisitions and
 logs. It is an application-specific client of the Voxel API rather than a standalone component library.
 
+The application opens in two kinds of windows:
+
+- **Dashboard** (`/`): lists the stations, shows what each station is doing, and opens a station.
+- **Station window** (`/stations/<station-id>`): operates one station, with its instruments, devices, live preview and
+  runs.
+
 ## Architecture
 
 ```mermaid
@@ -30,13 +36,25 @@ The backend exposes four distinct communication paths:
 | Preview WebSocket | Versioned binary preview packets                     | Latest-frame delivery; slow consumers may skip frames |
 | Log WebSocket     | Structured entries committed to the log journal      | Bounded live delivery, supplemented by REST history   |
 
-The application model under `src/lib/model/` owns backend discovery, connection lifecycle, the current station view,
+The application model under `src/lib/core/model/` owns backend discovery, connection lifecycle, the current station view,
 and device-facing models. Routes and components consume that model rather than opening their own state connection.
 Preview frames are received and decompressed in a worker, then rendered with WebGPU.
 
+## Source layout
+
+| Path                               | Contents                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/routes/(dashboard)/`          | The dashboard and the UI Lab                                                                |
+| `src/routes/stations/[stationId]/` | The station window. Its layout connects to the station and holds the rail and the panes     |
+| `src/lib/core/`                    | The application model, failure reporting and shared utilities                               |
+| `src/lib/kit/`                     | Shared interface parts, icons and themes                                                    |
+| `src/lib/features/`                | One folder for each area of the app: devices, imaging, issues, live, preview, run and stage |
+| `src/lib/shell/`                   | The station window frame: the rail, the panes and the keyboard shortcuts                    |
+
 ## Develop against Voxel
 
-Install the frontend dependencies and start the Python backend from the workspace root:
+Development requires Python 3.13+, [uv](https://docs.astral.sh/uv/) and [Nub](https://nubjs.com/). Install the
+frontend dependencies and start the Python backend from the workspace root:
 
 ```bash
 uv sync --all-packages --extra web
@@ -59,11 +77,11 @@ unavailable, but preview rendering reports an error.
 
 ## Backend contracts
 
-The TypeScript definitions in [`src/lib/model/types.ts`](src/lib/model/types.ts) mirror the Python models serialized
+The TypeScript definitions in [`src/lib/core/model/types.ts`](src/lib/core/model/types.ts) mirror the Python models serialized
 by `vxl.web`. They are not generated, so a backend wire-model change must update both sides in the same change.
 
 Preview framing has an additional versioned contract implemented in
-[`src/lib/preview/protocol.ts`](src/lib/preview/protocol.ts) and its Python counterpart under `vxl.preview`. A protocol
+[`src/lib/features/preview/protocol.ts`](src/lib/features/preview/protocol.ts) and its Python counterpart under `vxl.preview`. A protocol
 change must update the producer, parser, advertised version, and decoder worker together. Preview decoding uses
 MessagePack metadata and Zstandard-compressed 16-bit image data.
 
@@ -76,11 +94,11 @@ through those models and render their reactive state rather than parsing wire pa
 nub run --cwd web-ui build
 ```
 
-The static adapter writes the production SPA directly to `src/vxl/web/static/`. That directory is generated, ignored
+The static adapter writes the production SPA directly to `src/vxl/web/static/` in the workspace root. That directory is generated, ignored
 by Git, and included as package data when Voxel is built; do not edit its contents manually. The FastAPI application
 serves these files from `/` and falls back to `index.html` for client-side routes.
 
-Build the web interface and Python release artifacts together with:
+To build the web interface and the Python release artifacts together, run this from the workspace root:
 
 ```bash
 uv run scripts/build.py
@@ -102,6 +120,6 @@ static-adapter, worker, and bundling failures.
 
 The frontend uses [`@bokuweb/zstd-wasm`](https://github.com/bokuweb/zstd-wasm) as a fallback for browsers without
 native Zstandard decompression. Its TypeScript glue is MIT-licensed, while the compiled Zstandard decoder uses the
-BSD 3-Clause License. Packaged releases must include the applicable notices in `THIRD_PARTY_NOTICES.md`.
+BSD 3-Clause License. Packaged releases must include both license notices in a `THIRD_PARTY_NOTICES.md` file.
 
 web-ui is part of the [Voxel](../) project and is available under its [MIT license](../LICENSE).

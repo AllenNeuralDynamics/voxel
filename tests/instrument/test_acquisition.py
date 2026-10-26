@@ -15,10 +15,11 @@ from vxl_records import (
 
 from vxl.devices.camera import CaptureState
 from vxl.instrument import (
-    AcquisitionMode,
     AcquisitionRequest,
     AcquisitionTask,
-    ActiveAcquisition,
+    Activity,
+    CaptureActivity,
+    IdleActivity,
     Instrument,
     Point2D,
     XYDefinition,
@@ -86,24 +87,23 @@ async def test_acquisition_manifest_tracks_completed_dataset(
     instrument = opened_instrument
     catalog = records.acquisitions
     storage = StorageSpec(path=PurePosixPath("run"))
-    states: list[ActiveAcquisition | None] = []
-    instrument.acquisition.subscribe(states.append)
+    activities: list[Activity] = []
+    instrument.activity.subscribe(activities.append)
     started = await instrument.start_acquisition(AcquisitionRequest(storage=storage, operator="operator"))
     await asyncio.wait_for(instrument.wait_acquisition(), timeout=5)
+    captures = [activity for activity in activities if isinstance(activity, CaptureActivity)]
+    states = [capture.acquisition for capture in captures if capture.acquisition is not None]
 
     persisted = await catalog.get(started.id)
     dataset = persisted.volumes[0].datasets["gfp"]
     assert started.status is AcquisitionStatus.RUNNING
     assert started.volumes[0].task == "task"
     assert started.volumes[0].profile == "single_gfp"
-    assert states[0] is not None
+    assert captures[0] == CaptureActivity()
     assert states[0].frames_captured == 0
-    assert instrument.acquisition.value is None
-    assert states[-1] is None
-    assert any(
-        state is not None and state.manifest_revision > started.revision and state.frames_captured == 1
-        for state in states
-    )
+    assert any(capture.channels == ("gfp",) for capture in captures)
+    assert isinstance(activities[-1], IdleActivity)
+    assert any(state.manifest_revision > started.revision and state.frames_captured == 1 for state in states)
     assert persisted.status is AcquisitionStatus.COMPLETED
     assert persisted.volumes[0].status is VolumeStatus.COMPLETED
     assert dataset.status is DatasetStatus.COMPLETED
@@ -115,7 +115,7 @@ async def test_acquisition_manifest_tracks_completed_dataset(
     assert (tmp_path / "data/run/manifest.json").is_file()
     assert not (tmp_path / "data/run/record.json").exists()
     assert writer.released
-    assert instrument.mode.value is AcquisitionMode.IDLE
+    assert isinstance(instrument.activity.value, IdleActivity)
 
 
 async def test_writer_close_failure_marks_dataset_and_acquisition_failed(
@@ -137,4 +137,32 @@ async def test_writer_close_failure_marks_dataset_and_acquisition_failed(
     assert dataset.status is DatasetStatus.PARTIAL
     assert dataset.locations[0].status is LocationStatus.FAILED
     assert writer.released
-    assert instrument.mode.value is AcquisitionMode.IDLE
+    assert isinstance(instrument.activity.value, IdleActivity)
+
+
+async def test_profile_preparation_failure_still_stops_daq_and_finalizes_volume(
+    opened_instrument: Instrument,
+    records: SQLiteRecords,
+    writer: _Writer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instrument = opened_instrument
+    stopped = []
+
+    async def fail():
+        raise RuntimeError("profile preparation failed")
+
+    async def stop():
+        stopped.append(True)
+
+    monkeypatch.setattr(instrument, "_apply_settings", fail)
+    monkeypatch.setattr(instrument._hal.signal_generators["daq"], "stop", stop)
+    started = await instrument.start_acquisition(AcquisitionRequest(storage=StorageSpec(path=PurePosixPath("run"))))
+    await asyncio.wait_for(instrument.wait_acquisition(), timeout=5)
+    manifest = await records.acquisitions.get(started.id)
+    assert manifest.status is AcquisitionStatus.FAILED
+    assert manifest.volumes[0].status is VolumeStatus.FAILED
+    assert stopped
+    assert writer.released
+    laser = instrument._hal.lasers["laser_488"]
+    assert not (await laser.props.get("is_output_enabled")).ok["is_output_enabled"].value

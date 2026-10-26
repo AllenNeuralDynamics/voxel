@@ -13,20 +13,31 @@ from .config import (
     ZDefinition,
     ZRange,
 )
-from .core import AcquisitionMode, AcquisitionPhase, AcquisitionRequest, ActiveAcquisition, Instrument
+from .core import (
+    AcquisitionPhase,
+    AcquisitionRequest,
+    ActiveAcquisition,
+    Activity,
+    CaptureActivity,
+    IdleActivity,
+    Instrument,
+    PreviewActivity,
+)
 from .errors import InstrumentBusyError, InstrumentError, OperationRejectedError, StartupError, Violation
 from .metadata import ExaspimMetadata, ExperimentMetadata, annotation
 from .store import InstrumentInspection, InstrumentStore
 
 __all__ = [
-    "AcquisitionMode",
     "AcquisitionPhase",
     "AcquisitionRequest",
     "AcquisitionTask",
     "ActiveAcquisition",
+    "Activity",
     "Bounds",
+    "CaptureActivity",
     "ExaspimMetadata",
     "ExperimentMetadata",
+    "IdleActivity",
     "Instrument",
     "InstrumentBusyError",
     "InstrumentConfig",
@@ -38,6 +49,7 @@ __all__ = [
     "IterationOrder",
     "OperationRejectedError",
     "Point2D",
+    "PreviewActivity",
     "StartupError",
     "TaskPatch",
     "TileOrder",

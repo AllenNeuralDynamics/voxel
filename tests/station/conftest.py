@@ -5,7 +5,7 @@ from uuid import UUID
 import pytest
 
 from vxl import system as system_module
-from vxl._utils.files import load_yaml
+from vxl._utils.files import load_and_validate_yaml
 from vxl.instrument import InstrumentConfig
 from vxl.station import Station
 from vxl.system import StationConfig
@@ -41,7 +41,7 @@ def instrument_template() -> Path:
 
 @pytest.fixture
 def instrument_config(instrument_template: Path) -> InstrumentConfig:
-    return load_yaml(instrument_template, InstrumentConfig)
+    return load_and_validate_yaml(instrument_template, InstrumentConfig)
 
 
 @pytest.fixture

@@ -64,6 +64,9 @@ class Laser(Device[LaserState]):
 `stream=True` asks the controller to poll the property and publish changed observations. It is appropriate for live
 telemetry, not for events that require lossless delivery.
 
+See the [device properties guide](src/rigup/device/props/README.md) for decorators, validation,
+and property metadata for clients.
+
 ## Build and use a rig
 
 `RigConfig` is a Pydantic model; an application may construct it directly or validate configuration loaded from
@@ -139,9 +142,29 @@ nodes:
 If `kind` is omitted, no address or a local-only address selects `subprocess`; a non-local TCP address selects
 `remote`. An explicit `kind` always wins.
 
-Device UIDs must be unique across the complete rig. A constructor argument may refer to another configured device by
-UID, but both devices must occupy the same process. Independent targets within a dependency layer can initialize in
-parallel; devices sharing a target class initialize sequentially to protect SDKs with shared process state.
+Device UIDs and node ids use only ASCII letters, digits, `_` and `-`. Device UIDs must be unique across the complete
+rig. A constructor argument may refer to another configured device by UID, but both devices must occupy the same process.
+Independent targets within a dependency layer can initialize in parallel; devices sharing a target class initialize
+sequentially to protect SDKs with shared process state.
+
+Each device entry also accepts `autosave: [property_name, ...]` or `autosave: "*"` (default: `[]`).
+This is application-owned persistence policy, carried through local and remote configuration. Rigup does not
+save property edits or pass this field to driver constructors; the application decides how to use it.
+
+### Composition lifecycle and access
+
+Injected devices are borrowed: rigup owns their lifecycle. Each registered device has its own worker; calls made
+directly to an injected object bypass that object's controller. Shared hardware locks can serialize transactions,
+but do not coordinate a composition's saved settings with direct component writes.
+
+Two follow-ups remain:
+
+- Close dependents before their dependencies. Local nodes currently close devices in construction order, which
+  closes borrowed components first. Dependency-aware teardown should be addressed separately from device API
+  migrations; until then, composition cleanup must tolerate components that have already shut down.
+- Define how direct component writes are coordinated while a composition is operating, including whether to
+  restrict them or reconcile the composition's state afterward. Constructor injection does not establish ownership
+  of those writes.
 
 ## Run a remote node
 

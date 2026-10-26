@@ -1,19 +1,12 @@
 <script lang="ts">
   import { watch } from 'runed';
-  import { toast } from 'svelte-sonner';
 
-  import { resolve } from '$app/paths';
-  import { page } from '$app/state';
-  import { resolveDeviceColor, waveformPortColor } from '$lib/colors.svelte';
-  import { Select } from '$lib/kit';
-  import type { SelectOption } from '$lib/kit/Select.svelte';
-  import type { DerivedWaveform, Signals, Waveform } from '$lib/model';
-  import { getVoxelStation, ROLE_ORDER } from '$lib/model';
-  import PageHeader from '$lib/PageHeader.svelte';
-  import { SpinBox } from '$lib/prop/numeric';
-  import { displayName, toastError } from '$lib/utils';
-
-  import WaveformPlot, { type PlotContext } from './WaveformPlot.svelte';
+  import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
+  import { reportFailure } from '$lib/core/failures';
+  import type { DerivedWaveform, Signals, Waveform } from '$lib/core/model';
+  import { ROLE_ORDER } from '$lib/core/model';
+  import { displayName } from '$lib/core/utils';
+  import WaveformPlot, { type PlotContext } from '$lib/features/imaging/WaveformPlot.svelte';
   import {
     cloneWaveform,
     createWaveform,
@@ -22,35 +15,41 @@
     groupWaveforms,
     isDerivedWaveform,
     resolveWaveforms
-  } from './waveforms';
+  } from '$lib/features/imaging/waveforms';
+  import { NumberBox, Select, SpinBox } from '$lib/kit';
+  import { resolveDeviceColor, waveformPortColor } from '$lib/kit/themes/colors';
+  import { profileHref } from '$lib/navigation';
+  import PageFallback from '$lib/shell/PageFallback.svelte';
+  import PageHeader from '$lib/shell/PageHeader.svelte';
+
+  import type { PageProps } from './$types';
+
+  let { params }: PageProps = $props();
 
   const app = getVoxelStation();
+  const selected = getPageInstrument();
   const instrument = $derived(app.instrument);
-  const canEdit = $derived(instrument?.mode !== 'capture');
+  // Synchronized outputs only reload while nothing streams.
+  const canEdit = $derived(instrument?.activity.kind === 'idle');
   const profile = $derived(instrument ? instrument.imaging.profiles[instrument.activeProfileId] : undefined);
 
-  const waveformTypeOptions: SelectOption[] = [
-    { value: 'pulse', label: 'Pulse' },
-    { value: 'square', label: 'Square' },
-    { value: 'sine', label: 'Sine' },
-    { value: 'triangle', label: 'Triangle' },
-    { value: 'multi_point', label: 'Multi-point' },
-    { value: 'csv', label: 'CSV' },
-    { value: 'derived', label: 'Derived' }
-  ];
-
-  const derivedOperationOptions: SelectOption[] = [
-    { value: 'mirror', label: 'Mirror' },
-    { value: 'scale', label: 'Scale' },
-    { value: 'offset', label: 'Offset' },
-    { value: 'shift', label: 'Shift' }
-  ];
-
-  const groupModeOptions: SelectOption<GroupMode>[] = [
-    { value: 'related', label: 'Related' },
-    { value: 'device-type', label: 'Device type' },
-    { value: 'channel', label: 'Channel' }
-  ];
+  const WAVEFORM_TYPE_LABELS: Record<string, string> = {
+    pulse: 'Pulse',
+    square: 'Square',
+    sine: 'Sine',
+    triangle: 'Triangle',
+    multi_point: 'Multi-point',
+    csv: 'CSV',
+    derived: 'Derived'
+  };
+  const WAVEFORM_TYPES = Object.keys(WAVEFORM_TYPE_LABELS);
+  const DERIVED_OPERATIONS: DerivedWaveform['operation'][] = ['mirror', 'scale', 'offset', 'shift'];
+  const GROUP_MODE_LABELS: Record<GroupMode, string> = {
+    related: 'Related',
+    'device-type': 'Device type',
+    channel: 'Channel'
+  };
+  const GROUP_MODES = Object.keys(GROUP_MODE_LABELS) as GroupMode[];
 
   type VoltageMode = 'minmax' | 'ampoffset';
   type WindowMode = 'percent' | 'seconds';
@@ -63,7 +62,11 @@
 
   const defaultTiming: Timing = { sample_rate: 100000, duration: 0.01, rest_time: 0 };
 
-  const selectedGeneratorUid = $derived(page.params.generatorId ?? '');
+  const selectedGeneratorUid = $derived(params.generatorId);
+  const profileItem = $derived({
+    label: profile?.label || displayName(params.profileId),
+    href: profileHref(selected.params, params.profileId)
+  });
   let groupMode = $state<GroupMode>('related');
   let selectedWaveformId = $state<string | null>(null);
   let editingWaveform = $state<Waveform | null>(null);
@@ -185,7 +188,7 @@
   );
 
   watch(
-    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorUid ?? ''}`,
+    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorUid}`,
     () => {
       discardPendingWaveformPatch();
       selectedWaveformId = null;
@@ -218,7 +221,7 @@
   );
 
   watch(
-    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorUid ?? ''}`,
+    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorUid}`,
     () => {
       if (timingTimer) clearTimeout(timingTimer);
       timingTimer = null;
@@ -257,7 +260,7 @@
       await instrument?.updateSignals(generatorUid, signals);
       if (selectedGeneratorUid === generatorUid && timingRevision === revision) timingDirty = false;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update clock');
+      reportFailure(error);
       if (selectedGeneratorUid === generatorUid && timingRevision === revision) {
         timingDirty = false;
         syncTiming(configSignals);
@@ -324,7 +327,7 @@
       rest_time: patch.base.rest_time,
       waveforms: { ...patch.base.waveforms, [patch.waveformId]: patch.waveform }
     };
-    toastError(instrument?.updateSignals(patch.generatorUid, signals));
+    reportFailure(instrument?.updateSignals(patch.generatorUid, signals));
   }
 
   function discardPendingWaveformPatch() {
@@ -443,9 +446,7 @@
     (editingWaveform as DerivedWaveform).source = source;
   }
 
-  const derivedSourceOptions = $derived<SelectOption[]>(
-    waveformIds.filter((id) => id !== selectedWaveformId).map((id) => ({ value: id, label: displayName(id) }))
-  );
+  const derivedSources = $derived(waveformIds.filter((id) => id !== selectedWaveformId));
 
   const activeWindowSeconds = $derived(
     !editingWaveform || isDerivedWaveform(editingWaveform)
@@ -475,468 +476,369 @@
 </script>
 
 {#if profile && generatorConfigured}
-  <div class="flex h-full min-h-0 flex-col">
-    <PageHeader
-      items={[
-        {
-          label: profile.label || displayName(page.params.profileId ?? ''),
-          href: resolve('/stations/[stationId]/instruments/[instrumentId]/profiles/[profileId]/overview', {
-            stationId: page.params.stationId ?? '',
-            instrumentId: page.params.instrumentId ?? '',
-            profileId: page.params.profileId ?? ''
-          })
-        },
-        { label: displayName(selectedGeneratorUid) }
-      ]}
-    >
-      {#snippet trailing()}
-        <Select
-          prefix="Group by"
-          size="xs"
-          class="w-54"
-          value={groupMode}
-          options={groupModeOptions}
-          onchange={(value) => (groupMode = value as GroupMode)}
-        />
-      {/snippet}
-    </PageHeader>
+  <PageHeader items={[profileItem, { label: displayName(selectedGeneratorUid) }]}>
+    {#snippet trailing()}
+      <Select
+        prefix="Group by"
+        class="w-54"
+        value={groupMode}
+        options={GROUP_MODES}
+        formatLabel={(mode) => GROUP_MODE_LABELS[mode]}
+        onChange={(mode) => (groupMode = mode)}
+      />
+    {/snippet}
+  </PageHeader>
 
-    <main class="sync-viewport min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-      <div class="mx-auto flex w-full max-w-7xl flex-col gap-3">
-        {#each groups as group (group.id)}
-          {@const colors = group.waveformIds.map((id) => waveformColors[id] ?? '#888')}
-          {@const traces = group.waveformIds.map((id) => plotData.traces[id] ?? [])}
-          {@const selectedInGroup = selectedWaveformId && group.waveformIds.includes(selectedWaveformId)}
-          <section
-            class="overflow-hidden rounded-xs border bg-canvas transition-colors
-              {selectedInGroup ? 'border-line-selected' : 'border-line-muted'}"
-            aria-label={group.label || group.waveformIds.map(displayName).join(', ')}
-          >
-            <div class="flex min-h-10 flex-wrap items-center gap-1 border-b px-3 py-1.5">
-              {#if group.label}
-                <span class="mr-2 text-xs font-semibold tracking-wide text-fg-muted uppercase">{group.label}</span>
-              {/if}
-              {#each group.waveformIds as waveformId (waveformId)}
-                {@const color = waveformColors[waveformId] ?? '#888'}
-                {#if waveformId === selectedWaveformId && editingWaveform}
-                  <div class="flex shrink-0 items-stretch" role="group" aria-label={`${displayName(waveformId)} type`}>
-                    <button
-                      type="button"
-                      onclick={() => selectWaveform(waveformId)}
-                      class="flex cursor-pointer items-center gap-1.5 rounded-l-full border border-line-selected bg-element-selected px-2 py-0.5 text-base text-fg transition-colors"
-                      aria-pressed="true"
-                    >
-                      <span class="size-2 shrink-0 rounded-full" style="background-color: {color}" aria-hidden="true"
-                      ></span>
-                      {displayName(waveformId)}
-                    </button>
-                    <Select
-                      prefix=" "
-                      size="xs"
-                      class="-ml-px w-28 rounded-l-none rounded-r-full"
-                      value={editingWaveform.type}
-                      options={waveformTypeOptions}
-                      disabled={!canEdit}
-                      onchange={changeWaveformType}
-                    />
-                  </div>
-                {:else}
+  <div class="sync-viewport page-body">
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-3">
+      {#each groups as group (group.id)}
+        {@const colors = group.waveformIds.map((id) => waveformColors[id] ?? '#888')}
+        {@const traces = group.waveformIds.map((id) => plotData.traces[id] ?? [])}
+        {@const selectedInGroup = selectedWaveformId && group.waveformIds.includes(selectedWaveformId)}
+        <div
+          class="overflow-hidden rounded-xs border bg-canvas transition-colors
+            {selectedInGroup ? 'border-line-selected' : 'border-line-muted'}"
+        >
+          <div class="flex min-h-10 flex-wrap items-center gap-1 border-b px-3 py-1.5">
+            {#if group.label}
+              <span class="mr-2 text-xs font-semibold tracking-wide text-fg-muted uppercase">{group.label}</span>
+            {/if}
+            {#each group.waveformIds as waveformId (waveformId)}
+              {@const color = waveformColors[waveformId] ?? '#888'}
+              {#if waveformId === selectedWaveformId && editingWaveform}
+                <div class="flex shrink-0 items-stretch" role="group" aria-label={`${displayName(waveformId)} type`}>
                   <button
                     type="button"
                     onclick={() => selectWaveform(waveformId)}
-                    class="flex cursor-pointer items-center gap-1.5 rounded-full border border-transparent px-2 py-0.5 text-base text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
-                    aria-pressed="false"
+                    class="flex cursor-pointer items-center gap-1.5 rounded-l-full border border-line-selected bg-element-selected px-2 py-0.5 text-base text-fg transition-colors"
+                    aria-pressed="true"
                   >
                     <span class="size-2 shrink-0 rounded-full" style="background-color: {color}" aria-hidden="true"
                     ></span>
                     {displayName(waveformId)}
                   </button>
-                {/if}
-              {/each}
-            </div>
+                  <Select
+                    class="-ml-px w-28 rounded-l-none rounded-r-full"
+                    value={editingWaveform.type}
+                    options={WAVEFORM_TYPES}
+                    formatLabel={(type) => WAVEFORM_TYPE_LABELS[type]}
+                    disabled={!canEdit}
+                    onChange={changeWaveformType}
+                  />
+                </div>
+              {:else}
+                <button
+                  type="button"
+                  onclick={() => selectWaveform(waveformId)}
+                  class="flex cursor-pointer items-center gap-1.5 rounded-full border border-transparent px-2 py-0.5 text-base text-fg-muted transition-colors hover:bg-element-hover hover:text-fg"
+                  aria-pressed="false"
+                >
+                  <span class="size-2 shrink-0 rounded-full" style="background-color: {color}" aria-hidden="true"
+                  ></span>
+                  {displayName(waveformId)}
+                </button>
+              {/if}
+            {/each}
+          </div>
 
-            <div class="shrink-0 p-2" style:height={plotHeight}>
-              <WaveformPlot
-                time={plotData.time}
-                {traces}
-                {colors}
-                yRange={groupYRange(group.waveformIds)}
-                context={plotContext}
-              />
-            </div>
+          <div class="shrink-0 p-2" style:height={plotHeight}>
+            <WaveformPlot
+              time={plotData.time}
+              {traces}
+              {colors}
+              yRange={groupYRange(group.waveformIds)}
+              context={plotContext}
+            />
+          </div>
 
-            {#if selectedInGroup && selectedWaveformId && editingWaveform}
-              {@const waveform = editingWaveform}
-              <div class="border-t bg-element-bg/35">
-                {#if isDerivedWaveform(waveform)}
-                  <div class="inspector-body px-4 py-3">
+          {#if selectedInGroup && selectedWaveformId && editingWaveform}
+            {@const waveform = editingWaveform}
+            <div class="border-t bg-tint">
+              {#if isDerivedWaveform(waveform)}
+                <div class="inspector-body px-4 py-3">
+                  <div class="property-row">
+                    <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Derived</h3>
+                    <div class="property-controls">
+                      <Select
+                        prefix="Operation"
+                        class="w-full"
+                        value={waveform.operation}
+                        options={DERIVED_OPERATIONS}
+                        formatLabel={displayName}
+                        disabled={!canEdit}
+                        onChange={changeDerivedOperation}
+                      />
+                      <Select
+                        prefix="Source"
+                        class="w-full"
+                        value={waveform.source}
+                        options={derivedSources}
+                        formatLabel={displayName}
+                        disabled={!canEdit}
+                        onChange={changeDerivedSource}
+                      />
+                      {#if waveform.operation === 'scale'}
+                        <SpinBox
+                          value={waveform.factor}
+                          onChange={(value) => updateEditingField('factor', value)}
+                          step={0.05}
+                          prefix="Factor"
+                          size="sm"
+                          disabled={!canEdit}
+                          class="w-full"
+                        />
+                      {:else if waveform.operation === 'offset'}
+                        <SpinBox
+                          value={waveform.delta}
+                          onChange={(value) => updateEditingField('delta', value)}
+                          step={0.01}
+                          prefix="Delta"
+                          suffix="V"
+                          size="sm"
+                          disabled={!canEdit}
+                          class="w-full"
+                        />
+                      {:else if waveform.operation === 'shift'}
+                        <SpinBox
+                          value={waveform.fraction}
+                          onChange={(value) => updateEditingField('fraction', value)}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          prefix="Fraction"
+                          size="sm"
+                          disabled={!canEdit}
+                          class="w-full"
+                        />
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {:else}
+                <div class="inspector-body flex flex-col gap-x-2 gap-y-4 px-4 py-3">
+                  <div class="property-row">
+                    <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Timing</h3>
+                    <div class="property-controls">
+                      <Select
+                        prefix="Mode"
+                        class="w-full"
+                        value={windowMode}
+                        options={['percent', 'seconds']}
+                        formatLabel={displayName}
+                        disabled={!canEdit}
+                        onChange={(mode) => (windowMode = mode)}
+                      />
+                      <SpinBox
+                        value={windowMode === 'percent' ? waveform.window.min : waveform.window.min * duration}
+                        onChange={(value) =>
+                          updateWindow('min', windowMode === 'percent' ? value : duration > 0 ? value / duration : 0)}
+                        min={0}
+                        max={windowMode === 'percent' ? waveform.window.max : waveform.window.max * duration}
+                        step={windowMode === 'percent' ? 0.001 : 0.0001}
+                        bigStep={windowMode === 'percent' ? 0.05 : 0.001}
+                        prefix="Start"
+                        suffix={windowMode === 'seconds' ? 's' : undefined}
+                        size="sm"
+                        disabled={!canEdit || (windowMode === 'seconds' && duration <= 0)}
+                        class="w-full"
+                      />
+                      <SpinBox
+                        value={windowMode === 'percent' ? waveform.window.max : waveform.window.max * duration}
+                        onChange={(value) =>
+                          updateWindow('max', windowMode === 'percent' ? value : duration > 0 ? value / duration : 0)}
+                        min={windowMode === 'percent' ? waveform.window.min : waveform.window.min * duration}
+                        max={windowMode === 'percent' ? 1 : duration}
+                        step={windowMode === 'percent' ? 0.001 : 0.0001}
+                        bigStep={windowMode === 'percent' ? 0.05 : 0.001}
+                        prefix="End"
+                        suffix={windowMode === 'seconds' ? 's' : undefined}
+                        size="sm"
+                        disabled={!canEdit || (windowMode === 'seconds' && duration <= 0)}
+                        class="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="property-row">
+                    <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Voltage</h3>
+                    <div class="property-controls">
+                      <Select
+                        prefix="Mode"
+                        class="w-full"
+                        value={voltageMode}
+                        options={['minmax', 'ampoffset']}
+                        formatLabel={(mode) => (mode === 'minmax' ? 'Min / Max' : 'Amp / Offset')}
+                        disabled={!canEdit}
+                        onChange={(mode) => (voltageMode = mode)}
+                      />
+                      <SpinBox
+                        value={voltageMode === 'minmax'
+                          ? waveform.voltage.min
+                          : (waveform.voltage.max - waveform.voltage.min) / 2}
+                        onChange={voltageMode === 'minmax' ? (value) => updateVoltage('min', value) : updateAmplitude}
+                        min={voltageMode === 'minmax' ? voltageRange?.min : 0}
+                        max={voltageMode === 'minmax' ? waveform.voltage.max : undefined}
+                        step={0.001}
+                        prefix={voltageMode === 'minmax' ? 'Min' : 'Amp'}
+                        suffix="V"
+                        size="sm"
+                        disabled={!canEdit}
+                        class="w-full"
+                      />
+                      <SpinBox
+                        value={voltageMode === 'minmax'
+                          ? waveform.voltage.max
+                          : (waveform.voltage.max + waveform.voltage.min) / 2}
+                        onChange={voltageMode === 'minmax' ? (value) => updateVoltage('max', value) : updateOffset}
+                        min={voltageMode === 'minmax' ? waveform.voltage.min : voltageRange?.min}
+                        max={voltageRange?.max}
+                        step={0.001}
+                        prefix={voltageMode === 'minmax' ? 'Max' : 'Offset'}
+                        suffix="V"
+                        size="sm"
+                        disabled={!canEdit}
+                        class="w-full"
+                      />
+                      <SpinBox
+                        value={waveform.rest_voltage ?? waveform.voltage.min}
+                        onChange={(value) => updateEditingField('rest_voltage', value)}
+                        min={waveform.voltage.min}
+                        max={waveform.voltage.max}
+                        step={0.001}
+                        home={() => waveform.voltage.min}
+                        prefix="Rest"
+                        suffix="V"
+                        size="sm"
+                        disabled={!canEdit}
+                        class="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  {#if waveform.type === 'square' || waveform.type === 'sine' || waveform.type === 'triangle' || waveform.type === 'sawtooth'}
                     <div class="property-row">
-                      <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Derived</h3>
+                      <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Shape</h3>
                       <div class="property-controls">
                         <Select
-                          prefix="Operation"
-                          size="xs"
+                          prefix="Mode"
                           class="w-full"
-                          value={waveform.operation}
-                          options={derivedOperationOptions}
+                          value={repeatMode}
+                          options={['cycles', 'frequency']}
+                          formatLabel={displayName}
                           disabled={!canEdit}
-                          onchange={changeDerivedOperation}
+                          onChange={(mode) => (repeatMode = mode)}
                         />
-                        <Select
-                          prefix="Source"
-                          size="xs"
-                          class="w-full"
-                          value={waveform.source}
-                          options={derivedSourceOptions}
-                          disabled={!canEdit || derivedSourceOptions.length === 0}
-                          onchange={changeDerivedSource}
-                        />
-                        {#if waveform.operation === 'scale'}
+                        <label class="min-w-0">
+                          <span class="sr-only">{repeatMode === 'cycles' ? 'Cycles' : 'Frequency'}</span>
                           <SpinBox
-                            model={{
-                              value: waveform.factor,
-                              onChange: (value) => updateEditingField('factor', value),
-                              step: 0.05
-                            }}
-                            prefix="Factor"
-                            size="xs"
-                            numCharacters={8}
-                            align="right"
+                            value={repeatMode === 'cycles' ? cycleCount : cycleFrequency}
+                            onChange={repeatMode === 'cycles' ? updateCycleCount : updateCycleFrequency}
+                            min={0.001}
+                            step={repeatMode === 'cycles' ? 0.25 : 0.01}
+                            suffix={repeatMode === 'frequency' ? 'Hz' : undefined}
+                            size="sm"
+                            disabled={!canEdit || (repeatMode === 'frequency' && activeWindowSeconds <= 0)}
+                            class="w-full"
+                          />
+                        </label>
+                        {#if waveform.type === 'square'}
+                          <SpinBox
+                            value={waveform.duty_cycle}
+                            onChange={(value) => updateEditingField('duty_cycle', value)}
+                            min={0}
+                            max={1}
+                            step={0.001}
+                            prefix="Duty"
+                            size="sm"
                             disabled={!canEdit}
                             class="w-full"
                           />
-                        {:else if waveform.operation === 'offset'}
+                        {:else if waveform.type === 'triangle' || waveform.type === 'sawtooth'}
                           <SpinBox
-                            model={{
-                              value: waveform.delta,
-                              onChange: (value) => updateEditingField('delta', value),
-                              step: 0.01
-                            }}
-                            prefix="Delta"
-                            suffix=" V"
-                            size="xs"
-                            numCharacters={8}
-                            align="right"
-                            disabled={!canEdit}
-                            class="w-full"
-                          />
-                        {:else if waveform.operation === 'shift'}
-                          <SpinBox
-                            model={{
-                              value: waveform.fraction,
-                              onChange: (value) => updateEditingField('fraction', value),
-                              min: 0,
-                              max: 1,
-                              step: 0.01
-                            }}
-                            prefix="Fraction"
-                            size="xs"
-                            numCharacters={8}
-                            align="right"
+                            value={waveform.symmetry ?? 1}
+                            onChange={(value) => updateEditingField('symmetry', value)}
+                            min={0}
+                            max={1}
+                            step={0.001}
+                            prefix="Symmetry"
+                            size="sm"
                             disabled={!canEdit}
                             class="w-full"
                           />
                         {/if}
-                      </div>
-                    </div>
-                  </div>
-                {:else}
-                  <div class="inspector-body flex flex-col gap-x-2 gap-y-4 px-4 py-3">
-                    <div class="property-row">
-                      <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Timing</h3>
-                      <div class="property-controls">
-                        <Select
-                          prefix="Mode"
-                          size="xs"
-                          class="w-full"
-                          value={windowMode}
-                          options={[
-                            { value: 'percent', label: 'Percent' },
-                            { value: 'seconds', label: 'Seconds' }
-                          ]}
-                          disabled={!canEdit}
-                          onchange={(value) => (windowMode = value as WindowMode)}
-                        />
                         <SpinBox
-                          model={{
-                            value: windowMode === 'percent' ? waveform.window.min : waveform.window.min * duration,
-                            onChange: (value) =>
-                              updateWindow(
-                                'min',
-                                windowMode === 'percent' ? value : duration > 0 ? value / duration : 0
-                              ),
-                            min: 0,
-                            max: windowMode === 'percent' ? waveform.window.max : waveform.window.max * duration,
-                            step: windowMode === 'percent' ? 0.001 : 0.0001,
-                            bigStep: windowMode === 'percent' ? 0.05 : 0.001
-                          }}
-                          prefix="Start"
-                          suffix={windowMode === 'seconds' ? ' s' : undefined}
-                          size="xs"
-                          numCharacters={8}
-                          align="right"
-                          disabled={!canEdit || (windowMode === 'seconds' && duration <= 0)}
-                          class="w-full"
-                        />
-                        <SpinBox
-                          model={{
-                            value: windowMode === 'percent' ? waveform.window.max : waveform.window.max * duration,
-                            onChange: (value) =>
-                              updateWindow(
-                                'max',
-                                windowMode === 'percent' ? value : duration > 0 ? value / duration : 0
-                              ),
-                            min: windowMode === 'percent' ? waveform.window.min : waveform.window.min * duration,
-                            max: windowMode === 'percent' ? 1 : duration,
-                            step: windowMode === 'percent' ? 0.001 : 0.0001,
-                            bigStep: windowMode === 'percent' ? 0.05 : 0.001
-                          }}
-                          prefix="End"
-                          suffix={windowMode === 'seconds' ? ' s' : undefined}
-                          size="xs"
-                          numCharacters={8}
-                          align="right"
-                          disabled={!canEdit || (windowMode === 'seconds' && duration <= 0)}
-                          class="w-full"
-                        />
-                      </div>
-                    </div>
-
-                    <div class="property-row">
-                      <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Voltage</h3>
-                      <div class="property-controls">
-                        <Select
-                          prefix="Mode"
-                          size="xs"
-                          class="w-full"
-                          value={voltageMode}
-                          options={[
-                            { value: 'minmax', label: 'Min / Max' },
-                            { value: 'ampoffset', label: 'Amp / Offset' }
-                          ]}
-                          disabled={!canEdit}
-                          onchange={(value) => (voltageMode = value as VoltageMode)}
-                        />
-                        <SpinBox
-                          model={{
-                            value:
-                              voltageMode === 'minmax'
-                                ? waveform.voltage.min
-                                : (waveform.voltage.max - waveform.voltage.min) / 2,
-                            onChange:
-                              voltageMode === 'minmax' ? (value) => updateVoltage('min', value) : updateAmplitude,
-                            min: voltageMode === 'minmax' ? voltageRange?.min : 0,
-                            max: voltageMode === 'minmax' ? waveform.voltage.max : undefined,
-                            step: 0.001
-                          }}
-                          prefix={voltageMode === 'minmax' ? 'Min' : 'Amp'}
-                          suffix=" V"
-                          size="xs"
-                          numCharacters={8}
-                          align="right"
-                          disabled={!canEdit}
-                          class="w-full"
-                        />
-                        <SpinBox
-                          model={{
-                            value:
-                              voltageMode === 'minmax'
-                                ? waveform.voltage.max
-                                : (waveform.voltage.max + waveform.voltage.min) / 2,
-                            onChange: voltageMode === 'minmax' ? (value) => updateVoltage('max', value) : updateOffset,
-                            min: voltageMode === 'minmax' ? waveform.voltage.min : voltageRange?.min,
-                            max: voltageRange?.max,
-                            step: 0.001
-                          }}
-                          prefix={voltageMode === 'minmax' ? 'Max' : 'Offset'}
-                          suffix=" V"
-                          size="xs"
-                          numCharacters={8}
-                          align="right"
-                          disabled={!canEdit}
-                          class="w-full"
-                        />
-                        <SpinBox
-                          model={{
-                            value: waveform.rest_voltage ?? waveform.voltage.min,
-                            onChange: (value) => updateEditingField('rest_voltage', value),
-                            min: waveform.voltage.min,
-                            max: waveform.voltage.max,
-                            step: 0.001,
-                            home: () => waveform.voltage.min
-                          }}
-                          prefix="Rest"
-                          suffix=" V"
-                          size="xs"
-                          numCharacters={8}
-                          align="right"
+                          value={(waveform.phase ?? 0) * (180 / Math.PI)}
+                          onChange={(value) => updateEditingField('phase', value * (Math.PI / 180))}
+                          step={0.01}
+                          prefix="Phase"
+                          suffix="deg"
+                          size="sm"
                           disabled={!canEdit}
                           class="w-full"
                         />
                       </div>
                     </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/each}
 
-                    {#if waveform.type === 'square' || waveform.type === 'sine' || waveform.type === 'triangle' || waveform.type === 'sawtooth'}
-                      <div class="property-row">
-                        <h3 class="text-xs font-semibold tracking-wider text-fg-muted uppercase">Shape</h3>
-                        <div class="property-controls">
-                          <Select
-                            prefix="Mode"
-                            size="xs"
-                            class="w-full"
-                            value={repeatMode}
-                            options={[
-                              { value: 'cycles', label: 'Cycles' },
-                              { value: 'frequency', label: 'Frequency' }
-                            ]}
-                            disabled={!canEdit}
-                            onchange={(value) => (repeatMode = value as RepeatMode)}
-                          />
-                          <label class="min-w-0">
-                            <span class="sr-only">{repeatMode === 'cycles' ? 'Cycles' : 'Frequency'}</span>
-                            <SpinBox
-                              model={{
-                                value: repeatMode === 'cycles' ? cycleCount : cycleFrequency,
-                                onChange: repeatMode === 'cycles' ? updateCycleCount : updateCycleFrequency,
-                                min: 0.001,
-                                step: repeatMode === 'cycles' ? 0.25 : 0.01
-                              }}
-                              suffix={repeatMode === 'frequency' ? ' Hz' : undefined}
-                              size="xs"
-                              numCharacters={8}
-                              align="right"
-                              disabled={!canEdit || (repeatMode === 'frequency' && activeWindowSeconds <= 0)}
-                              class="w-full"
-                            />
-                          </label>
-                          {#if waveform.type === 'square'}
-                            <SpinBox
-                              model={{
-                                value: waveform.duty_cycle,
-                                onChange: (value) => updateEditingField('duty_cycle', value),
-                                min: 0,
-                                max: 1,
-                                step: 0.001
-                              }}
-                              prefix="Duty"
-                              size="xs"
-                              numCharacters={8}
-                              align="right"
-                              disabled={!canEdit}
-                              class="w-full"
-                            />
-                          {:else if waveform.type === 'triangle' || waveform.type === 'sawtooth'}
-                            <SpinBox
-                              model={{
-                                value: waveform.symmetry ?? 1,
-                                onChange: (value) => updateEditingField('symmetry', value),
-                                min: 0,
-                                max: 1,
-                                step: 0.001
-                              }}
-                              prefix="Symmetry"
-                              size="xs"
-                              numCharacters={8}
-                              align="right"
-                              disabled={!canEdit}
-                              class="w-full"
-                            />
-                          {/if}
-                          <SpinBox
-                            model={{
-                              value: (waveform.phase ?? 0) * (180 / Math.PI),
-                              onChange: (value) => updateEditingField('phase', value * (Math.PI / 180)),
-                              step: 0.01
-                            }}
-                            prefix="Phase"
-                            suffix=" deg"
-                            size="xs"
-                            numCharacters={8}
-                            align="right"
-                            disabled={!canEdit}
-                            class="w-full"
-                          />
-                        </div>
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </section>
-        {/each}
-
-        {#if groups.length === 0}
-          <div class="flex min-h-56 items-center justify-center text-lg text-fg-muted">No synchronized outputs</div>
-        {/if}
-      </div>
-    </main>
-    <footer
-      class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-muted bg-surface px-4 py-2"
-      aria-labelledby="timing-heading"
-    >
-      <h2 id="timing-heading" class="shrink-0 text-sm text-fg-muted">Timing</h2>
-      <div class="flex min-w-0 flex-[1_1_32rem] flex-wrap items-center gap-2">
-        <SpinBox
-          model={{
-            value: duration * 1000,
-            onChange: (value) => updateTiming('duration', value / 1000),
-            min: 0.1,
-            step: 0.1,
-            bigStep: 1
-          }}
-          prefix="Active"
-          suffix=" ms"
-          size="xs"
-          numCharacters={7}
-          align="right"
-          steppers={false}
-          disabled={!canEdit}
-          class="min-w-36 flex-1"
-        />
-        <SpinBox
-          model={{
-            value: restTime * 1000,
-            onChange: (value) => updateTiming('rest_time', value / 1000),
-            min: 0,
-            step: 0.1,
-            bigStep: 1
-          }}
-          prefix="Rest"
-          suffix=" ms"
-          size="xs"
-          numCharacters={5}
-          align="right"
-          steppers={false}
-          disabled={!canEdit}
-          class="min-w-36 flex-1"
-        />
-        <SpinBox
-          model={{
-            value: sampleRate / 1000,
-            onChange: (value) => updateTiming('sample_rate', value * 1000),
-            min: 0.001,
-            step: 0.001,
-            bigStep: 1
-          }}
-          prefix="Sample rate"
-          suffix=" kHz"
-          size="xs"
-          numCharacters={7}
-          align="right"
-          steppers={false}
-          disabled={!canEdit}
-          class="min-w-52 flex-1"
-        />
-      </div>
-    </footer>
+      {#if groups.length === 0}
+        <div class="flex min-h-56 items-center justify-center text-lg text-fg-muted">No synchronized outputs</div>
+      {/if}
+    </div>
   </div>
+  <footer
+    class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-muted bg-shell px-4 py-2"
+    aria-labelledby="timing-heading"
+  >
+    <h2 id="timing-heading" class="shrink-0 text-sm text-fg-muted">Timing</h2>
+    <div class="flex min-w-0 flex-[1_1_32rem] flex-wrap items-center gap-2">
+      <NumberBox
+        value={duration * 1000}
+        onChange={(value) => updateTiming('duration', value / 1000)}
+        min={0.1}
+        step={0.1}
+        bigStep={1}
+        prefix="Active"
+        suffix="ms"
+        size="sm"
+        disabled={!canEdit}
+        class="min-w-36 flex-1"
+      />
+      <NumberBox
+        value={restTime * 1000}
+        onChange={(value) => updateTiming('rest_time', value / 1000)}
+        min={0}
+        step={0.1}
+        bigStep={1}
+        prefix="Rest"
+        suffix="ms"
+        size="sm"
+        disabled={!canEdit}
+        class="min-w-36 flex-1"
+      />
+      <NumberBox
+        value={sampleRate / 1000}
+        onChange={(value) => updateTiming('sample_rate', value * 1000)}
+        min={0.001}
+        step={0.001}
+        bigStep={1}
+        prefix="Sample rate"
+        suffix="kHz"
+        size="sm"
+        disabled={!canEdit}
+        class="min-w-52 flex-1"
+      />
+    </div>
+  </footer>
 {:else}
-  <div class="flex h-full items-center justify-center text-lg text-fg-muted">
-    {profile && selectedGeneratorUid
-      ? `Generator “${displayName(selectedGeneratorUid)}” is not configured for this profile`
-      : 'Select a profile to view synchronized outputs'}
-  </div>
+  <PageFallback items={[profileItem, { label: displayName(selectedGeneratorUid) }]}>
+    Generator “{displayName(selectedGeneratorUid)}” is not configured for this profile.
+  </PageFallback>
 {/if}
 
 <style>
