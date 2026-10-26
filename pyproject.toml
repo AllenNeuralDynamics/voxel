@@ -72,8 +72,8 @@ members = [
     "omezarr",
     "bench",
     "records",
-    "instruments/barseq",
 ]
+exclude = ["instruments/seqsweep"]
 
 [tool.uv.sources]
 ome-zarr-writer = { workspace = true }

@@ -1,0 +1,27 @@
+router_server_kwargs:
+  rpc_port: 5555
+  broadcast_port: 5556
+router_server_api:
+  named_calls:
+    seqsweep_start:
+      obj_name: "seqsweep"
+      attr_name: "start_run"
+    seqsweep_pause:
+      obj_name: "seqsweep"
+      attr_name: "pause"
+    seqsweep_resume:
+      obj_name: "seqsweep"
+      attr_name: "resume_run"
+    seqsweep_reset:
+      obj_name: "seqsweep"
+      attr_name: "reset"
+    seqsweep_get_job:
+      obj_name: "seqsweep"
+      attr_name: "get_job"
+    seqsweep_check_job_status:
+      obj_name: "seqsweep"
+      attr_name: "check_job_status"
+
+
+# TODO: add rig up config
+# devices:
