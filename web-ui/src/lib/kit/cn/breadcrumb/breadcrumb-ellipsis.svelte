@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { HTMLAttributes } from 'svelte/elements';
 
-  import { DotsHorizontal } from '$lib/icons';
-  import { cn, type WithElementRef, type WithoutChildren } from '$lib/utils';
+  import { cn, type WithElementRef, type WithoutChildren } from '$lib/core/utils';
+  import { Ellipsis } from '$lib/kit/icons';
 
   let {
     ref = $bindable(null),
@@ -19,6 +19,6 @@
   class={cn('flex size-5 items-center justify-center [&>svg]:size-4', className)}
   {...restProps}
 >
-  <DotsHorizontal />
+  <Ellipsis />
   <span class="sr-only">More</span>
 </span>

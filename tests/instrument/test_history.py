@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from vxlib.history import HistoryState
 
-from vxl.instrument import AcquisitionMode, Instrument, InstrumentStore
+from vxl.instrument import CaptureActivity, IdleActivity, Instrument, InstrumentStore
 from vxl.instrument.config import InstrumentPreset, ProfilePatch
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
 from vxl.instrument.metadata import ExaspimMetadata
@@ -62,15 +62,15 @@ async def test_replay_checks_capture_mode_after_acquiring_lock(instrument: Instr
         replay = asyncio.create_task(getattr(instrument, operation)())
         await asyncio.sleep(0)
         assert not replay.done()
-        await instrument._mode.set(AcquisitionMode.CAPTURE)
+        await instrument._activity.set(CaptureActivity())
 
     try:
-        with pytest.raises(InstrumentBusyError, match="current mode is capture"):
+        with pytest.raises(InstrumentBusyError, match="while a capture is running"):
             await replay
         assert instrument.state.value == state
         assert instrument.history.value == history
     finally:
-        await instrument._mode.set(AcquisitionMode.IDLE)
+        await instrument._activity.set(IdleActivity())
 
     await getattr(instrument, operation)()
     assert instrument.history.value != history

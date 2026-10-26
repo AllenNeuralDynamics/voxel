@@ -5,7 +5,6 @@ hal:
       init:
         hub: nidaq_1
         ports:
-          aotf_1: ao0
           camera: ao21
           laser_488: ao17
           laser_561: ao13
@@ -17,20 +16,24 @@ hal:
           z_axis: ao5
     camera:
       target: vxl_drivers.cameras.egrabber.VieworksCamera
+      autosave: [exposure_time_ms, binning, pixel_format]
       init: {pixel_size_um: "3.76,3.76", serial: MP151BDZ014}
     fw_emission:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
       init:
         slots: {"0": "BP525", "1": "BP600", "2": "BP700"}
     laser_488:
-      target: &aotf_laser_target vxl.devices.laser.simulated.SimulatedAOTFShutteredLaser
-      init: {wavelength: 488, aotf: aotf_1, aotf_channel: 2, aotf_frequency_mhz: 98.2}
+      target: &laser_target vxl.devices.laser.simulated.SimulatedLaser
+      autosave: [source_power_setpoint_mw, output_level_percent]
+      init: {wavelength: 488, source_enable_delay_s: 1}
     laser_561:
-      target: *aotf_laser_target
-      init: {wavelength: 561, aotf: aotf_1, aotf_channel: 3, aotf_frequency_mhz: 87.4}
+      target: *laser_target
+      autosave: [source_power_setpoint_mw, output_level_percent]
+      init: {wavelength: 561, source_enable_delay_s: 1}
     laser_640:
-      target: *aotf_laser_target
-      init: {wavelength: 640, aotf: aotf_1, aotf_channel: 4, aotf_frequency_mhz: 78.6}
+      target: *laser_target
+      autosave: [source_power_setpoint_mw, output_level_percent]
+      init: {wavelength: 640, source_enable_delay_s: 1}
     tiger_controller:
       target: vxl_drivers.tigerhub.TigerHub
       init: {box: COM3}
@@ -52,9 +55,6 @@ hal:
     camera_focus:
       target: *tiger_axis
       init: {hub: tiger_controller, axis_label: m, units: um}
-    aotf_1:
-      target: vxl.devices.aotf.simulated.SimulatedAotf
-      init: {blanking_mode: "external"}
     nidaq_1:
       target: vxl.devices.daq.hub_ni.NiDaqmx
       init:
@@ -108,6 +108,10 @@ default:
     profiles:
       single_gfp:
         channels: ["gfp"]
+        props:
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
         z_step: 1.0
         desc: "Single GFP channel imaging"
         sync:
@@ -124,12 +128,6 @@ default:
                 type: pulse
                 voltage: {min: 0.0, max: 5.0}
                 window: {min: 0.027574, max: 1.0}
-              aotf_1: &aotf_blanking_waveform
-                type: triangle
-                voltage: {min: 0.0, max: 5.0}
-                window: {min: 0.0, max: 1.0}
-                cycles: 1
-                symmetry: 0.5
               left_tunable_lens: &left_tunable_lens_waveform
                 type: triangle
                 voltage: {min: 1.98, max: 4.28}
@@ -159,6 +157,10 @@ default:
 
       single_rfp:
         channels: ["rfp"]
+        props:
+          laser_561:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
         z_step: 1.0
         desc: "Single RFP channel imaging"
         sync:
@@ -169,7 +171,6 @@ default:
             waveforms:
               camera: *camera_waveform
               laser_561: *laser_waveform
-              aotf_1: *aotf_blanking_waveform
               left_tunable_lens: *left_tunable_lens_waveform
               right_tunable_lens: *right_tunable_lens_waveform
               positive_galvo: *positive_galvo_waveform
@@ -178,6 +179,10 @@ default:
 
       single_cy5:
         channels: ["cy5"]
+        props:
+          laser_640:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
         z_step: 1.0
         desc: "Single Cy5 channel imaging"
         sync:
@@ -188,7 +193,6 @@ default:
             waveforms:
               camera: *camera_waveform
               laser_640: *laser_waveform
-              aotf_1: *aotf_blanking_waveform
               left_tunable_lens: *left_tunable_lens_waveform
               right_tunable_lens: *right_tunable_lens_waveform
               positive_galvo: *positive_galvo_waveform

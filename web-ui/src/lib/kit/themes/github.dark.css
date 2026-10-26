@@ -1,0 +1,63 @@
+/* GitHub Dark, based on the Zed "GitHub Dark" theme (github-theme extension). */
+
+[data-theme='github'].dark {
+  --canvas: #010409;
+  --shell: #171e26;
+  --pane: #0d1117;
+  --raised: #21272e;
+  --floating: #2c3239;
+  --tint: #f0f6fc0f;
+  --tint-hover: #f0f6fc1a;
+  --overlay: #010409cc;
+  --backdrop: #000000cc;
+  --raised-shadow: 0 0 0 1px var(--line-faint);
+  --floating-shadow: 0 0 0 1px var(--line-faint), 0 14px 36px #00000080;
+
+  --element-bg: #f0f6fc13;
+  --element-hover: #f0f6fc1b;
+  --element-active: #f0f6fc2b;
+  --element-selected: #f0f6fc23;
+  --track: #f0f6fc26;
+
+  --fg: #f0f6fc;
+  --fg-muted: #989fa8;
+  --fg-faint: #79808a;
+
+  --line: #f0f6fc41;
+  --line-muted: #f0f6fc32;
+  --line-faint: #f0f6fc22;
+  --line-selected: #f0f6fc5f;
+
+  --focus: #2776f3;
+
+  --accent: #1f6feb;
+  --on-accent: #ffffff;
+  --accent-hover: #025cd6;
+  --accent-muted: #446396;
+  --accent-tint: #19202c;
+  --accent-fg: #4c9bff;
+
+  --danger: #dc3531;
+  --on-danger: #ffffff;
+  --danger-hover: #c6181d;
+  --danger-muted: #883630;
+  --danger-tint: #f851491a;
+  --danger-fg: #ff796c;
+
+  --success: #00891d;
+  --on-success: #ffffff;
+  --success-hover: #007700;
+  --success-muted: #2e6b34;
+  --success-tint: #2ea04326;
+  --success-fg: #47c056;
+
+  --warning: #e3b341;
+  --on-warning: #0d1117;
+  --warning-hover: #d29922;
+  --warning-muted: #775a22;
+  --warning-tint: #bb800926;
+  --warning-fg: #d89f2b;
+
+  --scrollbar-thumb: #656c764d;
+  --scrollbar-thumb-hover: #656c7666;
+}

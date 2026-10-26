@@ -162,7 +162,7 @@ class PreviewStore(QObject):
     def apply_view(self, view: StationFeedView) -> None:
         """Advance the reliable Station state used to accept and invalidate preview frames."""
         session = view.session
-        identity = None if session is None else (session.info.id, session.instrument.preview_revision)
+        identity = None if session is None else (session.info.id, session.instrument.stream_revision)
         if identity != self._session_identity:
             self._session_identity = identity
             self._invalidate_frames()

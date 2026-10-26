@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { SVGAttributes } from 'svelte/elements';
 
-  import { Loader2 as Loader2Icon } from '$lib/icons';
-  import { cn } from '$lib/utils';
+  import { cn } from '$lib/core/utils';
+  import { Loader as Loader2Icon } from '$lib/kit/icons';
   let {
     class: className,
     role = 'status',

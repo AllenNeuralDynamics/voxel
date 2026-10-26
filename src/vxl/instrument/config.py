@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
 from pydantic import Field, ValidationInfo, field_validator, model_validator
-from vxlib.schema import FrozenModel
+from vxlib.schema import FrozenModel, identifier
 
 from rigup import CommandRequest
 from vxl._utils.color import Color
@@ -105,9 +105,13 @@ class SplitRoutingRule(FrozenModel):
 type RoutingRule = SelectRoutingRule | SplitRoutingRule
 
 
+ChannelId = Annotated[str, identifier("Channel id")]
+ProfileId = Annotated[str, identifier("Profile id")]
+
+
 class ImagingProtocol(FrozenModel):
-    channels: dict[str, ChannelConfig]
-    profiles: dict[str, ProfileConfig]
+    channels: dict[ChannelId, ChannelConfig]
+    profiles: dict[ProfileId, ProfileConfig]
 
     @field_validator("channels", "profiles")
     @classmethod

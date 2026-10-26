@@ -3,9 +3,9 @@
 
   export const dialogContentVariants = tv({
     base: [
-      'bg-canvas fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2.3rem)]',
+      'fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2.3rem)]',
       'max-h-[calc(100dvh-2.3rem)] overflow-y-auto',
-      'translate-x-[-50%] translate-y-[-50%] gap-3 rounded-md border border-line-muted p-4 shadow-md duration-200',
+      'translate-[-50%]  gap-3 frame-dialog p-4 duration-200',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
@@ -34,8 +34,8 @@
   import type { Snippet } from 'svelte';
   import type { ComponentProps } from 'svelte';
 
-  import { Close as XIcon } from '$lib/icons';
-  import { cn, type WithoutChildrenOrChild } from '$lib/utils';
+  import { cn, type WithoutChildrenOrChild } from '$lib/core/utils';
+  import { X as XIcon } from '$lib/kit/icons';
 
   import DialogPortal from './dialog-portal.svelte';
   import * as Dialog from './index';
@@ -67,7 +67,7 @@
     {@render children?.()}
     {#if showCloseButton}
       <DialogPrimitive.Close
-        class="absolute inset-e-4 top-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+        class="absolute inset-e-4 top-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-focus focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
       >
         <XIcon />
         <span class="sr-only">Close</span>

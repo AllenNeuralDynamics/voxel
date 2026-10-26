@@ -1,9 +1,10 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from vxl._utils.files import load_yaml
+from vxl._utils.files import load_and_validate_yaml, save_yaml
 from vxl.instrument import (
     AcquisitionTask,
     InstrumentConfig,
@@ -18,12 +19,24 @@ from vxl.instrument.errors import OperationRejectedError, StartupError
 from vxl.instrument.store import InstrumentInspection, Invalid, Loaded, Missing
 
 
+class _Values(BaseModel):
+    values: dict[str, Any]
+
+
+def test_saved_yaml_loads_back_unchanged(tmp_path: Path) -> None:
+    path = tmp_path / "values.yaml"
+    model = _Values(values={"label": "no", "position": "on", "exposure": 1e-05, "time": "1:30"})
+    save_yaml(path, model)
+
+    assert load_and_validate_yaml(path, _Values) == model
+
+
 def test_load_config_returns_the_parsed_config(instrument_template: Path) -> None:
     checked = InstrumentStore.load_config(instrument_template)
 
     assert checked.ok
     assert isinstance(checked.config, Loaded)
-    assert checked.config.value == load_yaml(instrument_template, InstrumentConfig)
+    assert checked.config.value == load_and_validate_yaml(instrument_template, InstrumentConfig)
     assert isinstance(checked.state, Missing)
     assert checked.violations == ()
 
@@ -136,7 +149,7 @@ def test_store_uses_config_default_only_when_state_file_is_missing(
     assert inspection.ok
     assert store.value.imaging == config.default.imaging
     assert store.home == directory
-    assert store.config == load_yaml(directory / "config.yaml", InstrumentConfig)
+    assert store.config == load_and_validate_yaml(directory / "config.yaml", InstrumentConfig)
     assert not (directory / "state.json").exists()
 
 
@@ -153,7 +166,7 @@ async def test_store_saves_selected_live_fields_as_defaults(
 
     assert store.default.value.output == output
     assert store.config.default.output == output
-    assert load_yaml(directory / "config.yaml", InstrumentConfig).default.output == output
+    assert load_and_validate_yaml(directory / "config.yaml", InstrumentConfig).default.output == output
 
 
 async def test_store_restores_selected_defaults_to_live_state(

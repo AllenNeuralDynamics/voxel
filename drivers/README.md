@@ -10,11 +10,12 @@ devices and presents them through the same asynchronous handle API used for simu
 
 - **Configuration-selected hardware** — instrument configurations identify drivers by import path, without embedding
   vendor-specific construction in the instrument runtime.
-- **Common device contracts** — physical cameras, lasers, AOTFs, and axes implement the interfaces defined by `vxl`.
+- **Common device contracts** — physical cameras, lasers, power meters, and axes implement interfaces defined by `vxl`;
+  specialized controllers such as AOTFs live in this package.
 - **Shared-controller support** — hubs own serial buses or vendor connections and are injected into colocated device
   drivers by rigup.
-- **Hardware-free application development** — simulated devices remain in `vxl`; install and load this package only
-  when connecting physical hardware.
+- **Hardware-free application development** — core simulations live in `vxl`; legacy AOTF and laser simulations
+  remain here alongside their driver interfaces.
 
 ## How the package fits
 
@@ -71,17 +72,42 @@ firmware, operating-system drivers, and vendor runtimes.
 
 ### Lasers and AOTFs
 
+The [canonical laser contract](../src/vxl/devices/laser/README.md) separates source settings from output control.
+The package cutover is complete; instrument, template, and UI integration is still in progress.
+
 | Hardware | Target | Python support |
 | --- | --- | --- |
-| Vortran Stradus | `vxl_drivers.lasers.vortran_stradus.VortranStradus` | `vortran-laser` extra |
-| Cobolt Skyra | `vxl_drivers.lasers.cobolt_skyra.CoboltSkyra` | `pycobolt-laser` extra |
-| Coherent Genesis MX | `vxl_drivers.lasers.coherent.genesis_mx.GenesisMX` | `coherent-laser` extra |
-| Coherent OBIS LX and LS | `vxl_drivers.lasers.coherent.obis.ObisLX`, `ObisLS` | `obis-laser` extra |
-| MPB VFL | `vxl_drivers.lasers.mpb.vfl.MpbVfl` | Serial support included |
-| Oxxius LBX and LCX | `vxl_drivers.lasers.oxxius.OxxiusLBX`, `OxxiusLCX` | Serial support included |
-| AA Opto-Electronic MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` | Included dependency |
+| Coherent Genesis MX source | `vxl_drivers.lasers.genesis_mx.GenesisMXSource` | `coherent-laser` extra |
+| Oxxius shared controller | `vxl_drivers.lasers.oxxius.controller.OxxiusController` | Serial support included |
+| Oxxius LBX source | `vxl_drivers.lasers.oxxius.lbx.OxxiusLBXSource` | Serial support included |
+| Oxxius LCX with linked AOM | `vxl_drivers.lasers.oxxius.lcx.OxxiusLCXLaser` | Serial support included |
+| MPDS controller | `vxl_drivers.lasers.mpds.controller.MPDS` | Serial support included |
+| Source with MPDS modulation | `vxl_drivers.lasers.mpds.laser.MPDSLaser` | Configured with a source and MPDS controller |
 
-Oxxius lasers sharing a controller use `vxl_drivers.lasers.oxxius.OxxiusHub` as their configured hub.
+Wrap standalone sources with `vxl.devices.laser.source_only.SourceOnlyLaser` to expose the complete `Laser` API.
+Driver module docstrings contain configuration examples and pending hardware checks. The MPDS calibration CLI is
+`vxl-calibrate-mpds`; install the `mpds-calibration` extra for plotting.
+
+Older laser implementations are retained under `vxl_drivers.lasers_legacy`. They report `laser_legacy`, remain
+accessible through `hal.devices`, and cannot be assigned as canonical illumination lasers.
+
+| Legacy hardware | Target | Python support |
+| --- | --- | --- |
+| Vortran Stradus | `vxl_drivers.lasers_legacy.vortran_stradus.VortranStradus` | `vortran-laser` extra |
+| Cobolt Skyra | `vxl_drivers.lasers_legacy.cobolt_skyra.CoboltSkyra` | `pycobolt-laser` extra |
+| Coherent Genesis MX | `vxl_drivers.lasers_legacy.coherent.genesis_mx.GenesisMX` | `coherent-laser` extra |
+| Coherent OBIS LX and LS | `vxl_drivers.lasers_legacy.coherent.obis.ObisLX`, `ObisLS` | `obis-laser` extra |
+| MPB VFL | `vxl_drivers.lasers_legacy.mpb.vfl.MpbVfl` | Serial support included |
+| Oxxius LBX and LCX | `vxl_drivers.lasers_legacy.oxxius.OxxiusLBX`, `OxxiusLCX` | Shared `vxl_drivers.lasers_legacy.oxxius.OxxiusHub` |
+| AA Opto-Electronic MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` | Included `aaopto-aotf` dependency |
+
+### Power meters
+
+| Hardware | Target | Python support |
+| --- | --- | --- |
+| Thorlabs PM100-series (SCPI/VISA) | `vxl_drivers.power_meters.thorlabs.ThorlabsPowerMeter` | `thorlabs-power-meter` extra; VISA backend required |
+
+See the [driver module](src/vxl_drivers/power_meters/thorlabs.py) for setup notes and a configuration example.
 
 ### Motion control
 

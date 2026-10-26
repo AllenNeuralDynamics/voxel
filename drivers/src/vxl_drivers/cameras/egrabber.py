@@ -23,7 +23,7 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from rigup.device.props import enumerated, enumerated_int, numeric
+from rigup.device.props import enumerated, numeric, numeric_int
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
@@ -184,7 +184,7 @@ class VieworksCamera(Camera):
             self._refresh_binning_info()
             self._refresh_exposure_ms()
 
-    @enumerated_int(options=lambda self: list(self._binning.options))
+    @numeric_int(options=lambda self: list(self._binning.options))
     def binning(self) -> int:
         return self._binning.value
 

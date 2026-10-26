@@ -25,15 +25,23 @@ node to host devices the rig doesn't care about).
 :meth:`NodeConfig._infer_kind`.
 """
 
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from vxlib.schema import duplicate_keys, identifier
 
 from .build import BuildConfig
 
 NodeKind = Literal["subprocess", "remote"]
+DeviceUid = Annotated[str, identifier("Device UID")]
+NodeId = Annotated[str, identifier("Node id")]
 
-DeviceConfig = BuildConfig
+
+class DeviceConfig(BuildConfig):
+    """Device construction and application-owned property persistence policy."""
+
+    autosave: Literal["*"] | list[str] = Field(default_factory=list)
+
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "*"}
 
@@ -83,7 +91,7 @@ class NodeConfig(BaseModel):
 
     kind: NodeKind
     address: str | None = None
-    devices: dict[str, DeviceConfig] = Field(default_factory=dict)
+    devices: dict[DeviceUid, DeviceConfig] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -115,25 +123,20 @@ class RigConfig(BaseModel, frozen=True):
 
     model_config = ConfigDict(extra="forbid")
 
-    devices: dict[str, DeviceConfig] = Field(default_factory=dict)
-    nodes: dict[str, NodeConfig] = Field(default_factory=dict)
+    devices: dict[DeviceUid, DeviceConfig] = Field(default_factory=dict)
+    nodes: dict[NodeId, NodeConfig] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate_device_graph(self) -> Self:
         """Require globally unique UIDs and keep injected object references within one process."""
-        scopes = [("local", self.devices), *((f"node:{node_id}", node.devices) for node_id, node in self.nodes.items())]
-        locations: dict[str, list[str]] = {}
-        for scope, devices in scopes:
-            for uid in devices:
-                locations.setdefault(uid, []).append(scope)
-
+        scopes = {"local": self.devices, **{f"node:{node_id}": node.devices for node_id, node in self.nodes.items()}}
+        duplicates = duplicate_keys(scopes)
         errors = [
             f"Device UID '{uid}' is duplicated across scopes: {', '.join(device_scopes)}"
-            for uid, device_scopes in locations.items()
-            if len(device_scopes) > 1
+            for uid, device_scopes in duplicates.items()
         ]
 
-        unique_owner = {uid: device_scopes[0] for uid, device_scopes in locations.items() if len(device_scopes) == 1}
+        unique_owner = {uid: scope for scope, devices in scopes.items() for uid in devices if uid not in duplicates}
 
         def references(value: Any) -> set[str]:
             if isinstance(value, str):
@@ -144,7 +147,7 @@ class RigConfig(BaseModel, frozen=True):
                 return {reference for item in value.values() for reference in references(item)}
             return set()
 
-        for scope, devices in scopes:
+        for scope, devices in scopes.items():
             for uid, config in devices.items():
                 for dependency in references(config.init) - {uid}:
                     owner = unique_owner[dependency]
@@ -159,4 +162,4 @@ class RigConfig(BaseModel, frozen=True):
         return self
 
 
-__all__ = ["DeviceConfig", "NodeConfig", "NodeKind", "RigConfig"]
+__all__ = ["DeviceConfig", "DeviceUid", "NodeConfig", "NodeKind", "RigConfig"]

@@ -3,7 +3,7 @@
 import time
 
 import numpy as np
-from rigup.device.props import enumerated, enumerated_int, numeric
+from rigup.device.props import enumerated, numeric, numeric_int
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
@@ -185,7 +185,7 @@ class HamamatsuCamera(Camera):
 
     # ==================== Binning ====================
 
-    @enumerated_int(options=lambda self: self._binning_options)
+    @numeric_int(options=lambda self: self._binning_options)
     def binning(self) -> int:
         """Get the binning mode of the camera."""
         return int(_unwrap(self._cam.prop_getvalue(_PROPS["binning"]), 1.0))

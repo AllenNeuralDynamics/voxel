@@ -14,7 +14,7 @@
   } = $props();
 </script>
 
-<div class="grid gap-1">
+<div class="grid min-w-0 gap-0.5">
   <Label for={id}>{label}</Label>
   {@render children()}
 </div>

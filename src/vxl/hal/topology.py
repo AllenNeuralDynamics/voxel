@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
-from vxlib.schema import FrozenModel
+from vxlib.schema import FrozenModel, identifier
 
 from rigup import DeviceConfig, RigConfig
 
@@ -90,7 +90,7 @@ class SplitRoutingDefinition(FrozenModel):
 type RoutingDefinition = Annotated[SelectRoutingDefinition | SplitRoutingDefinition, Field(discriminator="type")]
 
 
-class OpticalRouting(RootModel[dict[str, RoutingDefinition]]):
+class OpticalRouting(RootModel[dict[Annotated[str, identifier("Routing dimension")], RoutingDefinition]]):
     """Configured selection strategies and selector positions, keyed by dimension."""
 
     model_config = ConfigDict(frozen=True)

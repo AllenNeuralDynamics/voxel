@@ -9,24 +9,18 @@ hal:
           laser_561: ao1
           camera_1: ao2
           camera_2: ao3
-          aotf_1: ao4
-    aotf_1:
-      target: vxl.devices.aotf.simulated.SimulatedAotf
-      init: { blanking_mode: "external" }
     laser_488:
-      target: &aotf_laser_target vxl.devices.laser.simulated.SimulatedAOTFShutteredLaser
+      target: &laser_target vxl.devices.laser.simulated.SimulatedLaser
+      autosave: [source_power_setpoint_mw, output_level_percent]
       init:
         wavelength: 488
-        aotf: aotf_1
-        aotf_channel: 1
-        aotf_frequency_mhz: 98.2
+        source_enable_delay_s: 1
     laser_561:
-      target: *aotf_laser_target
+      target: *laser_target
+      autosave: [source_power_setpoint_mw, output_level_percent]
       init:
         wavelength: 561
-        aotf: aotf_1
-        aotf_channel: 2
-        aotf_frequency_mhz: 87.4
+        source_enable_delay_s: 1
     fw_detection:
       target: &fw_target vxl.devices.axes.simulated.SimulatedDiscreteAxis
       init:
@@ -62,6 +56,7 @@ hal:
       devices:
         camera_1: &sim_camera
           target: vxl.devices.camera.simulated.SimulatedCamera
+          autosave: [exposure_time_ms, binning, pixel_format]
           init:
             frame_source:
               sensor_size_px: "10640,14192"
@@ -149,6 +144,12 @@ default:
     profiles:
       dual_gfp:
         channels: ["gfp_cam1", "gfp_cam2"]
+        props:
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Dual camera GFP imaging"
         sync:
@@ -169,12 +170,14 @@ default:
                 type: pulse
                 voltage: { min: 0.0, max: 5.0 }
                 window: { min: 0.1, max: 0.9 }
-              aotf_1: &aotf_blanking_waveform
-                type: pulse
-                voltage: { min: 0.0, max: 5.0 }
-                window: { min: 0.05, max: 0.95 }
       dual_rfp:
         channels: ["rfp_cam1", "rfp_cam2"]
+        props:
+          laser_561:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
+          camera_2: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Dual camera RFP imaging"
         sync:
@@ -186,9 +189,13 @@ default:
               camera_1: *camera_waveform_ch1
               camera_2: *camera_waveform_ch2
               laser_561: *laser_waveform_ch1
-              aotf_1: *aotf_blanking_waveform
       single_gfp:
         channels: ["gfp_cam1"]
+        props:
+          laser_488:
+            source_power_setpoint_mw: 100
+            output_level_percent: 10
+          camera_1: {pixel_format: MONO16, binning: 1, exposure_time_ms: 10}
         z_step: 1.0
         desc: "Single camera GFP"
 
@@ -200,9 +207,6 @@ default:
             waveforms:
               camera_1: *camera_waveform_ch1
               laser_488: *laser_waveform_ch1
-              aotf_1: *aotf_blanking_waveform
-
-
   output:
     max_level: 3
     compression: blosc.lz4

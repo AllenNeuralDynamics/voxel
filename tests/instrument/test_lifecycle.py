@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import PurePosixPath
 from types import SimpleNamespace
 
@@ -7,17 +9,37 @@ from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 
 from rigup import CommandRequest, DeviceInterface, DeviceProps
+from vxl.devices.laser.simulated import SimulatedLaser
 from vxl.instrument import (
-    AcquisitionMode,
     AcquisitionRequest,
+    Activity,
+    CaptureActivity,
+    IdleActivity,
     Instrument,
     InstrumentConfig,
     InstrumentState,
     InstrumentStore,
+    PreviewActivity,
 )
 from vxl.instrument.config import AcquisitionTask, Point2D, WriterPatch, XYDefinition, XYMode, ZRange
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
 from vxl.system import System
+
+
+async def test_imaging_requires_digital_support_before_any_source_is_enabled(
+    instrument: Instrument, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instrument.hardware_config.devices["laser_488"].init["modulation_modes"] = ["software"]
+    enabled = []
+
+    def enable(source, *, wait=False):
+        enabled.append((source.uid, wait))
+
+    monkeypatch.setattr(SimulatedLaser, "source_enable", enable)
+    with pytest.raises(StartupError) as caught:
+        await instrument.open()
+    assert [v.code for v in caught.value.violations] == ["imaging.laser.digital_unsupported"]
+    assert not enabled
 
 
 def test_violation_serializes_for_api_responses() -> None:
@@ -145,11 +167,14 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
 
     hal = SimpleNamespace(
         topology=instrument._hal.topology,
+        lasers={},
         device_interfaces={"camera_1": camera_interface, "daq": daq_interface},
         signal_generators={"daq": SimpleNamespace(ports=Cell({"camera_1": "ao0", "aotf_1": "ao1"}))},
         stage=SimpleNamespace(x=axis(), y=axis(), z=axis()),
     )
     with monkeypatch.context() as patch:
+        # This reduced interface exercises profile validation, not autosave policy.
+        patch.setattr(instrument.hardware_config.devices["camera_1"], "autosave", [])
         patch.setattr(instrument_store, "_value", state)
         patch.setattr(instrument, "_hal", hal)
         with pytest.raises(StartupError) as raised:
@@ -197,45 +222,48 @@ async def test_startup_exposes_device_properties_and_stage_updates(opened_instru
         unsubscribe()
 
 
-@pytest.mark.parametrize("mode", [AcquisitionMode.IDLE, AcquisitionMode.PREVIEW])
-async def test_edits_accept_idle_and_preview(instrument: Instrument, mode: AcquisitionMode) -> None:
-    await instrument._mode.set(mode)
-    await instrument.update_metadata(notes="editable")
+@asynccontextmanager
+async def _simulated(instrument: Instrument, activity: Activity) -> AsyncIterator[None]:
+    """Pretend an activity runs on an unopened instrument, then return to idle so teardown has nothing to stop."""
+    await instrument._activity.set(activity)
+    try:
+        yield
+    finally:
+        await instrument._activity.set(IdleActivity())
+
+
+@pytest.mark.parametrize("activity", [IdleActivity(), PreviewActivity(channels=("gfp",))])
+async def test_edits_accept_idle_and_preview(instrument: Instrument, activity: IdleActivity | PreviewActivity) -> None:
+    async with _simulated(instrument, activity):
+        await instrument.update_metadata(notes="editable")
     assert instrument.state.value.metadata["notes"] == "editable"
 
 
 async def test_edits_report_capture_restriction(instrument: Instrument) -> None:
-    await instrument._mode.set(AcquisitionMode.CAPTURE)
-    with pytest.raises(
-        InstrumentBusyError, match="Unable to remove tasks: requires mode idle or preview; current mode is capture"
-    ):
+    await instrument._activity.set(CaptureActivity())
+    with pytest.raises(InstrumentBusyError, match="Unable to remove tasks while a capture is running"):
         await instrument.remove_tasks([])
 
 
-async def test_update_signals_requires_idle_mode(instrument: Instrument) -> None:
-    await instrument._mode.set(AcquisitionMode.PREVIEW)
+async def test_update_signals_requires_idle(instrument: Instrument) -> None:
     signals = instrument.active_profile.sync["daq"]
-    with pytest.raises(
-        InstrumentBusyError, match="Unable to update synchronized outputs: requires mode idle; current mode is preview"
-    ):
-        await instrument.update_signals("daq", signals)
+    async with _simulated(instrument, PreviewActivity(channels=("gfp",))):
+        with pytest.raises(InstrumentBusyError, match="Unable to update synchronized outputs while preview is running"):
+            await instrument.update_signals("daq", signals)
 
 
-async def test_edit_checks_mode_after_acquiring_lock(instrument: Instrument) -> None:
+async def test_edit_checks_activity_after_acquiring_lock(instrument: Instrument) -> None:
     async with instrument._lock:
         edit = asyncio.create_task(instrument.update_output(WriterPatch()))
         await asyncio.sleep(0)
         assert not edit.done()
-        await instrument._mode.set(AcquisitionMode.CAPTURE)
-    with pytest.raises(
-        InstrumentBusyError,
-        match="Unable to update output settings: requires mode idle or preview; current mode is capture",
-    ):
+        await instrument._activity.set(CaptureActivity())
+    with pytest.raises(InstrumentBusyError, match="Unable to update output settings while a capture is running"):
         await edit
 
 
-async def test_manual_device_mutations_reject_capture_mode(instrument: Instrument) -> None:
-    await instrument._mode.set(AcquisitionMode.CAPTURE)
+async def test_manual_device_mutations_reject_capture(instrument: Instrument) -> None:
+    await instrument._activity.set(CaptureActivity())
     with pytest.raises(InstrumentBusyError, match="Unable to set device properties"):
         await instrument.set_device_properties("camera_1", {"exposure_time_ms": 10})
     with pytest.raises(InstrumentBusyError, match="Unable to execute a device command"):

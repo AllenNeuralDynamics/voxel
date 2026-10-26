@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from rigup.device.handle import Adapter, DeviceProperties
 
-from rigup import BuildConfig, BuildError, DeviceHandle, DeviceInterface, PropertyModel, PropResults, Result
+from rigup import BuildError, DeviceConfig, DeviceHandle, DeviceInterface, PropertyModel, PropResults, Result
 from vxl.hal.core import HAL
 from vxl.hal.errors import HALStartupError
 from vxl.hal.topology import (
@@ -52,7 +52,7 @@ def _handle(uid: str, device_type: str = "camera", *, properties=None, property_
 
 def _hal_config() -> HardwareTopology:
     uids = {"camera", "laser", "x", "y", "z", "filter"}
-    devices = {uid: BuildConfig(target="builtins.object") for uid in uids}
+    devices = {uid: DeviceConfig(target="builtins.object") for uid in uids}
     return HardwareTopology(
         devices=devices,
         stage=StageAxes(x="x", y="y", z="z"),
@@ -73,7 +73,7 @@ def _routed_hal_config() -> HardwareTopology:
         update={
             "devices": {
                 **config.devices,
-                "selector": BuildConfig(
+                "selector": DeviceConfig(
                     target="builtins.object",
                     init={"slots": {0: "left", 1: "right"}},
                 ),
