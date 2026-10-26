@@ -142,9 +142,10 @@ nodes:
 If `kind` is omitted, no address or a local-only address selects `subprocess`; a non-local TCP address selects
 `remote`. An explicit `kind` always wins.
 
-Device UIDs must be unique across the complete rig. A constructor argument may refer to another configured device by
-UID, but both devices must occupy the same process. Independent targets within a dependency layer can initialize in
-parallel; devices sharing a target class initialize sequentially to protect SDKs with shared process state.
+Device UIDs and node ids use only ASCII letters, digits, `_` and `-`. Device UIDs must be unique across the complete
+rig. A constructor argument may refer to another configured device by UID, but both devices must occupy the same process.
+Independent targets within a dependency layer can initialize in parallel; devices sharing a target class initialize
+sequentially to protect SDKs with shared process state.
 
 Each device entry also accepts `autosave: [property_name, ...]` or `autosave: "*"` (default: `[]`).
 This is application-owned persistence policy, carried through local and remote configuration. Rigup does not

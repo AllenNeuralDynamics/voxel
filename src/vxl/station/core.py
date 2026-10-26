@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from vxl_records import SQLiteRecords, VoxelRecords
 from vxlib.reactivity import Cell, Readable
+from vxlib.schema import check_identifier
 
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentInspection, InstrumentStore
 
@@ -331,8 +332,7 @@ class Station:
         await self._state.set(StationState(status=StationStatus.IDLE, error=_describe_error(launch_error)))
 
     def _instrument_home(self, instrument_name: str) -> Path:
-        if not instrument_name or Path(instrument_name).name != instrument_name or instrument_name in {".", ".."}:
-            raise ValueError("instrument_name must be a single non-empty path component")
+        check_identifier(instrument_name, "Instrument name")
         return self.instruments_dir / f"{instrument_name}.voxel"
 
     def _ensure_file_operation_allowed(self) -> None:
