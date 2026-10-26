@@ -5,8 +5,6 @@ the RAM budget (:class:`System.Ram`), and the local storage roots (``store``/``s
 Machine-specific knobs are sourced from ``VOXEL_*`` env vars and one machine file. A
 control station's ``station.yaml`` is a superset of ``system.yaml`` and takes its place
 when present; nodes and other non-control processes can use ``system.yaml`` or defaults.
-
-``load_yaml``/``save_yaml`` are re-exported from :mod:`vxlib` for compatibility.
 """
 
 import logging
@@ -25,9 +23,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     EnvSettingsSource,
+    InitSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
-    YamlConfigSettingsSource,
 )
 from vxl_records import (
     DatasetLocation,
@@ -39,7 +37,7 @@ from vxl_records import (
 )
 from vxlib.s3 import S3Store
 
-from vxl._utils.files import save_yaml
+from vxl._utils.files import load_yaml, save_yaml
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +47,11 @@ def _voxel_home() -> Path:
     Relocate it by setting ``$HOME``; move the data roots independently with
     ``VOXEL_STORE`` / ``VOXEL_SCRATCH``."""
     return Path.home() / ".voxel"
+
+
+def _yaml_source(settings_cls: type[BaseSettings], path: Path) -> InitSettingsSource:
+    """Machine YAML as a settings source, read like every other Voxel YAML file; a missing file adds nothing."""
+    return InitSettingsSource(settings_cls, (load_yaml(path) if path.is_file() else None) or {})
 
 
 def load_voxel_env() -> None:
@@ -139,8 +142,7 @@ class System(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Layer the selected machine YAML under env (priority: init > env > yaml)."""
         del dotenv_settings, file_secret_settings
-        yaml_source = YamlConfigSettingsSource(settings_cls, yaml_file=cls.config_path())
-        return (init_settings, env_settings, yaml_source)
+        return (init_settings, env_settings, _yaml_source(settings_cls, cls.config_path()))
 
     @property
     def dir(self) -> Path:
@@ -308,7 +310,7 @@ class StationConfig(System):
         return (
             init_settings,
             _SystemFieldsEnvSource(settings_cls),
-            YamlConfigSettingsSource(settings_cls, yaml_file=cls.config_path()),
+            _yaml_source(settings_cls, cls.config_path()),
         )
 
     @classmethod

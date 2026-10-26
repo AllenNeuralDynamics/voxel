@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from vxl_records import SQLiteRecords
 
-from vxl._utils.files import load_yaml
+from vxl._utils.files import load_and_validate_yaml
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentStore
 from vxl.system import System
 
@@ -16,7 +16,7 @@ def instrument_template() -> Path:
 
 @pytest.fixture
 def instrument_config(instrument_template: Path, request: pytest.FixtureRequest) -> InstrumentConfig:
-    config = load_yaml(instrument_template, InstrumentConfig).model_dump()
+    config = load_and_validate_yaml(instrument_template, InstrumentConfig).model_dump()
     # Keep ordinary instrument tests independent of simulated source startup delays.
     for uid in ("laser_488", "laser_561"):
         config["hal"]["devices"][uid]["init"]["source_enable_delay_s"] = 0
