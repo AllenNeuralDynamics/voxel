@@ -2,12 +2,10 @@ import asyncio
 import logging
 from typing import Any, Self
 
-from rigup import Rig
-
+from seqsweep.hal import HAL
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 
-# TODO SeqSweep should use Rig up
 class SeqSweep:
     """Runs scan jobs on the SeqSweep rig in the background.
 
@@ -18,31 +16,28 @@ class SeqSweep:
     def __init__(self, config: SeqSweepInstrumentConfig) -> None:
         self.log = logging.getLogger("seqsweep")
         self.config = config
-        self._rig: Rig | None = None
+        self._hal: HAL | None = None
         self.open()
         # TODO: private asyncio loop thread, lock for _status/_job, pause event, scan task
 
     # ==================== Lifecycle ====================
 
     def open(self) -> None:
-        """Open the rig. Raises if any device fails to build."""
-        if self._rig is not None:
+        """Open the rig. Raises ``HALStartupError`` if a device fails to build or fills the wrong role."""
+        if self._hal is not None:
             return
-        rig = Rig(self.config.hal, name=self.config.name)
-        asyncio.run(rig.open())  # TODO: replace with the loop thread
-        if rig.build_errors:
-            asyncio.run(rig.close())
-            raise RuntimeError(f"Failed to build devices: {rig.build_errors}")
-        self._rig = rig
-        self.log.info("Rig open with devices: %s", sorted(rig.devices))
+        hal = HAL(self.config.hal, name=self.config.name)
+        asyncio.run(hal.open())  # TODO: replace with the loop thread
+        self._hal = hal
+        self.log.info("Rig open with devices: %s", sorted(hal.devices))
 
     def close(self) -> None:
         """Close the rig. Safe to call more than once."""
         # TODO: cancel the scan task first
-        if self._rig is None:
+        if self._hal is None:
             return
-        asyncio.run(self._rig.close())
-        self._rig = None
+        asyncio.run(self._hal.close())
+        self._hal = None
 
     def __enter__(self) -> Self:
         self.open()
