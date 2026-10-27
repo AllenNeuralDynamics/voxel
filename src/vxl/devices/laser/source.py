@@ -99,7 +99,10 @@ class LaserSource(_Source):
     @source_power_setpoint_mw.setter
     @abstractmethod
     def source_power_setpoint_mw(self, value: float) -> None:
-        """Set source power without changing enable permission."""
+        """Set source power without changing enable permission.
+
+        Return only after the source confirms the value within its own tolerance; raise otherwise.
+        """
 
     @property
     @describe(label="Source Power", units="mW", stream=True)

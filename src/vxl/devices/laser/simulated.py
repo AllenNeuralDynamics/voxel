@@ -3,7 +3,6 @@
 from math import isfinite
 from random import gauss
 from time import monotonic, sleep
-from typing import override
 
 from rigup import numeric
 
@@ -56,12 +55,10 @@ class SimulatedLaser(Laser):
         self._closed = False
 
     @property
-    @override
     def wavelength(self) -> float:
         """Configured nominal wavelength of the simulated source."""
         return self._wavelength
 
-    @override
     def source_enable(self, *, wait: bool = False) -> None:
         """Begin startup once; optionally wait for its remaining duration."""
         self._ensure_open()
@@ -108,7 +105,6 @@ class SimulatedLaser(Laser):
         self._ensure_open()
         self._modulation_mode = mode
 
-    @override
     def output_enable(self, *, wait: bool = False) -> None:
         """Permit output; optionally wait for source startup."""
         self._ensure_open()

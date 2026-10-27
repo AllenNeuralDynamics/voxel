@@ -1,32 +1,10 @@
-"""Shared serial connection for L4Cc/L6Cc laser drivers.
-
-Register OxxiusController on the same rig node as its borrowers and pass its UID
-as their controller argument. The controller discovers slots without changing
-emission, reserves each slot for one borrower, and serializes complete operations.
-Close attempts to stop every reserved source before releasing the port. Borrowers
-release reservations only after a successful stop and never close this connection.
-
-Protocol: 9600 baud, 8N1, CR commands and CRLF replies, following voxel-classic's
-oxxius/lxcc.py. Writes require OK, followed by explicit readback where available.
-No automatic retry follows an uncertain reply. A framing failure faults the link.
-
-Hardware checks before adoption:
-- Confirm CRLF framing, OK acknowledgements, and empty-slot 'Not authorized' replies.
-- Confirm Ln INF? discovery and slot identity against the Manufacturing Test Report.
-- Check LBX L/?L and LCX T/?T with TTL held high and low; neither is an optical meter.
-- LCX T shutdown differs from legacy L: the LnCc manual documents T for LCX emission.
-- Confirm source-addressed AM/TTL reaches an LCX's linked AOM on this firmware.
-- Shared SHn shutters address output ports, not laser slots; this driver never changes them.
-
-References: voxel-classic/src/voxel/devices/controller/oxxius/lxcc.py and Oxxius
-LnCc user manual, pp. 85-95 (https://manualzz.com/doc/78988076/oxxius-laser-combiner-l6cc-user-manual).
-"""
+"""Shared serial connection for Oxxius L4Cc/L6Cc laser drivers."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
 from enum import StrEnum
 from math import isclose, isfinite
-from typing import Literal, override
+from typing import Literal
 
 from serial import SerialException
 
@@ -244,7 +222,6 @@ class OxxiusController(Device):
             raise OxxiusCommunicationError("Oxxius returned a nonfinite number")
         return value
 
-    @override
     def close(self) -> None:
         """Try every reserved source stop, close the port, and report all failures."""
         with self._transport.transaction():

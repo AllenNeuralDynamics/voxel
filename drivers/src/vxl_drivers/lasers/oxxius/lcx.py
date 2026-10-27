@@ -1,44 +1,8 @@
-"""LCX plus its built-in combiner AOM, with source shutdown for output blocking.
-
-Register OxxiusLCXLaser with controller=<controller UID>, prefix, wavelength,
-max_source_power_mw, and max_output_power_mw from the unit's test report. Optional
-min_source_power_mw limits adjustable sources. Set fixed_source_power_mw for a
-source without OPT-PWR-LCX; its reference becomes one numeric option and no P/?SP
-source-power commands are issued. The linked AOM is required by this implementation.
-
-Source permission is logical: source_enable() does not start emission. output_enable()
-starts the source after configuring the AOM; output_disable() stops the source but
-retains source permission, power reference, level, and modulation mode. Physical
-readback is available separately. Source shutdown uses T=0, following the manual;
-this also stops temperature regulation and may make re-enabling slow. wait=True
-allows startup_delay_s (default zero), without polling for optical stability.
-
-Software/digital percent scales the available full-scale setting, defined as
-min(source reference, max_output_power_mw). The PLn command uses optical mW and the
-combiner's existing AOM linearization. PPLn is not used: its denominator is nominal
-power, not our selected reference. Analog mode sets PLn to full scale and leaves
-intensity to the external waveform; percent changes are only saved. Initial mode
-is software and level is zero. source_power_mw reports source ?P; output_power_mw
-remains None. No external shutter or DAQ dependency is introduced.
-
-Hardware checks:
-- Confirm a linked AOM is fitted to this slot; PLn can otherwise target the source.
-- Verify per-source AM/TTL routing and ?AM/?TTL replies; never substitute the
-  global combiner commands, which would affect other lasers.
-- Verify T/?T startup/shutdown with TTL high; legacy code used L instead. A control
-  flag acknowledges a command, not measured optical extinction or readiness.
-- Verify P/?SP for OPT-PWR-LCX, PLn/?PLn in mW, limits, and 0.1 mW resolution.
-- Check modulation mode changes retain power and that analog ignores the saved level.
-- Verify the source's own shutter command before replacing source shutdown. SHn
-  controls shared output ports and is deliberately unused. Shared shutters must
-  already be configured by the instrument; this driver never opens them.
-
-See controller.py for references and serial protocol checks.
-"""
+"""Oxxius LCX with its linked combiner AOM, using source shutdown to block output."""
 
 from math import isclose, isfinite
 from time import monotonic, sleep
-from typing import Never, override
+from typing import Never
 
 from rigup.device.props import NumericFloat
 
@@ -111,18 +75,15 @@ class OxxiusLCXLaser(Laser):
             raise
 
     @property
-    @override
     def wavelength(self) -> float:
         return self._wavelength
 
     @property
-    @override
     def source_power_setpoint_mw(self) -> float:
         self._ensure_open()
         return self._power_value(self._reference_mw)
 
     @source_power_setpoint_mw.setter
-    @override
     def source_power_setpoint_mw(self, value: float) -> None:
         self._ensure_open()
         reference = float(self._power_value(value))
@@ -134,13 +95,11 @@ class OxxiusLCXLaser(Laser):
             self._reference_mw = reference
 
     @property
-    @override
     def source_power_mw(self) -> float:
         self._ensure_open()
         return self._controller.number(Query.POWER, self._prefix)
 
     @property
-    @override
     def temperature_c(self) -> float:
         self._ensure_open()
         return self._controller.number(Query.TEMPERATURE, self._prefix)
@@ -151,7 +110,6 @@ class OxxiusLCXLaser(Laser):
         """Hardware temperature-regulation permission; not instantaneous optical output."""
         return not self._closed and self._controller.is_enabled(self._prefix)
 
-    @override
     def source_enable(self, *, wait: bool = False) -> None:
         """Grant logical permission; defer physical startup and its wait to output enable."""
         self._ensure_open()
@@ -163,17 +121,14 @@ class OxxiusLCXLaser(Laser):
                     self._stop_after_failure(error)
             self._source_enabled = True
 
-    @override
     def source_disable(self) -> None:
         self.output_disable()
         self._source_enabled = False
 
     @property
-    @override
     def is_source_enabled(self) -> bool:
         return self._source_enabled
 
-    @override
     def output_enable(self, *, wait: bool = False) -> None:
         self._ensure_open()
         with self._controller.transaction():
@@ -188,7 +143,6 @@ class OxxiusLCXLaser(Laser):
                 self._stop_after_failure(error)
             self._output_enabled = True
 
-    @override
     def output_disable(self) -> None:
         if self._controller.is_closed and not self._closed:
             self._controller.disable(self._prefix)  # Only succeeds if controller shutdown confirmed this slot off.
@@ -202,18 +156,15 @@ class OxxiusLCXLaser(Laser):
                 self._enabled_at = None
 
     @property
-    @override
     def is_output_enabled(self) -> bool:
         return self._output_enabled
 
     @property
-    @override
     def output_level_percent(self) -> float:
         self._ensure_open()
         return NumericFloat(self._level, minimum=0.0, maximum=100.0)
 
     @output_level_percent.setter
-    @override
     def output_level_percent(self, value: float) -> None:
         self._ensure_open()
         if not isfinite(value) or not 0 <= value <= 100:
@@ -227,11 +178,9 @@ class OxxiusLCXLaser(Laser):
                 self._stop_after_failure(error)
             self._level = value
 
-    @override
     def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
         return tuple(ModulationMode)
 
-    @override
     def _read_modulation_mode(self) -> ModulationMode:
         self._ensure_open()
         with self._controller.transaction():
@@ -241,7 +190,6 @@ class OxxiusLCXLaser(Laser):
                 raise OxxiusCommunicationError("Combined analog/digital modulation is outside this interface")
             return ModulationMode.ANALOG if analog else ModulationMode.DIGITAL if digital else ModulationMode.SOFTWARE
 
-    @override
     def _configure_modulation_mode(self, mode: ModulationMode) -> None:
         self._ensure_open()
         with self._controller.transaction():
@@ -306,7 +254,6 @@ class OxxiusLCXLaser(Laser):
             raise ExceptionGroup("LCX operation and inhibition failed", [error, cleanup_error]) from None
         raise error
 
-    @override
     def close(self) -> None:
         if not self._closed:
             self.source_disable()

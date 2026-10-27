@@ -2120,6 +2120,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyreadline3"
+version = "3.5.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/6d/f94028646d7bbe6d9d873c47ee7c246f2d29129d253f0d96cb6fcab70733/pyreadline3-3.5.6.tar.gz", hash = "sha256:61e53218b99656091ddb077df9e71f25850e72e030b6183b39c9b7e6e4f4a9bf", size = 100368, upload-time = "2026-05-14T17:55:04.471Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/5e/35c856e186b74678c24927847ad9895a51f1bc02a0c6126477a6c6040064/pyreadline3-3.5.6-py3-none-any.whl", hash = "sha256:8449b734232e42a5dcd74048e39b60db2839a4c38cf3ae2bf7707d58b5389c0d", size = 85243, upload-time = "2026-05-14T17:55:03.262Z" },
+]
+
+[[package]]
 name = "pyserial"
 version = "3.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2976,6 +2985,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cli = [
+    { name = "pyreadline3", marker = "sys_platform == 'win32'" },
+]
 coherent-laser = [
     { name = "coherent-lasers" },
 ]
@@ -3023,6 +3035,7 @@ requires-dist = [
     { name = "pycobolt", marker = "extra == 'pycobolt-laser'", git = "https://github.com/cobolt-lasers/pycobolt.git" },
     { name = "pydantic", specifier = ">=2.11.9" },
     { name = "pylablib", marker = "extra == 'thorlabs'", specifier = ">=1.4.5" },
+    { name = "pyreadline3", marker = "sys_platform == 'win32' and extra == 'cli'", specifier = ">=3.5.6" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pyvisa", marker = "extra == 'thorlabs-power-meter'", specifier = ">=1.16.2" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -3032,7 +3045,7 @@ requires-dist = [
     { name = "vxlib", editable = "vxlib" },
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
-provides-extras = ["thorlabs", "opto-icc", "opto-kummenberg", "thorlabs-power-meter", "mpds-calibration", "coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
+provides-extras = ["cli", "thorlabs", "opto-icc", "opto-kummenberg", "thorlabs-power-meter", "mpds-calibration", "coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
 
 [[package]]
 name = "vxl-records"

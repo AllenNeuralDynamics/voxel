@@ -30,7 +30,8 @@ Concrete drivers supply the read-only `wavelength` in nm; compositions forward t
 | `output_level_percent` | Saved software/digital operating level; inactive in analog mode |
 | `output_power_mw` | Measured power at the laser output boundary; `None` when unavailable |
 
-Enable commands are idempotent. Setpoints do not enable either layer. Source permission may be logical: a source-only
+Enable commands are idempotent. Setpoints do not enable either layer. A source power setter returns only after the
+source confirms the value within its own tolerance; compositions trust it and do not read the setpoint back. Source permission may be logical: a source-only
 implementation defers physical startup until output is enabled.
 
 Numeric properties expose their range/resolution or allowed options. A fixed source has one mW option;
@@ -107,13 +108,16 @@ requires coordination; constructor injection alone does not serialize calls from
 | Implementation | Role and current behavior |
 | --- | --- |
 | [GenesisMXSource](../../../../drivers/src/vxl_drivers/lasers/genesis_mx.py) | Software-only source using the Coherent SDK; wrap with `SourceOnlyLaser` or compose with MPDS |
+| [MpbVflSource](../../../../drivers/src/vxl_drivers/lasers/mpb_vfl.py) | Software-only SHG source over serial with firmware power limits; wrap with `SourceOnlyLaser` |
+| [ObisSource](../../../../drivers/src/vxl_drivers/lasers/obis/source.py) | Native software, digital, and analog modulation, on a direct port or an [ObisController](../../../../drivers/src/vxl_drivers/lasers/obis/controller.py) channel; wrap with `SourceOnlyLaser` |
+| [SkyraSource](../../../../drivers/src/vxl_drivers/lasers/skyra/source.py) | Software and analog modulation on one [SkyraController](../../../../drivers/src/vxl_drivers/lasers/skyra/controller.py) line; digital waits for a current calibration; wrap with `SourceOnlyLaser` |
+| [StradusSource](../../../../drivers/src/vxl_drivers/lasers/stradus.py) | Native software, digital, and analog modulation; writes power after emission starts and parks it at 0 on disable; wrap with `SourceOnlyLaser` |
 | [MPDS controller](../../../../drivers/src/vxl_drivers/lasers/mpds/controller.py) | Shared serial connection, RF lines, common blanking, and line reservations |
 | [MPDSLaser](../../../../drivers/src/vxl_drivers/lasers/mpds/laser.py) | Source plus one MPDS line; software, digital, and analog modes |
 | [OxxiusLBXSource](../../../../drivers/src/vxl_drivers/lasers/oxxius/lbx.py) | Native source modulation with calibrated current control for digital mode; wrap with `SourceOnlyLaser` |
 | [OxxiusLCXLaser](../../../../drivers/src/vxl_drivers/lasers/oxxius/lcx.py) | LCX with linked AOM, using source shutdown to inhibit output |
 
-Module docstrings contain configuration examples and pending hardware checks. Physical behavior remains unverified
-on the installed instruments. Genesis uses configured power limits and an optional `startup_delay_s`; the default
+Physical behavior remains unverified on the installed instruments. Genesis uses configured power limits and an optional `startup_delay_s`; the default
 zero adds no startup delay. The Oxxius drivers share an [L4Cc/L6Cc controller](../../../../drivers/src/vxl_drivers/lasers/oxxius/controller.py).
 
 `MPDSLaser` independently selects `level_control` and `output_switch` as `aotf` or `source`.

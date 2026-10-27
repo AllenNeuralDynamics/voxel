@@ -1,49 +1,4 @@
-"""Direct serial control of an AA Opto-Electronic MPDSnC controller.
-
-Uses SerialTransport. Supply frequency and RF-dBm
-limits for the installed controller and AOTF. Construction discovers and inhibits
-all lines. Configure shared settings through rigup defaults before compositions
-reserve lines; rigup supplies the UID. Example devices entry::
-
-    mpds:
-      target: vxl_drivers.lasers.mpds.controller.MPDS
-      init:
-        port: COM3
-        min_frequency_mhz: 85
-        max_frequency_mhz: 135
-        max_power_dbm: 22
-      defaults:
-        blanking_mode: internal
-        blanking_enabled: true
-        external_voltage_range: 5
-
-Replace the example limits with installation values. Common blanking and the
-5/10 V external range affect every line; changes require no reserved or enabled
-lines. Each composition reserves its own line, while direct per-line commands
-remain available for diagnostics. See vxl_drivers.lasers.mpds.laser for source
-composition and configuration.
-
-Transactions serialize commands and status readbacks. Voltage selection has no
-acknowledgement or implemented readback: external_voltage_range reports the last
-configured value and raises until assigned. Incomplete replies fault the link;
-commands are not retried automatically. Close attempts to inhibit every line,
-closes the connection, and reports any inhibition failures.
-
-The MPDSnCxx 2018 manual limits software ON/OFF to internal mode. inhibit_line()
-selects internal OFF together, allows the documented typical 100 ms when changing
-mode, and verifies both fields. Compositions must restore external mode on enable.
-Internal common blanking ON permits operation; serial RF power sets the external
-modulation ceiling. RF dBm is distinct from optical mW.
-
-Hardware checks: verify command framing, status formatting, voltage selection,
-mode-transition transients, and optical extinction on the installed firmware.
-These behaviors have not been hardware-tested.
-
-Protocol references:
-- https://github.com/AllenNeuralDynamics/aaopto-aotf/blob/main/src/aaopto_aotf/aotf.py
-- https://github.com/AllenNeuralDynamics/aaopto-aotf/blob/main/src/aaopto_aotf/device_codes.py
-- https://github.com/SWC-Advanced-Microscopy/LaserControl/blob/master/code/%2BlaserControl/@MPDSaom/MPDSaom.m
-"""
+"""Direct serial control of an AA Opto-Electronic MPDSnC controller."""
 
 import re
 from collections.abc import Generator
@@ -51,7 +6,6 @@ from contextlib import contextmanager
 from enum import StrEnum
 from math import isfinite
 from time import sleep
-from typing import override
 
 from pydantic import BaseModel, ConfigDict
 from serial import SerialException
@@ -377,7 +331,6 @@ class MPDS(Device):
         if not isfinite(value) or not self.min_power_dbm <= value <= self.max_power_dbm:
             raise ValueError("RF power is outside configured limits")
 
-    @override
     def close(self) -> None:
         """Attempt to inhibit every line, release the connection, and report any failures."""
         with self._transport.transaction():

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from math import isfinite
 from time import monotonic, sleep
-from typing import override
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX
@@ -30,6 +29,7 @@ class GenesisMXSource(LaserSource):
         min_power_mw: float = 0.0,
         max_power_mw: float = 1000.0,
         startup_delay_s: float = 0.0,
+        setpoint_tolerance_mw: float = 0.05,
     ) -> None:
         super().__init__(uid=uid)
         if isinstance(wavelength, bool) or not isfinite(wavelength) or wavelength <= 0:
@@ -40,10 +40,13 @@ class GenesisMXSource(LaserSource):
             raise ValueError("power limits must satisfy 0 <= minimum <= maximum with a positive maximum")
         if startup_delay_s < 0:
             raise ValueError("startup delay must be nonnegative")
+        if not isfinite(setpoint_tolerance_mw) or setpoint_tolerance_mw <= 0:
+            raise ValueError("setpoint tolerance must be finite and positive")
         self._wavelength = float(wavelength)
         self._min_power_mw = min_power_mw
         self._max_power_mw = max_power_mw
         self._startup_delay_s = startup_delay_s
+        self._setpoint_tolerance_mw = setpoint_tolerance_mw
         self._enabled_at: float | None = None
         self._closed = False
         self._inst = GenesisMX(serial=serial)
@@ -57,7 +60,6 @@ class GenesisMXSource(LaserSource):
             raise
 
     @property
-    @override
     def wavelength(self) -> float:
         """Configured nominal wavelength of the installed source."""
         return self._wavelength
@@ -124,6 +126,9 @@ class GenesisMXSource(LaserSource):
         if not isfinite(value):
             raise ValueError("source power must be finite")
         self._inst.power_mw = value
+        readback = self._inst.power_setpoint_mw
+        if abs(readback - value) > self._setpoint_tolerance_mw:
+            raise RuntimeError(f"Genesis power setpoint reads {readback} mW after setting {value} mW")
 
     @property
     def source_power_mw(self) -> float:

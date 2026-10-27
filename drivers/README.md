@@ -78,6 +78,12 @@ The package cutover is complete; instrument, template, and UI integration is sti
 | Hardware | Target | Python support |
 | --- | --- | --- |
 | Coherent Genesis MX source | `vxl_drivers.lasers.genesis_mx.GenesisMXSource` | `coherent-laser` extra |
+| MPB VFL source | `vxl_drivers.lasers.mpb_vfl.MpbVflSource` | Serial support included |
+| Coherent OBIS LX/LS source | `vxl_drivers.lasers.obis.source.ObisSource` | Serial support included; direct port or controller channel |
+| Coherent OBIS LaserBox or Remote | `vxl_drivers.lasers.obis.controller.ObisController` | Serial support included |
+| Cobolt Skyra line source | `vxl_drivers.lasers.skyra.source.SkyraSource` | Serial support included; one line of a controller |
+| Cobolt Skyra | `vxl_drivers.lasers.skyra.controller.SkyraController` | Serial support included |
+| Vortran Stradus source | `vxl_drivers.lasers.stradus.StradusSource` | Serial support included |
 | Oxxius shared controller | `vxl_drivers.lasers.oxxius.controller.OxxiusController` | Serial support included |
 | Oxxius LBX source | `vxl_drivers.lasers.oxxius.lbx.OxxiusLBXSource` | Serial support included |
 | Oxxius LCX with linked AOM | `vxl_drivers.lasers.oxxius.lcx.OxxiusLCXLaser` | Serial support included |
@@ -85,8 +91,7 @@ The package cutover is complete; instrument, template, and UI integration is sti
 | Source with MPDS modulation | `vxl_drivers.lasers.mpds.laser.MPDSLaser` | Configured with a source and MPDS controller |
 
 Wrap standalone sources with `vxl.devices.laser.source_only.SourceOnlyLaser` to expose the complete `Laser` API.
-Driver module docstrings contain configuration examples and pending hardware checks. The MPDS calibration CLI is
-`vxl-calibrate-mpds`; install the `mpds-calibration` extra for plotting.
+The MPDS calibration CLI is `vxl-calibrate-mpds`; install the `mpds-calibration` extra for plotting.
 
 Older laser implementations are retained under `vxl_drivers.lasers_legacy`. They report `laser_legacy`, remain
 accessible through `hal.devices`, and cannot be assigned as canonical illumination lasers.

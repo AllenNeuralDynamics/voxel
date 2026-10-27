@@ -19,9 +19,12 @@ dependencies = [
 ]
 
 [project.scripts]
+vxl-drivers = "vxl_drivers.cli.main:main"
 vxl-calibrate-mpds = "vxl_drivers.lasers.mpds.cli:main"
 
 [project.optional-dependencies]
+# vxl-drivers shell: Tab completion and history on Windows
+cli = ["pyreadline3>=3.5.6; sys_platform == 'win32'"]
 # Optomechanics drivers
 thorlabs = ["pylablib>=1.4.5"]
 opto-icc = ["optoICC"]

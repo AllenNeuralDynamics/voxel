@@ -1,67 +1,9 @@
-"""Laser composition using a source and one shared MPDS controller line.
-
-Implements vxl.devices.laser.Laser; not yet wired into the microscope runtime.
-Register the source, MPDS, and composed laser separately on the same rig node,
-injecting component UIDs through source and mpds. Each composition needs an exclusive
-software-controlled source (such as GenesisMXSource) and a distinct MPDS line.
-
-Before construction, set MPDS defaults to blanking_mode="internal",
-blanking_enabled=True, and external_voltage_range=5 or 10 to match the DAQ.
-The composition never changes these shared settings, and reservations prevent
-changing them while composed lasers exist. Direct construction example::
-
-    laser = MPDSLaser(
-        "laser561",
-        source,
-        mpds,
-        line=1,
-        settings={"frequency_mhz": 100, "min_rf_power_dbm": 0, "max_rf_power_dbm": 20},
-    )
-    laser.source_power_setpoint_mw = 300
-    laser.output_level_percent = 50
-    laser.source_enable(wait=True)  # Source runs while the RF line stays disabled.
-    laser.output_enable()
-    laser.output_disable()  # Source stays running.
-    laser.close()  # Component owners still close source and mpds.
-
-level_control and output_switch independently select ControlTarget.AOTF (default)
-or ControlTarget.SOURCE; YAML accepts "aotf" and "source". Source level control
-scales a saved source reference and exposes its numeric constraints as percentages.
-The underlying source reports the actual scaled setting. Source output switching
-keeps the source physically off until output_enable(), including its optional wait.
-
-AOTF level control uses the optional optical calibration in MPDSSettings. Without
-calibration, percentage interpolates the RF dBm interval, not optical power.
-Source level control holds RF at settings.rf_power(100); its percentage relies on
-the source's power accuracy rather than the RF calibration's optical response.
-Digital mode uses external off/full-scale pulses with the chosen level control.
-Analog mode uses full source reference and RF operating power; percent is saved
-but inactive. Neither mode controls a DAQ or calibrates analog waveforms.
-
-AOTF output switching parks the line in internal OFF when disabled, then restores
-external control on enable. The requested modulation mode is retained separately
-because hardware reports only internal/external. Mode transitions allow the
-manual's typical 100 ms; they are not the fast acquisition gate. Common blanking
-remains internal and ON; shared external blanking is not implemented here.
-Source permission is logical when output_switch="source"; inspect the borrowed
-source for its physical enable state. Both output switches preserve the reference,
-level, and source permission. Failures attempt both source and RF inhibition.
-
-Replace example limits with those of the setup. output_power_mw remains None.
-Calibration context mismatches warn without blocking operation. Collect settings
-with python -m vxl_drivers.lasers.mpds.cli --help. Closing inhibits source and RF,
-releases the line, and leaves component connections open.
-
-Composition calls and shared serial traffic are serialized. Direct component writes
-bypass permissions, and access through a separate source worker needs coordination.
-Hardware behavior and the protocol assumptions documented in controller.py
-remain unverified.
-"""
+"""Laser composition of a source and one shared MPDS controller line."""
 
 import threading
 from enum import StrEnum
 from math import isclose, isfinite
-from typing import Any, Never, override
+from typing import Any, Never
 
 from rigup.device.props import NumericFloat
 
@@ -143,11 +85,9 @@ class MPDSLaser(Laser):
         return self._output_switch
 
     @property
-    @override
     def wavelength(self) -> float:
         return self._source.wavelength
 
-    @override
     def source_enable(self, *, wait: bool = False) -> None:
         """Permit the source; defer physical startup when the source switches output."""
         with self._lock:
@@ -167,7 +107,6 @@ class MPDSLaser(Laser):
                 self._inhibit_after_failure(error)
             self._source_enabled = True
 
-    @override
     def source_disable(self) -> None:
         """Inhibit both components, then clear their logical permissions."""
         with self._lock:
@@ -178,13 +117,11 @@ class MPDSLaser(Laser):
             self._output_enabled = False
 
     @property
-    @override
     def is_source_enabled(self) -> bool:
         with self._lock:
             return self._source_enabled
 
     @property
-    @override
     def source_power_setpoint_mw(self) -> float:
         """Saved operating reference, with the source's numeric constraints."""
         with self._lock:
@@ -192,7 +129,6 @@ class MPDSLaser(Laser):
             return self._power_value(self._reference_mw)
 
     @source_power_setpoint_mw.setter
-    @override
     def source_power_setpoint_mw(self, value: float) -> None:
         with self._lock:
             self._ensure_open()
@@ -207,20 +143,17 @@ class MPDSLaser(Laser):
             self._warn_calibration_context()
 
     @property
-    @override
     def source_power_mw(self) -> float | None:
         with self._lock:
             self._ensure_open()
             return self._source.source_power_mw
 
     @property
-    @override
     def temperature_c(self) -> float | None:
         with self._lock:
             self._ensure_open()
             return self._source.temperature_c
 
-    @override
     def output_enable(self, *, wait: bool = False) -> None:
         """Restore modulation and permit output, optionally waiting for source startup."""
         with self._lock:
@@ -240,7 +173,6 @@ class MPDSLaser(Laser):
                 self._inhibit_after_failure(error)
             self._output_enabled = True
 
-    @override
     def output_disable(self) -> None:
         """Block output through the selected component, retaining source permission."""
         with self._lock:
@@ -253,13 +185,11 @@ class MPDSLaser(Laser):
             self._output_enabled = False
 
     @property
-    @override
     def is_output_enabled(self) -> bool:
         with self._lock:
             return self._output_enabled
 
     @property
-    @override
     def output_level_percent(self) -> float:
         """Saved AOTF or source operating percentage; inactive in analog mode."""
         with self._lock:
@@ -267,7 +197,6 @@ class MPDSLaser(Laser):
             return self._level_value(self._level, self._reference_mw)
 
     @output_level_percent.setter
-    @override
     def output_level_percent(self, value: float) -> None:
         with self._lock:
             self._ensure_open()
@@ -281,16 +210,13 @@ class MPDSLaser(Laser):
             if not isclose(value, level, abs_tol=1e-9):
                 self.log.warning("Output level %s%% was adjusted to %s%% for source resolution", value, level)
 
-    @override
     def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
         return tuple(ModulationMode)
 
-    @override
     def _read_modulation_mode(self) -> ModulationMode:
         """Requested mode, including external waveform semantics and disabled parking."""
         return self._mode
 
-    @override
     def _configure_modulation_mode(self, mode: ModulationMode) -> None:
         with self._lock:
             self._ensure_open()
@@ -318,8 +244,6 @@ class MPDSLaser(Laser):
                 reference * level / 100 if self._level_control == ControlTarget.SOURCE and not analog else reference
             )
             self._source.source_power_setpoint_mw = target
-            if not isclose(float(self._source.source_power_setpoint_mw), target, abs_tol=1e-9):
-                raise RuntimeError("Source did not establish the requested power setting")
             rf_level = level if self._level_control == ControlTarget.AOTF and not analog else 100.0
             self._mpds.set_power(self._line, self._settings.rf_power(rf_level))
             if enabled:
@@ -413,7 +337,6 @@ class MPDSLaser(Laser):
         if not self._source.is_source_enabled:
             raise RuntimeError("Source did not enable or lost enable during startup wait")
 
-    @override
     def close(self) -> None:
         """Inhibit this laser and release its line; leave borrowed connections open."""
         with self._lock:

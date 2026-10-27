@@ -1,7 +1,7 @@
 """A laser that controls delivered power through its source's power setting."""
 
 from math import isclose, isfinite
-from typing import Never, override
+from typing import Never
 
 from rigup.device.props import NumericFloat
 
@@ -34,11 +34,9 @@ class SourceOnlyLaser(Laser):
             raise ValueError("source power reference must be finite and nonnegative")
 
     @property
-    @override
     def wavelength(self) -> float:
         return self._source.wavelength
 
-    @override
     def source_enable(self, *, wait: bool = False) -> None:
         """Permit operation; physical startup and its wait are deferred to output enable."""
         self._ensure_open()
@@ -46,25 +44,21 @@ class SourceOnlyLaser(Laser):
             self._start_source(wait=wait)
         self._source_enabled = True
 
-    @override
     def source_disable(self) -> None:
         self.output_disable()
         self._source_enabled = False
 
     @property
-    @override
     def is_source_enabled(self) -> bool:
         return self._source_enabled
 
     @property
-    @override
     def source_power_setpoint_mw(self) -> float:
         """Reference power at 100% output, with the source's numeric constraints."""
         self._ensure_open()
         return self._power_value(self._reference_mw)
 
     @source_power_setpoint_mw.setter
-    @override
     def source_power_setpoint_mw(self, value: float) -> None:
         self._ensure_open()
         reference = self._power_value(value)
@@ -76,18 +70,15 @@ class SourceOnlyLaser(Laser):
             self.log.warning("Source reference %s mW was adjusted to %s mW", value, float(reference))
 
     @property
-    @override
     def source_power_mw(self) -> float | None:
         self._ensure_open()
         return self._source.source_power_mw
 
     @property
-    @override
     def temperature_c(self) -> float | None:
         self._ensure_open()
         return self._source.temperature_c
 
-    @override
     def output_enable(self, *, wait: bool = False) -> None:
         self._ensure_open()
         if not self._source_enabled:
@@ -97,7 +88,6 @@ class SourceOnlyLaser(Laser):
             self._start_source(wait=wait)
         self._output_enabled = True
 
-    @override
     def output_disable(self) -> None:
         if self._closed:
             return
@@ -105,19 +95,16 @@ class SourceOnlyLaser(Laser):
         self._output_enabled = False
 
     @property
-    @override
     def is_output_enabled(self) -> bool:
         return self._output_enabled
 
     @property
-    @override
     def output_level_percent(self) -> float:
         """Supported operating percentage; use output_disable() independently of this level."""
         self._ensure_open()
         return self._level_value(self._level, self._reference_mw)
 
     @output_level_percent.setter
-    @override
     def output_level_percent(self, value: float) -> None:
         self._ensure_open()
         level = self._level_value(value, self._reference_mw)
@@ -127,15 +114,12 @@ class SourceOnlyLaser(Laser):
         if not isclose(value, self._level, abs_tol=1e-9):
             self.log.warning("Output level %s%% was adjusted to %s%% for source resolution", value, self._level)
 
-    @override
     def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
         return tuple(ModulationMode(mode) for mode in self._source.modulation_mode.options)
 
-    @override
     def _read_modulation_mode(self) -> ModulationMode:
         return ModulationMode(self._source.modulation_mode)
 
-    @override
     def _configure_modulation_mode(self, mode: ModulationMode) -> None:
         self._ensure_open()
         self._source.source_disable()
@@ -181,15 +165,10 @@ class SourceOnlyLaser(Laser):
             if target == 0:
                 self._source.source_disable()
             self._source.source_power_setpoint_mw = target
-            self._verify_power(target)
             if self._output_enabled and target > 0:
                 self._source.source_enable()
         except Exception as error:
             self._inhibit_after_failure(error)
-
-    def _verify_power(self, target: float) -> None:
-        if not isclose(float(self._source.source_power_setpoint_mw), target, abs_tol=1e-9):
-            raise RuntimeError("source did not establish the requested power setting")
 
     def _start_source(self, *, wait: bool) -> None:
         try:
@@ -205,7 +184,6 @@ class SourceOnlyLaser(Laser):
             raise ExceptionGroup("Source operation and inhibition both failed", [error, cleanup_error]) from None
         raise error
 
-    @override
     def close(self) -> None:
         """Disable output without closing the borrowed source; failures can be retried."""
         if self._closed:

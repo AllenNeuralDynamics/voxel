@@ -1,7 +1,6 @@
 """Microscope-facing contract for controlled laser output."""
 
 from abc import abstractmethod
-from typing import override
 
 from rigup import describe, numeric
 from vxl.devices.base import DeviceType
@@ -82,13 +81,11 @@ class Laser(LaserSource):
         """Measured optical power at the laser output, or None when unavailable."""
         return None
 
-    @override
     def _ensure_modulation_change_allowed(self) -> None:
         """Require output permission to be off before reconfiguration."""
         if self.is_output_enabled:
             raise RuntimeError("Disable output before changing modulation mode")
 
-    @override
     @abstractmethod
     def _configure_modulation_mode(self, mode: ModulationMode) -> None:
         """Configure the mode while output remains disabled.
