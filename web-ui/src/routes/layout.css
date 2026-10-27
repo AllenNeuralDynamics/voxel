@@ -24,9 +24,9 @@
   vector-effect: non-scaling-stroke;
 }
 
-/* The scrolling area under a page header. Its direct children stop at 56rem unless they set their own width. */
 @utility page-body {
-  @apply min-h-0 flex-1 overflow-y-auto px-4 pt-1.5 pb-4;
+  @apply min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-4;
+  scrollbar-gutter: stable;
 
   :where(& > *) {
     max-width: var(--container-4xl);

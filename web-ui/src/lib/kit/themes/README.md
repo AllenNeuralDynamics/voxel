@@ -25,6 +25,7 @@ In the tables below, "every layer" means the 5 solid layers: `--canvas`, `--pane
 | `index.css`                                 | Imports the files above                                                                       |
 | `manager.svelte.ts`                         | The theme registry, and the mode, density and mark color settings                             |
 | `AppearanceMenu.svelte`                     | The quick appearance settings in a menu, on the dashboard bar and the connection splash       |
+| `ModeSwitch.svelte`                         | The light, dark and auto switch inside a menu, in the appearance menu and the station menu    |
 | `ThemePicker.svelte`, `MarkSettings.svelte` | The full appearance settings, on the station Settings page and in the UI Lab                  |
 | `colors.ts`                                 | Color helpers, such as the color of a wavelength and a color that reads in light or dark mode |
 | `index.ts`                                  | The public exports of this folder                                                             |

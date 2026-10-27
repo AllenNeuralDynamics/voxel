@@ -27,7 +27,7 @@
   import { cn, displayName } from '$lib/core/utils';
   import MetadataEditor from '$lib/features/run/MetadataEditor.svelte';
   import { Badge, Button, Checkbox, CollapsibleSection, Field, Section, Select, SpinBox, TextBox } from '$lib/kit';
-  import { ArrowRight, Check, ChevronDown, CircleAlert, GripVertical, Plus, TriangleAlert } from '$lib/kit/icons';
+  import { ArrowRight, Check, ChevronDown, CircleAlert, Plus, TriangleAlert } from '$lib/kit/icons';
   import * as Sortable from '$lib/kit/sortable';
   import { acquisitionHref, deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
@@ -407,16 +407,17 @@
           key={(task) => task.id}
           onReorder={reorderTasks}
           layout="vertical"
-          class="flex flex-col gap-3"
+          class="flex flex-col gap-3 p-2"
+          containerClass="-m-2"
         >
           {#snippet item(task: AcquisitionTask, index: number)}
             <Sortable.Item item={task} class="flex min-w-0 items-center frame-raised-link">
               <Sortable.Handle
                 item={task}
                 disabled={locked}
-                class="flex shrink-0 cursor-grab touch-none items-center self-stretch px-1 text-fg-faint active:cursor-grabbing"
+                class="mr-2 flex w-3 shrink-0 cursor-grab touch-none self-stretch overflow-hidden rounded-l-lg text-line-faint hover:bg-tint hover:text-fg-faint active:cursor-grabbing"
               >
-                <GripVertical class="size-3.5" />
+                <span class="grip flex-1" aria-hidden="true"></span>
               </Sortable.Handle>
               <a
                 href={resolve(TASK_ROUTE, { ...routeParams, taskId: task.id })}
@@ -694,3 +695,11 @@
     {/if}
   </div>
 </footer>
+
+<style>
+  /* Tiny dots in the text color, like the knurled grip on a knob. The task handle uses them. */
+  .grip {
+    background-image: radial-gradient(circle, currentColor 0.5px, transparent 0.6px);
+    background-size: 2px 2px;
+  }
+</style>

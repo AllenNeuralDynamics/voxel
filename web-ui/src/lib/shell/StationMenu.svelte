@@ -9,6 +9,7 @@
   import { cn, displayName, errorMessage } from '$lib/core/utils';
   import { DropdownMenu } from '$lib/kit';
   import { Check, ChevronDown, LayoutDashboard, TriangleAlert } from '$lib/kit/icons';
+  import { ModeSwitch } from '$lib/kit/themes';
 
   interface StationDetails {
     discovery: StationDiscovery;
@@ -20,16 +21,19 @@
     stationName: string;
     selectedInstrumentId: string | null;
     disabled?: boolean;
+    /** Whether the menu is open. The logo in the rail opens it too, so the layout can bind it. */
+    open?: boolean;
     onselectinstrument: (stationId: string, instrumentId: string) => void;
     onclose: () => void;
     ondashboard: () => void;
   }
 
-  const {
+  let {
     stationId,
     stationName,
     selectedInstrumentId,
     disabled = false,
+    open = $bindable(false),
     onselectinstrument,
     onclose,
     ondashboard
@@ -104,14 +108,18 @@
 
 {#snippet statusDot(open: boolean)}
   <span
-    class={cn(
-      'size-1.5 shrink-0 rounded-full border',
-      open ? 'border-success-fg bg-success-fg' : 'border-fg-faint bg-transparent'
-    )}
+    class="flex size-4 shrink-0 items-center justify-center"
     role="img"
     aria-label={open ? 'Open' : 'Closed'}
     title={open ? 'Open' : 'Closed'}
-  ></span>
+  >
+    <span
+      class={cn(
+        'size-1.5 rounded-full border',
+        open ? 'border-success-fg bg-success-fg' : 'border-fg-faint bg-transparent'
+      )}
+    ></span>
+  </span>
 {/snippet}
 
 {#snippet instrumentItems(station: StationInfo)}
@@ -164,7 +172,7 @@
   {/each}
 {/snippet}
 
-<DropdownMenu.Root onOpenChange={(open) => open && void load()}>
+<DropdownMenu.Root bind:open onOpenChange={(next) => next && void load()}>
   <DropdownMenu.Trigger
     {disabled}
     class="group flex min-w-0 cursor-pointer items-center self-stretch text-base focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40"
@@ -186,7 +194,17 @@
     </span>
   </DropdownMenu.Trigger>
 
-  <DropdownMenu.Content customAnchor={names} side="bottom" align="start" sideOffset={6} class="w-72">
+  <!-- A press on the logo toggles the menu itself, so it does not count as a press outside. -->
+  <DropdownMenu.Content
+    customAnchor={names}
+    side="bottom"
+    align="start"
+    sideOffset={6}
+    class="w-72"
+    onInteractOutside={(event) => {
+      if ((event.target as Element | null)?.closest('[data-opens-station-menu]')) event.preventDefault();
+    }}
+  >
     {#if showExpandedStations}
       {#each visibleStations as station, index (station.id)}
         {#if index > 0}
@@ -230,5 +248,7 @@
       <LayoutDashboard class="size-4" aria-hidden="true" />
       Go to dashboard
     </DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <ModeSwitch />
   </DropdownMenu.Content>
 </DropdownMenu.Root>

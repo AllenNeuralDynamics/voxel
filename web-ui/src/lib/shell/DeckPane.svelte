@@ -81,7 +81,7 @@
   </Select>
   <RunButton class="ml-auto" />
 </div>
-<div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-2">
+<div class="flex min-h-0 flex-1 scrollbar-gutter-stable flex-col gap-4 overflow-y-auto px-4 py-2">
   <Section class="mb-auto">
     {#snippet heading()}
       <span class="flex min-w-0 items-center gap-1">

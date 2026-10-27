@@ -1,13 +1,9 @@
 <script lang="ts">
   import { Button, DropdownMenu } from '$lib/kit';
-  import { Monitor, Moon, Sun } from '$lib/kit/icons';
-  import { DENSITIES, type Density, type Mode, type ThemeId, themes } from '$lib/kit/themes';
+  import { Monitor } from '$lib/kit/icons';
+  import { DENSITIES, type Density, type ThemeId, themes } from '$lib/kit/themes';
 
-  const MODES: readonly { value: Mode; label: string; icon: typeof Sun }[] = [
-    { value: 'light', label: 'Light', icon: Sun },
-    { value: 'dark', label: 'Dark', icon: Moon },
-    { value: 'auto', label: 'Auto', icon: Monitor }
-  ];
+  import ModeSwitch, { MODES } from './ModeSwitch.svelte';
   const THEMES = {
     light: themes.list.filter((theme) => theme.swatches.light),
     dark: themes.list.filter((theme) => theme.swatches.dark)
@@ -51,24 +47,7 @@
     {/snippet}
   </DropdownMenu.Trigger>
   <DropdownMenu.Content align="end" sideOffset={4} class="w-52">
-    <DropdownMenu.RadioGroup
-      value={prefs.mode}
-      onValueChange={(mode) => themes.setMode(mode as Mode)}
-      aria-label="Mode"
-      class="m-1 grid grid-cols-3 gap-0.5 rounded-md bg-element-bg p-0.5 ring-1 ring-control-line ring-inset"
-    >
-      {#each MODES as mode (mode.value)}
-        <DropdownMenu.RadioItem
-          value={mode.value}
-          closeOnSelect={false}
-          aria-label={mode.label}
-          title={mode.label}
-          class="justify-center rounded-sm ps-0 pe-0 text-fg-muted data-[state=checked]:bg-element-selected data-[state=checked]:text-fg [&>span:first-child]:hidden"
-        >
-          <mode.icon />
-        </DropdownMenu.RadioItem>
-      {/each}
-    </DropdownMenu.RadioGroup>
+    <ModeSwitch />
     <DropdownMenu.Separator />
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger>Light theme</DropdownMenu.SubTrigger>

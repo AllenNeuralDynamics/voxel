@@ -13,6 +13,7 @@ export {
   watchTheme
 } from './manager.svelte';
 export { default as MarkSettings } from './MarkSettings.svelte';
+export { default as ModeSwitch } from './ModeSwitch.svelte';
 export { default as ThemePicker } from './ThemePicker.svelte';
 
 export const brand = {

@@ -67,6 +67,9 @@
 
   const barSplits = [{ size: 'var(--app-bar-height)', gap: '0.875rem' }, {}];
 
+  // The logo opens the station menu, like the station name next to it.
+  let stationMenuOpen = $state(false);
+
   let frameRef = $state<HTMLElement | null>(null);
   const contentPane = createPaneSize(() => frameRef, {
     min: 32,
@@ -76,11 +79,11 @@
     persist: 'work'
   });
   const viewerPane = createPaneSize(() => frameRef, {
-    min: 60,
+    min: 48,
     fallback: { min: 40 }
   });
   const deckPane = createPaneSize(() => frameRef, {
-    min: 34,
+    min: 30,
     default: 34,
     max: 34,
     fallback: { min: 15, max: 15 }
@@ -99,9 +102,14 @@
       <button
         type="button"
         class="group app-bar w-rail cursor-pointer justify-center border-r focus-visible:outline-none"
-        title="Go to dashboard"
-        aria-label="Go to dashboard"
-        onclick={showDashboard}
+        title="Station menu"
+        aria-label="Station menu"
+        aria-haspopup="menu"
+        aria-expanded={stationMenuOpen}
+        data-opens-station-menu
+        onclick={() => {
+          if (!app.instrumentTransition) stationMenuOpen = !stationMenuOpen;
+        }}
       >
         <span
           class="rounded-xl p-1.5 group-hover:bg-tint group-focus-visible:outline-2 group-focus-visible:outline-focus"
@@ -128,6 +136,7 @@
       <Pane {...contentPane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
         <div class="app-bar pr-4">
           <StationMenu
+            bind:open={stationMenuOpen}
             stationId={params.stationId}
             {stationName}
             selectedInstrumentId={selection.selected ?? app.activeName}
