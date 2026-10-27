@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from vxl.hal.errors import HALStartupError, Violation
 
 from rigup import DeviceHandle, DeviceInterface, Rig
+from seqsweep.devices.acs.handle import ScanControllerHandle
 from seqsweep.devices.base import SeqSweepDeviceType
 
 from .topology import SeqSweepHardwareTopology
@@ -21,7 +22,7 @@ class HAL:
         self._topology = topology
         self._rig = Rig(topology, name)
 
-        self.scan_controllers: dict[str, DeviceHandle] = {}  # TODO Add ACS Handle
+        self.scan_controllers: dict[str, ScanControllerHandle] = {}  # TODO Add ACS Handle
         self._device_interfaces: dict[str, DeviceInterface] = {}
 
     @property
@@ -42,7 +43,7 @@ class HAL:
         return dict(self._device_interfaces)
 
     @property
-    def scan_controller(self) -> DeviceHandle:
+    def scan_controller(self) -> ScanControllerHandle:
         if (handle := self.scan_controllers.get(self._topology.scan_controller)) is None:
             raise RuntimeError("HAL is not open — scan controller is unavailable")
         return handle
@@ -105,7 +106,7 @@ class HAL:
 
             match interface.type:
                 case SeqSweepDeviceType.SCAN_CONTROLLER:
-                    self.scan_controllers[uid] = handle
+                    self.scan_controllers[uid] = ScanControllerHandle.wrap(handle)
                 case _:
                     logger.debug("Uncategorized device '%s' of type '%s'", uid, interface.type)
         return violations, unavailable

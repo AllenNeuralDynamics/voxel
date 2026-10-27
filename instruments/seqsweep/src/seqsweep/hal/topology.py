@@ -15,11 +15,11 @@ class SeqSweepHardwareTopology(RigConfig, frozen=True):
 
     @property
     def device_uids(self) -> set[str]:
-        return set(self.devices) | {uid for node in self.nodes.values() for uid in node.devices}
+        node_devices = {did for node in self.nodes.values() for did in node.devices}
+        return node_devices | set(self.devices.keys())
 
     @model_validator(mode="after")
     def _check_device_references(self) -> Self:
-        for role, uid in [("scan_controller", self.scan_controller)]:
-            if uid not in self.device_uids:
-                raise ValueError(f"{role} '{uid}' is not a device in the rig")
+        if self.scan_controller not in self.device_uids:
+            raise ValueError(f"scan_controller '{self.scan_controller}' is not a device in the rig")
         return self
