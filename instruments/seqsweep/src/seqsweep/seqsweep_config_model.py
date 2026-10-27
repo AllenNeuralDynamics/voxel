@@ -1,11 +1,11 @@
-from typing import Any, Literal, Self
+from typing import Any, Literal
 
 from one_liner.models import RouterServerConfig  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from vxlib.schema import FrozenModel
 
-from rigup import RigConfig
 from seqsweep.devices.acs.base import ScanPassConfig
+from seqsweep.hal import SeqSweepHardwareTopology
 
 
 class HandlerConfig(BaseModel):
@@ -28,24 +28,6 @@ class LoggingConfig(BaseModel):
 class RouterServerPortConfig(BaseModel):
     rpc_port: int = 5555
     broadcast_port: int = 5556
-
-
-class SeqSweepHardwareTopology(RigConfig, frozen=True):
-    """The hardware blueprint (``hal``): a rig (``devices`` + ``nodes``, inherited) plus the role each device
-    plays. Mirrors Voxel's ``HardwareTopology``: loaded once, never edited at runtime."""
-
-    scan_controller: str = Field(description="UID of the scan controller in the rig")
-    # TODO: cameras, lasers, z_axis roles
-
-    @property
-    def device_uids(self) -> set[str]:
-        return set(self.devices) | {uid for node in self.nodes.values() for uid in node.devices}
-
-    @model_validator(mode="after")
-    def _check_roles(self) -> Self:
-        if self.scan_controller not in self.device_uids:
-            raise ValueError(f"scan_controller '{self.scan_controller}' is not a device in the rig")
-        return self
 
 
 class SeqSweepDefaults(FrozenModel):
