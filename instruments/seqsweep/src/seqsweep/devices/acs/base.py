@@ -13,6 +13,7 @@ from pydantic import Field
 from vxlib.schema import FrozenModel
 
 from rigup import Device, describe
+from seqsweep.devices.base import SeqSweepDeviceType
 
 
 class ScanDirection(StrEnum):
@@ -37,7 +38,7 @@ class ScanController(Device):
     without knowing the wiring.
     """
 
-    __DEVICE_TYPE__: ClassVar[str] = "scan_controller"
+    __DEVICE_TYPE__: ClassVar[str] = SeqSweepDeviceType.SCAN_CONTROLLER
 
     def __init__(self, uid: str, *, gate_outputs: dict[str, str]) -> None:
         super().__init__(uid=uid)
