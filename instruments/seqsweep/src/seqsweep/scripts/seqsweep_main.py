@@ -91,8 +91,8 @@ def main():
     logging.setLogRecordFactory(record_factory)
 
     # Open the scanner (rig) before serving it
-    #TODO: Rig up 
-    seqsweep = SeqSweep()
+    seqsweep = SeqSweep(config)
+    seqsweep.open()
 
     server = ZMQServer(
         instances={"seqsweep": seqsweep},
