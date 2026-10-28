@@ -16,28 +16,20 @@ class SeqSweep:
     def __init__(self, config: SeqSweepInstrumentConfig) -> None:
         self.log = logging.getLogger("seqsweep")
         self.config = config
-        self._hal: HAL | None = None
-        self.open()
+        self._hal = HAL(self.config.hal, name=self.config.name)
         # TODO: private asyncio loop thread, lock for _status/_job, pause event, scan task
 
     # ==================== Lifecycle ====================
 
     def open(self) -> None:
         """Open the rig. Raises ``HALStartupError`` if a device fails to build or fills the wrong role."""
-        if self._hal is not None:
-            return
-        hal = HAL(self.config.hal, name=self.config.name)
-        asyncio.run(hal.open())  # TODO: replace with the loop thread
-        self._hal = hal
-        self.log.info("Rig open with devices: %s", sorted(hal.devices))
+        asyncio.run(self._hal.open())  # TODO: replace with the loop thread
+        self.log.info("Rig open with devices: %s", sorted(self._hal.devices))
 
     def close(self) -> None:
         """Close the rig. Safe to call more than once."""
         # TODO: cancel the scan task first
-        if self._hal is None:
-            return
         asyncio.run(self._hal.close())
-        self._hal = None
 
     def __enter__(self) -> Self:
         self.open()
