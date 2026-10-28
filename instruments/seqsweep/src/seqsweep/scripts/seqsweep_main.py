@@ -92,6 +92,7 @@ def main():
 
     # Open the scanner (rig) before serving it
     seqsweep = SeqSweep(config)
+    seqsweep.open()
 
     server = ZMQServer(
         instances={"seqsweep": seqsweep},
