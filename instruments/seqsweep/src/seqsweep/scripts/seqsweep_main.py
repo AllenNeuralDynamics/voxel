@@ -10,6 +10,7 @@ from ficus.database.filesys import FileSysStore  # type: ignore
 from ficus.services.configs import get_config  # type: ignore
 from one_liner.server import RouterServer  # type: ignore
 
+from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import SeqSweepSystemConfig
 
@@ -36,7 +37,7 @@ class ZMQServer(RouterServer):
             raise ValueError("instances dictionary must be provided to ZMQServer")
 
         if "seqsweep" in instances:
-            self.seqsweep: SeqSweep = instances["seqsweep"]
+            self.seqsweep: SeqSweepRpc = instances["seqsweep"]
 
 
 def main():
@@ -91,7 +92,7 @@ def main():
     logging.setLogRecordFactory(record_factory)
 
     # Open the scanner (rig) before serving it
-    seqsweep = SeqSweep(config)
+    seqsweep = SeqSweepRpc(SeqSweep(config))
     seqsweep.open()
 
     server = ZMQServer(
