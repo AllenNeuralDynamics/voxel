@@ -11,7 +11,7 @@ the 3:1 non-text rule, so a flagged `border` row is informational.
 
 Usage:
     uv run scripts/check_theme_contrast.py
-    uv run scripts/check_theme_contrast.py web-ui/src/lib/kit/themes/jetbrains.dark.css
+    uv run scripts/check_theme_contrast.py web/station/src/lib/kit/themes/jetbrains.dark.css
     uv run scripts/check_theme_contrast.py --only-fails
 """
 
@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-THEMES_DIR = REPO_ROOT / "web-ui" / "src" / "lib" / "themes"
+THEMES_DIR = REPO_ROOT / "web" / "station" / "src" / "lib" / "kit" / "themes"
 
 SURFACES = ["canvas", "surface", "elevated", "element-bg"]
 TEXT_TOKENS = ["fg", "fg-muted", "fg-faint", "fg-accent"]

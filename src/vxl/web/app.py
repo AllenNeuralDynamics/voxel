@@ -111,7 +111,7 @@ def create_app(
     static_dir = Path(__file__).parent / "static"
     if serve_static:
         if not (static_dir / "index.html").is_file():
-            raise RuntimeError("Voxel web UI is not built; run `cd web-ui && nub run build` from the repository root")
+            raise RuntimeError("Voxel web UI is not built; run `vp -C web/station build` from the repository root")
         app.mount("/", _SPAStaticFiles(directory=static_dir, html=True), name="static")
     return app
 

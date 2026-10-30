@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB_UI = ROOT / "web-ui"
+WEB = ROOT / "web"
+STATION = WEB / "station"
 
 
 def _run(command: list[str], *, cwd: Path) -> None:
@@ -19,8 +20,8 @@ def _run(command: list[str], *, cwd: Path) -> None:
 
 
 def main() -> None:
-    _run(["nub", "install", "--frozen-lockfile"], cwd=WEB_UI)
-    _run(["nub", "run", "build"], cwd=WEB_UI)
+    _run(["vp", "install", "--frozen-lockfile"], cwd=WEB)
+    _run(["vp", "build"], cwd=STATION)
     _run(["uv", "build", *sys.argv[1:]], cwd=ROOT)
 
 

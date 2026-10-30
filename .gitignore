@@ -18,5 +18,5 @@ notes
 .obsidian
 .old
 
-# web-ui build
+# web/station build
 src/vxl/web/static/

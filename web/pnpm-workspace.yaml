@@ -1,0 +1,12 @@
+packages:
+  - station
+
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true
+  msgpackr-extract: true
+
+# `vite` is the Vite+ copy of Vite 8, so its version number is the Vite+ version.
+peerDependencyRules:
+  allowAny:
+    - vite

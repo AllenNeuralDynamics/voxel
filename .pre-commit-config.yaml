@@ -4,8 +4,8 @@
 # plus Astral's external uv-lock hook to keep the lockfile in sync with
 # pyproject.toml.
 #
-# Frontend (web-ui) hooks shell out to Nub and are scoped by `files:` so they
-# only fire when web-ui sources are staged. Fast checks run pre-commit, slower
+# Frontend (web/station) hooks shell out to Vite+ and are scoped by `files:` so they
+# only fire when web/station sources are staged. Fast checks run pre-commit, slower
 # whole-project analysis runs pre-push — same split as ruff vs basedpyright.
 #
 # First-time setup (per clone):
@@ -39,11 +39,11 @@ repos:
         types_or: [python, pyi]
         require_serial: true
 
-      - id: prettier
-        name: prettier (web-ui)
-        entry: nub run --cwd web-ui lint:prettier
+      - id: oxfmt
+        name: oxfmt (web)
+        entry: vp -C web/station run lint:fmt
         language: system
-        files: ^web-ui/.*\.(ts|js|svelte|css|json|html)$
+        files: ^web/.*\.(ts|js|svelte|css|json|html)$
         pass_filenames: false
         require_serial: true
 
@@ -65,11 +65,11 @@ repos:
         require_serial: true
         stages: [pre-push]
 
-      - id: eslint
-        name: eslint (web-ui)
-        entry: nub run --cwd web-ui lint:eslint
+      - id: oxlint
+        name: oxlint and frame classes (web)
+        entry: vp -C web/station run lint:code
         language: system
-        files: ^web-ui/.*\.(ts|js|svelte)$
+        files: ^web/.*\.(ts|js|svelte)$
         pass_filenames: false
         require_serial: true
         stages: [pre-push]
