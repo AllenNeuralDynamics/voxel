@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getVoxelStation, providePageInstrument } from '$lib/context.svelte';
-  import { displayName } from '$lib/core/utils';
   import PageFallback from '$lib/shell/PageFallback.svelte';
+  import { displayName } from '@voxel/kit/format';
 
   import type { LayoutProps } from './$types';
 

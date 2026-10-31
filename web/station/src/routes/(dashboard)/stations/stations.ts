@@ -1,5 +1,5 @@
 import type { AcquisitionManifest, AcquisitionStatus, StationDiscovery, StationFeedView } from '$lib/core/model';
-import { Check, CircleAlert, DotsSpinner, Square, TriangleAlert } from '$lib/kit/icons';
+import { Check, CircleAlert, DotsSpinner, Square, TriangleAlert } from '@voxel/kit/icons';
 
 /** What the Stations page knows about 1 station. `runs` is newest first. */
 export interface StationItem {

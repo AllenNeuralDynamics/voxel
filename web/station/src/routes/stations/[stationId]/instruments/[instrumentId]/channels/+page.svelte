@@ -1,12 +1,12 @@
 <script lang="ts">
   import { getPageInstrument } from '$lib/context.svelte';
   import type { ChannelConfig, ChannelPatch } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import { channelLabel, channelSpectrum, SpectrumScale, SpectrumStrip } from '$lib/features/imaging';
-  import { Chip, Field, NumberBox, RadioBar, Section, TextArea, TextBox } from '$lib/kit';
-  import { ArrowRight, ChevronRight } from '$lib/kit/icons';
   import { deviceHref, profileHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { LinkChip, Field, NumberBox, RadioBar, Section, TextArea, TextBox } from '@voxel/kit';
+  import { displayName } from '@voxel/kit/format';
+  import { ArrowRight, ChevronRight } from '@voxel/kit/icons';
 
   type View = 'inline' | 'boxes';
   const VIEWS: readonly View[] = ['inline', 'boxes'];
@@ -116,7 +116,7 @@
         {:else}
           <ArrowRight class="size-3 shrink-0 text-fg-faint" aria-hidden="true" />
         {/if}
-        <Chip href={deviceHref(selected.params, wheelId)}>{filter}</Chip>
+        <LinkChip href={deviceHref(selected.params, wheelId)}>{filter}</LinkChip>
       {/each}
     </div>
 
@@ -143,10 +143,10 @@
     <div class="flex min-w-0 flex-wrap items-center gap-1 border-t border-line-faint p-2.5 text-sm">
       <span class="mr-1 text-fg-muted">Used in</span>
       {#each usedBy as [profileId, profile] (profileId)}
-        <Chip
+        <LinkChip
           href={profileHref(selected.params, profileId)}
           color={profileId === instrument?.activeProfileId ? 'var(--color-success-fg)' : null}
-          >{profile.label || displayName(profileId)}</Chip
+          >{profile.label || displayName(profileId)}</LinkChip
         >
       {:else}
         <span class="text-fg-muted">No profile</span>

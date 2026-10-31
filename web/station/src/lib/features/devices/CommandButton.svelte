@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import type { CommandInfo, DeviceHandle, ParamInfo } from '$lib/core/model';
-  import { displayName, errorMessage } from '$lib/core/utils';
-  import { Button, Dialog, NumberBox, Select, TextBox } from '$lib/kit';
+  import { Button, Dialog, NumberBox, Select, TextBox } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { errorMessage } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   interface Props {
     device: DeviceHandle;

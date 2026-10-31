@@ -16,9 +16,9 @@ A new error shows 1 toast. A warning shows none.
 
 - Each issue is defined 1 time: 1 code in `IssueCode`, and 1 check or 1 failure that makes it. Pages read it from
   `issues`. They do not test for it again.
-- Only `reportFailure` shows a failure. It adds the event and shows the toast. An Oxlint rule in `web/vite.config.ts` blocks `toast.error`
+- Only `reportFailure` shows a failure. It adds the event and shows the toast. An Oxlint rule in `web/station/vite.config.ts` blocks `toast.error`
   outside this folder.
-- `reportFailure` lives in [`$lib/core/failures`](../../core/failures.ts), so the model, kit and utils can call it
+- `reportFailure` lives in [`@voxel/kit/failures`](../../../../../kit/src/failures.ts), so the model, kit and utils can call it
   without importing this folder.
   `index.ts` registers `recordFailure` as its handler.
 - A failure carries its own context. A failed request finds its subject in its API path, so a call site adds only what

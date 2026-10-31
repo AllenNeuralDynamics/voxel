@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button, type ButtonVariants } from '$lib/kit';
-  import { ArrowRight, Pause, Play, Redo, RotateCcw, Undo } from '$lib/kit/icons';
+  import { Button, type ButtonVariants } from '@voxel/kit';
+  import { ArrowRight, Pause, Play, Redo, RotateCcw, Undo } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

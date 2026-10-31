@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cn } from '$lib/core/utils';
+  import { cn } from '@voxel/kit/cn';
 
   import { xAt } from './channels';
 

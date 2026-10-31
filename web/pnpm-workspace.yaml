@@ -1,5 +1,11 @@
 packages:
+  - kit
   - station
+
+# Packages that both the kit and an app list. 1 version here means 1 copy, so they share the same Svelte runtime.
+catalog:
+  runed: ^0.37.1
+  svelte: ^5.57.2
 
 allowBuilds:
   '@tailwindcss/oxide': true

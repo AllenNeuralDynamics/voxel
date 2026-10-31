@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import { displayName } from '$lib/core/utils';
-  import { Button, Dialog } from '$lib/kit';
   import { useShortcut } from '$lib/shell/shortcuts';
+  import { Button, Dialog } from '@voxel/kit';
+  import { displayName } from '@voxel/kit/format';
 
   import type { InstrumentSelection } from './selection.svelte';
 

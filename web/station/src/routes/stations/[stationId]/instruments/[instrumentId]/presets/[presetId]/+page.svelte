@@ -1,18 +1,19 @@
 <script lang="ts">
   import { resource, watch } from 'runed';
-  import { toast } from 'svelte-sonner';
 
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { ApiError, type InstrumentDefaults, type PresetRecord } from '$lib/core/model';
   import { prefs, type StateView } from '$lib/core/prefs';
-  import { cn, displayName, errorMessage } from '$lib/core/utils';
-  import { Button, Dialog, JsonView, RadioBar, Section } from '$lib/kit';
-  import { ChevronDown } from '$lib/kit/icons';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Button, Dialog, JsonView, RadioBar, Section, toast } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { errorMessage } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { ChevronDown } from '@voxel/kit/icons';
 
   type Confirm = 'apply' | 'update' | 'delete';
 

@@ -3,14 +3,15 @@
   import { getPageInstrument } from '$lib/context.svelte';
   import { buildDeviceTopology, groupDevicesByNode } from '$lib/core/model';
   import { type DeviceGrouping, prefs } from '$lib/core/prefs';
-  import { cn, displayName } from '$lib/core/utils';
   import { deviceReading, processDetail, processLabel, roleLabel } from '$lib/features/devices';
   import { groupDevicesForNavigation } from '$lib/features/devices/groups';
   import { type IssueLevel, issues, issueText, LEVEL_DOT, LEVEL_TONE } from '$lib/features/issues';
-  import { Badge, RadioBar, Section } from '$lib/kit';
-  import { ArrowRight } from '$lib/kit/icons';
   import { deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, RadioBar, Section } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { displayName } from '@voxel/kit/format';
+  import { ArrowRight } from '@voxel/kit/icons';
 
   type DevicePage = 'cameras' | 'lasers' | 'routing' | 'stage';
 

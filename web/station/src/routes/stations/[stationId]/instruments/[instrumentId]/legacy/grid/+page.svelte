@@ -3,13 +3,13 @@
   import { SvelteSet } from 'svelte/reactivity';
 
   import { getPageInstrument } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { createPositionTask, type PlannedVolume, planningFov, type Point2D } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
   import { formatSpatialDistance } from '$lib/core/spatial-units';
-  import { ContextMenu } from '$lib/kit';
-  import { Boxes, Crosshair, GridLines, Route } from '$lib/kit/icons';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { ContextMenu } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { Boxes, Crosshair, GridLines, Route } from '@voxel/kit/icons';
 
   interface LayerVisibility {
     grid: boolean;

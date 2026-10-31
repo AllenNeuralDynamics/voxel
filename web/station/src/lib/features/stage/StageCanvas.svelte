@@ -36,9 +36,9 @@
   import { SvelteMap } from 'svelte/reactivity';
 
   import { browser } from '$app/environment';
-  import { ContextMenu } from '$lib/kit';
-  import { Layers } from '$lib/kit/icons';
-  import { watchTheme } from '$lib/kit/themes/manager.svelte';
+  import { ContextMenu } from '@voxel/kit';
+  import { Layers } from '@voxel/kit/icons';
+  import { watchTheme } from '@voxel/kit/style';
 
   import { provideStageContext, type StageFeature, type StageMenuSource } from './context';
   import { box, fit, intersect, project, screenRect, unproject, worldTransform } from './geometry';

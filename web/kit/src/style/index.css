@@ -1,0 +1,19 @@
+/* An app imports this file after `tailwindcss`.
+ * The Default theme and surfaces.css must come before the named themes. */
+
+@import 'tw-animate-css';
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource-variable/lilex';
+
+@import './tokens.css';
+@import './global.css';
+@import './themes/default.css';
+@import './surfaces.css';
+@import './themes/jetbrains.light.css';
+@import './themes/jetbrains.dark.css';
+@import './themes/github.light.css';
+@import './themes/github.dark.css';
+@import './themes/ayu.light.css';
+@import './themes/ayu.dark.css';
+@import './themes/catppuccin.latte.css';
+@import './themes/catppuccin.mocha.css';

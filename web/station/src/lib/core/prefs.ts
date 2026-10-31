@@ -1,4 +1,4 @@
-import { pref } from '$lib/core/utils/helpers';
+import { pref } from '@voxel/kit/pref';
 
 export type SpatialUnit = 'mm' | 'um';
 export type ViewerMode = 'fov' | 'stage';

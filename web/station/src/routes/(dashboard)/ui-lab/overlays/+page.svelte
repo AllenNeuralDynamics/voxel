@@ -1,27 +1,32 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import { Button, ContextMenu, Dialog, DropdownMenu, HoverCard, Tooltip } from '$lib/kit';
-  import { Check, ChevronDown, ChevronRight, Crosshair, Plus, Square, Undo } from '$lib/kit/icons';
-  import { themes } from '$lib/kit/themes';
+  import { Button, ContextMenu, Dialog, DropdownMenu, HoverCard, Popover, Tooltip } from '@voxel/kit';
+  import { Check, ChevronDown, ChevronRight, Crosshair, Plus, Square, Undo } from '@voxel/kit/icons';
+  import { themes } from '@voxel/kit/style';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';
   import NotUsed from '../NotUsed.svelte';
 
-  // The live overlays use the kit defaults. The pictures copy those classes, so keep them in step with `$lib/kit/cn`.
+  // The live overlays use the kit defaults. The pictures copy those classes, so keep them in step with `web/kit/src/shadcn`.
   const MENU = 'min-w-32 frame-floating p-1 text-fg';
   const ITEM =
     "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-base select-none data-highlighted:bg-element-hover data-highlighted:text-fg [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-fg-muted";
   const SEPARATOR = '-mx-1 my-1 h-px bg-line-faint';
   const TIP = 'relative inline-flex items-center gap-1.5 frame-floating px-2 py-1 text-base text-fg';
   const CARD = 'flex w-60 flex-col gap-2 frame-floating p-3';
+  const PANEL = 'grid w-48 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 frame-floating p-3 text-sm';
 
   const ZOOMS = ['Fit to window', 'Zoom to 100%'];
   const CHANNEL = [
     ['Laser', '488 nm'],
     ['Camera', 'Camera 1'],
     ['Filter', 'BP525']
+  ];
+  const LEVELS = [
+    ['Black', '0.1 %'],
+    ['White', '99.9 %']
   ];
 
   let zoom = $state('Fit to window');
@@ -45,6 +50,13 @@
   <span class="flex size-3.5 shrink-0 items-center"
     >{#if on}<Check class="size-3.5" />{/if}</span
   >
+{/snippet}
+
+{#snippet levels()}
+  {#each LEVELS as [term, value] (term)}
+    <span class="text-fg-muted">{term}</span>
+    <span class="text-fg tabular-nums">{value}</span>
+  {/each}
 {/snippet}
 
 {#snippet channelCard()}
@@ -164,6 +176,21 @@
       </div>
     {/snippet}
     {@render stage('HoverCard', card, true)}
+
+    {#snippet popover()}
+      <div class="flex flex-col items-start gap-1.5">
+        <Popover.Root>
+          <Popover.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} variant="secondary" size="sm">Levels<ChevronDown class="size-3.5" /></Button>
+            {/snippet}
+          </Popover.Trigger>
+          <Popover.Content class={PANEL} align="start">{@render levels()}</Popover.Content>
+        </Popover.Root>
+        <div class={PANEL} aria-hidden="true">{@render levels()}</div>
+      </div>
+    {/snippet}
+    {@render stage('Popover', popover)}
 
     {#snippet dialog()}
       <Button variant="secondary" onclick={() => (closeOpen = true)}>Close the instrument</Button>

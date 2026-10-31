@@ -1,5 +1,7 @@
 /** TypeScript models mirroring the Voxel API wire types. */
-import type { PropertyInfo, PropSnapshot } from './prop.svelte';
+import type { PropSnapshot } from '@voxel/kit/models';
+
+import type { PropertyInfo } from './device.svelte';
 
 /** A device's construction recipe: target class + init kwargs. */
 export interface DeviceConfig {

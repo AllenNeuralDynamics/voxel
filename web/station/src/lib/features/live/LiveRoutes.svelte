@@ -2,10 +2,10 @@
   import { SvelteMap } from 'svelte/reactivity';
 
   import { resolve } from '$app/paths';
-  import { reportFailure } from '$lib/core/failures';
   import type { Instrument, RoutingDimension } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import { issues, issueText, LEVEL_TEXT } from '$lib/features/issues';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   import ChoiceChip from './ChoiceChip.svelte';
 

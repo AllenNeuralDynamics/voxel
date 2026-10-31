@@ -1,10 +1,10 @@
 <script lang="ts">
   import { prefs } from '$lib/core/prefs';
   import { getSpatialUnit, SPATIAL_UNITS } from '$lib/core/spatial-units';
-  import { RadioBar, Section } from '$lib/kit';
-  import MarkSettings from '$lib/kit/themes/MarkSettings.svelte';
-  import ThemePicker from '$lib/kit/themes/ThemePicker.svelte';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { RadioBar, Section } from '@voxel/kit';
+  import { MarkSettings } from '@voxel/kit/style';
+  import { ThemePicker } from '@voxel/kit/style';
 </script>
 
 <PageHeader items={[{ label: 'Settings' }]} />

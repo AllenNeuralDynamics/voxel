@@ -3,7 +3,7 @@
   import { Circle, Group, Line } from 'svelte-konva';
 
   import { convexHull, type Point2D, type XYDefinition } from '$lib/core/model';
-  import { hexWithAlpha } from '$lib/kit/themes/colors';
+  import { hexWithAlpha } from '@voxel/kit/colors';
 
   import { getStageContext } from '../context';
   import { screenTransform, worldTransform } from '../geometry';

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { NumberBox, TextBox } from '$lib/kit';
-  import { CircleAlert } from '$lib/kit/icons';
+  import { NumberBox, TextBox } from '@voxel/kit';
+  import { CircleAlert } from '@voxel/kit/icons';
 
   import { lab } from './lab';
   import LabHeader from './LabHeader.svelte';

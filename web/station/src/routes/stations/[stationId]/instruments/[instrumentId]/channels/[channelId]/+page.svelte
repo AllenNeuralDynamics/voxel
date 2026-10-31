@@ -3,11 +3,11 @@
   import { page } from '$app/state';
   import { getPageInstrument } from '$lib/context.svelte';
   import type { ChannelPatch } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import { channelLabel } from '$lib/features/imaging';
-  import { Chip, Field, NumberBox, Section, TextArea, TextBox } from '$lib/kit';
   import { profileHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { LinkChip, Field, NumberBox, Section, TextArea, TextBox } from '@voxel/kit';
+  import { displayName } from '@voxel/kit/format';
 
   const selected = getPageInstrument();
   const channelId = $derived(page.params.channelId ?? '');
@@ -99,7 +99,8 @@
       {#if usedBy.length}
         <div class="flex flex-wrap gap-1">
           {#each usedBy as [profileId, profile] (profileId)}
-            <Chip href={profileHref(selected.params, profileId)}>{profile.label || displayName(profileId)}</Chip>
+            <LinkChip href={profileHref(selected.params, profileId)}>{profile.label || displayName(profileId)}</LinkChip
+            >
           {/each}
         </div>
       {:else}

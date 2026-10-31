@@ -3,10 +3,10 @@
 
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { cn } from '$lib/core/utils';
-  import { AppearanceMenu } from '$lib/kit/themes';
   import { DASHBOARD_WINDOW_NAME } from '$lib/shell/app-windows';
   import VoxelLogo from '$lib/shell/VoxelLogo.svelte';
+  import { cn } from '@voxel/kit/cn';
+  import { AppearanceMenu } from '@voxel/kit/style';
 
   const { children } = $props();
 

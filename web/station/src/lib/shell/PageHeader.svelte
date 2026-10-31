@@ -2,8 +2,8 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
 
-  import { cn } from '$lib/core/utils';
-  import { Breadcrumb } from '$lib/kit';
+  import { Breadcrumb } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
 
   export interface PageHeaderItem {
     label: string;

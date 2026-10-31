@@ -12,8 +12,8 @@ import {
   type Prop,
   SignalGeneratorHandle
 } from '$lib/core/model';
-import { displayName, trimFloat } from '$lib/core/utils';
-import { numberDisplay } from '$lib/kit';
+import { numberDisplay } from '@voxel/kit';
+import { displayName, trimFloat } from '@voxel/kit/format';
 
 interface ValueFormat {
   step?: number | null;

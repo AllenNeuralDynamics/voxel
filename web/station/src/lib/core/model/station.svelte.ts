@@ -1,6 +1,6 @@
-/** The station: its connection, discovery, logs and acquisitions, and the open instrument. */
-import { errorMessage } from '$lib/core/utils/helpers';
 import { decodeMsgpack } from '$lib/core/utils/msgpack';
+/** The station: its connection, discovery, logs and acquisitions, and the open instrument. */
+import { errorMessage } from '@voxel/kit/failures';
 
 import { Client, type ClientOptions, resolveWebSocketUrl, type Unsub } from './client.svelte';
 import { Instrument } from './instrument.svelte';

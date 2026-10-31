@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { themes } from '$lib/kit/themes';
+  import { themes } from '@voxel/kit/style';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

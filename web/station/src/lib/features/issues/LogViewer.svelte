@@ -29,9 +29,10 @@
 <script lang="ts">
   import type { Component } from 'svelte';
 
-  import { cn, displayName } from '$lib/core/utils';
-  import { Button, Select, TextBox } from '$lib/kit';
-  import { Bug, ChevronDown, ChevronUp, CircleAlert, Dot, Info, TriangleAlert, WrapText } from '$lib/kit/icons';
+  import { Button, Select, TextBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { displayName } from '@voxel/kit/format';
+  import { Bug, ChevronDown, ChevronUp, CircleAlert, Dot, Info, TriangleAlert, WrapText } from '@voxel/kit/icons';
 
   interface Props {
     logs: LogEntry[];

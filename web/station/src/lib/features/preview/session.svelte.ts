@@ -1,7 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 
 import type { Client } from '$lib/core/model/client.svelte';
-import { NumericModel } from '$lib/core/model/prop.svelte';
 import {
   AUTO_COLORMAP,
   type ChannelConfig,
@@ -11,8 +10,11 @@ import {
   type PreviewViewport,
   type StreamCursor
 } from '$lib/core/model/types';
-import { clampTopLeft, displayName, pref } from '$lib/core/utils';
-import { emissionToPreviewColor, isValidHex } from '$lib/kit/themes/colors';
+import { clampTopLeft } from '$lib/core/utils/vec';
+import { emissionToPreviewColor, isValidHex } from '@voxel/kit/colors';
+import { displayName } from '@voxel/kit/format';
+import { NumericModel } from '@voxel/kit/models';
+import { pref } from '@voxel/kit/pref';
 
 import { FRAME_HISTORY_MS } from './arrivals';
 import type { DecodedPreviewFrame, PreviewLayer, PreviewSourceHeader, StagePosition } from './protocol';

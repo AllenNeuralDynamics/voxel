@@ -1,17 +1,18 @@
 <script lang="ts">
   import { getOpenInstrument } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { type AxisHandle, deviceLocked, NumericModel, type Prop } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
   import { formatSpatialValue, getSpatialUnit } from '$lib/core/spatial-units';
-  import { cn, displayName } from '$lib/core/utils';
   import LinkToggle from '$lib/features/imaging/LinkToggle.svelte';
   import PropertyDivergenceDot from '$lib/features/imaging/PropertyDivergenceDot.svelte';
   import StageGizmo from '$lib/features/stage/StageGizmo.svelte';
-  import { Button, NumberBox, Section, Slider } from '$lib/kit';
-  import { Loader } from '$lib/kit/icons';
   import { deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Button, NumberBox, Section, Slider } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { Loader } from '@voxel/kit/icons';
 
   type Axis = 'x' | 'y' | 'z';
   type GizmoView = 'iso' | 'xy' | 'xz' | 'yz';

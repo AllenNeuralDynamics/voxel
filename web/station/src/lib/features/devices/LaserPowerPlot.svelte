@@ -1,6 +1,6 @@
 <script lang="ts">
   import { EnumeratedModel, type LaserHandle, type LaserSample, NumericModel } from '$lib/core/model';
-  import { wavelengthToColor } from '$lib/kit/themes/colors';
+  import { wavelengthToColor } from '@voxel/kit/colors';
 
   let { laser }: { laser: LaserHandle } = $props();
 

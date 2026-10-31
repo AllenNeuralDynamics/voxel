@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import { prefs } from '$lib/core/prefs';
-  import { cn, displayName } from '$lib/core/utils';
   import { showLogsOf } from '$lib/features/issues/LogViewer.svelte';
-  import { Button } from '$lib/kit';
-  import { ArrowRight, CircleAlert, TriangleAlert, X } from '$lib/kit/icons';
   import { deviceHref } from '$lib/navigation';
+  import { Button } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { ArrowRight, CircleAlert, TriangleAlert, X } from '@voxel/kit/icons';
 
   import { LEVEL_TEXT } from './display';
   import { issues } from './store.svelte';

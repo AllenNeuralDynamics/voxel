@@ -46,8 +46,7 @@ Preview frames are received and decompressed in a worker, then rendered with Web
 | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `src/routes/(dashboard)/`          | The dashboard and the UI Lab                                                                |
 | `src/routes/stations/[stationId]/` | The station window. Its layout connects to the station and holds the rail and the panes     |
-| `src/lib/core/`                    | The application model, failure reporting and shared utilities                               |
-| `src/lib/kit/`                     | Shared interface parts, icons and themes                                                    |
+| `src/lib/core/`                    | The application model and station utilities                                                 |
 | `src/lib/features/`                | One folder for each area of the app: devices, imaging, issues, live, preview, run and stage |
 | `src/lib/shell/`                   | The station window frame: the rail, the panes and the keyboard shortcuts                    |
 

@@ -1,6 +1,6 @@
 import { CameraHandle, type DeviceHandle, type Instrument } from '$lib/core/model';
-import { displayName } from '$lib/core/utils';
 import { formatPropValue, propStep } from '$lib/features/devices/format';
+import { displayName } from '@voxel/kit/format';
 
 /** A live value that differs from the saved profile, with a way to put the saved value back. */
 export interface PropertyChange {

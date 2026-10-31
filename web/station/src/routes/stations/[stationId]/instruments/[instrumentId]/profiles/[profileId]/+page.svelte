@@ -2,14 +2,14 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getPageInstrument } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import type { ProfilePatch } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import { formatPropValue, propStep } from '$lib/features/devices';
   import { channelColor, channelLabel } from '$lib/features/imaging';
-  import { Badge, Button, Chip, Field, NumberBox, Section, TextArea, TextBox } from '$lib/kit';
   import { channelHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, Button, LinkChip, Field, NumberBox, Section, TextArea, TextBox } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   const selected = getPageInstrument();
   const profileId = $derived(page.params.profileId ?? '');
@@ -131,8 +131,8 @@
       <div class="flex flex-wrap gap-1">
         {#each profile.channels as channelId (channelId)}
           {@const channel = selected.imaging?.channels[channelId]}
-          <Chip href={channelHref(selected.params, channelId)} color={channelColor(channel)}
-            >{channelLabel(channelId, channel)}</Chip
+          <LinkChip href={channelHref(selected.params, channelId)} color={channelColor(channel)}
+            >{channelLabel(channelId, channel)}</LinkChip
           >
         {/each}
       </div>

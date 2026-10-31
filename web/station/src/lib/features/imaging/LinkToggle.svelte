@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Instrument } from '$lib/core/model';
-  import { cn, displayName } from '$lib/core/utils';
-  import { Link, Unlink } from '$lib/kit/icons';
+  import { cn } from '@voxel/kit/cn';
+  import { displayName } from '@voxel/kit/format';
+  import { Link, Unlink } from '@voxel/kit/icons';
 
   /** Links a setting with the same setting on the other cameras or lasers of the active profile, or unlinks it. */
   let {

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { cn } from '$lib/core/utils';
-  import { Button, RadioBar, ScrollArea } from '$lib/kit';
-  import { GripVertical } from '$lib/kit/icons';
-  import Sortable, { type SortableLayout } from '$lib/kit/sortable';
+  import { Button, RadioBar, ScrollArea } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { GripVertical } from '@voxel/kit/icons';
+  import Sortable, { type SortableLayout } from '@voxel/kit/sortable';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

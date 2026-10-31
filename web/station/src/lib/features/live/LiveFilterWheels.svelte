@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { ComponentProps } from 'svelte';
 
-  import { reportFailure } from '$lib/core/failures';
   import type { Channel, DiscreteAxisHandle, Instrument } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import { issues, issueText, LEVEL_TEXT } from '$lib/features/issues';
   import { deviceHref } from '$lib/navigation';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   import ChoiceChip from './ChoiceChip.svelte';
 

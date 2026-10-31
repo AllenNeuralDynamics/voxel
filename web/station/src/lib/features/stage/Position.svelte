@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { Group, Line, Rect } from 'svelte-konva';
 
-  import { watchTheme } from '$lib/kit/themes/manager.svelte';
+  import { watchTheme } from '@voxel/kit/style';
 
   import { getStageContext } from './context';
   import { type Bounds, type Point, screenTransform, worldTransform } from './geometry';

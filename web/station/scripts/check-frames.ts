@@ -1,12 +1,11 @@
 /**
  * Shadows, blur and dashed edges belong to the frames in `roles.css` and to the kit, which defines the looks. This
- * fails when a class outside `src/lib/kit/` uses one of them.
+ * fails when a class in the station uses one of them. The kit lives in its own package, so this never scans it.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..', 'src');
-const SKIP = join(ROOT, 'lib', 'kit');
 
 const RULES: { pattern: RegExp; message: string }[] = [
   {
@@ -27,7 +26,7 @@ function* files(dir: string): Generator<string> {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (path !== SKIP) yield* files(path);
+      yield* files(path);
     } else if (/\.(svelte|ts)$/.test(entry.name)) {
       yield path;
     }

@@ -1,14 +1,13 @@
 <script lang="ts">
   import { resource, watch } from 'runed';
-  import { toast } from 'svelte-sonner';
 
   import { resolve } from '$app/paths';
   import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { type InstrumentDefaults, type PresetRecord } from '$lib/core/model';
-  import { errorMessage } from '$lib/core/utils';
-  import { Badge, Button, Dialog, Field, TextBox } from '$lib/kit';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, Button, Dialog, Field, TextBox, toast } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { errorMessage } from '@voxel/kit/failures';
 
   interface Row {
     id: string;

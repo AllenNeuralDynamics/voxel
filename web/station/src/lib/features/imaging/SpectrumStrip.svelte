@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { wavelengthToColor } from '$lib/kit/themes/colors';
+  import { wavelengthToColor } from '@voxel/kit/colors';
 
   import type { SpectrumLine } from './channels';
   import { xAt } from './channels';

@@ -2,11 +2,11 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getPageInstrument, getVoxelStation, provideOpenInstrument } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
-  import { displayName } from '$lib/core/utils';
-  import { Button } from '$lib/kit';
-  import { ArrowRight } from '$lib/kit/icons';
   import PageFallback from '$lib/shell/PageFallback.svelte';
+  import { Button } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { ArrowRight } from '@voxel/kit/icons';
 
   const { children } = $props();
   const app = getVoxelStation();

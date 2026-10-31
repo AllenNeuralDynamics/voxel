@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import {
     BoolModel,
     type DeviceHandle,
@@ -11,10 +10,11 @@
     PropModel,
     StringModel
   } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
-  import { delayedTrue } from '$lib/core/utils/delayed-true.svelte';
-  import { JsonView, Section } from '$lib/kit';
-  import { ChevronDown } from '$lib/kit/icons';
+  import { JsonView, Section } from '@voxel/kit';
+  import { delayedTrue } from '@voxel/kit/delayed-true';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { ChevronDown } from '@voxel/kit/icons';
 
   import CommandButton from './CommandButton.svelte';
   import { entryCount, formatPropValue, isStructuredValue, propertyHint, propStep } from './format';

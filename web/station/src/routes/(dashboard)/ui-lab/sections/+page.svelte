@@ -1,9 +1,9 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { cn } from '$lib/core/utils';
   import { LEVEL_DOT } from '$lib/features/issues';
-  import { Badge, Button, CollapsibleSection, NumberBox, RadioBar, Section, Select, Switch, TextBox } from '$lib/kit';
-  import { ArrowRight, Plus, RefreshCw, Trash } from '$lib/kit/icons';
+  import { Badge, Button, CollapsibleSection, NumberBox, RadioBar, Section, Select, Switch, TextBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { ArrowRight, Plus, RefreshCw, Trash } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

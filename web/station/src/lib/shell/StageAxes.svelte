@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import type { Stage } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
   import { fromMicrometers, getSpatialUnit, toMicrometers } from '$lib/core/spatial-units';
-  import { cn } from '$lib/core/utils';
-  import { Button, SpinBox } from '$lib/kit';
+  import { Button, SpinBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
 
   interface Props {
     stage: Stage;

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { reportFailure } from '$lib/core/failures';
   import {
     type Channel,
     deviceLocked,
@@ -11,15 +10,17 @@
     type Prop
   } from '$lib/core/model';
   import type { ChannelCardRows } from '$lib/core/prefs';
-  import { cn, displayName } from '$lib/core/utils';
-  import type { MultiSelect } from '$lib/core/utils/multiselect.svelte';
   import LaserPowerPlot from '$lib/features/devices/LaserPowerPlot.svelte';
   import LinkToggle from '$lib/features/imaging/LinkToggle.svelte';
   import PropertyDivergenceDot from '$lib/features/imaging/PropertyDivergenceDot.svelte';
   import { issues, issueText, LEVEL_TEXT } from '$lib/features/issues';
-  import { NumberInput, RadioBar, Select, Slider } from '$lib/kit';
-  import { wavelengthToColor } from '$lib/kit/themes/colors';
   import { deviceHref } from '$lib/navigation';
+  import { NumberInput, RadioBar, Select, Slider } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { wavelengthToColor } from '@voxel/kit/colors';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import type { MultiSelect } from '@voxel/kit/multiselect';
 
   import ChipRow from './ChipRow.svelte';
   import LiveFilterWheels from './LiveFilterWheels.svelte';

@@ -1,5 +1,5 @@
 import { deviceReady } from '$lib/core/model';
-import { displayName } from '$lib/core/utils';
+import { displayName } from '@voxel/kit/format';
 
 import type { Check } from '../types';
 

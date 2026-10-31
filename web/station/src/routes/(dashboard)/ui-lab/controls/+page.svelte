@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import { displayName } from '$lib/core/utils';
   import {
     Button,
     Checkbox,
@@ -16,8 +15,9 @@
     TagInput,
     TextArea,
     TextBox
-  } from '$lib/kit';
-  import { Crosshair, RefreshCw } from '$lib/kit/icons';
+  } from '@voxel/kit';
+  import { displayName } from '@voxel/kit/format';
+  import { Crosshair, RefreshCw } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

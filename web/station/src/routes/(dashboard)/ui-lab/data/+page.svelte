@@ -1,6 +1,6 @@
 <script lang="ts">
   import { SpectrumScale, SpectrumStrip } from '$lib/features/imaging';
-  import { JsonView } from '$lib/kit';
+  import { JsonView } from '@voxel/kit';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

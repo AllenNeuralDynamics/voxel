@@ -1,10 +1,8 @@
 <script lang="ts">
-  import { Pane, PaneGroup } from 'paneforge';
-
   import { resolve } from '$app/paths';
-  import { BoxSelect, ChartSpline, Layers, PanelLeft, TriangleAlert } from '$lib/kit/icons';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import * as Rail from '$lib/kit/rail';
+  import * as Rail from '$lib/shell/rail';
+  import { BoxSelect, ChartSpline, Layers, PanelLeft, TriangleAlert } from '@voxel/kit/icons';
+  import { Pane, PaneDivider, PaneGroup } from '@voxel/kit/pane';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

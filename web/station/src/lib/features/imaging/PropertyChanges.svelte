@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import type { Instrument } from '$lib/core/model';
-  import { cn, displayName } from '$lib/core/utils';
-  import { Button } from '$lib/kit';
-  import { RotateCcw } from '$lib/kit/icons';
+  import { Button } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { RotateCcw } from '@voxel/kit/icons';
 
   import { type PropertyChange, propertyChanges } from './changes';
 

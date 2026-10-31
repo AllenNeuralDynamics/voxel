@@ -2,8 +2,8 @@
   import { onMount, type Snippet, untrack } from 'svelte';
   import { Group, Image as KonvaImage, Rect } from 'svelte-konva';
 
-  import { ContextMenu } from '$lib/kit';
-  import { Crosshair } from '$lib/kit/icons';
+  import { ContextMenu } from '@voxel/kit';
+  import { Crosshair } from '@voxel/kit/icons';
 
   import { getStageContext, type MenuSelection } from './context';
   import { type Bounds, intersect, worldTransform } from './geometry';

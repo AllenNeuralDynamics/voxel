@@ -2,10 +2,9 @@
   import { watch } from 'runed';
 
   import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import type { DerivedWaveform, Signals, Waveform } from '$lib/core/model';
   import { ROLE_ORDER } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
+  import { resolveDeviceColor, waveformPortColor } from '$lib/features/devices/role-colors';
   import WaveformPlot, { type PlotContext } from '$lib/features/imaging/WaveformPlot.svelte';
   import {
     cloneWaveform,
@@ -16,11 +15,12 @@
     isDerivedWaveform,
     resolveWaveforms
   } from '$lib/features/imaging/waveforms';
-  import { NumberBox, Select, SpinBox } from '$lib/kit';
-  import { resolveDeviceColor, waveformPortColor } from '$lib/kit/themes/colors';
   import { profileHref } from '$lib/navigation';
   import PageFallback from '$lib/shell/PageFallback.svelte';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { NumberBox, Select, SpinBox } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   import type { PageProps } from './$types';
 

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { getPageInstrument } from '$lib/context.svelte';
-  import { displayName } from '$lib/core/utils';
   import { profileSpectrum, SpectrumScale, SpectrumStrip } from '$lib/features/imaging';
-  import { Badge } from '$lib/kit';
   import { profileHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge } from '@voxel/kit';
+  import { displayName } from '@voxel/kit/format';
 
   const selected = getPageInstrument();
   const instrument = $derived(selected.open);

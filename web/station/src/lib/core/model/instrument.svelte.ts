@@ -1,8 +1,9 @@
 /** The open instrument: its session, devices, channels, profiles, routing and tasks. */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
-import { reportFailure } from '$lib/core/failures';
-import { displayName } from '$lib/core/utils/helpers';
+import { reportFailure } from '@voxel/kit/failures';
+import { displayName } from '@voxel/kit/format';
+import { type EditContext, EnumeratedModel, NumericModel } from '@voxel/kit/models';
 
 import { Client } from './client.svelte';
 import { assignDeviceRoles, type DeviceRoleAssignment } from './device-rules';
@@ -17,7 +18,6 @@ import {
 } from './device.svelte';
 import { createEditQueue } from './edit-queue.svelte';
 import { ProfileLinks } from './profile-links.svelte';
-import { type EditContext, EnumeratedModel, NumericModel } from './prop.svelte';
 import { Stage, type StageAxis } from './stage.svelte';
 import type {
   AcquisitionManifest,

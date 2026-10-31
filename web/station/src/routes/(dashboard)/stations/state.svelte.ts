@@ -9,8 +9,8 @@ import {
   type StationFeedView,
   type StationInfo
 } from '$lib/core/model';
-import { errorMessage } from '$lib/core/utils';
 import { sendStationWindowRequest, stationWindowName, stationWindowRequest } from '$lib/shell/app-windows';
+import { errorMessage } from '@voxel/kit/failures';
 
 export interface AcquiredStationWindow {
   ref: Window;

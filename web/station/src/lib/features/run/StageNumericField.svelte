@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { EditContext, Stage } from '$lib/core/model';
   import type { SpatialUnitDefinition } from '$lib/core/spatial-units';
-  import { Button, NumberBox } from '$lib/kit';
-  import { Crosshair } from '$lib/kit/icons';
+  import { Button, NumberBox } from '@voxel/kit';
+  import { Crosshair } from '@voxel/kit/icons';
 
   interface Props {
     stage?: Stage | null;

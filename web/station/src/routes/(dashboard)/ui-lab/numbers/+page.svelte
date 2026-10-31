@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte';
 
   import { type EditContext, NumericModel } from '$lib/core/model';
-  import { NumberBox, NumberInput, NumberSlider, Slider, SpinBox } from '$lib/kit';
+  import { NumberBox, NumberInput, NumberSlider, Slider, SpinBox } from '@voxel/kit';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

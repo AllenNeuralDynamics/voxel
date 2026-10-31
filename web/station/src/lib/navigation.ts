@@ -17,7 +17,7 @@ import {
   Settings,
   Split,
   Video
-} from '$lib/kit/icons';
+} from '@voxel/kit/icons';
 
 export interface NavigationItem {
   label: string;

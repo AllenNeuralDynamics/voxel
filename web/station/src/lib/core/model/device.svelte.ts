@@ -1,11 +1,8 @@
 /** App-level store (`VoxelApp`) + the active-instrument store (`Instrument`) and its device handles. */
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
-import { reportFailure } from '$lib/core/failures';
 import { parseVec2D, type Vec2D } from '$lib/core/utils/vec';
-
-import { Client } from './client.svelte';
-import type { DeviceRoleAssignment } from './device-rules';
+import { reportFailure } from '@voxel/kit/failures';
 import {
   type AnyPropModel,
   BoolModel,
@@ -13,10 +10,45 @@ import {
   EnumeratedModel,
   LinkGroup,
   NumericModel,
-  Prop,
   type PropSnapshot
-} from './prop.svelte';
+} from '@voxel/kit/models';
+
+import { Client } from './client.svelte';
+import type { DeviceRoleAssignment } from './device-rules';
 import type { DeviceInterface, DeviceSnapshot, DiscreteAxisState, PropResults, SensorROI, Signals } from './types';
+
+export interface PropertyInfo {
+  name: string;
+  label: string;
+  desc?: string | null;
+  dtype: string;
+  access: 'ro' | 'rw';
+  units: string;
+}
+
+/** A PropModel paired with its interface metadata. Profile saved-state lives on `Instrument.divergence`. */
+export class Prop {
+  readonly model: AnyPropModel;
+  info: PropertyInfo = $state(undefined as never);
+
+  constructor(model: AnyPropModel, info: PropertyInfo) {
+    this.model = model;
+    this.info = info;
+  }
+
+  get value(): unknown {
+    return this.model.value;
+  }
+  get label(): string {
+    return this.info.label || '';
+  }
+  get units(): string {
+    return this.info.units ?? '';
+  }
+  get access() {
+    return this.info.access;
+  }
+}
 
 /**
  * A single device: its introspected interface plus a live, reactive cache of property models.

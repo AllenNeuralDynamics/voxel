@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import { cn } from '$lib/core/utils';
-  import { RotateCcw } from '$lib/kit/icons';
+  import { cn } from '@voxel/kit/cn';
+  import { RotateCcw } from '@voxel/kit/icons';
 
   let {
     label,

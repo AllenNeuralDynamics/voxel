@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { brand } from '$lib/kit/themes';
+  import { brand } from '@voxel/kit/style';
 
   export interface CubeScheme {
     light: string;

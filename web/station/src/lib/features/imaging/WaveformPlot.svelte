@@ -4,7 +4,7 @@
   import { untrack } from 'svelte';
   import uPlot, { type AlignedData, type Options } from 'uplot';
 
-  import { themes } from '$lib/kit/themes';
+  import { themes } from '@voxel/kit/style';
 
   export interface PlotContext {
     duration: number;

@@ -3,7 +3,7 @@
   import { Circle, Group, Line } from 'svelte-konva';
 
   import { type Point2D, pointBounds, rectanglePoints, resizePointsToBounds, type XYDefinition } from '$lib/core/model';
-  import { hexWithAlpha } from '$lib/kit/themes/colors';
+  import { hexWithAlpha } from '@voxel/kit/colors';
 
   import { getStageContext } from '../context';
   import { type Bounds, screenTransform, worldTransform } from '../geometry';

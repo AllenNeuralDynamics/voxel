@@ -1,6 +1,6 @@
 <script lang="ts">
   import { prefs } from '$lib/core/prefs';
-  import { ChevronDown } from '$lib/kit/icons';
+  import { ChevronDown } from '@voxel/kit/icons';
 
   import PreviewChannelPrefs from './PreviewChannelPrefs.svelte';
   import type { PreviewSession } from './session.svelte';

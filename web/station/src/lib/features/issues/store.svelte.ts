@@ -1,11 +1,11 @@
 import { watch } from 'runed';
 import { untrack } from 'svelte';
-import { toast } from 'svelte-sonner';
 import { SvelteMap } from 'svelte/reactivity';
 
 import type { HttpMethod } from '$lib/core/model/client.svelte';
 import type { Station } from '$lib/core/model/station.svelte';
 import type { PreviewSession } from '$lib/features/preview/session.svelte';
+import { toast } from '@voxel/kit';
 
 import { CHECKS } from './checks';
 import type { CheckContext, ConditionInput, IssueCondition, IssueEvent, IssueSubject } from './types';

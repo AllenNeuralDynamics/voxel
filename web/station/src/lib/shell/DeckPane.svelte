@@ -1,15 +1,16 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { reportFailure } from '$lib/core/failures';
   import type { Instrument } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
-  import { cn, displayName } from '$lib/core/utils';
-  import { delayedTrue } from '$lib/core/utils/delayed-true.svelte';
-  import { MultiSelect } from '$lib/core/utils/multiselect.svelte';
   import { ChannelCard, LiveFilterWheels, LiveROI, LiveRoutes } from '$lib/features/live';
   import ChipRow from '$lib/features/live/ChipRow.svelte';
-  import { Button, Section, Select } from '$lib/kit';
-  import { ArrowRight, Blend, ChartSpline, Loader } from '$lib/kit/icons';
+  import { Button, Section, Select } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { delayedTrue } from '@voxel/kit/delayed-true';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { ArrowRight, Blend, ChartSpline, Loader } from '@voxel/kit/icons';
+  import { MultiSelect } from '@voxel/kit/multiselect';
 
   import RunButton from './RunButton.svelte';
 

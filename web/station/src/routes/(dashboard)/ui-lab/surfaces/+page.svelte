@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button, NumberBox, Select, Switch, TextBox } from '$lib/kit';
-  import { Check, ChevronDown, CircleAlert, CircleCheck, Info, TriangleAlert } from '$lib/kit/icons';
+  import { Button, NumberBox, Select, Switch, TextBox } from '@voxel/kit';
+  import { Check, ChevronDown, CircleAlert, CircleCheck, Info, TriangleAlert } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

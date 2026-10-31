@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import { cn } from '$lib/core/utils';
-  import { AppearanceMenu } from '$lib/kit/themes';
+  import { cn } from '@voxel/kit/cn';
+  import { AppearanceMenu } from '@voxel/kit/style';
 
   import VoxelLogo from './VoxelLogo.svelte';
 

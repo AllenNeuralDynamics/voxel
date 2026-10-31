@@ -4,14 +4,14 @@
   import { Group } from 'svelte-konva';
 
   import { getPreviewContext, getRegionSelection, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { createAreaTask, createPositionTask, NumericModel, type PlannedVolume, planningFov } from '$lib/core/model';
   import { planOverlap, prefs } from '$lib/core/prefs';
   import { formatSpatialDistance, formatSpatialValue } from '$lib/core/spatial-units';
-  import { displayName } from '$lib/core/utils';
-  import { ContextMenu } from '$lib/kit';
-  import { Brush, Crosshair, Focus, Fullscreen, Plus, Square } from '$lib/kit/icons';
-  import { watchTheme } from '$lib/kit/themes/manager.svelte';
+  import { ContextMenu } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { Brush, Crosshair, Focus, Fullscreen, Plus, Square } from '@voxel/kit/icons';
+  import { watchTheme } from '@voxel/kit/style';
 
   import Fov from './Fov.svelte';
   import type { Bounds, Point, Viewport } from './geometry';

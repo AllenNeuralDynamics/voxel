@@ -1,13 +1,13 @@
 <script lang="ts">
   import './layout.css';
   // Applies the saved theme before any page renders.
-  import '$lib/kit/themes';
+  import '@voxel/kit/style';
 
   import { onMount } from 'svelte';
 
-  import { reportFailure } from '$lib/core/failures';
-  import { Toaster, Tooltip } from '$lib/kit';
   import favicon from '$lib/shell/favicon.svg';
+  import { Toaster, Tooltip } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
 
   const { children } = $props();
 

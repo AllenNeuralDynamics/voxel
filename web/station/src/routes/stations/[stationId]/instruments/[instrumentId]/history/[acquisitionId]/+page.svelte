@@ -4,7 +4,6 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import {
     type AcquisitionManifest,
     type AcquisitionStatus,
@@ -13,10 +12,12 @@
     type InstrumentState,
     type VolumeStatus
   } from '$lib/core/model';
-  import { cn, displayName } from '$lib/core/utils';
-  import { Badge, CollapsibleSection, JsonView, Section } from '$lib/kit';
-  import { Check, Copy } from '$lib/kit/icons';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, CollapsibleSection, JsonView, Section } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { Check, Copy } from '@voxel/kit/icons';
 
   interface Difference {
     path: string[];

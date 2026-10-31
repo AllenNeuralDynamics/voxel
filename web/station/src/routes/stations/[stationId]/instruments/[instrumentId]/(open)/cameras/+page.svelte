@@ -1,14 +1,15 @@
 <script lang="ts">
   import { getOpenInstrument } from '$lib/context.svelte';
   import { deviceLocked, deviceReady, EnumeratedModel, NumericModel, type Prop } from '$lib/core/model';
-  import { cn, displayName } from '$lib/core/utils';
   import { deviceIdentity } from '$lib/features/devices/snippets.svelte';
   import LinkToggle from '$lib/features/imaging/LinkToggle.svelte';
   import PropertyDivergenceDot from '$lib/features/imaging/PropertyDivergenceDot.svelte';
   import { issues, LEVEL_TEXT } from '$lib/features/issues';
-  import { Checkbox, NumberBox, RadioBar, Section, Select, Slider } from '$lib/kit';
   import { deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Checkbox, NumberBox, RadioBar, Section, Select, Slider } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { displayName } from '@voxel/kit/format';
 
   type Setting = {
     name: string;

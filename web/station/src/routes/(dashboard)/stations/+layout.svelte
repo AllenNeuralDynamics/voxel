@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
 
-  import { reportFailure } from '$lib/core/failures';
+  import { reportFailure } from '@voxel/kit/failures';
 
   import { DashboardState, setDashboardState } from './state.svelte';
 

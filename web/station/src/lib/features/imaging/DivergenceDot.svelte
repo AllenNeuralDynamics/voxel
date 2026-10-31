@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { cn } from '$lib/core/utils';
-  import { delayedTrue } from '$lib/core/utils/delayed-true.svelte';
+  import { cn } from '@voxel/kit/cn';
+  import { delayedTrue } from '@voxel/kit/delayed-true';
 
   /** A dot that shows while a live value differs from the saved profile. A click puts the saved value back. */
   let {

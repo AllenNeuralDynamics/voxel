@@ -1,10 +1,10 @@
 <script lang="ts">
   import { watch } from 'runed';
 
-  import { reportFailure } from '$lib/core/failures';
   import type { Stage } from '$lib/core/model';
-  import { cn } from '$lib/core/utils';
-  import { watchTheme } from '$lib/kit/themes/manager.svelte';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { watchTheme } from '@voxel/kit/style';
 
   import { type Axis3, Camera3D } from './camera3d';
 

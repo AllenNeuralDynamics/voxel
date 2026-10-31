@@ -1,7 +1,7 @@
 import type { ResolvedPathname } from '$app/types';
-import type { FailureSubject } from '$lib/core/failures';
 import type { Instrument, Station } from '$lib/core/model';
 import type { PreviewSession } from '$lib/features/preview/session.svelte';
+import type { FailureSubject } from '@voxel/kit/failures';
 
 export type IssueLevel = 'error' | 'warning';
 

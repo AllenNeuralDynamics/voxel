@@ -2,10 +2,11 @@
   import { onNavigate } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { cn, pref } from '$lib/core/utils';
-  import { Collapsible } from '$lib/kit';
-  import { ChevronDown } from '$lib/kit/icons';
-  import { MarkSettings, ThemePicker } from '$lib/kit/themes';
+  import { Collapsible } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { ChevronDown } from '@voxel/kit/icons';
+  import { pref } from '@voxel/kit/pref';
+  import { MarkSettings, ThemePicker } from '@voxel/kit/style';
 
   import { GROUPS, OVERVIEW, PAGES } from './nav';
 

@@ -117,6 +117,7 @@ interfaces; the other distributions have narrower library boundaries.
 | [`ome-zarr-writer`](omezarr/) | Streaming multiscale OME-Zarr writing |
 | [`vxlib`](vxlib/) | Shared reactive primitives, schemas, and utilities |
 | [`web/station`](web/station/) | SvelteKit frontend compiled into `vxl.web` package data |
+| [`web/kit`](web/kit/) | Shared Svelte UI kit used by the web apps |
 
 The non-published [`bench`](bench/) workspace contains OME-Zarr performance and behavior benchmarks.
 
@@ -137,7 +138,7 @@ uv run ruff check
 uv run ruff format --check
 uv run basedpyright
 uv run pytest
-vp -C web/station run check
+vp -C web run -r check
 ```
 
 For frontend development, run `vp -C web/station dev` beside `uv run vxl serve`. Build the frontend and Python

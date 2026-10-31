@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import { cn } from '$lib/core/utils';
+  import { cn } from '@voxel/kit/cn';
 
   interface Props {
     label: string;

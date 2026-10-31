@@ -4,7 +4,7 @@ export * from './device-rules';
 export * from './instrument.svelte';
 export * from './instrument-view';
 export * from './planning';
-export * from './prop.svelte';
+export * from '@voxel/kit/models';
 export * from './stage.svelte';
 export * from './station.svelte';
 export * from './topology';

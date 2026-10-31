@@ -3,9 +3,9 @@
   import { onMount } from 'svelte';
 
   import { prefs } from '$lib/core/prefs';
-  import { clampTopLeft } from '$lib/core/utils';
-  import { NumberBox } from '$lib/kit';
-  import { ChevronDown } from '$lib/kit/icons';
+  import { clampTopLeft } from '$lib/core/utils/vec';
+  import { NumberBox } from '@voxel/kit';
+  import { ChevronDown } from '@voxel/kit/icons';
 
   import { isFullViewport } from './render';
   import { DEFAULT_VIEWPORT, type PreviewSession, wheelZoomFactor } from './session.svelte';

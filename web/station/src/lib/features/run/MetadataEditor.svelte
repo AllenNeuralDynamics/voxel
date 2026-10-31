@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import type { Instrument, JsonSchema, JsonSchemaProperty } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
-  import { Button, Dialog, Label, NumberBox, Select, TagInput, TextArea, TextBox } from '$lib/kit';
+  import { Button, Dialog, Label, NumberBox, Select, TagInput, TextArea, TextBox } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   interface Props {
     instrument: Instrument;

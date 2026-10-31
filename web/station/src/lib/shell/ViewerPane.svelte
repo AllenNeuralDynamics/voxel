@@ -1,12 +1,9 @@
 <script lang="ts">
-  import { Pane, PaneGroup } from 'paneforge';
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
 
   import { getPreviewContext, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { type CenterPanelTab, prefs, type ViewerMode } from '$lib/core/prefs';
-  import { cn, createPaneSize } from '$lib/core/utils';
   import { propertyChanges } from '$lib/features/imaging/changes';
   import PropertyChanges from '$lib/features/imaging/PropertyChanges.svelte';
   import { issues, LEVEL_DOT } from '$lib/features/issues';
@@ -15,9 +12,12 @@
   import PreviewCanvas from '$lib/features/preview/PreviewCanvas.svelte';
   import PreviewFrameInfo from '$lib/features/preview/PreviewFrameInfo.svelte';
   import { StageView, type Viewport } from '$lib/features/stage';
-  import { Button, RadioBar, Spinner } from '$lib/kit';
-  import { Power } from '$lib/kit/icons';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
+  import { Button, RadioBar, Spinner } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { Power } from '@voxel/kit/icons';
+  import { createPaneSize, Pane, PaneGroup } from '@voxel/kit/pane';
+  import { PaneDivider } from '@voxel/kit/pane';
 
   import HistoryButtons from './HistoryButtons.svelte';
   import StageAxes from './StageAxes.svelte';

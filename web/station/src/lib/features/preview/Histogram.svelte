@@ -3,8 +3,8 @@
   import type { Snippet } from 'svelte';
 
   import type { ColormapCatalog } from '$lib/core/model';
-  import { ContextMenu, NumberInput } from '$lib/kit';
-  import { EyeOff } from '$lib/kit/icons';
+  import { ContextMenu, NumberInput } from '@voxel/kit';
+  import { EyeOff } from '@voxel/kit/icons';
 
   import { resolveColormapStops } from './render';
 

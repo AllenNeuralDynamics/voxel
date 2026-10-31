@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { DropdownMenu } from 'bits-ui';
-
   import type { ResolvedPathname } from '$app/types';
-  import { cn } from '$lib/core/utils';
-  import { ArrowRight, Check, Loader } from '$lib/kit/icons';
+  import { DropdownMenu } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { ArrowRight, Check, Loader } from '@voxel/kit/icons';
 
   type Option = {
     value: string;
@@ -46,61 +45,55 @@
     )}
     {title}><span class="truncate">{text}</span></DropdownMenu.Trigger
   >
-  <DropdownMenu.Portal>
-    <DropdownMenu.Content
-      class="z-50 min-w-44 frame-floating p-1 outline-none"
-      align="start"
-      sideOffset={4}
-      preventScroll={false}
-    >
-      <DropdownMenu.RadioGroup value={value ?? ''} onValueChange={onChange}>
-        {#each options as option (option.value)}
-          <DropdownMenu.RadioItem
-            value={option.value}
-            {disabled}
-            class="flex cursor-default items-center gap-2 rounded-sm px-2 py-1 text-sm text-fg outline-none select-none data-disabled:opacity-50 data-highlighted:bg-element-hover"
-          >
-            {#snippet children({ checked })}
-              <span class="flex min-w-0 flex-1 items-center gap-1.5">
-                <span class={cn('truncate', option.muted && 'text-fg-muted')}>{option.label}</span>
-                {#if option.marked && mark}
-                  <span
-                    class={cn('size-1.5 shrink-0 rounded-full', !mark.color && 'bg-accent-fg')}
-                    style:background-color={mark.color}
-                    role="img"
-                    aria-label={mark.label}
-                    title={mark.title}
-                  ></span>
-                {/if}
-              </span>
-              <span class="flex size-3.5 shrink-0 items-center justify-center">
-                {#if option.value === pending}
-                  <Loader class="size-3 animate-spin text-fg-muted" />
-                {:else if checked}
-                  <Check class="size-3.5" />
-                {/if}
-              </span>
-            {/snippet}
-          </DropdownMenu.RadioItem>
-        {/each}
-      </DropdownMenu.RadioGroup>
-      <DropdownMenu.Separator class="-mx-1 my-1 h-px bg-line-faint" />
-      <div class="flex items-center gap-2 ps-2 pe-1">
-        <span class="min-w-0 flex-1 truncate text-sm text-fg">{footer.name}</span>
-        <DropdownMenu.Item>
-          {#snippet child({ props })}
-            <a
-              {...props}
-              href={footer.href}
-              class="flex size-5 shrink-0 items-center justify-center rounded-sm text-fg-muted outline-none data-highlighted:bg-element-hover data-highlighted:text-fg"
-              title={footer.title}
-              aria-label={footer.title}
-            >
-              <ArrowRight class="size-3" />
-            </a>
+  <DropdownMenu.Content class="min-w-44" align="start" preventScroll={false}>
+    <DropdownMenu.RadioGroup value={value ?? ''} onValueChange={onChange}>
+      {#each options as option (option.value)}
+        <DropdownMenu.RadioItem
+          value={option.value}
+          {disabled}
+          indicator={false}
+          class="py-1 text-sm text-fg data-highlighted:bg-element-hover"
+        >
+          {#snippet children({ checked })}
+            <span class="flex min-w-0 flex-1 items-center gap-1.5">
+              <span class={cn('truncate', option.muted && 'text-fg-muted')}>{option.label}</span>
+              {#if option.marked && mark}
+                <span
+                  class={cn('size-1.5 shrink-0 rounded-full', !mark.color && 'bg-accent-fg')}
+                  style:background-color={mark.color}
+                  role="img"
+                  aria-label={mark.label}
+                  title={mark.title}
+                ></span>
+              {/if}
+            </span>
+            <span class="flex size-3.5 shrink-0 items-center justify-center">
+              {#if option.value === pending}
+                <Loader class="size-3 animate-spin text-fg-muted" />
+              {:else if checked}
+                <Check class="size-3.5" />
+              {/if}
+            </span>
           {/snippet}
-        </DropdownMenu.Item>
-      </div>
-    </DropdownMenu.Content>
-  </DropdownMenu.Portal>
+        </DropdownMenu.RadioItem>
+      {/each}
+    </DropdownMenu.RadioGroup>
+    <DropdownMenu.Separator />
+    <div class="flex items-center gap-2 ps-2 pe-1">
+      <span class="min-w-0 flex-1 truncate text-sm text-fg">{footer.name}</span>
+      <DropdownMenu.Item>
+        {#snippet child({ props })}
+          <a
+            {...props}
+            href={footer.href}
+            class="flex size-5 shrink-0 items-center justify-center rounded-sm text-fg-muted outline-none data-highlighted:bg-element-hover data-highlighted:text-fg"
+            title={footer.title}
+            aria-label={footer.title}
+          >
+            <ArrowRight class="size-3" />
+          </a>
+        {/snippet}
+      </DropdownMenu.Item>
+    </div>
+  </DropdownMenu.Content>
 </DropdownMenu.Root>

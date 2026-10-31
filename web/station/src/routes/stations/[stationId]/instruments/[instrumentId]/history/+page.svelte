@@ -4,10 +4,10 @@
   import { resolve } from '$app/paths';
   import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
   import { type AcquisitionManifest, type AcquisitionStatus } from '$lib/core/model';
-  import { RadioBar } from '$lib/kit';
-  import { ArrowRight, Check, CircleAlert, DotsSpinner, Square, TriangleAlert } from '$lib/kit/icons';
   import { acquisitionHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { RadioBar } from '@voxel/kit';
+  import { ArrowRight, Check, CircleAlert, DotsSpinner, Square, TriangleAlert } from '@voxel/kit/icons';
 
   type Filter = 'all' | 'done' | 'failed' | 'stopped';
 

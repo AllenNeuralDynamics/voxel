@@ -1,9 +1,9 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
-  import { Button } from '$lib/kit';
-  import { Redo, Undo } from '$lib/kit/icons';
   import { useShortcut } from '$lib/shell/shortcuts';
+  import { Button } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { Redo, Undo } from '@voxel/kit/icons';
 
   const app = getVoxelStation();
 

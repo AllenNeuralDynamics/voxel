@@ -1,7 +1,7 @@
 <script module lang="ts">
   import { type Channel } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
-  import { wavelengthToColor } from '$lib/kit/themes/colors';
+  import { wavelengthToColor } from '@voxel/kit/colors';
+  import { displayName } from '@voxel/kit/format';
 
   export { channelDot, deviceIdentity };
 </script>

@@ -1,25 +1,25 @@
 <script lang="ts">
-  import { Pane, PaneGroup } from 'paneforge';
   import { useEventListener } from 'runed';
   import { onMount } from 'svelte';
 
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { provideStationContext } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { resolveInstrumentView } from '$lib/core/model';
-  import { createPaneSize, displayName } from '$lib/core/utils';
-  import PaneDivider from '$lib/kit/PaneDivider.svelte';
-  import * as Rail from '$lib/kit/rail';
   import { instrumentNavigation } from '$lib/navigation';
   import { activateDashboardWindow, isStationWindowRequest, stationWindowName } from '$lib/shell/app-windows';
   import CloseInstrumentDialog from '$lib/shell/CloseInstrumentDialog.svelte';
   import ConnectionSplash from '$lib/shell/ConnectionSplash.svelte';
   import DeckPane from '$lib/shell/DeckPane.svelte';
+  import * as Rail from '$lib/shell/rail';
   import { InstrumentSelection } from '$lib/shell/selection.svelte';
   import StationMenu from '$lib/shell/StationMenu.svelte';
   import ViewerPane from '$lib/shell/ViewerPane.svelte';
   import VoxelLogo from '$lib/shell/VoxelLogo.svelte';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { createPaneSize, Pane, PaneGroup } from '@voxel/kit/pane';
+  import { PaneDivider } from '@voxel/kit/pane';
 
   import type { LayoutProps } from './$types';
 

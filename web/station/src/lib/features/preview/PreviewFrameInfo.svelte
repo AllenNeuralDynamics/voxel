@@ -3,11 +3,11 @@
 
   import type { ColormapCatalog, PreviewViewport } from '$lib/core/model/types';
   import { prefs } from '$lib/core/prefs';
-  import { cn } from '$lib/core/utils';
-  import { Button, RadioBar } from '$lib/kit';
-  import { Pause, Play } from '$lib/kit/icons';
-  import { legibleFor, toHex } from '$lib/kit/themes/colors';
-  import { themes } from '$lib/kit/themes/manager.svelte';
+  import { Button, RadioBar } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { legibleFor, toHex } from '@voxel/kit/colors';
+  import { Pause, Play } from '@voxel/kit/icons';
+  import { themes } from '@voxel/kit/style';
 
   import { FRAME_HISTORY_MS, frameRate } from './arrivals';
   import { isFullViewport, resolveColormapColor, toDisplayViewport, viewportFrameCovers } from './render';

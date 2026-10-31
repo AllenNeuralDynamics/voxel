@@ -1,23 +1,22 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
-@import '@fontsource-variable/ibm-plex-sans';
-@import '@fontsource-variable/lilex';
-@import '../lib/kit/themes/index.css';
+@import '@voxel/kit/style.css';
 
-@custom-variant dark (&:is(.dark *));
+/* The kit is its own package, so Tailwind scans its files too. */
+@source '../../../kit/src';
 
+/* The sizes of the station window's frame. */
 :root {
-  --ui-step: 0.25rem;
-  --ui-base: 2.5rem;
-
-  --ui-xs: calc(var(--ui-base) - 4 * var(--ui-step));
-  --ui-sm: calc(var(--ui-base) - 2 * var(--ui-step));
-  --ui-md: calc(var(--ui-base) - 1 * var(--ui-step));
-  --ui-lg: var(--ui-base);
   --pane-header-height: calc(var(--ui-lg) + 3 * var(--ui-step));
   --pane-footer-height: calc(var(--ui-lg) + 4 * var(--ui-step));
   --app-bar-height: calc(var(--ui-lg) + 5 * var(--ui-step));
   --rail-width: 5rem;
+}
+
+@theme inline {
+  --spacing-pane-header: var(--pane-header-height);
+  --spacing-pane-footer: var(--pane-footer-height);
+  --spacing-app-bar: var(--app-bar-height);
+  --spacing-rail: var(--rail-width);
 }
 
 .nss {
@@ -47,200 +46,4 @@
 /* The framed list under a bottom panel bar. It scrolls. */
 @utility bottom-panel-box {
   @apply mx-2 mb-3 min-h-0 flex-1 overflow-y-auto frame-sunken text-sm;
-}
-
-@theme {
-  --font-sans: 'IBM Plex Sans Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Lilex Variable', ui-monospace, monospace;
-
-  --spacing: 0.3rem;
-
-  --radius-xs: 0.15rem;
-  --radius-sm: 0.3rem;
-  --radius-md: 0.45rem;
-  --radius-lg: 0.6rem;
-}
-
-@theme inline {
-  /* ── Density ───────────────────────────────────────────────────────── */
-  --spacing-ui-xs: var(--ui-xs);
-  --spacing-ui-sm: var(--ui-sm);
-  --spacing-ui-md: var(--ui-md);
-  --spacing-ui-lg: var(--ui-lg);
-  --spacing-pane-header: var(--pane-header-height);
-  --spacing-pane-footer: var(--pane-footer-height);
-  --spacing-app-bar: var(--app-bar-height);
-  --spacing-rail: var(--rail-width);
-
-  /* ── Surfaces ──────────────────────────────────────────────────────── */
-  --color-canvas: var(--canvas);
-  --color-floating: var(--floating);
-  --color-backdrop: var(--backdrop);
-  --color-shell: var(--shell);
-  --color-pane: var(--pane);
-  --color-raised: var(--raised);
-  --color-tint: var(--tint);
-  --color-tint-hover: var(--tint-hover);
-  --color-overlay: var(--overlay);
-
-  /* ── Element ───────────────────────────────────────────────────────── */
-  --color-element-bg: var(--element-bg);
-  --color-element-hover: var(--element-hover);
-  --color-element-active: var(--element-active);
-  --color-element-selected: var(--element-selected);
-  --color-track: var(--track);
-
-  /* ── Text ──────────────────────────────────────────────────────────── */
-  --color-fg: var(--fg);
-  --color-fg-muted: var(--fg-muted);
-  --color-fg-faint: var(--fg-faint);
-
-  /* ── Borders ───────────────────────────────────────────────────────── */
-  --color-line: var(--line);
-  --color-line-muted: var(--line-muted);
-  --color-line-faint: var(--line-faint);
-  --color-line-selected: var(--line-selected);
-  --color-control-line: var(--control-line);
-  --color-control-line-hover: var(--control-line-hover);
-
-  /* ── Data and marks ────────────────────────────────────────────────── */
-  --color-series-1: var(--series-1);
-  --color-series-2: var(--series-2);
-  --color-series-3: var(--series-3);
-  --color-series-4: var(--series-4);
-  --color-axis-x: var(--axis-x);
-  --color-axis-y: var(--axis-y);
-  --color-axis-z: var(--axis-z);
-  --color-axis-x-tint: var(--axis-x-tint);
-  --color-axis-y-tint: var(--axis-y-tint);
-  --color-axis-z-tint: var(--axis-z-tint);
-  --color-stage-mark: var(--stage-mark);
-
-  /* ── Shadows ───────────────────────────────────────────────────────── */
-  --shadow-floating: var(--floating-shadow);
-
-  /* ── Accent ────────────────────────────────────────────────────────── */
-  --color-accent: var(--accent);
-  --color-on-accent: var(--on-accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-muted: var(--accent-muted);
-  --color-accent-tint: var(--accent-tint);
-  --color-accent-fg: var(--accent-fg);
-  --color-focus: var(--focus);
-
-  /* ── Semantic ──────────────────────────────────────────────────────── */
-  --color-danger: var(--danger);
-  --color-on-danger: var(--on-danger);
-  --color-danger-hover: var(--danger-hover);
-  --color-danger-muted: var(--danger-muted);
-  --color-danger-tint: var(--danger-tint);
-  --color-danger-fg: var(--danger-fg);
-  --color-success: var(--success);
-  --color-on-success: var(--on-success);
-  --color-success-hover: var(--success-hover);
-  --color-success-muted: var(--success-muted);
-  --color-success-tint: var(--success-tint);
-  --color-success-fg: var(--success-fg);
-  --color-warning: var(--warning);
-  --color-on-warning: var(--on-warning);
-  --color-warning-hover: var(--warning-hover);
-  --color-warning-muted: var(--warning-muted);
-  --color-warning-tint: var(--warning-tint);
-  --color-warning-fg: var(--warning-fg);
-  /* ── Animations ────────────────────────────────────────────────────── */
-  --animate-collapsible-down: collapsible-down 0.2s ease-out;
-  --animate-collapsible-up: collapsible-up 0.2s ease-out;
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
-}
-
-/* ── Keyframes ────────────────────────────────────────────────────────── */
-
-@keyframes collapsible-down {
-  from {
-    height: 0;
-  }
-  to {
-    height: var(--bits-collapsible-content-height);
-  }
-}
-
-@keyframes collapsible-up {
-  from {
-    height: var(--bits-collapsible-content-height);
-  }
-  to {
-    height: 0;
-  }
-}
-
-@keyframes accordion-down {
-  from {
-    height: 0;
-  }
-  to {
-    height: var(--bits-accordion-content-height);
-  }
-}
-
-@keyframes accordion-up {
-  from {
-    height: var(--bits-accordion-content-height);
-  }
-  to {
-    height: 0;
-  }
-}
-
-/* ── Base layer ───────────────────────────────────────────────────────── */
-
-@layer base {
-  * {
-    @apply border-line-muted outline-focus;
-  }
-  body {
-    @apply bg-canvas text-fg;
-  }
-
-  html,
-  body {
-    @apply overscroll-none;
-  }
-
-  @supports selector(::-webkit-scrollbar) {
-    /* Thin scrollbars — webkit (Chrome, Safari, Edge).
-     * Hover-reveal: the thumb is transparent at rest and only paints while the
-     * pointer is over the scroll area (or something in it is focused). */
-    ::-webkit-scrollbar {
-      width: 4px !important;
-      height: 4px !important;
-    }
-    ::-webkit-scrollbar-track {
-      background: transparent !important;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: transparent !important;
-      border-radius: 8px !important;
-    }
-    :hover::-webkit-scrollbar-thumb,
-    :focus-within::-webkit-scrollbar-thumb {
-      background: var(--scrollbar-thumb) !important;
-    }
-    :hover::-webkit-scrollbar-thumb:hover,
-    :focus-within::-webkit-scrollbar-thumb:hover {
-      background: var(--scrollbar-thumb-hover) !important;
-    }
-  }
-
-  @supports (scrollbar-width: auto) {
-    /* Thin scrollbars — Firefox. Hover-reveal via the same states. */
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: transparent transparent;
-    }
-    *:hover,
-    *:focus-within {
-      scrollbar-color: var(--scrollbar-thumb) transparent;
-    }
-  }
 }

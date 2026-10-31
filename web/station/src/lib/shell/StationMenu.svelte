@@ -6,10 +6,12 @@
     type StationFeedView,
     type StationInfo
   } from '$lib/core/model';
-  import { cn, displayName, errorMessage } from '$lib/core/utils';
-  import { DropdownMenu } from '$lib/kit';
-  import { Check, ChevronDown, LayoutDashboard, TriangleAlert } from '$lib/kit/icons';
-  import { ModeSwitch } from '$lib/kit/themes';
+  import { DropdownMenu } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { errorMessage } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { Check, ChevronDown, LayoutDashboard, TriangleAlert } from '@voxel/kit/icons';
+  import { ModeSwitch } from '@voxel/kit/style';
 
   interface StationDetails {
     discovery: StationDiscovery;

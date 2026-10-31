@@ -11,7 +11,7 @@
   } from '$lib/core/model';
   import LinkToggle from '$lib/features/imaging/LinkToggle.svelte';
   import PropertyDivergenceDot from '$lib/features/imaging/PropertyDivergenceDot.svelte';
-  import { NumberBox, Select, Switch, TextBox } from '$lib/kit';
+  import { NumberBox, Select, Switch, TextBox } from '@voxel/kit';
 
   import { propertyHint } from './format';
 

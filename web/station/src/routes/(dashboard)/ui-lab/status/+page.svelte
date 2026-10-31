@@ -1,12 +1,10 @@
 <script lang="ts">
-  import { toast } from 'svelte-sonner';
-
   import { resolve } from '$app/paths';
-  import { reportFailure } from '$lib/core/failures';
   import { LEVEL_DOT } from '$lib/features/issues';
-  import { Badge, Button, Chip, Spinner } from '$lib/kit';
-  import { Check, CircleAlert, DotsSpinner, Square, TriangleAlert } from '$lib/kit/icons';
-  import { wavelengthToColor } from '$lib/kit/themes/colors';
+  import { Badge, Button, LinkChip, Spinner, toast } from '@voxel/kit';
+  import { wavelengthToColor } from '@voxel/kit/colors';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { Check, CircleAlert, DotsSpinner, Square, TriangleAlert } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';
@@ -91,8 +89,9 @@
           <th scope="row" class="{lab.td} text-sm font-normal text-fg-muted">Chips</th>
           <td class={lab.td}>
             <span class="flex flex-wrap items-center gap-2">
-              {#each WAVELENGTHS as nm (nm)}<Chip href={here} color={wavelengthToColor(nm)}>{nm} nm</Chip>{/each}
-              <Chip href={here}>Profile 1</Chip>
+              {#each WAVELENGTHS as nm (nm)}<LinkChip href={here} color={wavelengthToColor(nm)}>{nm} nm</LinkChip
+                >{/each}
+              <LinkChip href={here}>Profile 1</LinkChip>
             </span>
           </td>
         </tr>

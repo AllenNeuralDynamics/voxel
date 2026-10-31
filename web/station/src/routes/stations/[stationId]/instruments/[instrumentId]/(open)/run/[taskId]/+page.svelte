@@ -3,7 +3,6 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getPageInstrument } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import {
     convexHull,
     type EditContext,
@@ -17,13 +16,14 @@
   } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
   import { getSpatialUnit } from '$lib/core/spatial-units';
-  import { displayName } from '$lib/core/utils';
   import FieldRow from '$lib/features/run/FieldRow.svelte';
   import StageNumericField from '$lib/features/run/StageNumericField.svelte';
-  import { Button, buttonVariants, Dialog, DropdownMenu, NumberInput, Section, Select, SpinBox } from '$lib/kit';
-  import { Crosshair, GripVertical, Link, Plus, Trash, Unlink, X } from '$lib/kit/icons';
-  import * as Sortable from '$lib/kit/sortable';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Button, buttonVariants, Dialog, DropdownMenu, NumberInput, Section, Select, SpinBox } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { Crosshair, GripVertical, Link, Plus, Trash, Unlink, X } from '@voxel/kit/icons';
+  import * as Sortable from '@voxel/kit/sortable';
 
   const selected = getPageInstrument();
   const routeParams = $derived(selected.params);

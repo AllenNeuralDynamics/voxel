@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Group, Line, Rect, Text } from 'svelte-konva';
 
-  import { watchTheme } from '$lib/kit/themes/manager.svelte';
+  import { watchTheme } from '@voxel/kit/style';
 
   import { getStageContext } from '../context';
   import { screenTransform } from '../geometry';

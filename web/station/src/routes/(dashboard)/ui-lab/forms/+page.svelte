@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { displayName } from '$lib/core/utils';
-  import { Button, Dialog, Field, NumberBox, RadioBar, Select, TextBox } from '$lib/kit';
-  import { Plus } from '$lib/kit/icons';
+  import { Button, Dialog, Field, NumberBox, RadioBar, Select, TextBox } from '@voxel/kit';
+  import { displayName } from '@voxel/kit/format';
+  import { Plus } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

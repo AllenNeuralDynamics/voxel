@@ -1,9 +1,9 @@
 import { SvelteMap } from 'svelte/reactivity';
 
-import { displayName } from '$lib/core/utils/helpers';
+import { displayName } from '@voxel/kit/format';
+import { BoolModel, EnumeratedModel, LinkGroup, NumericModel } from '@voxel/kit/models';
 
 import { CameraHandle, type DeviceHandle, RoiModel } from './device.svelte';
-import { BoolModel, EnumeratedModel, LinkGroup, NumericModel } from './prop.svelte';
 
 type LinkableModel = NumericModel | EnumeratedModel<string> | EnumeratedModel<number> | BoolModel | RoiModel;
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { BoolModel, EnumeratedModel } from '$lib/core/model';
-  import { Button, Checkbox, RadioBar, Select, Switch } from '$lib/kit';
+  import { Button, Checkbox, RadioBar, Select, Switch } from '@voxel/kit';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

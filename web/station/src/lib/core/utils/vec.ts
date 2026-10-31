@@ -27,3 +27,7 @@ export function parseVec2D(val: unknown): Vec2D | null {
   }
   return null;
 }
+
+export function clampTopLeft(value: number, viewSize: number): number {
+  return Math.max(0, Math.min(value, 1 - viewSize));
+}

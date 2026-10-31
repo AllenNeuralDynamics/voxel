@@ -1,0 +1,83 @@
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--bits-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--bits-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--bits-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--bits-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-line-muted outline-focus;
+  }
+  body {
+    @apply bg-canvas text-fg;
+  }
+
+  html,
+  body {
+    @apply overscroll-none;
+  }
+
+  @supports selector(::-webkit-scrollbar) {
+    /* Hover-reveal: the thumb paints only while the pointer is over the scroll area or something in it is focused. */
+    ::-webkit-scrollbar {
+      width: 4px !important;
+      height: 4px !important;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: transparent !important;
+      border-radius: 8px !important;
+    }
+    :hover::-webkit-scrollbar-thumb,
+    :focus-within::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb) !important;
+    }
+    :hover::-webkit-scrollbar-thumb:hover,
+    :focus-within::-webkit-scrollbar-thumb:hover {
+      background: var(--scrollbar-thumb-hover) !important;
+    }
+  }
+
+  @supports (scrollbar-width: auto) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    *:hover,
+    *:focus-within {
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+  }
+}

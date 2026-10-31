@@ -1,7 +1,7 @@
 # Application model
 
 The data and models of the station: discovery, the connection, the open instrument, its devices and its commands. It
-has no UI. It reports errors through `reportFailure` in [`core/failures.ts`](../failures.ts).
+has no UI. It reports errors through `reportFailure` in [`@voxel/kit/failures`](../../../../../kit/src/failures.ts).
 
 ## Commands
 

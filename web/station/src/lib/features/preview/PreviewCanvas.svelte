@@ -2,7 +2,7 @@
   import { watch } from 'runed';
   import { onMount } from 'svelte';
 
-  import { clampTopLeft } from '$lib/core/utils';
+  import { clampTopLeft } from '$lib/core/utils/vec';
 
   import PreviewChannels from './PreviewChannels.svelte';
   import PreviewNavigationControls from './PreviewNavigationControls.svelte';

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { getPreviewContext, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { type Instrument } from '$lib/core/model';
-  import { cn } from '$lib/core/utils';
-  import { Button, Dialog, Spinner } from '$lib/kit';
   import { useShortcut } from '$lib/shell/shortcuts';
+  import { Button, Dialog, Spinner } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
 
   interface Props {
     class?: string;

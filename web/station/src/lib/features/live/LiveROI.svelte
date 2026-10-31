@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import type { CameraHandle, Instrument } from '$lib/core/model';
   import { deviceLocked } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import DivergenceDot from '$lib/features/imaging/DivergenceDot.svelte';
   import LinkToggle from '$lib/features/imaging/LinkToggle.svelte';
-  import { Button, CollapsibleSection, SpinBox } from '$lib/kit';
+  import { Button, CollapsibleSection, SpinBox } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   /** The Sensor ROI card of the live controls. It shows nothing when no camera of the active channels has an ROI. */
   let { instrument }: { instrument: Instrument } = $props();

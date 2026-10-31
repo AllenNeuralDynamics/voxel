@@ -2,8 +2,8 @@
   import { onMount, untrack } from 'svelte';
   import { Image } from 'svelte-konva';
 
-  import { reportFailure } from '$lib/core/failures';
   import type { PreviewChannel, PreviewSession } from '$lib/features/preview/session.svelte';
+  import { reportFailure } from '@voxel/kit/failures';
 
   import { getStageContext } from './context';
 

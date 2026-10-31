@@ -1,11 +1,11 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
   import { getPageInstrument, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import { violationLocation } from '$lib/core/model';
-  import { Badge, Button, Dialog, JsonView } from '$lib/kit';
-  import { ArrowRight, ChevronDown } from '$lib/kit/icons';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, Button, Dialog, JsonView } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { ArrowRight, ChevronDown } from '@voxel/kit/icons';
 
   const app = getVoxelStation();
   const selected = getPageInstrument();

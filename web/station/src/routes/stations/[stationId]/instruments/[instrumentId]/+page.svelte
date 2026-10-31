@@ -4,7 +4,6 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { getPageInstrument, getRegionSelection, getVoxelStation } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import {
     type AcquisitionManifest,
     type AcquisitionStatus,
@@ -24,13 +23,15 @@
   } from '$lib/core/model';
   import { planOverlap, prefs } from '$lib/core/prefs';
   import { formatSpatialValue, getSpatialUnit } from '$lib/core/spatial-units';
-  import { cn, displayName } from '$lib/core/utils';
   import MetadataEditor from '$lib/features/run/MetadataEditor.svelte';
-  import { Badge, Button, Checkbox, CollapsibleSection, Field, Section, Select, SpinBox, TextBox } from '$lib/kit';
-  import { ArrowRight, Check, ChevronDown, CircleAlert, Plus, TriangleAlert } from '$lib/kit/icons';
-  import * as Sortable from '$lib/kit/sortable';
   import { acquisitionHref, deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, Button, Checkbox, CollapsibleSection, Field, Section, Select, SpinBox, TextBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { ArrowRight, Check, ChevronDown, CircleAlert, Plus, TriangleAlert } from '@voxel/kit/icons';
+  import * as Sortable from '@voxel/kit/sortable';
 
   type CheckTone = 'ok' | 'warn' | 'block';
 

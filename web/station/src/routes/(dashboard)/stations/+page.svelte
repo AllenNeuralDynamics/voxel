@@ -5,8 +5,13 @@
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { type AcquisitionManifest, type ImagingProtocol, resolveInstrumentView } from '$lib/core/model';
-  import { cn, displayName, errorMessage } from '$lib/core/utils';
-  import { Badge, Button, Dialog, Field, Select, TextBox } from '$lib/kit';
+  import { acquisitionHref } from '$lib/navigation';
+  import { sendStationWindowRequest, stationWindowName, stationWindowRequest } from '$lib/shell/app-windows';
+  import { Badge, Button, Dialog, Field, Select, TextBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { wavelengthToColor } from '@voxel/kit/colors';
+  import { errorMessage } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
   import {
     ArrowRight,
     ChevronRight,
@@ -17,10 +22,7 @@
     Plus,
     TriangleAlert,
     X
-  } from '$lib/kit/icons';
-  import { wavelengthToColor } from '$lib/kit/themes/colors';
-  import { acquisitionHref } from '$lib/navigation';
-  import { sendStationWindowRequest, stationWindowName, stationWindowRequest } from '$lib/shell/app-windows';
+  } from '@voxel/kit/icons';
 
   import { getDashboardState } from './state.svelte';
   import {

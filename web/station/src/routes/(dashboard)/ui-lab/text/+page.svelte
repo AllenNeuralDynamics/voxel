@@ -2,8 +2,8 @@
   import { onDestroy } from 'svelte';
 
   import { StringModel } from '$lib/core/model';
-  import { Badge, Button, Switch, TagInput, TextArea, TextBox } from '$lib/kit';
-  import { Pencil } from '$lib/kit/icons';
+  import { Badge, Button, Switch, TagInput, TextArea, TextBox } from '@voxel/kit';
+  import { Pencil } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

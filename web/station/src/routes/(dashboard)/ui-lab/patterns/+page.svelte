@@ -1,12 +1,12 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { cn } from '$lib/core/utils';
   import DivergenceDot from '$lib/features/imaging/DivergenceDot.svelte';
   import ChipRow from '$lib/features/live/ChipRow.svelte';
   import ChoiceChip from '$lib/features/live/ChoiceChip.svelte';
-  import { Button, NumberInput, RadioBar, Slider, TextBox } from '$lib/kit';
-  import { ArrowRight, Check, CircleAlert, DotsSpinner, Plus, Square, TriangleAlert } from '$lib/kit/icons';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Button, NumberInput, RadioBar, Slider, TextBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { ArrowRight, Check, CircleAlert, DotsSpinner, Plus, Square, TriangleAlert } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

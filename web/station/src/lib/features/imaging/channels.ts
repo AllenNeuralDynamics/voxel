@@ -1,7 +1,7 @@
 import type { PageInstrument } from '$lib/context.svelte';
 import { type ChannelConfig, findDeviceConfig, LaserHandle, type ProfileConfig } from '$lib/core/model';
-import { displayName } from '$lib/core/utils';
-import { wavelengthToColor } from '$lib/kit/themes/colors';
+import { wavelengthToColor } from '@voxel/kit/colors';
+import { displayName } from '@voxel/kit/format';
 
 export function channelLabel(channelId: string, channel: ChannelConfig | undefined): string {
   return channel?.label || displayName(channelId);

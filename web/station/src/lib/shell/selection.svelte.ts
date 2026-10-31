@@ -3,8 +3,8 @@ import { watch } from 'runed';
 import { goto, replaceState } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { page } from '$app/state';
-import { reportFailure } from '$lib/core/failures';
 import type { Station } from '$lib/core/model';
+import { reportFailure } from '@voxel/kit/failures';
 
 import { stationWindowName } from './app-windows';
 

@@ -12,10 +12,10 @@
   import { deviceIdentity } from '$lib/features/devices/snippets.svelte';
   import LinkToggle from '$lib/features/imaging/LinkToggle.svelte';
   import PropertyDivergenceDot from '$lib/features/imaging/PropertyDivergenceDot.svelte';
-  import { NumberBox, RadioBar, Section, Select, Slider, Switch } from '$lib/kit';
-  import { Loader } from '$lib/kit/icons';
   import { deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { NumberBox, RadioBar, Section, Select, Slider, Switch } from '@voxel/kit';
+  import { Loader } from '@voxel/kit/icons';
 
   type Setting = {
     name: string;

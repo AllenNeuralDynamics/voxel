@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { DropdownMenu, Popover } from 'bits-ui';
   import { SvelteSet } from 'svelte/reactivity';
 
   import { AUTO_COLORMAP } from '$lib/core/model';
-  import { Button, NumberBox, TextBox } from '$lib/kit';
-  import { Check, ListFilter } from '$lib/kit/icons';
-  import { emissionToPreviewColor, isValidHex } from '$lib/kit/themes/colors';
+  import { Button, DropdownMenu, NumberBox, Popover, TextBox } from '@voxel/kit';
+  import { emissionToPreviewColor, isValidHex } from '@voxel/kit/colors';
+  import { Check, ListFilter } from '@voxel/kit/icons';
 
   import Histogram from './Histogram.svelte';
   import { colormapGradient, resolveColormapStops } from './render';
@@ -114,170 +113,162 @@
         <span class="h-2 min-w-0 flex-1 rounded-xs" style="background: {triggerGradient};"></span>
       </Popover.Trigger>
 
-      <Popover.Portal>
-        <Popover.Content
-          class="z-50 flex flex-col-reverse frame-floating outline-none"
-          style="width: {columnWidth}px;"
-          side="top"
-          sideOffset={2}
-          align="center"
-          onOpenAutoFocus={focusSearch}
+      <Popover.Content
+        class="flex w-auto flex-col-reverse"
+        style="width: {columnWidth}px;"
+        side="top"
+        sideOffset={2}
+        align="center"
+        onOpenAutoFocus={focusSearch}
+      >
+        <div
+          class="grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1.5 border-t border-line-faint p-2 text-sm text-fg-muted"
         >
-          <div
-            class="grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1.5 border-t border-line-faint p-2 text-sm text-fg-muted"
-          >
-            <span>Black</span>
-            <NumberBox
-              value={channel.preferences.levels.auto.lowPercentile}
-              onChange={(value) => updateAutoLevel('lowPercentile', value)}
-              min={0}
-              max={channel.preferences.levels.auto.highPercentile - 0.01}
-              step={0.001}
-              decimals={3}
-              suffix="%"
-              class="w-full"
-            />
-            <NumberBox
-              value={channel.preferences.levels.auto.lowFloor}
-              onChange={(value) => updateAutoLevel('lowFloor', value)}
-              min={0}
-              max={Math.min(dataTypeMax - 1, channel.preferences.levels.auto.highCeiling - 1)}
-              step={1}
-              home={0}
-              decimals={0}
-              prefix="≥"
-              class="w-full"
-            />
+          <span>Black</span>
+          <NumberBox
+            value={channel.preferences.levels.auto.lowPercentile}
+            onChange={(value) => updateAutoLevel('lowPercentile', value)}
+            min={0}
+            max={channel.preferences.levels.auto.highPercentile - 0.01}
+            step={0.001}
+            decimals={3}
+            suffix="%"
+            class="w-full"
+          />
+          <NumberBox
+            value={channel.preferences.levels.auto.lowFloor}
+            onChange={(value) => updateAutoLevel('lowFloor', value)}
+            min={0}
+            max={Math.min(dataTypeMax - 1, channel.preferences.levels.auto.highCeiling - 1)}
+            step={1}
+            home={0}
+            decimals={0}
+            prefix="≥"
+            class="w-full"
+          />
 
-            <span>White</span>
-            <NumberBox
-              value={channel.preferences.levels.auto.highPercentile}
-              onChange={(value) => updateAutoLevel('highPercentile', value)}
-              min={channel.preferences.levels.auto.lowPercentile + 0.01}
-              max={100}
-              step={0.001}
-              decimals={3}
-              suffix="%"
-              class="w-full"
-            />
-            <NumberBox
-              value={channel.preferences.levels.auto.highCeiling}
-              onChange={(value) => updateAutoLevel('highCeiling', value)}
-              min={channel.preferences.levels.auto.lowFloor + 1}
-              max={dataTypeMax}
-              step={1}
-              home={dataTypeMax}
-              decimals={0}
-              prefix="≤"
-              class="w-full"
-            />
-          </div>
+          <span>White</span>
+          <NumberBox
+            value={channel.preferences.levels.auto.highPercentile}
+            onChange={(value) => updateAutoLevel('highPercentile', value)}
+            min={channel.preferences.levels.auto.lowPercentile + 0.01}
+            max={100}
+            step={0.001}
+            decimals={3}
+            suffix="%"
+            class="w-full"
+          />
+          <NumberBox
+            value={channel.preferences.levels.auto.highCeiling}
+            onChange={(value) => updateAutoLevel('highCeiling', value)}
+            min={channel.preferences.levels.auto.lowFloor + 1}
+            max={dataTypeMax}
+            step={1}
+            home={dataTypeMax}
+            decimals={0}
+            prefix="≤"
+            class="w-full"
+          />
+        </div>
 
-          <div class="flex items-center gap-1.5 p-2">
-            <TextBox
-              live
-              bind:ref={searchInput}
-              value={search}
-              onChange={(text) => (search = text)}
-              placeholder="Search colormaps..."
-              class="min-w-0 flex-1"
-            />
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger
-                tabindex={-1}
-                class="flex size-ui-sm shrink-0 items-center justify-center rounded border border-control-line bg-element-bg transition-colors hover:bg-element-hover {hasFilter
-                  ? 'text-fg'
-                  : 'text-fg-muted'}"
-                aria-label="Filter groups"
-              >
-                <ListFilter width="14" height="14" />
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  class="z-60 min-w-32 frame-floating p-1 outline-none"
-                  side="top"
-                  sideOffset={4}
-                  align="end"
+        <div class="flex items-center gap-1.5 p-2">
+          <TextBox
+            live
+            bind:ref={searchInput}
+            value={search}
+            onChange={(text) => (search = text)}
+            placeholder="Search colormaps..."
+            class="min-w-0 flex-1"
+          />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger
+              tabindex={-1}
+              class="flex size-ui-sm shrink-0 items-center justify-center rounded border border-control-line bg-element-bg transition-colors hover:bg-element-hover {hasFilter
+                ? 'text-fg'
+                : 'text-fg-muted'}"
+              aria-label="Filter groups"
+            >
+              <ListFilter width="14" height="14" />
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content class="z-60" side="top" sideOffset={4} align="end">
+              {#each previewer.catalog as group (group.uid)}
+                <DropdownMenu.CheckboxItem
+                  closeOnSelect={false}
+                  indicator={false}
+                  checked={!hiddenGroups.has(group.uid)}
+                  onCheckedChange={(checked) => {
+                    const next = new SvelteSet(hiddenGroups);
+                    if (checked) next.delete(group.uid);
+                    else next.add(group.uid);
+                    hiddenGroups = next;
+                  }}
+                  class="gap-1.5 px-1.5 py-1 text-xs text-fg-muted data-highlighted:bg-element-hover data-highlighted:text-fg"
                 >
-                  {#each previewer.catalog as group (group.uid)}
-                    <DropdownMenu.CheckboxItem
-                      closeOnSelect={false}
-                      checked={!hiddenGroups.has(group.uid)}
-                      onCheckedChange={(checked) => {
-                        const next = new SvelteSet(hiddenGroups);
-                        if (checked) next.delete(group.uid);
-                        else next.add(group.uid);
-                        hiddenGroups = next;
-                      }}
-                      class="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-xs text-fg-muted outline-none select-none data-highlighted:bg-element-hover data-highlighted:text-fg"
-                    >
-                      {#snippet children({ checked })}
-                        <span class="inline-flex size-3 shrink-0 items-center justify-center">
-                          {#if checked}<Check class="size-3  text-fg" />{/if}
-                        </span>
-                        <span>{group.label}</span>
-                      {/snippet}
-                    </DropdownMenu.CheckboxItem>
-                  {/each}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          </div>
+                  {#snippet children({ checked })}
+                    <span class="inline-flex size-3 shrink-0 items-center justify-center">
+                      {#if checked}<Check class="size-3  text-fg" />{/if}
+                    </span>
+                    <span>{group.label}</span>
+                  {/snippet}
+                </DropdownMenu.CheckboxItem>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
 
-          <div class="max-h-80 overflow-y-auto border-y border-line-faint px-2">
-            <div class="swatch-grid py-2">
-              {@render swatch(AUTO_COLORMAP, 'auto', autoGradient)}
-            </div>
-            {#if searchResults}
-              {#if searchResults.length > 0}
+        <div class="max-h-80 overflow-y-auto border-y border-line-faint px-2">
+          <div class="swatch-grid py-2">
+            {@render swatch(AUTO_COLORMAP, 'auto', autoGradient)}
+          </div>
+          {#if searchResults}
+            {#if searchResults.length > 0}
+              <div class="swatch-grid pb-2">
+                {#each searchResults as { name, stops } (name)}
+                  {@render swatch(name, name, colormapGradient(stops))}
+                {/each}
+              </div>
+            {:else}
+              <div class="pb-2 text-xs text-fg-muted">No matches</div>
+            {/if}
+          {:else}
+            {#each previewer.catalog as group (group.uid)}
+              {#if !hiddenGroups.has(group.uid)}
+                <div class="pt-1 pb-0.5 text-xs font-medium tracking-wide text-fg-muted uppercase">
+                  {group.label}
+                </div>
                 <div class="swatch-grid pb-2">
-                  {#each searchResults as { name, stops } (name)}
+                  {#each Object.entries(group.colormaps) as [name, stops] (name)}
                     {@render swatch(name, name, colormapGradient(stops))}
                   {/each}
                 </div>
-              {:else}
-                <div class="pb-2 text-xs text-fg-muted">No matches</div>
               {/if}
-            {:else}
-              {#each previewer.catalog as group (group.uid)}
-                {#if !hiddenGroups.has(group.uid)}
-                  <div class="pt-1 pb-0.5 text-xs font-medium tracking-wide text-fg-muted uppercase">
-                    {group.label}
-                  </div>
-                  <div class="swatch-grid pb-2">
-                    {#each Object.entries(group.colormaps) as [name, stops] (name)}
-                      {@render swatch(name, name, colormapGradient(stops))}
-                    {/each}
-                  </div>
-                {/if}
-              {/each}
-            {/if}
-          </div>
+            {/each}
+          {/if}
+        </div>
 
-          <div class="p-2" style:--hex-color={triggerColor}>
-            <TextBox
-              bind:ref={hexInput}
-              value=""
-              onChange={applyHex}
-              placeholder={triggerColor}
-              aria-label="Custom hex color"
-              class="border-l-[3px] border-l-(--hex-color) font-mono"
+        <div class="p-2" style:--hex-color={triggerColor}>
+          <TextBox
+            bind:ref={hexInput}
+            value=""
+            onChange={applyHex}
+            placeholder={triggerColor}
+            aria-label="Custom hex color"
+            class="border-l-[3px] border-l-(--hex-color) font-mono"
+          >
+            <!-- The box keeps the focus until the click. Leaving the box then sends the text. -->
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="h-full rounded-none text-fg-muted"
+              aria-label="Apply custom hex color"
+              onmousedown={(event) => event.preventDefault()}
+              onclick={() => hexInput?.blur()}
             >
-              <!-- The box keeps the focus until the click. Leaving the box then sends the text. -->
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                class="h-full rounded-none text-fg-muted"
-                aria-label="Apply custom hex color"
-                onmousedown={(event) => event.preventDefault()}
-                onclick={() => hexInput?.blur()}
-              >
-                <Check width="14" height="14" />
-              </Button>
-            </TextBox>
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
+              <Check width="14" height="14" />
+            </Button>
+          </TextBox>
+        </div>
+      </Popover.Content>
     </Popover.Root>
   {/snippet}
 </Histogram>

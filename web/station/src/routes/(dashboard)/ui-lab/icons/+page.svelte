@@ -1,12 +1,11 @@
 <script lang="ts">
   import type { Component } from 'svelte';
-  import { toast } from 'svelte-sonner';
   import type { SvelteHTMLElements } from 'svelte/elements';
 
-  import { reportFailure } from '$lib/core/failures';
-  import { TextBox } from '$lib/kit';
-  import * as icons from '$lib/kit/icons';
-  import { Flashlight, Microscope, Video } from '$lib/kit/icons';
+  import { TextBox, toast } from '@voxel/kit';
+  import { reportFailure } from '@voxel/kit/failures';
+  import * as icons from '@voxel/kit/icons';
+  import { Flashlight, Microscope, Video } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';

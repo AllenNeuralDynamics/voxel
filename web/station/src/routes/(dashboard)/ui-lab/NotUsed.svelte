@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Badge } from '$lib/kit';
+  import { Badge } from '@voxel/kit';
 
   /** Marks a kit part that no page of the app uses yet. Name the part when its name is not next to the badge. */
   let { part }: { part?: string } = $props();

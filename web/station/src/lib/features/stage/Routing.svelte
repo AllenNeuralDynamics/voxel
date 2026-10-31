@@ -21,7 +21,7 @@
   import { onDestroy, onMount, type Snippet, untrack } from 'svelte';
   import { Group, Line, Text } from 'svelte-konva';
 
-  import { watchTheme } from '$lib/kit/themes/manager.svelte';
+  import { watchTheme } from '@voxel/kit/style';
 
   import { getStageContext, type MenuSelection } from './context';
   import { type Point, screenRect, screenTransform } from './geometry';

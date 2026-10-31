@@ -3,13 +3,14 @@
   import { page } from '$app/state';
   import { getPageInstrument } from '$lib/context.svelte';
   import { buildDeviceTopology, resolveDeviceConfig } from '$lib/core/model';
-  import { cn, displayName } from '$lib/core/utils';
   import { processDetail, processLabel, roleLabel } from '$lib/features/devices';
   import Properties from '$lib/features/devices/Properties.svelte';
   import { issues } from '$lib/features/issues';
-  import { Chip, JsonView, Section } from '$lib/kit';
   import { channelHref, deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { LinkChip, JsonView, Section } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { displayName } from '@voxel/kit/format';
 
   const selected = getPageInstrument();
   const topology = $derived(
@@ -77,7 +78,9 @@
           <dt class="text-fg-muted">Used by</dt>
           <dd class="flex min-w-0 flex-wrap gap-1">
             {#each channels as [channelId, channel] (channelId)}
-              <Chip href={channelHref(selected.params, channelId)}>{channel.label || displayName(channelId)}</Chip>
+              <LinkChip href={channelHref(selected.params, channelId)}
+                >{channel.label || displayName(channelId)}</LinkChip
+              >
             {/each}
           </dd>
         {/if}
@@ -91,7 +94,7 @@
           <dt class="text-fg-muted">Depends on</dt>
           <dd class="flex min-w-0 flex-wrap gap-1">
             {#each dependencies as dependency (dependency)}
-              <Chip href={deviceHref(selected.params, dependency)}>{displayName(dependency)}</Chip>
+              <LinkChip href={deviceHref(selected.params, dependency)}>{displayName(dependency)}</LinkChip>
             {/each}
           </dd>
         {/if}

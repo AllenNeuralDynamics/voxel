@@ -2,7 +2,6 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   import { getOpenInstrument } from '$lib/context.svelte';
-  import { reportFailure } from '$lib/core/failures';
   import {
     deviceLocked,
     deviceReady,
@@ -14,12 +13,14 @@
   } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
   import { getSpatialUnit } from '$lib/core/spatial-units';
-  import { cn, displayName } from '$lib/core/utils';
   import { issues, issueText, LEVEL_TEXT } from '$lib/features/issues';
-  import { Badge, Button, Section, Select, SpinBox } from '$lib/kit';
-  import { Crosshair } from '$lib/kit/icons';
   import { deviceHref } from '$lib/navigation';
   import PageHeader from '$lib/shell/PageHeader.svelte';
+  import { Badge, Button, Section, Select, SpinBox } from '@voxel/kit';
+  import { cn } from '@voxel/kit/cn';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
+  import { Crosshair } from '@voxel/kit/icons';
 
   const instrument = $derived.by(getOpenInstrument());
   const spatialUnit = $derived(prefs.spatialUnit.get());

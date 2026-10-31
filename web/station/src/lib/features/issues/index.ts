@@ -1,4 +1,4 @@
-import { handleFailures } from '$lib/core/failures';
+import { handleFailures } from '@voxel/kit/failures';
 
 import { recordFailure } from './report';
 

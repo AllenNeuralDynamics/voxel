@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { reportFailure } from '$lib/core/failures';
   import type { Instrument } from '$lib/core/model';
   import { deviceLocked } from '$lib/core/model';
-  import { displayName } from '$lib/core/utils';
   import { formatPropValue, propStep } from '$lib/features/devices/format';
+  import { reportFailure } from '@voxel/kit/failures';
+  import { displayName } from '@voxel/kit/format';
 
   import DivergenceDot from './DivergenceDot.svelte';
 
