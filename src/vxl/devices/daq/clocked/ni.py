@@ -69,6 +69,9 @@ class NiSignalGenerator(SignalGenerator):
 
     Enables regeneration on the AO stream so each trigger can replay the same
     finite buffer.
+
+    Ports with ``limits`` get those limits as the NI channel's min/max, so
+    NI-DAQmx itself also refuses samples outside them.
     """
 
     def __init__(
@@ -78,8 +81,9 @@ class NiSignalGenerator(SignalGenerator):
         hub: NiDaqmx,
         ports: Mapping[str, str],
         trigger: Trigger | Mapping[str, object] | None = None,
+        limits: Mapping[str, VoltageRange | Mapping[str, float]] | None = None,
     ) -> None:
-        super().__init__(uid=uid, ports=ports)
+        super().__init__(uid=uid, ports=ports, limits=limits)
         self._hub = hub
         self._trigger = CounterTrigger() if trigger is None else _TRIGGER_ADAPTER.validate_python(trigger)
         self._log = logging.getLogger(f"{uid}.NiSignalGenerator")
@@ -139,8 +143,10 @@ class NiSignalGenerator(SignalGenerator):
             # Acquire the complete lease before creating any NI task. Keep task
             # handles on self immediately so cleanup can retry a failed close.
             self._ao_task = NiTask(f"{self.uid}_ao")
+            hw_range = self.voltage_range
             for port_name, path in zip(self._ports, lease.ao_paths, strict=True):
-                self._ao_task.ao_channels.add_ao_voltage_chan(path)
+                rng = self._limits.get(port_name, hw_range)
+                self._ao_task.ao_channels.add_ao_voltage_chan(path, min_val=float(rng.min), max_val=float(rng.max))
                 self._ao_channel_order.append(port_name)
 
             # Each counter or input trigger plays one finite buffer cycle, then

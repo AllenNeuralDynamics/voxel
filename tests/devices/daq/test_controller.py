@@ -167,6 +167,37 @@ class TestControllerValidation:
         with pytest.raises(ValueError, match="values out of range"):
             await ctrl.load(sig)
 
+    async def test_rejects_voltage_exceeding_port_limits(self):
+        _, generator = _make_generator(limits={"galvo": {"min": -1.0, "max": 1.0}})
+        ctrl = SignalGeneratorController(generator)
+        with pytest.raises(ValueError, match=r"galvo spans -2\.\.\S+ V, outside its limits -1\.\.1 V"):
+            await ctrl.load(_signals())
+        assert ctrl.state == "fresh"
+        assert generator.last_arrays == {}
+
+    async def test_port_limits_apply_to_derived_waveforms(self):
+        # A push-pull pair: the mirrored port must be checked on its resolved samples.
+        _, generator = _make_generator(limits={"galvo": {"min": -3.0, "max": 3.0}, "etl": {"min": -1.0, "max": 1.0}})
+        ctrl = SignalGeneratorController(generator)
+        sig = _signals(
+            waveforms={
+                "galvo": validate_waveform(_triangle(vmin=-2, vmax=2)),
+                "etl": validate_waveform({"type": "derived", "operation": "mirror", "source": "galvo"}),
+            }
+        )
+        with pytest.raises(ValueError, match="etl spans"):
+            await ctrl.load(sig)
+
+    async def test_accepts_waveforms_within_port_limits(self):
+        _, generator = _make_generator(limits={"galvo": {"min": -2.0, "max": 2.0}})
+        ctrl = SignalGeneratorController(generator)
+        await ctrl.load(_signals())
+        assert ctrl.state == "ready"
+
+    def test_limits_for_undeclared_port_rejected(self):
+        with pytest.raises(ValueError, match="not declared"):
+            _make_generator(limits={"camera": {"min": 0.0, "max": 5.0}})
+
     async def test_rejects_derived_cycle_through_validator(self):
         _, generator = _make_generator()
         ctrl = SignalGeneratorController(generator)

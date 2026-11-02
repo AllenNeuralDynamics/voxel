@@ -17,12 +17,14 @@ def _triangle(vmin: float = -2, vmax: float = 2, rest: float = 0.0) -> dict:
 
 def _make_generator(
     ports: dict[str, str] | None = None,
+    limits: dict[str, dict[str, float]] | None = None,
 ) -> tuple[SimulatedDaqmx, SimulatedSignalGenerator]:
     hub = SimulatedDaqmx(num_ao=8, num_pfi=4, num_counters=2)
     generator = SimulatedSignalGenerator(
         uid="ao_main",
         hub=hub,
         ports=ports or {"galvo": "ao0", "etl": "ao1"},
+        limits=limits,
     )
     return hub, generator
 
