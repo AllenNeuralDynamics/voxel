@@ -1,5 +1,5 @@
 import pytest
-from vxlib.schema import check_identifier, duplicate_keys
+from vxlib.schema import NoSettings, check_identifier, duplicate_keys, repeated, single_key_tag
 
 
 def test_duplicate_keys_reports_each_shared_key_with_its_scopes_in_order():
@@ -18,3 +18,14 @@ def test_check_identifier_allows_only_letters_digits_underscore_and_hyphen():
     for value in ["gfp 488", "gfp.488", "gfp/rfp", "..", "gfp_é", ""]:
         with pytest.raises(ValueError, match="may use only letters, digits, '_' and '-'"):
             check_identifier(value, "Profile id")
+
+
+def test_repeated_lists_each_repeat_once_in_first_repeat_order() -> None:
+    assert repeated(["a", "b", "a", "c", "b", "a"]) == ["a", "b"]
+    assert repeated([1, 2, 3]) == []
+
+
+def test_single_key_tag_reads_the_key_of_a_one_key_block() -> None:
+    assert single_key_tag({"step": {"axis": "z"}}) == "step"
+    assert single_key_tag({"step": {}, "sweep": {}}) is None
+    assert single_key_tag(NoSettings()) is None

@@ -48,6 +48,33 @@ def identifier(kind: str) -> AfterValidator:
     return AfterValidator(partial(check_identifier, kind=kind))
 
 
+class NoSettings(FrozenModel):
+    """An empty block, written ``{}``: a choice that takes no settings."""
+
+
+def single_key_tag(value: Any) -> str | None:
+    """The tag of a 1-key block, such as ``step`` for ``{step: {...}}``, for a pydantic ``Discriminator``.
+
+    A model's tag is its first field, so each model in the union has its 1 key as its first field.
+    """
+    if isinstance(value, Mapping):
+        return next(iter(value)) if len(value) == 1 else None
+    if isinstance(value, BaseModel):
+        return next(iter(type(value).model_fields), None)
+    return None
+
+
+def repeated[T: Hashable](values: Iterable[T]) -> list[T]:
+    """Return each value that appears more than once, in the order it first repeats."""
+    seen: set[T] = set()
+    found: dict[T, None] = {}
+    for value in values:
+        if value in seen:
+            found[value] = None
+        seen.add(value)
+    return list(found)
+
+
 def duplicate_keys[K: Hashable](scopes: Mapping[str, Iterable[K]]) -> dict[K, list[str]]:
     """Return each key that appears more than once across ``scopes``, with the scopes that hold it.
 
@@ -60,4 +87,13 @@ def duplicate_keys[K: Hashable](scopes: Mapping[str, Iterable[K]]) -> dict[K, li
     return {key: names for key, names in found.items() if len(names) > 1}
 
 
-__all__ = ["FrozenModel", "SparseModel", "check_identifier", "duplicate_keys", "identifier"]
+__all__ = [
+    "FrozenModel",
+    "NoSettings",
+    "SparseModel",
+    "check_identifier",
+    "duplicate_keys",
+    "identifier",
+    "repeated",
+    "single_key_tag",
+]
