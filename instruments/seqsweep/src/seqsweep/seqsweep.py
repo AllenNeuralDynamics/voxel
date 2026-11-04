@@ -53,7 +53,7 @@ class SeqSweep:
         self._status, self._error = "running", None
         # Launch in the background
         self._scan_task = asyncio.create_task(self._run_passes(pass_config, direction))
-        
+
     async def _run_passes(self, pass_config: ScanPassConfig, direction: ScanDirection) -> None:
         scan_controller = self._hal.scan_controller
         try:
