@@ -1,0 +1,33 @@
+[project]
+name = "seqsweep"
+version = "0.2.0"
+description = "SeqSweep: BARseq's TDI line-scan imaging instrument, built on Voxel's rigup, device, writer, and records libraries"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "vxl",
+    "vxlib",
+    "rigup",
+    "vxl-records",
+    "ome-zarr-writer",
+    "numpy>=2.3.4",
+    "pydantic>=2.11.9",
+    "pyyaml>=6.0",
+    "coloredlogs",
+    "one-liner @ git+https://github.com/AllenNeuralDynamics/one-liner.git@main",
+    "ficus @ git+https://github.com/AllenNeuralDynamics/ficus.git",
+]
+
+[project.scripts]
+seqsweep = "seqsweep.scripts.seqsweep_main:main"
+
+[tool.uv.sources]
+vxl = { path = "../..", editable = true }
+vxlib = { path = "../../vxlib", editable = true }
+rigup = { path = "../../rigup", editable = true }
+vxl-records = { path = "../../records", editable = true }
+ome-zarr-writer = { path = "../../omezarr", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
