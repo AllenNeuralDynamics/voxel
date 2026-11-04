@@ -1,8 +1,11 @@
-from pathlib import Path
 from typing import Any, Literal
 
 from one_liner.models import RouterServerConfig  # type: ignore
 from pydantic import BaseModel, ConfigDict, Field
+from vxlib.schema import FrozenModel
+
+from seqsweep.devices.acs.base import ScanPassConfig
+from seqsweep.hal import SeqSweepHardwareTopology
 
 
 class HandlerConfig(BaseModel):
@@ -27,11 +30,31 @@ class RouterServerPortConfig(BaseModel):
     broadcast_port: int = 5556
 
 
-class SeqSweepSystemConfig(BaseModel, validate_assignment=True):
+class SeqSweepDefaults(FrozenModel):
+    """Baseline run settings (``default``): the pass to run and how many times."""
+
+    scan: ScanPassConfig = Field(description="Geometry and gating of one strip pass along the scan axis")
+    passes: int = Field(
+        default=2, ge=1, description="Passes per run; they alternate forward and reverse (bidirectional scan)"
+    )
+    # TODO: pass timeouts, Z planes, strips
+
+
+class SeqSweepInstrumentConfig(BaseModel):
+    """SeqSweep setup: the hardware blueprint (``hal``) and the baseline run settings (``default``)."""
+
+    name: str = Field(default="seqsweep", min_length=1, description="Label for this setup in logs")
+    hal: SeqSweepHardwareTopology = Field(
+        description="Hardware blueprint: rigup devices and nodes, plus the role each device plays"
+    )
+    default: SeqSweepDefaults = Field(
+        description="Baseline run settings, used when a job from the orchestrator leaves a value unset"
+    )
+
+
+class SeqSweepSystemConfig(SeqSweepInstrumentConfig, validate_assignment=True):
+    """The ``seqsweep`` ficus namespace: the instrument config plus the one_liner server and logging."""
+
     router_server_kwargs: RouterServerPortConfig = Field(default_factory=RouterServerPortConfig)
     router_server_api: RouterServerConfig
-    scanner_config: Path = Field(
-        default=Path("simulated-local.seqsweep.yaml"),
-        description="SeqSweep config file, relative to the configs directory",
-    )
     logging: LoggingConfig
