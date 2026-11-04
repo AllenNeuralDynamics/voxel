@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 
 import pytest
 from vxl.hal.errors import HALStartupError
@@ -6,6 +7,7 @@ from vxl.hal.errors import HALStartupError
 from seqsweep.devices.acs.handle import ScanControllerHandle
 from seqsweep.devices.acs.simulated_acs import SimulatedAcsController
 from seqsweep.hal import HAL, SeqSweepHardwareTopology
+from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
@@ -21,10 +23,7 @@ def _topology(scan_controller: str = "acs") -> SeqSweepHardwareTopology:
 
 
 def _config(topology: SeqSweepHardwareTopology) -> SeqSweepInstrumentConfig:
-    return SeqSweepInstrumentConfig(
-        hal=topology,
-        default={"scan": {"start_um": 0, "end_um": 10, "velocity_um_s": 10, "line_pitch_um": 1}},
-    )
+    return SeqSweepInstrumentConfig(hal=topology)
 
 
 def test_unknown_role_device_is_rejected_at_load():
@@ -67,11 +66,40 @@ def test_hal_open_skips_role_check_for_unavailable_device():
 
 
 def test_seqsweep_open_succeeds_with_simulated_acs():
-    with SeqSweep(_config(_topology())) as seqsweep:
-        assert seqsweep.check_job_status() == {"status": "idle"}
+    async def run() -> None:
+        seqsweep = SeqSweep(_config(_topology()))
+        await seqsweep.open()
+        try:
+            assert await seqsweep.check_job_status() == {"status": "idle", "error": None}
+        finally:
+            await seqsweep.close()
+
+    asyncio.run(run())
 
 
 def test_seqsweep_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(SimulatedAcsController, "__DEVICE_TYPE__", "camera")
     with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
-        SeqSweep(_config(_topology())).open()
+        asyncio.run(SeqSweep(_config(_topology())).open())
+
+
+def test_rpc_serves_sync_methods_with_the_core_signature():
+    seqsweep = SeqSweep(_config(_topology()))
+    rpc = SeqSweepRpc(seqsweep)
+    rpc.open()
+    try:
+        assert rpc.check_job_status() == {"status": "idle", "error": None}  # type: ignore[attr-defined]
+        assert not inspect.iscoroutinefunction(rpc.start_acquisition)  # type: ignore[attr-defined]
+        assert inspect.signature(rpc.start_acquisition) == inspect.signature(seqsweep.start_acquisition)  # type: ignore[attr-defined]
+        assert rpc.start_acquisition.__doc__ == seqsweep.start_acquisition.__doc__  # type: ignore[attr-defined]
+    finally:
+        rpc.close()
+    rpc.close()  # safe to call twice
+
+
+def test_rpc_open_failure_stops_the_loop_thread(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(SimulatedAcsController, "__DEVICE_TYPE__", "camera")
+    rpc = SeqSweepRpc(SeqSweep(_config(_topology())))
+    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
+        rpc.open()
+    assert not rpc._loop.running  # noqa: SLF001
