@@ -3,9 +3,9 @@ router_server_kwargs:
   broadcast_port: 5556
 router_server_api:
   named_calls:
-    seqsweep_start:
+    seqsweep_start_acquisition:
       obj_name: "seqsweep"
-      attr_name: "start_run"
+      attr_name: "start_acquisition"
     seqsweep_pause:
       obj_name: "seqsweep"
       attr_name: "pause"

@@ -18,7 +18,9 @@ class SimulatedAcsController(ScanController):
 
     def run(self, direction: ScanDirection) -> None:
         # TODO: start a timer for duration * time_scale
+        self.log.info("Running scan in direction: %s", direction)
         time.sleep(10)
+        self.log.info("Scan completed.")
 
     def abort(self) -> None:
         # TODO: clear the timer

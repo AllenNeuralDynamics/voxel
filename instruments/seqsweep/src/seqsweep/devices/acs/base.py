@@ -6,6 +6,7 @@ velocity while the controller drives every gate (frame grabbers, camera line tri
 Skeleton: the contract is in place; the bodies are TODO.
 """
 
+import logging
 from enum import StrEnum
 from typing import ClassVar
 
@@ -42,6 +43,7 @@ class ScanController(Device):
 
     def __init__(self, uid: str, *, gate_outputs: dict[str, str]) -> None:
         super().__init__(uid=uid)
+        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self._gate_outputs = dict(gate_outputs)
 
     @property

@@ -24,6 +24,7 @@ class SeqSweepRpc:
         self._loop = LoopThread()
         for name, method in inspect.getmembers(seqsweep, inspect.iscoroutinefunction):
             if not name.startswith("_") and not hasattr(type(self), name):
+                print(f"Bridging method: {name}, signature: {inspect.signature(method)}")
                 setattr(self, name, self._bridge(method))
 
     def _bridge(self, method: Callable[..., Coroutine[Any, Any, Any]]) -> Callable[..., Any]:

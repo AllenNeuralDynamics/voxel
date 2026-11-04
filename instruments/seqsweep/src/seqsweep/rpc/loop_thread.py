@@ -28,7 +28,7 @@ class LoopThread:
 
     def run[T](self, coro: Coroutine[Any, Any, T]) -> T:
         """Run ``coro`` on the loop and block until it finishes; re-raises its exception."""
-        return self.submit(coro).result()
+        return self.submit(coro).result()  # block until the coroutine finishes and return its result
 
     def stop(self) -> None:
         """Stop the loop and join the thread. Safe to call more than once."""
