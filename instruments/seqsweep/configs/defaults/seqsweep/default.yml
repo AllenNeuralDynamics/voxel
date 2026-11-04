@@ -3,9 +3,9 @@ router_server_kwargs:
   broadcast_port: 5556
 router_server_api:
   named_calls:
-    seqsweep_start:
+    seqsweep_start_acquisition:
       obj_name: "seqsweep"
-      attr_name: "start_run"
+      attr_name: "start_acquisition"
     seqsweep_pause:
       obj_name: "seqsweep"
       attr_name: "pause"
@@ -32,14 +32,7 @@ hal:
           laser_532: OUT0
         time_scale: 1.0
   scan_controller: acs
-  # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles
+  # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles, scan limits
 
-# default: the baseline run settings (SeqSweepDefaults) — one strip pass and how many times to run it.
-default:
-  scan:
-    start_um: 0
-    end_um: 2000
-    velocity_um_s: 10000
-    line_pitch_um: 0.5
-    lasers: [laser_532]
-  passes: 2
+# default: baseline run settings (SeqSweepInstrumentDefaults). TODO: scan velocity, line pitch, lasers, passes.
+default: {}

@@ -6,6 +6,7 @@ velocity while the controller drives every gate (frame grabbers, camera line tri
 Skeleton: the contract is in place; the bodies are TODO.
 """
 
+import logging
 from enum import StrEnum
 from typing import ClassVar
 
@@ -31,6 +32,21 @@ class ScanPassConfig(FrozenModel):
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
 
 
+class ScanLimits(FrozenModel):
+    """What the scan axis can physically do; every pass is checked against it."""
+
+    min_um: float = Field(description="Lowest reachable scan-axis position")
+    max_um: float = Field(description="Highest reachable scan-axis position")
+    max_velocity_um_s: float = Field(gt=0, description="Fastest safe stage speed during a pass")
+
+    def check(self, scan: ScanPassConfig) -> None:
+        """Raise ``ValueError`` if ``scan`` goes outside the limits."""
+        if min(scan.start_um, scan.end_um) < self.min_um or max(scan.start_um, scan.end_um) > self.max_um:
+            raise ValueError(f"scan {scan.start_um}..{scan.end_um} um is outside [{self.min_um}, {self.max_um}]")
+        if scan.velocity_um_s > self.max_velocity_um_s:
+            raise ValueError(f"velocity {scan.velocity_um_s} um/s exceeds the limit {self.max_velocity_um_s}")
+
+
 class ScanController(Device):
     """Vendor-neutral timing master for strip passes.
 
@@ -42,6 +58,7 @@ class ScanController(Device):
 
     def __init__(self, uid: str, *, gate_outputs: dict[str, str]) -> None:
         super().__init__(uid=uid)
+        self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self._gate_outputs = dict(gate_outputs)
 
     @property

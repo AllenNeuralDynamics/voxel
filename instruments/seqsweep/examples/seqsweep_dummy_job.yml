@@ -1,0 +1,8 @@
+name: "SeqSweep Test Job"
+direction: forward
+pass_config:
+  start_um: 0
+  end_um: 1000
+  velocity_um_s: 500
+  line_pitch_um: 1
+  lasers: []

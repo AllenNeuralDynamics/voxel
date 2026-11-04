@@ -4,7 +4,6 @@ from one_liner.models import RouterServerConfig  # type: ignore
 from pydantic import BaseModel, ConfigDict, Field
 from vxlib.schema import FrozenModel
 
-from seqsweep.devices.acs.base import ScanPassConfig
 from seqsweep.hal import SeqSweepHardwareTopology
 
 
@@ -30,14 +29,10 @@ class RouterServerPortConfig(BaseModel):
     broadcast_port: int = 5556
 
 
-class SeqSweepDefaults(FrozenModel):
-    """Baseline run settings (``default``): the pass to run and how many times."""
+class SeqSweepInstrumentDefaults(FrozenModel):
+    """Baseline run settings (``default``): everything that can live in ``config.default``."""
 
-    scan: ScanPassConfig = Field(description="Geometry and gating of one strip pass along the scan axis")
-    passes: int = Field(
-        default=2, ge=1, description="Passes per run; they alternate forward and reverse (bidirectional scan)"
-    )
-    # TODO: pass timeouts, Z planes, strips
+    # TODO: scan settings (velocity, line pitch, lasers), passes, limits
 
 
 class SeqSweepInstrumentConfig(BaseModel):
@@ -47,8 +42,8 @@ class SeqSweepInstrumentConfig(BaseModel):
     hal: SeqSweepHardwareTopology = Field(
         description="Hardware blueprint: rigup devices and nodes, plus the role each device plays"
     )
-    default: SeqSweepDefaults = Field(
-        description="Baseline run settings, used when a job from the orchestrator leaves a value unset"
+    default: SeqSweepInstrumentDefaults = Field(
+        default_factory=SeqSweepInstrumentDefaults, description="Baseline run settings; empty for now"
     )
 
 
