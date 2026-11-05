@@ -33,7 +33,7 @@ hal:
           laser_532: OUT0
         axis_x: 0
         axis_y: 1
-        line_trigger_output: OUT0.1  # frame trigger to grabber
+        frame_trigger_output: OUT0.1  # frame trigger to grabber
         direction_output: OUT0.0  # direction to camera
         line_pulse_width_ms: 0.01
         x_accel: 6000

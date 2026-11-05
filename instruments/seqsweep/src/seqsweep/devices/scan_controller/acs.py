@@ -3,12 +3,15 @@
 Skeleton: the settings model is in place; talking to the controller is TODO.
 """
 
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 from vxlib.schema import FrozenModel
 
 from .base import ScanController
+
+AcsOutput = Annotated[str, StringConstraints(pattern=r"^OUT\d+\.\d+$")]
+"""A digital output bit as ``OUT<port>.<bit>``, e.g. ``OUT0.1``."""
 
 
 class AcsStageConfig(FrozenModel):
@@ -16,8 +19,8 @@ class AcsStageConfig(FrozenModel):
 
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
-    line_trigger_output: str = Field(description="Output driving the frame trigger to the grabber")
-    direction_output: str = Field(description="Output telling the camera the scan direction")
+    frame_trigger_output: AcsOutput = Field(description="Output driving the frame trigger to the grabber")
+    direction_output: AcsOutput = Field(description="Output telling the camera the scan direction")
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     x_accel: float = Field(gt=0)
     x_decel: float = Field(gt=0)
@@ -30,6 +33,8 @@ class AcsStageConfig(FrozenModel):
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
+        if self.frame_trigger_output == self.direction_output:
+            raise ValueError(f"frame_trigger_output and direction_output must differ, both are {self.direction_output}")
         for axis, (low, high) in self.limits_mm.items():
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
