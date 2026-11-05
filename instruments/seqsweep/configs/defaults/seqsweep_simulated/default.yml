@@ -26,7 +26,7 @@ router_server_api:
 hal:
   devices:
     acs:
-      target: seqsweep.devices.acs.simulated_acs.SimulatedAcsController
+      target: seqsweep.devices.scan_controller.simulated.SimulatedScanController
       init:
         gate_outputs:
           laser_532: OUT0

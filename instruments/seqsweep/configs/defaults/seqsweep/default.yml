@@ -27,7 +27,7 @@ router_server_api:
 hal:
   devices:
     acs:
-      target: seqsweep.devices.acs.acs_controller.AcsController  # TODO: driver not written yet; simulated setup is in ../seqsweep_simulated
+      target: seqsweep.devices.scan_controller.acs.AcsController  # TODO: driver not written yet; simulated setup is in ../seqsweep_simulated
       init:
         gate_outputs:
           laser_532: OUT0
