@@ -60,6 +60,12 @@ def main():
         help="Hostname scope for config overrides (configs/hostname/<hostname>/...).",
     )
 
+    parser.add_argument(
+        "--simulated",
+        action="store_true",
+        help="Run with the simulated ACS controller (the seqsweep_simulated config) instead of the hardware.",
+    )
+
     args = parser.parse_args()
     logger = logging.getLogger()
 
@@ -71,7 +77,8 @@ def main():
     data_store = FileSysStore(rootdir=config_dir, scopes={"defaults", "hostname"})
     current_scopes = {"hostname": args.hostname}
     logging_config = get_config(data_store=data_store, namespace="logging")
-    seqsweep_config = get_config(data_store=data_store, namespace="seqsweep", scope_identifiers=current_scopes)
+    namespace = "seqsweep_simulated" if args.simulated else "seqsweep"
+    seqsweep_config = get_config(data_store=data_store, namespace=namespace, scope_identifiers=current_scopes)
     seqsweep_config.data["logging"] = logging_config.data.get("logging", {})
     config = SeqSweepSystemConfig(**seqsweep_config.data)
 
