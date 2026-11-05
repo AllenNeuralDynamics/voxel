@@ -61,7 +61,7 @@ class SeqSweep:
         scan_job = ScanJob.model_validate(job or {})
         self._check_job(scan_job)
         self._derived = self.derive_scan(scan_job.pass_config)
-        self.log.info("Derived scan for '%s': %s", scan_job.name, self._derived.model_dump())
+        self._log_derived(scan_job.name, self._derived)
         self._status, self._error = "running", None
         # Launch in the background
         self._scan_task = asyncio.create_task(self._run_passes(scan_job.pass_config, self._derived, scan_job.direction))
@@ -78,6 +78,27 @@ class SeqSweep:
             capture_mm=capture_um / 1000,
             travel_mm=(capture_um + 2 * optics.overscan_um) / 1000,
             line_count=capture_um / optics.pixel_size_um,
+        )
+
+    def _log_derived(self, job_name: str, derived: DerivedScan) -> None:
+        """Log the derived parameters, in the same units and order as the stage buffer prints them."""
+        self.log.info(
+            "Derived parameters for '%s':\n"
+            "  Pixel Size (mm) = %g\n"
+            "  Scan Velocity (mm/s) = %g\n"
+            "  Lead distance before/after ROI (mm) = %g\n"
+            "  Strip width (mm) = %g\n"
+            "  Capture distance + margin (mm) = %g\n"
+            "  Capture distance (mm) = %g\n"
+            "  Calculated # Line Pulse = %g",
+            job_name,
+            derived.pixel_size_um / 1000,
+            derived.scan_speed_mm_s,
+            derived.overscan_um / 1000,
+            derived.fov_y_um / 1000,
+            derived.travel_mm,
+            derived.capture_mm,
+            derived.line_count,
         )
 
     def _check_job(self, job: ScanJob) -> None:
