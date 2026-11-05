@@ -32,6 +32,15 @@ class SeqSweep:
         """Open the rig. Raises ``HALStartupError`` if a device fails to build or fills the wrong role."""
         await self._hal.open()
         self.log.info("Rig open with devices: %s", sorted(self._hal.devices))
+        defaults = self.config.default
+        optics = defaults.optics
+        self.log.info(
+            "Optics: pixel size %.4f um, strip width %.1f um, overscan %.1f um (chamber edge margin %g mm)",
+            optics.pixel_size_um,
+            optics.fov_y_um,
+            optics.overscan_um,
+            defaults.chamber_edge_margin_mm,
+        )
 
     async def close(self) -> None:
         """Close the rig."""

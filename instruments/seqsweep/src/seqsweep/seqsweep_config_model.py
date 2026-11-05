@@ -30,12 +30,14 @@ class RouterServerPortConfig(BaseModel):
 
 
 class OpticsConfig(FrozenModel):
-    """TDI sensor and objective; sets the pixel size on the sample (defaults follow the stage buffer)."""
+    """TDI sensor and objective; sets the pixel size on the sample. No defaults: every derived value depends on these."""
 
-    tdi_pixel_um: float = Field(default=5.0, gt=0, description="TDI sensor pixel size")
-    magnification: float = Field(default=20, gt=0)
-    tdi_width_px: int = Field(default=480, gt=0, le=16384, multiple_of=32, description="Sensor width in pixels")
-    tdi_stages_px: int = Field(default=200, ge=0, description="Lead-in and lead-out distance in pixels")
+    tdi_pixel_um: float = Field(..., gt=0, description="TDI sensor pixel size")
+    magnification: float = Field(..., gt=0)
+    tdi_image_width_px: int = Field(
+        ..., gt=0, le=16384, multiple_of=32, description="Sensor width in pixels (long side, across the scan)"
+    )
+    overscan_px: int = Field(..., ge=0, description="Lead-in and lead-out distance outside the imaged range, in pixels")
 
     @property
     def pixel_size_um(self) -> float:
@@ -44,21 +46,24 @@ class OpticsConfig(FrozenModel):
 
     @property
     def fov_y_um(self) -> float:
-        """Strip width on the sample."""
-        return self.tdi_width_px * self.pixel_size_um
+        """Strip width (y) on the sample."""
+        return self.tdi_image_width_px * self.pixel_size_um
 
     @property
     def overscan_um(self) -> float:
         """Run-up and run-out outside the imaged range."""
-        return self.tdi_stages_px * self.pixel_size_um
+        return self.overscan_px * self.pixel_size_um
 
 
 class SeqSweepInstrumentDefaults(FrozenModel):
     """Baseline run settings (``default``): everything that can live in ``config.default``."""
 
-    optics: OpticsConfig = Field(default_factory=OpticsConfig, description="TDI camera and objective")
+    optics: OpticsConfig = Field(..., description="TDI camera and objective")
     chambers_y_mm: dict[int, float] = Field(
         default_factory=dict, description="Strip-axis (Y) start position of each sample chamber"
+    )
+    chamber_edge_margin_mm: float = Field(
+        ..., gt=0, description="Clearance between the safe X range and the chamber edge; the overscan must fit in it"
     )
     x_safe_range_mm: tuple[float, float] | None = Field(
         default=None, description="X range kept clear of the sample chamber edges; passes are checked against it"
@@ -72,6 +77,12 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     def _check_safe_range(self) -> Self:
         if self.x_safe_range_mm is not None and self.x_safe_range_mm[0] >= self.x_safe_range_mm[1]:
             raise ValueError("x_safe_range_mm must be [min, max]")
+        overscan_mm = self.optics.overscan_um / 1000
+        if overscan_mm > self.chamber_edge_margin_mm:
+            raise ValueError(
+                f"overscan {overscan_mm:g} mm ({self.optics.overscan_px} px) exceeds "
+                f"chamber_edge_margin_mm {self.chamber_edge_margin_mm:g}"
+            )
         return self
 
 
@@ -82,9 +93,7 @@ class SeqSweepInstrumentConfig(BaseModel):
     hal: SeqSweepHardwareTopology = Field(
         description="Hardware blueprint: rigup devices and nodes, plus the role each device plays"
     )
-    default: SeqSweepInstrumentDefaults = Field(
-        default_factory=SeqSweepInstrumentDefaults, description="Baseline run settings; empty for now"
-    )
+    default: SeqSweepInstrumentDefaults = Field(description="Baseline run settings")
 
 
 class SeqSweepSystemConfig(SeqSweepInstrumentConfig, validate_assignment=True):
