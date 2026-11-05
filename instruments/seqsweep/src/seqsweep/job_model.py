@@ -10,13 +10,24 @@ class ScanDirection(StrEnum):
 
 
 class ScanPassConfig(FrozenModel):
-    """One strip pass along the scan axis (µm, µm/s)."""
+    """One strip pass along the scan axis (µm, Hz). Stage speed and line pitch follow from the optics."""
 
     start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
     end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
-    velocity_um_s: float = Field(gt=0, description="Constant stage speed during imaging")
-    line_pitch_um: float = Field(gt=0, description="Stage travel per camera line trigger")
+    line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
+
+
+class DerivedScan(FrozenModel):
+    """What a pass works out to once the optics are applied (computed, never configured)."""
+
+    pixel_size_um: float = Field(description="Pixel size on the sample; also the stage travel per line trigger")
+    scan_speed_mm_s: float = Field(description="Constant stage speed during imaging")
+    overscan_um: float = Field(description="Run-up and run-out outside the imaged range")
+    fov_y_um: float = Field(description="Strip width on the sample")
+    capture_mm: float = Field(description="Imaged distance along the scan axis")
+    travel_mm: float = Field(description="Capture distance plus overscan at both ends")
+    line_count: float = Field(description="Line triggers over the capture distance")
 
 
 class ScanJob(FrozenModel):

@@ -2,7 +2,7 @@
 
 import time
 
-from seqsweep.job_model import ScanDirection, ScanPassConfig
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 from .base import ScanController
 
@@ -14,7 +14,7 @@ class SimulatedScanController(ScanController):
         super().__init__(uid, gate_outputs=gate_outputs)
         self._time_scale = time_scale
 
-    def configure(self, config: ScanPassConfig) -> None:
+    def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         # TODO: store the pass and its duration
         pass
 

@@ -4,7 +4,7 @@ from rigup.device.handle import Adapter, DeviceProperty
 
 from rigup import DeviceHandle
 
-from seqsweep.job_model import ScanDirection, ScanPassConfig
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 from .base import ScanController
 
@@ -16,9 +16,9 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         super().__init__(adapter)
         self.is_running: DeviceProperty[bool] = self.props.property("is_running", bool)
 
-    async def configure(self, config: ScanPassConfig) -> None:
+    async def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         """Load the pass geometry and gating."""
-        await self.call("configure", config)
+        await self.call("configure", config, derived)
 
     async def run(self, direction: ScanDirection) -> None:
         """Start one strip pass in the given direction without blocking."""

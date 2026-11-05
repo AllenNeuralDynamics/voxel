@@ -43,6 +43,11 @@ class OpticsConfig(FrozenModel):
         return self.tdi_pixel_um / self.magnification
 
     @property
+    def fov_y_um(self) -> float:
+        """Strip width on the sample."""
+        return self.tdi_width_px * self.pixel_size_um
+
+    @property
     def overscan_um(self) -> float:
         """Run-up and run-out outside the imaged range."""
         return self.tdi_stages_px * self.pixel_size_um

@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from rigup import Device, describe
 from seqsweep.devices.base import SeqSweepDeviceType
-from seqsweep.job_model import ScanDirection, ScanPassConfig
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 
 class ScanController(Device):
@@ -35,7 +35,7 @@ class ScanController(Device):
         return False
 
     @describe(label="Configure Scan", desc="Load pass geometry and gating")
-    def configure(self, config: ScanPassConfig) -> None:
+    def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         # TODO: check lasers against gate_outputs, program the controller
         pass
 
