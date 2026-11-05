@@ -1,8 +1,11 @@
-name: "SeqSweep Test Job"
+# Values from "Stage buffer_062226.txt" (mm in the buffer, um here).
+name: "Chamber 2, 7-frame strip"
+chamber: 2  # resolves to Y0 from default.chambers_y_mm
 direction: forward
+num_strips: 1  # passes or frames per chamber
 pass_config:
-  start_um: 0
-  end_um: 1000
-  velocity_um_s: 500
-  line_pitch_um: 1
-  lasers: []
+  start_um: 116750  # X0
+  end_um: 168200  # X_end; use 124100 for exactly one 29400 px frame
+  velocity_um_s: 2500  # = line_rate x pixel size
+  line_pitch_um: 0.25  # = pixel size (5 / 20)
+  lasers: [laser_532]
