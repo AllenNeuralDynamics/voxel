@@ -7,7 +7,7 @@ from seqsweep.job_model import ScanDirection, ScanPassConfig
 from .base import ScanController
 
 
-class SimulatedAcsController(ScanController):
+class SimulatedScanController(ScanController):
     """Timer-only scan controller: a pass lasts its configured duration times ``time_scale``."""
 
     def __init__(self, uid: str, *, gate_outputs: dict[str, str], time_scale: float = 1.0) -> None:
