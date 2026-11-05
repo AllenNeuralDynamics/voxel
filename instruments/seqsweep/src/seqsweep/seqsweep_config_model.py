@@ -1,7 +1,7 @@
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from one_liner.models import RouterServerConfig  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from vxlib.schema import FrozenModel
 
 from seqsweep.hal import SeqSweepHardwareTopology
@@ -55,10 +55,19 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     chambers_y_mm: dict[int, float] = Field(
         default_factory=dict, description="Strip-axis (Y) start position of each sample chamber"
     )
+    x_safe_range_mm: tuple[float, float] | None = Field(
+        default=None, description="X range kept clear of the sample chamber edges; passes are checked against it"
+    )
     max_line_rate_hz: float | None = Field(
         default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"
     )
     # TODO: lasers, passes
+
+    @model_validator(mode="after")
+    def _check_safe_range(self) -> Self:
+        if self.x_safe_range_mm is not None and self.x_safe_range_mm[0] >= self.x_safe_range_mm[1]:
+            raise ValueError("x_safe_range_mm must be [min, max]")
+        return self
 
 
 class SeqSweepInstrumentConfig(BaseModel):

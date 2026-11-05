@@ -24,12 +24,9 @@ class AcsStageConfig(FrozenModel):
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     x_accel: float = Field(gt=0)
     x_decel: float = Field(gt=0)
-    y_accel: float = Field(gt=0, description="Not set in the stage buffer; kept explicit")
-    y_decel: float = Field(gt=0)
     move_velocity_mm_s: float = Field(gt=0, description="Speed of positioning moves, not scans")
     origin_mm: tuple[float, float] = Field(description="Home position (X, Y)")
     limits_mm: dict[Literal["x", "y"], tuple[float, float]] = Field(description="Reachable range per axis")
-    x_safe_range_mm: tuple[float, float] = Field(description="X range kept clear of the sample chamber edges")
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
@@ -38,8 +35,6 @@ class AcsStageConfig(FrozenModel):
         for axis, (low, high) in self.limits_mm.items():
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
-        if self.x_safe_range_mm[0] >= self.x_safe_range_mm[1]:
-            raise ValueError("x_safe_range_mm must be [min, max]")
         return self
 
 

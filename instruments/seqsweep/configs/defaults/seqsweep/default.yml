@@ -38,14 +38,11 @@ hal:
         line_pulse_width_ms: 0.01
         x_accel: 6000
         x_decel: 6000
-        y_accel: 6000  # not set in the buffer; explicit here
-        y_decel: 6000
         move_velocity_mm_s: 50  # positioning moves, not scans
         origin_mm: [155.0, 155.0]
         limits_mm:
           x: [20, 290]
           y: [20, 290]
-        x_safe_range_mm: [116.75, 173.25]  # 10 mm margin from chamber edges
   scan_controller: acs
   # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles
 
@@ -60,4 +57,5 @@ default:
     1: 200.25
     2: 155.0
     3: 109.75
+  x_safe_range_mm: [116.75, 173.25]  # 10 mm margin from chamber edges
   max_line_rate_hz: 10000  # camera limit; keep in step with the camera .cpp config

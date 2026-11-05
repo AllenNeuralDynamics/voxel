@@ -55,10 +55,15 @@ class SeqSweep:
         self._scan_task = asyncio.create_task(self._run_passes(scan_job.pass_config, scan_job.direction))
 
     def _check_job(self, job: ScanJob) -> None:
-        """Raise ``ValueError`` if the job names an unknown chamber or exceeds the camera line rate."""
+        """Raise ``ValueError`` if the job names an unknown chamber, leaves the safe X range or exceeds the line rate."""
         defaults = self.config.default
         if job.chamber is not None and job.chamber not in defaults.chambers_y_mm:
             raise ValueError(f"chamber {job.chamber} is not in default.chambers_y_mm {sorted(defaults.chambers_y_mm)}")
+        if defaults.x_safe_range_mm is not None:
+            low_mm, high_mm = defaults.x_safe_range_mm
+            start_mm, end_mm = sorted((job.pass_config.start_um / 1000, job.pass_config.end_um / 1000))
+            if start_mm < low_mm or end_mm > high_mm:
+                raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside x_safe_range_mm [{low_mm:g}, {high_mm:g}]")
         line_rate_hz = job.pass_config.velocity_um_s / job.pass_config.line_pitch_um
         if defaults.max_line_rate_hz is not None and line_rate_hz > defaults.max_line_rate_hz:
             raise ValueError(f"line rate {line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
