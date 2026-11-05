@@ -29,10 +29,36 @@ class RouterServerPortConfig(BaseModel):
     broadcast_port: int = 5556
 
 
+class OpticsConfig(FrozenModel):
+    """TDI sensor and objective; sets the pixel size on the sample (defaults follow the stage buffer)."""
+
+    tdi_pixel_um: float = Field(default=5.0, gt=0, description="TDI sensor pixel size")
+    magnification: float = Field(default=20, gt=0)
+    tdi_width_px: int = Field(default=480, gt=0, le=16384, multiple_of=32, description="Sensor width in pixels")
+    tdi_stages_px: int = Field(default=200, ge=0, description="Lead-in and lead-out distance in pixels")
+
+    @property
+    def pixel_size_um(self) -> float:
+        """Pixel size on the sample."""
+        return self.tdi_pixel_um / self.magnification
+
+    @property
+    def overscan_um(self) -> float:
+        """Run-up and run-out outside the imaged range."""
+        return self.tdi_stages_px * self.pixel_size_um
+
+
 class SeqSweepInstrumentDefaults(FrozenModel):
     """Baseline run settings (``default``): everything that can live in ``config.default``."""
 
-    # TODO: scan settings (velocity, line pitch, lasers), passes, limits
+    optics: OpticsConfig = Field(default_factory=OpticsConfig, description="TDI camera and objective")
+    chambers_y_mm: dict[int, float] = Field(
+        default_factory=dict, description="Strip-axis (Y) start position of each sample chamber"
+    )
+    max_line_rate_hz: float | None = Field(
+        default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"
+    )
+    # TODO: lasers, passes
 
 
 class SeqSweepInstrumentConfig(BaseModel):

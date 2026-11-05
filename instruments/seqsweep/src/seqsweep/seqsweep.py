@@ -2,8 +2,8 @@ import asyncio
 import logging
 from typing import Any
 
-from seqsweep.devices.acs.base import ScanDirection, ScanPassConfig
 from seqsweep.hal import HAL
+from seqsweep.job_model import ScanDirection, ScanJob, ScanPassConfig
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 
@@ -45,14 +45,23 @@ class SeqSweep:
 
         Replaces any paused or failed job. A ``resume_state`` in ``job`` starts from that pass.
         """
-        # Test stub: one pass on the scan controller. TODO: validate ScanJob, refuse while running
+        # Test stub: one pass on the scan controller; strips are validated but not stepped yet
         if self._scan_task is not None and not self._scan_task.done():
             raise RuntimeError("a scan is already running")
-        pass_config = ScanPassConfig.model_validate((job or {}).get("pass_config", {}))
-        direction = ScanDirection((job or {}).get("direction", ScanDirection.FORWARD))
+        scan_job = ScanJob.model_validate(job or {})
+        self._check_job(scan_job)
         self._status, self._error = "running", None
         # Launch in the background
-        self._scan_task = asyncio.create_task(self._run_passes(pass_config, direction))
+        self._scan_task = asyncio.create_task(self._run_passes(scan_job.pass_config, scan_job.direction))
+
+    def _check_job(self, job: ScanJob) -> None:
+        """Raise ``ValueError`` if the job names an unknown chamber or exceeds the camera line rate."""
+        defaults = self.config.default
+        if job.chamber is not None and job.chamber not in defaults.chambers_y_mm:
+            raise ValueError(f"chamber {job.chamber} is not in default.chambers_y_mm {sorted(defaults.chambers_y_mm)}")
+        line_rate_hz = job.pass_config.velocity_um_s / job.pass_config.line_pitch_um
+        if defaults.max_line_rate_hz is not None and line_rate_hz > defaults.max_line_rate_hz:
+            raise ValueError(f"line rate {line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
 
     async def _run_passes(self, pass_config: ScanPassConfig, direction: ScanDirection) -> None:
         scan_controller = self._hal.scan_controller

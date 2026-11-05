@@ -7,44 +7,11 @@ Skeleton: the contract is in place; the bodies are TODO.
 """
 
 import logging
-from enum import StrEnum
 from typing import ClassVar
-
-from pydantic import Field
-from vxlib.schema import FrozenModel
 
 from rigup import Device, describe
 from seqsweep.devices.base import SeqSweepDeviceType
-
-
-class ScanDirection(StrEnum):
-    FORWARD = "forward"  # start_um → end_um
-    REVERSE = "reverse"  # end_um → start_um
-
-
-class ScanPassConfig(FrozenModel):
-    """One strip pass along the scan axis (µm, µm/s)."""
-
-    start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
-    end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
-    velocity_um_s: float = Field(gt=0, description="Constant stage speed during imaging")
-    line_pitch_um: float = Field(gt=0, description="Stage travel per camera line trigger")
-    lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
-
-
-class ScanLimits(FrozenModel):
-    """What the scan axis can physically do; every pass is checked against it."""
-
-    min_um: float = Field(description="Lowest reachable scan-axis position")
-    max_um: float = Field(description="Highest reachable scan-axis position")
-    max_velocity_um_s: float = Field(gt=0, description="Fastest safe stage speed during a pass")
-
-    def check(self, scan: ScanPassConfig) -> None:
-        """Raise ``ValueError`` if ``scan`` goes outside the limits."""
-        if min(scan.start_um, scan.end_um) < self.min_um or max(scan.start_um, scan.end_um) > self.max_um:
-            raise ValueError(f"scan {scan.start_um}..{scan.end_um} um is outside [{self.min_um}, {self.max_um}]")
-        if scan.velocity_um_s > self.max_velocity_um_s:
-            raise ValueError(f"velocity {scan.velocity_um_s} um/s exceeds the limit {self.max_velocity_um_s}")
+from seqsweep.job_model import ScanDirection, ScanPassConfig
 
 
 class ScanController(Device):

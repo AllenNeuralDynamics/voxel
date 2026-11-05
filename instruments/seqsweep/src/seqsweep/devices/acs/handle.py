@@ -4,7 +4,9 @@ from rigup.device.handle import Adapter, DeviceProperty
 
 from rigup import DeviceHandle
 
-from .base import ScanController, ScanDirection, ScanPassConfig
+from seqsweep.job_model import ScanDirection, ScanPassConfig
+
+from .base import ScanController
 
 
 class ScanControllerHandle(DeviceHandle[ScanController]):

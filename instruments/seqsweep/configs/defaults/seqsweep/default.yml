@@ -22,17 +22,42 @@ router_server_api:
       obj_name: "seqsweep"
       attr_name: "check_job_status"
 
-# hal: the hardware blueprint (SeqSweepHardwareTopology) — rigup devices/nodes plus the role each device plays.
+# hal: the hardware blueprint (SeqSweepHardwareTopology) - rigup devices/nodes plus the role each device plays.
+# Stage values (mm, mm/s) come from "Stage buffer_062226.txt".
 hal:
   devices:
     acs:
-      target: seqsweep.devices.acs.simulated_acs.SimulatedAcsController
+      target: seqsweep.devices.acs.acs_controller.AcsController  # TODO: driver not written yet; simulated setup is in ../seqsweep_simulated
       init:
         gate_outputs:
           laser_532: OUT0
-        time_scale: 1.0
+        axis_x: 0
+        axis_y: 1
+        line_trigger_output: OUT0.1  # frame trigger to grabber
+        direction_output: OUT0.0  # direction to camera
+        line_pulse_width_ms: 0.01
+        x_accel: 6000
+        x_decel: 6000
+        y_accel: 6000  # not set in the buffer; explicit here
+        y_decel: 6000
+        move_velocity_mm_s: 50  # positioning moves, not scans
+        origin_mm: [155.0, 155.0]
+        limits_mm:
+          x: [20, 290]
+          y: [20, 290]
+        x_safe_range_mm: [116.75, 173.25]  # 10 mm margin from chamber edges
   scan_controller: acs
-  # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles, scan limits
+  # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles
 
-# default: baseline run settings (SeqSweepInstrumentDefaults). TODO: scan velocity, line pitch, lasers, passes.
-default: {}
+# default: baseline run settings (SeqSweepInstrumentDefaults). TODO: lasers, passes.
+default:
+  optics:
+    tdi_pixel_um: 5.0
+    magnification: 20
+    tdi_width_px: 480  # sensor width, steps of 32, max 16384
+    tdi_stages_px: 200  # lead-in/out distance in pixels; keep the margin under 10 mm
+  chambers_y_mm:
+    1: 200.25
+    2: 155.0
+    3: 109.75
+  max_line_rate_hz: 10000  # camera limit; keep in step with the camera .cpp config

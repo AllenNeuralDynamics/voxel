@@ -2,7 +2,9 @@
 
 import time
 
-from .base import ScanController, ScanDirection, ScanPassConfig
+from seqsweep.job_model import ScanDirection, ScanPassConfig
+
+from .base import ScanController
 
 
 class SimulatedAcsController(ScanController):
