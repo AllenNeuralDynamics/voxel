@@ -149,6 +149,10 @@ class SeqSweep:
             status["derived"] = self._derived.model_dump()
         return status
 
+    async def test_sleep(self, device: str, seconds: float = 5.0) -> float:
+        """Concurrency test hook (remove once real devices are served): block a fake device for ``seconds``."""
+        return await self._hal.devices[device].call("sleep", seconds)
+
     async def get_job(self) -> dict[str, Any] | None:
         """The current job, with ``resume_state`` once paused or failed; ``None`` when idle or finished."""
         return None

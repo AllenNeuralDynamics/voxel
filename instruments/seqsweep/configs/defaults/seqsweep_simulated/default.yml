@@ -21,6 +21,10 @@ router_server_api:
     seqsweep_check_job_status:
       obj_name: "seqsweep"
       attr_name: "check_job_status"
+    seqsweep_test_sleep:
+      obj_name: "seqsweep"
+      attr_name: "test_sleep"
+
 
 # hal: the hardware blueprint (SeqSweepHardwareTopology) - rigup devices/nodes plus the role each device plays.
 hal:
@@ -31,6 +35,11 @@ hal:
         gate_outputs:
           laser_532: OUT0
         time_scale: 1.0
+    # Fake slow devices for the one_liner concurrency test (examples/concurrency_test.py)
+    fake_1:
+      target: seqsweep.devices.sleep_device.SleepDevice
+    fake_2:
+      target: seqsweep.devices.sleep_device.SleepDevice
   scan_controller: acs
   # TODO: nodes (WS2/WS3 cameras over tcp://), cameras, lasers, z_axis roles
 

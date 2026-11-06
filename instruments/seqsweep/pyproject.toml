@@ -14,7 +14,7 @@ dependencies = [
     "pydantic>=2.11.9",
     "pyyaml>=6.0",
     "coloredlogs",
-    "one-liner @ git+https://github.com/AllenNeuralDynamics/one-liner.git@main",
+    "one-liner @ git+https://github.com/AllenNeuralDynamics/one-liner.git@feat-threaded-rpcs",
     "ficus @ git+https://github.com/AllenNeuralDynamics/ficus.git",
 ]
 

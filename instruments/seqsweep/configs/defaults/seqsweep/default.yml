@@ -60,6 +60,6 @@ default:
   chambers_step_mm:  # start of each chamber across the scan (Y while scan_axis is x)
     1: 200.25
     2: 155.0
-    3: 109.75   
+    3: 109.75
   scan_safe_range_mm: [116.75, 173.25]  # 10 mm margin also be in this range
   max_line_rate_hz: 10000  # camera limit; keep in step with the camera .cpp config
