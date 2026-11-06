@@ -35,7 +35,7 @@ class OpticsConfig(FrozenModel):
     tdi_pixel_um: float = Field(..., gt=0, description="TDI sensor pixel size")
     magnification: float = Field(..., gt=0)
     tdi_image_width_px: int = Field(
-        ..., gt=0, le=16384, multiple_of=32, description="Sensor width in pixels (long side, across the scan)"
+        ..., gt=0, le=16384, multiple_of=32, description="Sensor width in pixels (long side of TDI sensor)"
     )
     overscan_px: int = Field(..., ge=0, description="Lead-in and lead-out distance outside the imaged range, in pixels")
 
@@ -45,8 +45,8 @@ class OpticsConfig(FrozenModel):
         return self.tdi_pixel_um / self.magnification
 
     @property
-    def fov_y_um(self) -> float:
-        """Strip width (y) on the sample."""
+    def tdi_image_width_um(self) -> float:
+        """Strip width on the sample, across the scan."""
         return self.tdi_image_width_px * self.pixel_size_um
 
     @property
@@ -58,15 +58,19 @@ class OpticsConfig(FrozenModel):
 class SeqSweepInstrumentDefaults(FrozenModel):
     """Baseline run settings (``default``): everything that can live in ``config.default``."""
 
+    scan_axis: Literal["x", "y"] = Field(
+        ..., description="Stage axis the scan runs along; the strip step is along the other axis"
+    )
     optics: OpticsConfig = Field(..., description="TDI camera and objective")
-    chambers_y_mm: dict[int, float] = Field(
-        default_factory=dict, description="Strip-axis (Y) start position of each sample chamber"
+    chambers_step_mm: dict[int, float] = Field(
+        default_factory=dict, description="Start position of each sample chamber along the step axis (across the scan)"
     )
     chamber_edge_margin_mm: float = Field(
         ..., gt=0, description="Clearance between the safe X range and the chamber edge; the overscan must fit in it"
     )
-    x_safe_range_mm: tuple[float, float] | None = Field(
-        default=None, description="X range kept clear of the sample chamber edges; passes are checked against it"
+    scan_safe_range_mm: tuple[float, float] | None = Field(
+        default=None,
+        description="Range along the scan axis kept clear of the sample chamber edges; passes are checked against it",
     )
     max_line_rate_hz: float | None = Field(
         default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"
@@ -75,8 +79,8 @@ class SeqSweepInstrumentDefaults(FrozenModel):
 
     @model_validator(mode="after")
     def _check_safe_range(self) -> Self:
-        if self.x_safe_range_mm is not None and self.x_safe_range_mm[0] >= self.x_safe_range_mm[1]:
-            raise ValueError("x_safe_range_mm must be [min, max]")
+        if self.scan_safe_range_mm is not None and self.scan_safe_range_mm[0] >= self.scan_safe_range_mm[1]:
+            raise ValueError("scan_safe_range_mm must be [min, max]")
         overscan_mm = self.optics.overscan_um / 1000
         if overscan_mm > self.chamber_edge_margin_mm:
             raise ValueError(

@@ -36,15 +36,18 @@ hal:
 
 # default: baseline run settings (SeqSweepInstrumentDefaults). TODO: lasers, passes.
 default:
+  # scan_axis: stage axis the scan runs along. If it changes (camera rotated), re-check optics, scan_safe_range_mm
+  # and chambers_step_mm, which are given along the scan axis and across it.
+  scan_axis: x
   optics:
     tdi_pixel_um: 5.0
     magnification: 20
     tdi_image_width_px: 480  # sensor width, steps of 32, max 16384
     overscan_px: 200  # lead-in/out distance in pixels; must fit in chamber_edge_margin_mm
   chamber_edge_margin_mm: 10  # clearance between the safe X range and the chamber edge
-  chambers_y_mm:
+  chambers_step_mm:  # start of each chamber across the scan (Y while scan_axis is x)
     1: 200.25
     2: 155.0
     3: 109.75
-  x_safe_range_mm: [116.75, 173.25]  # 10 mm margin from chamber edges
+  scan_safe_range_mm: [116.75, 173.25]  # 10 mm margin from chamber edges
   max_line_rate_hz: 10000  # camera limit; keep in step with the camera .cpp config

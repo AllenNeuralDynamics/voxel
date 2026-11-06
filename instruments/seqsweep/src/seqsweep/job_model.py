@@ -24,7 +24,7 @@ class DerivedScan(FrozenModel):
     pixel_size_um: float = Field(description="Pixel size on the sample; also the stage travel per line trigger")
     scan_speed_mm_s: float = Field(description="Constant stage speed during imaging")
     overscan_um: float = Field(description="Run-up and run-out outside the imaged range")
-    fov_y_um: float = Field(description="Strip width on the sample")
+    tdi_image_width_um: float = Field(description="Strip width on the sample, across the scan")
     capture_mm: float = Field(description="Imaged distance along the scan axis")
     travel_mm: float = Field(description="Capture distance plus overscan at both ends")
     line_count: float = Field(description="Line triggers over the capture distance")

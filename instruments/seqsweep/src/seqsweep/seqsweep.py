@@ -35,9 +35,9 @@ class SeqSweep:
         defaults = self.config.default
         optics = defaults.optics
         self.log.info(
-            "Optics: pixel size %.4f um, strip width %.1f um, overscan %.1f um (chamber edge margin %g mm)",
+            "Optics: pixel size %.4f um, Image width %.1f um, overscan %.1f um (chamber edge margin %g mm)",
             optics.pixel_size_um,
-            optics.fov_y_um,
+            optics.tdi_image_width_um,
             optics.overscan_um,
             defaults.chamber_edge_margin_mm,
         )
@@ -74,7 +74,7 @@ class SeqSweep:
             pixel_size_um=optics.pixel_size_um,
             scan_speed_mm_s=pass_config.line_rate_hz * optics.pixel_size_um / 1000,
             overscan_um=optics.overscan_um,
-            fov_y_um=optics.fov_y_um,
+            tdi_image_width_um=optics.tdi_image_width_um,
             capture_mm=capture_um / 1000,
             travel_mm=(capture_um + 2 * optics.overscan_um) / 1000,
             line_count=capture_um / optics.pixel_size_um,
@@ -95,22 +95,24 @@ class SeqSweep:
             derived.pixel_size_um / 1000,
             derived.scan_speed_mm_s,
             derived.overscan_um / 1000,
-            derived.fov_y_um / 1000,
+            derived.tdi_image_width_um / 1000,
             derived.travel_mm,
             derived.capture_mm,
             derived.line_count,
         )
 
     def _check_job(self, job: ScanJob) -> None:
-        """Raise ``ValueError`` if the job names an unknown chamber, leaves the safe X range or exceeds the line rate."""
+        """Raise ``ValueError`` if the job names an unknown chamber, leaves the safe scan range or exceeds the line rate."""
         defaults = self.config.default
-        if job.chamber is not None and job.chamber not in defaults.chambers_y_mm:
-            raise ValueError(f"chamber {job.chamber} is not in default.chambers_y_mm {sorted(defaults.chambers_y_mm)}")
-        if defaults.x_safe_range_mm is not None:
-            low_mm, high_mm = defaults.x_safe_range_mm
+        if job.chamber is not None and job.chamber not in defaults.chambers_step_mm:
+            raise ValueError(
+                f"chamber {job.chamber} is not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}"
+            )
+        if defaults.scan_safe_range_mm is not None:
+            low_mm, high_mm = defaults.scan_safe_range_mm
             start_mm, end_mm = sorted((job.pass_config.start_um / 1000, job.pass_config.end_um / 1000))
             if start_mm < low_mm or end_mm > high_mm:
-                raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside x_safe_range_mm [{low_mm:g}, {high_mm:g}]")
+                raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside scan_safe_range_mm [{low_mm:g}, {high_mm:g}]")
         line_rate_hz = job.pass_config.line_rate_hz
         if defaults.max_line_rate_hz is not None and line_rate_hz > defaults.max_line_rate_hz:
             raise ValueError(f"line rate {line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
