@@ -11,7 +11,7 @@ from vxlib.quantity import QuantityRange, VoltageRange
 from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.devices.base import DeviceType
 
-from .waveform import Signals
+from .waveform import Signals, WaveformResolutionError
 
 GeneratorState = Literal["fresh", "ready", "running"]
 _PORTS_ADAPTER = TypeAdapter(dict[str, str])
@@ -113,19 +113,40 @@ class SignalGenerator(Device):
 
     Timing and trigger configuration are driver-specific. The vendor-neutral
     surface accepts per-port voltage waveforms sharing one sample rate and cycle.
+
+    ``limits`` optionally narrows the allowed output voltage of individual ports,
+    e.g. ``{"galvo": {"min": -2.5, "max": 2.5}}``, to protect devices whose inputs
+    accept less than the hardware range. Resolved waveforms, including derived ones,
+    that leave a port's limits are rejected before anything reaches the hardware.
     """
 
     __DEVICE_TYPE__: ClassVar[str] = DeviceType.SIGNAL_GENERATOR
     __CONTROLLER_TYPE__: ClassVar[type] = SignalGeneratorController
 
-    def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
+    def __init__(
+        self,
+        uid: str,
+        *,
+        ports: Mapping[str, str],
+        limits: Mapping[str, VoltageRange | Mapping[str, float]] | None = None,
+    ) -> None:
         super().__init__(uid=uid)
         self._ports: dict[str, str] = dict(ports)
+        self._limits: dict[str, VoltageRange] = {
+            name: VoltageRange.model_validate(rng) for name, rng in (limits or {}).items()
+        }
+        if unknown := set(self._limits) - set(self._ports):
+            raise ValueError(f"Voltage limits given for ports not declared on {uid}: {sorted(unknown)}")
 
     @property
     @describe(label="Ports", desc="Logical name -> physical analog output terminal")
     def ports(self) -> dict[str, str]:
         return dict(self._ports)
+
+    @property
+    @describe(label="Port Voltage Limits", units="V", desc="Per-port output limits within the hardware range")
+    def limits(self) -> dict[str, VoltageRange]:
+        return dict(self._limits)
 
     @property
     @abstractmethod
@@ -199,7 +220,19 @@ class SignalGenerator(Device):
         if unknown := waveform_names - port_names:
             raise ValueError(f"Waveform keys not declared as ports on {self.uid}: {sorted(unknown)}")
 
-        return signals.arrays(self.voltage_range)
+        arrays = signals.arrays(self.voltage_range)
+        errors: list[str] = []
+        for name, limit in self._limits.items():
+            if name not in arrays:
+                continue
+            lo, hi = float(np.min(arrays[name])), float(np.max(arrays[name]))
+            if lo < limit.min or hi > limit.max:
+                errors.append(
+                    f"{name} spans {lo:g}..{hi:g} V, outside its limits {float(limit.min):g}..{float(limit.max):g} V"
+                )
+        if errors:
+            raise WaveformResolutionError(f"Waveforms exceed port voltage limits on {self.uid}: " + "; ".join(errors))
+        return arrays
 
     def emit(self, signals: Signals, timeout_s: float | None = None) -> None:
         """Play ``signals`` through the hardware exactly once, blocking until done.

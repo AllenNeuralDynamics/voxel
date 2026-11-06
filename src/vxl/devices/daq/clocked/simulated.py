@@ -28,8 +28,9 @@ class SimulatedSignalGenerator(SignalGenerator):
         *,
         hub: SimulatedDaqmx,
         ports: Mapping[str, str],
+        limits: Mapping[str, VoltageRange | Mapping[str, float]] | None = None,
     ) -> None:
-        super().__init__(uid=uid, ports=ports)
+        super().__init__(uid=uid, ports=ports, limits=limits)
         self._hub = hub
         self._log = logging.getLogger(f"{uid}.SimulatedSignalGenerator")
 
