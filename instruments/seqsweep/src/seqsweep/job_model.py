@@ -14,6 +14,7 @@ class ScanPassConfig(FrozenModel):
 
     scan_start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
     scan_end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
+    # Validate against camera config
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
 
@@ -34,7 +35,9 @@ class ScanJob(FrozenModel):
     """One scan job: a pass geometry repeated over ``num_strips`` strips of a sample chamber."""
 
     name: str = Field(default="seqsweep job", min_length=1)
+    #TODO Chamber: Change in to the list type to support multiple chambers
     chamber: int | None = Field(default=None, description="Sample chamber; its Y start comes from the defaults")
     direction: ScanDirection = ScanDirection.FORWARD
+    # TODO Validate the number of strips does not exceed the next chamber's start position
     num_strips: int = Field(default=1, ge=1, description="Frames per chamber, stepped along Y")
     pass_config: ScanPassConfig
