@@ -117,6 +117,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down seqsweep server..")
     finally:
+        server.close()
         seqsweep.close()
 
 
