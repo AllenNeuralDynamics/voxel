@@ -117,6 +117,8 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down seqsweep server..")
     finally:
+        # Stop the router first: its receive worker threads are non-daemon and keep the process alive
+        server.close()
         seqsweep.close()
 
 
