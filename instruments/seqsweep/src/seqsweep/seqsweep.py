@@ -69,7 +69,7 @@ class SeqSweep:
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
         """Apply the optics to a pass: pixel size, stage speed, overscan, strip width and distances."""
         optics = self.config.default.optics
-        capture_um = abs(pass_config.end_um - pass_config.start_um)
+        capture_um = abs(pass_config.scan_end_um - pass_config.scan_start_um)
         return DerivedScan(
             pixel_size_um=optics.pixel_size_um,
             scan_speed_mm_s=pass_config.line_rate_hz * optics.pixel_size_um / 1000,
@@ -110,7 +110,7 @@ class SeqSweep:
             )
         if defaults.scan_safe_range_mm is not None:
             low_mm, high_mm = defaults.scan_safe_range_mm
-            start_mm, end_mm = sorted((job.pass_config.start_um / 1000, job.pass_config.end_um / 1000))
+            start_mm, end_mm = sorted((job.pass_config.scan_start_um / 1000, job.pass_config.scan_end_um / 1000))
             if start_mm < low_mm or end_mm > high_mm:
                 raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside scan_safe_range_mm [{low_mm:g}, {high_mm:g}]")
         line_rate_hz = job.pass_config.line_rate_hz

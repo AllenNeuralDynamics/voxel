@@ -1,11 +1,10 @@
 # Values from "Stage buffer_062226.txt" (mm in the buffer, um here).
 name: "Chamber 2, 7-frame strip"
-chamber: 2  # resolves to Y0 from default.chambers_y_mm
+chamber: 2  # resolves to Y0 from default.chambers_step_mm
 direction: forward
 num_strips: 1  # passes or frames per chamber
 pass_config:
-  start_um: 116750  # X0
-  end_um: 168200  # X_end; use 124100 for exactly one 29400 px frame
-  velocity_um_s: 2500  # = line_rate x pixel size
-  line_pitch_um: 0.25  # = pixel size (5 / 20)
+  scan_start_um: 116750  # X0
+  scan_end_um: 168200  # X_end; use 124100 for exactly one 29400 px frame
+  line_rate_hz: 10000  # camera line rate; pixel pitch and stage speed follow from the optics
   lasers: [laser_532]

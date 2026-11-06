@@ -5,15 +5,15 @@ from vxlib.schema import FrozenModel
 
 
 class ScanDirection(StrEnum):
-    FORWARD = "forward"  # start_um → end_um
-    REVERSE = "reverse"  # end_um → start_um
+    FORWARD = "forward"  # scan_start_um → scan_end_um
+    REVERSE = "reverse"  # scan_end_um → scan_start_um
 
 
 class ScanPassConfig(FrozenModel):
     """One strip pass along the scan axis (µm, Hz). Stage speed and line pitch follow from the optics."""
 
-    start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
-    end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
+    scan_start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
+    scan_end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
 
