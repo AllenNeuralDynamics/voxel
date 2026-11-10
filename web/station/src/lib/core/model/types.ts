@@ -169,7 +169,7 @@ export interface CommandRequest {
 }
 
 /** Region of interest on the camera sensor, in unbinned sensor pixels. */
-export interface SensorROI {
+export interface AreaROI {
   x: number;
   y: number;
   w: number;
@@ -193,7 +193,7 @@ export interface ProfileConfig {
   sync: Record<string, Signals>;
   props: Record<string, Record<string, unknown>>;
   setup: Record<string, CommandRequest[]>;
-  rois: Record<string, SensorROI>;
+  rois: Record<string, AreaROI>;
   desc: string;
   label?: string | null;
 }
@@ -369,12 +369,12 @@ export interface PreviewLevels {
 // ---- acquisition request / record ----
 
 /** How an S3 store resolves credentials: a strategy tag plus non-secret params, never the secrets.
- * Discriminated on `type`; mirrors `vxlib.S3Credentials`. */
+ * Discriminated on `kind`; mirrors `vxlib.S3Credentials`. */
 export type S3Credentials =
-  | { type: 'environment' }
-  | { type: 'profile'; name?: string; config_file?: string | null; credentials_file?: string | null }
-  | { type: 'chain' }
-  | { type: 'anonymous' };
+  | { kind: 'environment' }
+  | { kind: 'profile'; name?: string; config_file?: string | null; credentials_file?: string | null }
+  | { kind: 'chain' }
+  | { kind: 'anonymous' };
 
 /** An S3-compatible connection: routing + credential strategy, no secrets. Mirrors `vxlib.S3Store`. */
 export interface S3Store {

@@ -1,5 +1,6 @@
 """PCO camera driver using pco SDK."""
 
+from collections.abc import Mapping
 from enum import StrEnum
 
 import numpy as np
@@ -8,16 +9,10 @@ from rigup.device.props import enumerated, numeric, numeric_int
 from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
-from vxl.devices.camera.base import (
-    Camera,
-    IntRange,
-    PixelFormat,
-    ROIGrid,
-    SensorROI,
-    StreamInfo,
-    TriggerMode,
-    TriggerPolarity,
-)
+from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.roi import AreaROI, IntRange, ROIGrid
+
+DEFAULT_PIXEL_SIZE_UM = Vec2D(y=6.5, x=6.5)
 
 # Buffer size in MB for frame storage
 BUFFER_SIZE_MB = 2400
@@ -59,19 +54,19 @@ class PCOCamera(Camera):
         self,
         uid: str,
         interface: str = "Camera Link Silicon Software",
-        pixel_size_um: Vec2D | tuple[float, float] | list[float] | str = (6.5, 6.5),
+        pixel_size_um: Vec2D | Mapping[str, float] = DEFAULT_PIXEL_SIZE_UM,
     ) -> None:
         """Initialize the PCO camera.
 
         Args:
             uid: Unique identifier for this device.
             interface: Camera interface name (e.g., "Camera Link Silicon Software").
-            pixel_size_um: Physical pixel size in microns (y, x). Default is 6.5µm for PCO Edge.
+            pixel_size_um: Physical pixel size in microns, as {x, y}. Default is 6.5µm for PCO Edge.
         """
         super().__init__(uid=uid)
 
         self._interface = interface
-        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
+        self._pixel_size_um = Vec2D.parse(pixel_size_um)
         self._buffer_size_frames = 0
 
         # Initialize camera
@@ -92,16 +87,8 @@ class PCOCamera(Camera):
     # ==================== Sensor Properties ====================
 
     @property
-    @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
-    def sensor_size_px(self) -> IVec2D:
-        """Get the size of the camera sensor in pixels."""
-        return IVec2D(y=self._sensor_height, x=self._sensor_width)
-
-    @property
-    @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D:
-        """Get the size of the camera pixel in microns."""
-        return self._pixel_size_um
+    def sensor(self) -> CameraSensor:
+        return CameraSensor(pixel_um=self._pixel_size_um, size_px=IVec2D(y=self._sensor_height, x=self._sensor_width))
 
     # ==================== Pixel Format ====================
 
@@ -173,17 +160,17 @@ class PCOCamera(Camera):
 
     # ==================== Sensor ROI ====================
 
-    def _get_roi(self) -> SensorROI:
+    def _get_roi(self) -> AreaROI:
         # PCO ROI is in sensor coordinates with 1-based indexing
         roi_dict = self._pco.sdk.get_roi()
-        return SensorROI(
+        return AreaROI(
             x=roi_dict["x0"] - 1,
             y=roi_dict["y0"] - 1,
             w=roi_dict["x1"] - roi_dict["x0"] + 1,
             h=roi_dict["y1"] - roi_dict["y0"] + 1,
         )
 
-    def _set_roi(self, roi: SensorROI) -> None:
+    def _set_roi(self, roi: AreaROI) -> None:
         # PCO uses 1-based indexing: x0, y0, x1, y1
         self._pco.sdk.set_roi(roi.x + 1, roi.y + 1, roi.x + roi.w, roi.y + roi.h)
 

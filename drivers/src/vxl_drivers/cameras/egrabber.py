@@ -1,5 +1,6 @@
 import logging
 import math
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, cast, final
@@ -27,16 +28,8 @@ from rigup.device.props import enumerated, numeric, numeric_int
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.devices.camera.base import (
-    Camera,
-    IntRange,
-    PixelFormat,
-    ROIGrid,
-    SensorROI,
-    StreamInfo,
-    TriggerMode,
-    TriggerPolarity,
-)
+from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.roi import AreaROI, IntRange, ROIGrid
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 
@@ -141,10 +134,10 @@ class VieworksCamera(Camera):
         self,
         uid: str,
         serial: str,
-        pixel_size_um: Vec2D | list[float] | str = DEFAULT_PIXEL_SIZE_UM,
+        pixel_size_um: Vec2D | Mapping[str, float] = DEFAULT_PIXEL_SIZE_UM,
     ):
         super().__init__(uid=uid)
-        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
+        self._pixel_size_um = Vec2D.parse(pixel_size_um)
         self._dev = get_dev_by_serial(serial)
 
         # cache static properties
@@ -160,12 +153,8 @@ class VieworksCamera(Camera):
         self._refresh_exposure_ms()
 
     @property
-    def sensor_size_px(self) -> IVec2D:
-        return self._sensor_size_px
-
-    @property
-    def pixel_size_um(self) -> Vec2D:
-        return self._pixel_size_um
+    def sensor(self) -> CameraSensor:
+        return CameraSensor(pixel_um=self._pixel_size_um, size_px=self._sensor_size_px)
 
     @enumerated(options=lambda self: self._pixel_format_options)
     def pixel_format(self) -> PixelFormat:
@@ -249,17 +238,17 @@ class VieworksCamera(Camera):
 
     # ==================== Sensor ROI ====================
 
-    def _get_roi(self) -> SensorROI:
+    def _get_roi(self) -> AreaROI:
         # GenICam Width/Height/Offset are post-binning; convert to sensor pixels
         b = self._binning.value
-        return SensorROI(
+        return AreaROI(
             x=self._dev.fetch_remote("OffsetX", int) * b,
             y=self._dev.fetch_remote("OffsetY", int) * b,
             w=self._dev.fetch_remote("Width", int) * b,
             h=self._dev.fetch_remote("Height", int) * b,
         )
 
-    def _set_roi(self, roi: SensorROI) -> None:
+    def _set_roi(self, roi: AreaROI) -> None:
         # Convert sensor pixels to post-binning coordinates for GenICam
         b = self._binning.value
         # Set dimensions first (may need to reduce size before changing offset)

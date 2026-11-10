@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import inspect
 import logging
 import traceback
 from collections import defaultdict
@@ -10,6 +11,28 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
+
+def import_class[T](target: str, base: type[T]) -> type[T]:
+    """Import the class that a dotted path such as ``vxl.engines.spim.ClockedStep`` names.
+
+    The class must extend ``base`` and must not be abstract, because every target names a class to build.
+    """
+    module_name, _, name = target.rpartition(".")
+    if not module_name:
+        raise ValueError(f"a target is a dotted path, such as package.module.Class, got {target!r}")
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as exc:
+        raise ValueError(f"cannot import '{module_name}' for target '{target}': {exc}") from exc
+    found = getattr(module, name, None)
+    if found is None:
+        raise ValueError(f"'{module_name}' has no '{name}'")
+    if not (isinstance(found, type) and issubclass(found, base)):
+        raise ValueError(f"'{target}' is not a subclass of {base.__qualname__}")
+    if inspect.isabstract(found):
+        raise ValueError(f"'{target}' is abstract: name 1 of its subclasses")
+    return found
 
 
 class BuildConfig(BaseModel):
@@ -23,14 +46,8 @@ class BuildConfig(BaseModel):
     defaults: dict[str, Any] | None = None
 
     def get_obj_class(self) -> type:
-        """Dynamically import and return the obj class."""
-        parts = self.target.rsplit(".", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid target format: {self.target}")
-
-        module_name, class_name = parts
-        module = importlib.import_module(module_name)
-        return getattr(module, class_name)
+        """Import and return the obj class."""
+        return import_class(self.target, object)
 
 
 class BuildError(BaseModel):

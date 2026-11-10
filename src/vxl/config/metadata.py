@@ -1,11 +1,11 @@
 """Experiment metadata models for Voxel sessions."""
 
-import importlib
 from importlib.metadata import entry_points
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
+from rigup.build import import_class
 
 ENTRY_POINT_GROUP = "vxl.instrument.metadata"
 BASE_METADATA_SCHEMA = "vxl.config.metadata.ExperimentMetadata"
@@ -105,12 +105,7 @@ def discover_metadata_schema() -> dict[str, str]:
 
 def resolve_metadata_class(target: str) -> type[ExperimentMetadata]:
     """Import a metadata class from a dotted target path (e.g. ``vxl.config.metadata.ExaspimMetadata``)."""
-    module_path, class_name = target.rsplit(".", 1)
-    module = importlib.import_module(module_path)
-    cls = getattr(module, class_name)
-    if not (isinstance(cls, type) and issubclass(cls, ExperimentMetadata)):
-        raise TypeError(f"{target} is not an ExperimentMetadata subclass")
-    return cls
+    return import_class(target, ExperimentMetadata)
 
 
 def resolve_class_from_path(v: Any) -> type[ExperimentMetadata]:
@@ -121,12 +116,7 @@ def resolve_class_from_path(v: Any) -> type[ExperimentMetadata]:
 
     # If it's a string, import it
     if isinstance(v, str):
-        module_path, class_name = v.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        cls = getattr(module, class_name)
-        if not issubclass(cls, ExperimentMetadata):
-            raise TypeError(f"'{v}' is not an ExperimentMetadata subclass")
-        return cls
+        return import_class(v, ExperimentMetadata)
 
     raise ValueError("Must be a class or a valid import path string.")
 

@@ -5,21 +5,39 @@ Provides float, integer, and non-negative-validated variants:
 - IVec2D, IVec3D: Integer vectors for pixel coordinates, shapes, etc.
 - UVec2D, UVec3D: Non-negative float vectors (all components >= 0)
 - UIVec2D, UIVec3D: Non-negative (unsigned) integer vectors (all components >= 0)
+- Span: 2 numbers in the order they were given, with ``low`` and ``high``
 
-All vectors use y,x (and z,y,x) ordering to match NumPy array indexing.
+Components are named everywhere: vectors are built with keywords, and they are saved as maps such as
+``{x: 1.5, y: 2.0}``. Iterating yields y,x (and z,y,x), the order of NumPy array indexes.
 """
 
-from collections.abc import Iterator
+import math
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
-from typing import Any, Self, final
+from typing import Annotated, Any, NamedTuple, Self, final
 
-from pydantic import GetCoreSchemaHandler
+from pydantic import Field, GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
+
+
+def _finite(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _whole(value: object) -> bool:
+    return (isinstance(value, int) and not isinstance(value, bool)) or (isinstance(value, float) and value.is_integer())
+
+
+def _schema(parse: Callable[[Any], Any]) -> CoreSchema:
+    return core_schema.no_info_plain_validator_function(
+        parse, serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_dict())
+    )
+
 
 # === 2D Vectors ===
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Vec2D:
     """Float 2D vector with y,x components.
 
@@ -38,66 +56,46 @@ class Vec2D:
         yield self.x
 
     def __add__(self, other: Self) -> Self:
-        return type(self)(self.y + other.y, self.x + other.x)
+        return type(self)(y=self.y + other.y, x=self.x + other.x)
 
     def __sub__(self, other: Self) -> Self:
-        return type(self)(self.y - other.y, self.x - other.x)
+        return type(self)(y=self.y - other.y, x=self.x - other.x)
 
     def __mul__(self, scalar: float) -> Self:
-        return type(self)(self.y * scalar, self.x * scalar)
+        return type(self)(y=self.y * scalar, x=self.x * scalar)
 
     def __truediv__(self, scalar: float) -> Self:
-        return type(self)(self.y / scalar, self.x / scalar)
+        return type(self)(y=self.y / scalar, x=self.x / scalar)
 
     def __floordiv__(self, scalar: float) -> Self:
-        return type(self)(self.y // scalar, self.x // scalar)
+        return type(self)(y=self.y // scalar, x=self.x // scalar)
 
     def __neg__(self) -> Self:
-        return type(self)(-self.y, -self.x)
-
-    def to_str(self) -> str:
-        """Serialize to 'y,x' string."""
-        return f"{self.y},{self.x}"
+        return type(self)(y=-self.y, x=-self.x)
 
     @classmethod
-    def from_str(cls, s: str) -> Self:
-        """Parse from 'y,x' string."""
-        parts = s.split(",")
-        if len(parts) != 2:
-            raise ValueError(f"Expected 'y,x' format, got '{s}'")
-        return cls(float(parts[0]), float(parts[1]))
-
-    @classmethod
-    def parse(cls, v: "list[float] | tuple[float, float] | dict[str, float] | str") -> Self:
-        """Parse from various formats: [y, x], (y, x), {'y': ..., 'x': ...}, or 'y,x' string."""
-        if isinstance(v, str):
-            return cls.from_str(v)
-        if isinstance(v, dict):
+    def parse(cls, v: object) -> Self:
+        """Parse from a map of finite numbers with exactly the keys x, y."""
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, Mapping) and set(v) == {"y", "x"} and all(map(_finite, v.values())):
             return cls(y=float(v["y"]), x=float(v["x"]))
-        if isinstance(v, (list, tuple)) and len(v) == 2:
-            return cls(y=float(v[0]), x=float(v[1]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
+        raise ValueError(f"Expected a map with keys x, y for {cls.__name__}, got {v!r}")
 
     def to_dict(self) -> dict[str, float]:
-        """Convert to dictionary."""
-        return {"y": self.y, "x": self.x}
+        """The saved form: a map from component name to value."""
+        return {"x": self.x, "y": self.y}
 
     def to_int(self) -> "IVec2D":
         """Convert to integer vector (truncates toward zero)."""
-        return IVec2D(int(self.y), int(self.x))
+        return IVec2D(y=int(self.y), x=int(self.x))
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return core_schema.union_schema(
-            [
-                core_schema.is_instance_schema(cls),
-                core_schema.no_info_plain_validator_function(cls.parse),
-            ],
-            serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_str()),
-        )
+        return _schema(cls.parse)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class IVec2D:
     """Integer 2D vector with y,x components.
 
@@ -116,66 +114,46 @@ class IVec2D:
         yield self.x
 
     def __add__(self, other: Self) -> Self:
-        return type(self)(self.y + other.y, self.x + other.x)
+        return type(self)(y=self.y + other.y, x=self.x + other.x)
 
     def __sub__(self, other: Self) -> Self:
-        return type(self)(self.y - other.y, self.x - other.x)
+        return type(self)(y=self.y - other.y, x=self.x - other.x)
 
     def __mul__(self, scalar: int) -> Self:
-        return type(self)(self.y * scalar, self.x * scalar)
+        return type(self)(y=self.y * scalar, x=self.x * scalar)
 
     def __floordiv__(self, scalar: int) -> Self:
-        return type(self)(self.y // scalar, self.x // scalar)
+        return type(self)(y=self.y // scalar, x=self.x // scalar)
 
     def __neg__(self) -> Self:
-        return type(self)(-self.y, -self.x)
-
-    def to_str(self) -> str:
-        """Serialize to 'y,x' string."""
-        return f"{self.y},{self.x}"
+        return type(self)(y=-self.y, x=-self.x)
 
     @classmethod
-    def from_str(cls, s: str) -> Self:
-        """Parse from 'y,x' string."""
-        parts = s.split(",")
-        if len(parts) != 2:
-            raise ValueError(f"Expected 'y,x' format, got '{s}'")
-        return cls(int(parts[0]), int(parts[1]))
-
-    @classmethod
-    def parse(cls, v: "list[int] | tuple[int, int] | dict[str, int] | str") -> Self:
-        """Parse from various formats: [y, x], (y, x), {'y': ..., 'x': ...}, or 'y,x' string."""
-        if isinstance(v, str):
-            return cls.from_str(v)
-        if isinstance(v, dict):
+    def parse(cls, v: object) -> Self:
+        """Parse from a map of whole numbers with exactly the keys x, y."""
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, Mapping) and set(v) == {"y", "x"} and all(map(_whole, v.values())):
             return cls(y=int(v["y"]), x=int(v["x"]))
-        if isinstance(v, (list, tuple)) and len(v) == 2:
-            return cls(y=int(v[0]), x=int(v[1]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
+        raise ValueError(f"Expected a map with keys x, y for {cls.__name__}, got {v!r}")
 
     def to_dict(self) -> dict[str, int]:
-        """Convert to dictionary."""
-        return {"y": self.y, "x": self.x}
+        """The saved form: a map from component name to value."""
+        return {"x": self.x, "y": self.y}
 
     def to_float(self) -> Vec2D:
         """Convert to float vector."""
-        return Vec2D(float(self.y), float(self.x))
+        return Vec2D(y=float(self.y), x=float(self.x))
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return core_schema.union_schema(
-            [
-                core_schema.is_instance_schema(cls),
-                core_schema.no_info_plain_validator_function(cls.parse),
-            ],
-            serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_str()),
-        )
+        return _schema(cls.parse)
 
 
 # === 3D Vectors ===
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Vec3D:
     """Float 3D vector with z,y,x components.
 
@@ -196,74 +174,54 @@ class Vec3D:
         yield self.x
 
     def __add__(self, other: Self) -> Self:
-        return type(self)(self.z + other.z, self.y + other.y, self.x + other.x)
+        return type(self)(z=self.z + other.z, y=self.y + other.y, x=self.x + other.x)
 
     def __sub__(self, other: Self) -> Self:
-        return type(self)(self.z - other.z, self.y - other.y, self.x - other.x)
+        return type(self)(z=self.z - other.z, y=self.y - other.y, x=self.x - other.x)
 
     def __mul__(self, scalar: float) -> Self:
-        return type(self)(self.z * scalar, self.y * scalar, self.x * scalar)
+        return type(self)(z=self.z * scalar, y=self.y * scalar, x=self.x * scalar)
 
     def __truediv__(self, scalar: float) -> Self:
-        return type(self)(self.z / scalar, self.y / scalar, self.x / scalar)
+        return type(self)(z=self.z / scalar, y=self.y / scalar, x=self.x / scalar)
 
     def __floordiv__(self, scalar: float) -> Self:
-        return type(self)(self.z // scalar, self.y // scalar, self.x // scalar)
+        return type(self)(z=self.z // scalar, y=self.y // scalar, x=self.x // scalar)
 
     def __neg__(self) -> Self:
-        return type(self)(-self.z, -self.y, -self.x)
+        return type(self)(z=-self.z, y=-self.y, x=-self.x)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(z={self.z}, y={self.y}, x={self.x})"
 
-    def to_str(self) -> str:
-        """Serialize to 'z,y,x' string."""
-        return f"{self.z},{self.y},{self.x}"
-
     @classmethod
-    def from_str(cls, s: str) -> Self:
-        """Parse from 'z,y,x' string."""
-        parts = s.split(",")
-        if len(parts) != 3:
-            raise ValueError(f"Expected 'z,y,x' format, got '{s}'")
-        return cls(float(parts[0]), float(parts[1]), float(parts[2]))
-
-    @classmethod
-    def parse(cls, v: "list[float] | tuple[float, float, float] | dict[str, float] | str") -> Self:
-        """Parse from various formats: [z, y, x], (z, y, x), {'z': ..., 'y': ..., 'x': ...}, or 'z,y,x' string."""
-        if isinstance(v, str):
-            return cls.from_str(v)
-        if isinstance(v, dict):
+    def parse(cls, v: object) -> Self:
+        """Parse from a map of finite numbers with exactly the keys x, y, z."""
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, Mapping) and set(v) == {"z", "y", "x"} and all(map(_finite, v.values())):
             return cls(z=float(v["z"]), y=float(v["y"]), x=float(v["x"]))
-        if isinstance(v, (list, tuple)) and len(v) == 3:
-            return cls(z=float(v[0]), y=float(v[1]), x=float(v[2]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
+        raise ValueError(f"Expected a map with keys x, y, z for {cls.__name__}, got {v!r}")
 
     def to_dict(self) -> dict[str, float]:
-        """Convert to dictionary."""
-        return {"z": self.z, "y": self.y, "x": self.x}
+        """The saved form: a map from component name to value."""
+        return {"x": self.x, "y": self.y, "z": self.z}
 
     def to_int(self) -> "IVec3D":
         """Convert to integer vector (truncates toward zero)."""
-        return IVec3D(int(self.z), int(self.y), int(self.x))
+        return IVec3D(z=int(self.z), y=int(self.y), x=int(self.x))
 
     @property
     def xy(self) -> Vec2D:
         """Get the y,x components as a Vec2D."""
-        return Vec2D(self.y, self.x)
+        return Vec2D(y=self.y, x=self.x)
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return core_schema.union_schema(
-            [
-                core_schema.is_instance_schema(cls),
-                core_schema.no_info_plain_validator_function(cls.parse),
-            ],
-            serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_str()),
-        )
+        return _schema(cls.parse)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class IVec3D:
     """Integer 3D vector with z,y,x components.
 
@@ -284,68 +242,48 @@ class IVec3D:
         yield self.x
 
     def __add__(self, other: Self) -> Self:
-        return type(self)(self.z + other.z, self.y + other.y, self.x + other.x)
+        return type(self)(z=self.z + other.z, y=self.y + other.y, x=self.x + other.x)
 
     def __sub__(self, other: Self) -> Self:
-        return type(self)(self.z - other.z, self.y - other.y, self.x - other.x)
+        return type(self)(z=self.z - other.z, y=self.y - other.y, x=self.x - other.x)
 
     def __mul__(self, scalar: int) -> Self:
-        return type(self)(self.z * scalar, self.y * scalar, self.x * scalar)
+        return type(self)(z=self.z * scalar, y=self.y * scalar, x=self.x * scalar)
 
     def __floordiv__(self, scalar: int) -> Self:
-        return type(self)(self.z // scalar, self.y // scalar, self.x // scalar)
+        return type(self)(z=self.z // scalar, y=self.y // scalar, x=self.x // scalar)
 
     def __neg__(self) -> Self:
-        return type(self)(-self.z, -self.y, -self.x)
+        return type(self)(z=-self.z, y=-self.y, x=-self.x)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(z={self.z}, y={self.y}, x={self.x})"
 
-    def to_str(self) -> str:
-        """Serialize to 'z,y,x' string."""
-        return f"{self.z},{self.y},{self.x}"
-
     @classmethod
-    def from_str(cls, s: str) -> Self:
-        """Parse from 'z,y,x' string."""
-        parts = s.split(",")
-        if len(parts) != 3:
-            raise ValueError(f"Expected 'z,y,x' format, got '{s}'")
-        return cls(int(parts[0]), int(parts[1]), int(parts[2]))
-
-    @classmethod
-    def parse(cls, v: "list[int] | tuple[int, int, int] | dict[str, int] | str") -> Self:
-        """Parse from various formats: [z, y, x], (z, y, x), {'z': ..., 'y': ..., 'x': ...}, or 'z,y,x' string."""
-        if isinstance(v, str):
-            return cls.from_str(v)
-        if isinstance(v, dict):
+    def parse(cls, v: object) -> Self:
+        """Parse from a map of whole numbers with exactly the keys x, y, z."""
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, Mapping) and set(v) == {"z", "y", "x"} and all(map(_whole, v.values())):
             return cls(z=int(v["z"]), y=int(v["y"]), x=int(v["x"]))
-        if isinstance(v, (list, tuple)) and len(v) == 3:
-            return cls(z=int(v[0]), y=int(v[1]), x=int(v[2]))
-        raise ValueError(f"Cannot parse {type(v).__name__} as {cls.__name__}")
+        raise ValueError(f"Expected a map with keys x, y, z for {cls.__name__}, got {v!r}")
 
     def to_dict(self) -> dict[str, int]:
-        """Convert to dictionary."""
-        return {"z": self.z, "y": self.y, "x": self.x}
+        """The saved form: a map from component name to value."""
+        return {"x": self.x, "y": self.y, "z": self.z}
 
     def to_float(self) -> Vec3D:
         """Convert to float vector."""
-        return Vec3D(float(self.z), float(self.y), float(self.x))
+        return Vec3D(z=float(self.z), y=float(self.y), x=float(self.x))
 
     @property
     def xy(self) -> IVec2D:
         """Get the y,x components as an IVec2D."""
-        return IVec2D(self.y, self.x)
+        return IVec2D(y=self.y, x=self.x)
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return core_schema.union_schema(
-            [
-                core_schema.is_instance_schema(cls),
-                core_schema.no_info_plain_validator_function(cls.parse),
-            ],
-            serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_str()),
-        )
+        return _schema(cls.parse)
 
 
 # === Positive-validated variants ===
@@ -362,7 +300,7 @@ def _check_non_negative_3d(name: str, z: float, y: float, x: float) -> None:
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UVec2D(Vec2D):
     """Non-negative float 2D vector. All components must be >= 0."""
 
@@ -371,7 +309,7 @@ class UVec2D(Vec2D):
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UIVec2D(IVec2D):
     """Non-negative (unsigned) integer 2D vector. All components must be >= 0."""
 
@@ -380,7 +318,7 @@ class UIVec2D(IVec2D):
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UVec3D(Vec3D):
     """Non-negative float 3D vector. All components must be >= 0."""
 
@@ -389,9 +327,35 @@ class UVec3D(Vec3D):
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UIVec3D(IVec3D):
     """Non-negative (unsigned) integer 3D vector. All components must be >= 0."""
 
     def __post_init__(self):
         _check_non_negative_3d(type(self).__name__, self.z, self.y, self.x)
+
+
+# === Span ===
+
+
+class Span(NamedTuple):
+    """2 numbers in the order they were given, saved as a pair such as ``[0, 5]``. ``low`` and ``high`` ignore it."""
+
+    a: Annotated[float, Field(allow_inf_nan=False)]
+    b: Annotated[float, Field(allow_inf_nan=False)]
+
+    @property
+    def low(self) -> float:
+        return min(self.a, self.b)
+
+    @property
+    def high(self) -> float:
+        return max(self.a, self.b)
+
+    @property
+    def length(self) -> float:
+        return self.high - self.low
+
+    @property
+    def middle(self) -> float:
+        return (self.a + self.b) / 2

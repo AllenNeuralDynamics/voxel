@@ -9,10 +9,10 @@ from vxlib.schema import FrozenModel, identifier
 
 from rigup import CommandRequest
 from vxl._utils.color import Color
-from vxl.devices.camera import SensorROI
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import DiscreteAxisPositions, HardwareTopology
 from vxl.hal.topology import SelectRoutingDefinition, SplitRoutingDefinition
+from vxl.roi import AreaROI
 
 from .errors import Violation, ViolationLoc, assignment_violations
 from .metadata import ExperimentMetadata, MetadataCls
@@ -73,7 +73,7 @@ class ProfileConfig(FrozenModel):
     sync: dict[str, Signals] = Field(default_factory=dict)
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
     setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
-    rois: dict[str, SensorROI] = Field(default_factory=dict)
+    rois: dict[str, AreaROI] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None
 

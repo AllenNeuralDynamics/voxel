@@ -11,19 +11,11 @@ export interface Vec3D {
   x: number;
 }
 
-/** Parse a Vec2D from "y,x" string, [y,x] array, or {y,x} object. Returns null on malformed input. */
+/** Parse a Vec2D from its saved form, a {x, y} map. Returns null on malformed input. */
 export function parseVec2D(val: unknown): Vec2D | null {
-  if (typeof val === 'string') {
-    const parts = val.split(',').map(Number);
-    if (parts.length === 2 && parts.every(Number.isFinite)) {
-      return { y: parts[0], x: parts[1] };
-    }
-  }
-  if (Array.isArray(val) && val.length === 2) {
-    return { y: Number(val[0]), x: Number(val[1]) };
-  }
   if (val && typeof val === 'object' && 'y' in val && 'x' in val) {
-    return { y: Number((val as Vec2D).y), x: Number((val as Vec2D).x) };
+    const { y, x } = val as Vec2D;
+    if (Number.isFinite(y) && Number.isFinite(x)) return { y, x };
   }
   return null;
 }

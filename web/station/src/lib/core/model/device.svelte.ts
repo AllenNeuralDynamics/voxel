@@ -15,7 +15,7 @@ import {
 
 import { Client } from './client.svelte';
 import type { DeviceRoleAssignment } from './device-rules';
-import type { DeviceInterface, DeviceSnapshot, DiscreteAxisState, PropResults, SensorROI, Signals } from './types';
+import type { DeviceInterface, DeviceSnapshot, DiscreteAxisState, PropResults, AreaROI, Signals } from './types';
 
 export interface PropertyInfo {
   name: string;
@@ -394,9 +394,9 @@ export class RoiModel {
   }
 
   /** Live ROI from the camera's `roi` prop; undefined until it hydrates. */
-  get value(): SensorROI | undefined {
+  get value(): AreaROI | undefined {
     const v = this.#camera.getProp('roi')?.value;
-    return v && typeof v === 'object' ? (v as SensorROI) : undefined;
+    return v && typeof v === 'object' ? (v as AreaROI) : undefined;
   }
 
   /** This camera's own hardware grid from the `roi_grid` prop. */
@@ -427,7 +427,7 @@ export class RoiModel {
   }
 
   /** Clamp+snap an ROI to the (merged) grid, keeping the origin within sensor extents. */
-  resolve(roi: SensorROI): SensorROI {
+  resolve(roi: AreaROI): AreaROI {
     const grid = this.grid;
     if (!grid) return roi;
     const w = clampSnap(roi.w, grid.h.min, grid.h.max, grid.h.step);
@@ -438,13 +438,13 @@ export class RoiModel {
   }
 
   /** Set the full ROI (clamped to the merged grid), fanning out to peers when linked. */
-  patch(roi: SensorROI): Promise<unknown> {
+  patch(roi: AreaROI): Promise<unknown> {
     const resolved = this.resolve(roi);
     return this.#dispatch((m) => m.#apply(resolved));
   }
 
   /** Merge a partial ROI over the current value, then patch. No-op until ROI hydrates. */
-  patchDim(partial: Partial<SensorROI>): Promise<unknown> {
+  patchDim(partial: Partial<AreaROI>): Promise<unknown> {
     const current = this.value;
     if (!current) return Promise.resolve();
     return this.patch({ ...current, ...partial });
@@ -470,7 +470,7 @@ export class RoiModel {
   }
 
   /** Push an ROI to this camera's hardware via the update_roi command; backend snaps to grid. */
-  #apply(roi: SensorROI): Promise<unknown> {
+  #apply(roi: AreaROI): Promise<unknown> {
     return this.#camera.runCommand('update_roi', [], { roi });
   }
 
@@ -527,8 +527,9 @@ export class CameraHandle extends DeviceHandle {
     return v === 'IDLE' || v === 'PREVIEW' || v === 'ACQUISITION' ? v : undefined;
   });
 
-  sensorSizePx = $derived.by<Vec2D | null>(() => parseVec2D(this.getProp('sensor_size_px')?.value));
-  pixelSizeUm = $derived.by<Vec2D | null>(() => parseVec2D(this.getProp('pixel_size_um')?.value));
+  #sensor = $derived.by(() => this.getProp('sensor')?.value as { pixel_um?: unknown; size_px?: unknown } | undefined);
+  sensorSizePx = $derived.by<Vec2D | null>(() => parseVec2D(this.#sensor?.size_px));
+  pixelSizeUm = $derived.by<Vec2D | null>(() => parseVec2D(this.#sensor?.pixel_um));
   frameSizePx = $derived.by<Vec2D | null>(() => parseVec2D(this.getProp('frame_size_px')?.value));
   frameAreaUm = $derived.by<Vec2D | null>(() => parseVec2D(this.getProp('frame_area_um')?.value));
 }

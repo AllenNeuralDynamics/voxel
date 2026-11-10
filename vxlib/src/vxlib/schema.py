@@ -6,6 +6,7 @@ from functools import partial
 from typing import Any
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic_core import ErrorDetails
 
 
 class FrozenModel(BaseModel):
@@ -48,20 +49,15 @@ def identifier(kind: str) -> AfterValidator:
     return AfterValidator(partial(check_identifier, kind=kind))
 
 
-class NoSettings(FrozenModel):
-    """An empty block, written ``{}``: a choice that takes no settings."""
+def error_message(error: ErrorDetails) -> str:
+    """The message of 1 pydantic error, with a missing tag of a tagged union said plainly.
 
-
-def single_key_tag(value: Any) -> str | None:
-    """The tag of a 1-key block, such as ``step`` for ``{step: {...}}``, for a pydantic ``Discriminator``.
-
-    A model's tag is its first field, so each model in the union has its 1 key as its first field.
+    Pydantic's own message for a missing tag names only the field, such as "Unable to extract tag using
+    discriminator 'kind'".
     """
-    if isinstance(value, Mapping):
-        return next(iter(value)) if len(value) == 1 else None
-    if isinstance(value, BaseModel):
-        return next(iter(type(value).model_fields), None)
-    return None
+    if error["type"] == "union_tag_not_found":
+        return f"write {error.get('ctx', {}).get('discriminator', 'the tag')}: it picks 1 of the choices here"
+    return error["msg"]
 
 
 def repeated[T: Hashable](values: Iterable[T]) -> list[T]:
@@ -89,11 +85,10 @@ def duplicate_keys[K: Hashable](scopes: Mapping[str, Iterable[K]]) -> dict[K, li
 
 __all__ = [
     "FrozenModel",
-    "NoSettings",
     "SparseModel",
     "check_identifier",
     "duplicate_keys",
+    "error_message",
     "identifier",
     "repeated",
-    "single_key_tag",
 ]

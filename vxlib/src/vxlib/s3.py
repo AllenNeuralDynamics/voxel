@@ -15,13 +15,13 @@ class _S3Credentials(FrozenModel):
 class EnvCredentials(_S3Credentials):
     """Resolve credentials from the standard AWS environment variables."""
 
-    type: Literal["environment"] = "environment"
+    kind: Literal["environment"] = "environment"
 
 
 class ProfileCredentials(_S3Credentials):
     """Resolve credentials from a named AWS profile."""
 
-    type: Literal["profile"] = "profile"
+    kind: Literal["profile"] = "profile"
     name: str = "default"
     config_file: Path | None = None
     credentials_file: Path | None = None
@@ -30,18 +30,18 @@ class ProfileCredentials(_S3Credentials):
 class ChainCredentials(_S3Credentials):
     """Resolve credentials through the default AWS provider chain."""
 
-    type: Literal["chain"] = "chain"
+    kind: Literal["chain"] = "chain"
 
 
 class AnonymousCredentials(_S3Credentials):
     """Use unsigned access to a public bucket."""
 
-    type: Literal["anonymous"] = "anonymous"
+    kind: Literal["anonymous"] = "anonymous"
 
 
 S3Credentials = Annotated[
     EnvCredentials | ProfileCredentials | ChainCredentials | AnonymousCredentials,
-    Field(discriminator="type"),
+    Field(discriminator="kind"),
 ]
 """How an S3 connection resolves credentials without carrying their secret values."""
 

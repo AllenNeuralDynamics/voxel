@@ -30,11 +30,12 @@ from vxlib.schema import FrozenModel
 
 from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from vxl.devices.camera import CameraHandle, CaptureState, SensorROI
+from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.preview.protocol import StagePosition
+from vxl.roi import AreaROI
 from vxl.system import Remote, System, remote_store_fingerprint
 
 from .config import (
@@ -428,7 +429,7 @@ class Instrument:
                 and device_id in self._hal.cameras
                 and self._channel_for_camera(device_id) is not None
             ):
-                roi = SensorROI.model_validate(result.unwrap())
+                roi = AreaROI.model_validate(result.unwrap())
                 profile = self.active_profile
                 await self._persist_device_edit(
                     device_id,
@@ -1395,10 +1396,9 @@ class Instrument:
                 if camera_id in profile_fovs:
                     continue
                 camera = self._hal.cameras.get(camera_id)
-                if camera is None or (pixel_size := camera.pixel_size_um.value) is None:
+                if camera is None or (sensor := camera.sensor.value) is None:
                     continue
-                if (sensor_size := camera.sensor_size_px.value) is None:
-                    continue
+                pixel_size, sensor_size = sensor.pixel_um, sensor.size_px
                 roi = profile.rois.get(camera_id)
                 x, y, width_px, height_px = (
                     (roi.x, roi.y, roi.w, roi.h) if roi is not None else (0, 0, sensor_size.x, sensor_size.y)

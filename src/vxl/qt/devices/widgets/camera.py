@@ -185,19 +185,10 @@ class CameraControl(QWidget):
         if "frame_size_mb" in props:
             self._frame_size_mb_value.setText(f"{float(props['frame_size_mb']):.2f} MB")
 
-        if "sensor_size_px" in props:
-            size = props["sensor_size_px"]
-            if isinstance(size, dict):
-                self._sensor_size_value.setText(f"{size.get('x', 0)} x {size.get('y', 0)} px")
-            elif isinstance(size, (list, tuple)) and len(size) == 2:
-                self._sensor_size_value.setText(f"{size[0]} x {size[1]} px")
-
-        if "pixel_size_um" in props:
-            size = props["pixel_size_um"]
-            if isinstance(size, dict):
-                self._pixel_size_value.setText(f"{size.get('x', 0):.2f} x {size.get('y', 0):.2f} µm")
-            elif isinstance(size, (list, tuple)) and len(size) == 2:
-                self._pixel_size_value.setText(f"{size[0]:.2f} x {size[1]:.2f} µm")
+        if isinstance(sensor := props.get("sensor"), dict):
+            size, pixel = sensor.get("size_px", {}), sensor.get("pixel_um", {})
+            self._sensor_size_value.setText(f"{size.get('x', 0)} x {size.get('y', 0)} px")
+            self._pixel_size_value.setText(f"{pixel.get('x', 0):.2f} x {pixel.get('y', 0):.2f} µm")
 
         if "frame_area_um" in props:
             area = props["frame_area_um"]

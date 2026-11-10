@@ -1,28 +1,18 @@
 """Camera device handle with typed methods."""
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, cast
 
 from ome_zarr_writer import WriterSettings
 from pydantic import TypeAdapter
 from rigup.device.handle import Adapter, DeviceProperty
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.coalescer import Coalescer
-from vxlib.vector import IVec2D, Vec2D
+from vxlib.vector import Vec2D
 
 from rigup import DeviceHandle
-from vxl.devices.camera.base import (
-    Camera,
-    CaptureState,
-    SensorROI,
-    StorageStatus,
-    TriggerMode,
-    TriggerPolarity,
-)
+from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
 from vxl.preview import PreviewViewport
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+from vxl.roi import AreaROI
 
 _DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
@@ -41,10 +31,9 @@ class CameraHandle(DeviceHandle[Camera]):
     def __init__(self, adapter: Adapter[Camera]) -> None:
         super().__init__(adapter)
         self.preview_viewport: Coalescer[PreviewViewport] = Coalescer(drain=self._set_preview_viewport)
-        self.roi: DeviceProperty[SensorROI] = self.props.property("roi", SensorROI.model_validate)
-        self.frame_area_um: DeviceProperty[Vec2D] = self.props.property("frame_area_um", self._parse_vec2d)
-        self.pixel_size_um: DeviceProperty[Vec2D] = self.props.property("pixel_size_um", self._parse_vec2d)
-        self.sensor_size_px: DeviceProperty[IVec2D] = self.props.property("sensor_size_px", self._parse_ivec2d)
+        self.roi: DeviceProperty[AreaROI] = self.props.property("roi", AreaROI.model_validate)
+        self.frame_area_um: DeviceProperty[Vec2D] = self.props.property("frame_area_um", Vec2D.parse)
+        self.sensor: DeviceProperty[CameraSensor] = self.props.property("sensor", CameraSensor.model_validate)
         self.ready_for_batch: DeviceProperty[bool] = self.props.property("ready_for_batch", bool)
 
     async def start_preview(
@@ -142,41 +131,15 @@ class CameraHandle(DeviceHandle[Camera]):
         result = await self.call("capture_state")
         return CaptureState(result)
 
-    async def update_roi(self, roi: SensorROI) -> SensorROI:
+    async def update_roi(self, roi: AreaROI) -> AreaROI:
         """Set sensor ROI. Returns the actual applied ROI (may differ due to alignment)."""
         result = await self.call("update_roi", roi)
-        return SensorROI.model_validate(result)
+        return AreaROI.model_validate(result)
 
-    async def reset_roi(self) -> SensorROI:
+    async def reset_roi(self) -> AreaROI:
         """Reset the sensor ROI to the full sensor. Returns the applied ROI."""
         result = await self.call("reset_roi")
-        return SensorROI.model_validate(result)
-
-    @staticmethod
-    def _parse_vec2d(value: object) -> Vec2D:
-        """Parse a Vec2D property, handling its "y,x" string serialization over ZMQ."""
-        if isinstance(value, Vec2D):
-            return value
-        if isinstance(value, str):
-            return Vec2D.from_str(value)
-        if isinstance(value, (list, tuple)):
-            seq = cast("Sequence[int | float]", value)
-            return Vec2D(y=seq[0], x=seq[1])
-        mapping = cast("Mapping[str, int | float]", value)
-        return Vec2D(y=mapping["y"], x=mapping["x"])
-
-    @staticmethod
-    def _parse_ivec2d(value: object) -> IVec2D:
-        """Parse an IVec2D property, handling its "y,x" string serialization over ZMQ."""
-        if isinstance(value, IVec2D):
-            return value
-        if isinstance(value, str):
-            return IVec2D.from_str(value)
-        if isinstance(value, (list, tuple)):
-            seq = cast("Sequence[int]", value)
-            return IVec2D(y=seq[0], x=seq[1])
-        mapping = cast("Mapping[str, int]", value)
-        return IVec2D(y=mapping["y"], x=mapping["x"])
+        return AreaROI.model_validate(result)
 
     # async def get_frame_area_um(self) -> Vec2D:
     #     """Get the physical frame area in micrometers."""

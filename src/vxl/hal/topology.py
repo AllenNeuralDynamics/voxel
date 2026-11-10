@@ -7,7 +7,7 @@ from typing import Annotated, Literal, Self
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
 from vxlib.schema import FrozenModel, identifier
 
-from rigup import DeviceConfig, RigConfig
+from rigup import RigConfig
 
 from .errors import Violation, ViolationLoc, assignment_violations
 
@@ -104,18 +104,6 @@ class HardwareTopology(RigConfig, frozen=True):
     detection: dict[str, DetectionAssembly]
     illumination: dict[str, IlluminationAssembly]
     optical_routing: OpticalRouting = Field(default_factory=lambda: OpticalRouting({}))
-
-    @property
-    def device_uids(self) -> set[str]:
-        node_devices = {did for node in self.nodes.values() for did in node.devices}
-        return node_devices | set(self.devices.keys())
-
-    @property
-    def device_configs(self) -> dict[str, DeviceConfig]:
-        configs = dict(self.devices)
-        for node in self.nodes.values():
-            configs.update(node.devices)
-        return configs
 
     @property
     def filter_wheels(self) -> set[str]:

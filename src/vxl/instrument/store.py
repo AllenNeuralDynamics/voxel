@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from vxlib.reactivity import Cell, Readable, Subscribable
+from vxlib.schema import error_message
 
 from vxl._utils.files import atomic_write, load_and_validate_yaml, save_yaml
 
@@ -50,7 +51,7 @@ def _load_model[T: BaseModel](path: Path, model: type[T], source: str) -> tuple[
         return Invalid[T](), tuple(
             Violation(
                 code=f"{source}.{error['type']}",
-                msg=error["msg"],
+                msg=error_message(error),
                 loc=(source, *error["loc"]),
             )
             for error in exc.errors()

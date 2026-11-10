@@ -1,7 +1,8 @@
 import pytest
 from rigup.device.props import PropertyModel
+from rigup.rig import Rig
 
-from rigup import DeviceConfig, Rig, RigConfig, describe, numeric
+from rigup import DeviceConfig, RigConfig, describe, numeric
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl.devices.laser.source_only import SourceOnlyLaser
 

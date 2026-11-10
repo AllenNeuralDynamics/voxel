@@ -35,7 +35,7 @@ import type {
   ProfilePatch,
   RoutingDimensionConfig,
   RoutingRule,
-  SensorROI,
+  AreaROI,
   SessionView,
   Signals,
   TaskPatch,
@@ -94,11 +94,7 @@ function propValueDiverged(saved: unknown, current: unknown): boolean {
 }
 
 /** Compare live ROI to the saved ROI, defaulting to the full sensor when absent. */
-function roiDiffers(
-  saved: SensorROI | undefined,
-  live: SensorROI | undefined,
-  sensor?: { x: number; y: number }
-): boolean {
+function roiDiffers(saved: AreaROI | undefined, live: AreaROI | undefined, sensor?: { x: number; y: number }): boolean {
   if (!live) return false;
   if (!saved) {
     // Profiles without an explicit ROI use the full sensor.

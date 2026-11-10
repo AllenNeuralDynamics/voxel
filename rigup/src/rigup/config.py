@@ -126,6 +126,19 @@ class RigConfig(BaseModel, frozen=True):
     devices: dict[DeviceUid, DeviceConfig] = Field(default_factory=dict)
     nodes: dict[NodeId, NodeConfig] = Field(default_factory=dict)
 
+    @property
+    def device_configs(self) -> dict[DeviceUid, DeviceConfig]:
+        """Every device of the rig, in-process and on each node, by UID."""
+        configs = dict(self.devices)
+        for node in self.nodes.values():
+            configs.update(node.devices)
+        return configs
+
+    @property
+    def device_uids(self) -> set[DeviceUid]:
+        """The UID of every device of the rig, in-process and on each node."""
+        return set(self.device_configs)
+
     @model_validator(mode="after")
     def _validate_device_graph(self) -> Self:
         """Require globally unique UIDs and keep injected object references within one process."""

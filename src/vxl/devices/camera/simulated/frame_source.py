@@ -14,7 +14,8 @@ from pydantic import Field, TypeAdapter, model_validator
 from vxlib.schema import FrozenModel, SparseModel
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.devices.camera.base import SensorROI, ValidBits
+from vxl.preview import ValidBits
+from vxl.roi import AreaROI
 from vxl.system import System
 
 DEFAULT_REFERENCE_PATH = Path(__file__).with_name("default_reference.png")
@@ -130,7 +131,7 @@ class FrameSource(ABC):
     source_valid_bits: ValidBits
 
     @abstractmethod
-    def prepare(self, roi: SensorROI, binning: int) -> np.ndarray:
+    def prepare(self, roi: AreaROI, binning: int) -> np.ndarray:
         """Return source-encoded pixels for the requested sensor ROI and binning."""
 
     def close(self) -> None:
@@ -170,7 +171,7 @@ class FileFrameSource(FrameSource):
             self.close()
             raise
 
-    def prepare(self, roi: SensorROI, binning: int) -> np.ndarray:
+    def prepare(self, roi: AreaROI, binning: int) -> np.ndarray:
         _validate_geometry(roi, binning, self.sensor_size_px)
         if not self._tile:
             frame = self._frame[roi.y : roi.y + roi.h, roi.x : roi.x + roi.w]
@@ -197,7 +198,7 @@ class PatternFrameSource(FrameSource):
         self.pixel_size_um = config.pixel_size_um
         self.source_valid_bits = config.source_valid_bits
 
-    def prepare(self, roi: SensorROI, binning: int) -> np.ndarray:
+    def prepare(self, roi: AreaROI, binning: int) -> np.ndarray:
         _validate_geometry(roi, binning, self.sensor_size_px)
         y = np.arange(roi.y, roi.y + roi.h, dtype=np.uint64)[:, None]
         x = np.arange(roi.x, roi.x + roi.w, dtype=np.uint64)[None, :]
@@ -367,7 +368,7 @@ def _validate_sensor_metadata(sensor_size: IVec2D | None, pixel_size: Vec2D) -> 
         raise ValueError(f"pixel_size_um must be positive, got {pixel_size}")
 
 
-def _validate_geometry(roi: SensorROI, binning: int, sensor_size: IVec2D) -> None:
+def _validate_geometry(roi: AreaROI, binning: int, sensor_size: IVec2D) -> None:
     if roi.x < 0 or roi.y < 0 or roi.x + roi.w > sensor_size.x or roi.y + roi.h > sensor_size.y:
         raise ValueError(f"ROI {roi} exceeds sensor size {sensor_size}")
     if roi.h % binning or roi.w % binning:

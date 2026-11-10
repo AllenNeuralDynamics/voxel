@@ -1,6 +1,7 @@
 """Hamamatsu camera driver using DCAM SDK."""
 
 import time
+from collections.abc import Mapping
 
 import numpy as np
 from rigup.device.props import enumerated, numeric, numeric_int
@@ -8,19 +9,13 @@ from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
-from vxl.devices.camera.base import (
-    Camera,
-    IntRange,
-    PixelFormat,
-    ROIGrid,
-    SensorROI,
-    StreamInfo,
-    TriggerMode,
-    TriggerPolarity,
-)
+from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.roi import AreaROI, IntRange, ROIGrid
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi
 from .sdk.dcamapi4 import DCAMCAP_TRANSFERINFO
+
+DEFAULT_PIXEL_SIZE_UM = Vec2D(y=6.5, x=6.5)
 
 
 def _unwrap[T](result: T | bool, default: T) -> T:
@@ -85,19 +80,19 @@ class HamamatsuCamera(Camera):
         self,
         uid: str,
         serial: str,
-        pixel_size_um: Vec2D | tuple[float, float] | list[float] | str = (6.5, 6.5),
+        pixel_size_um: Vec2D | Mapping[str, float] = DEFAULT_PIXEL_SIZE_UM,
     ) -> None:
         """Initialize the Hamamatsu camera.
 
         Args:
             uid: Unique identifier for this device.
             serial: Camera serial number.
-            pixel_size_um: Physical pixel size in microns (y, x). Default is 6.5µm for ORCA.
+            pixel_size_um: Physical pixel size in microns, as {x, y}. Default is 6.5µm for ORCA.
         """
         super().__init__(uid=uid)
 
         self._serial = str(serial)
-        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
+        self._pixel_size_um = Vec2D.parse(pixel_size_um)
         self._buffer_size_frames = 0
         self._dropped_frames = 0
         self._pre_frame_time = 0.0
@@ -149,16 +144,8 @@ class HamamatsuCamera(Camera):
     # ==================== Sensor Properties ====================
 
     @property
-    @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
-    def sensor_size_px(self) -> IVec2D:
-        """Get the size of the camera sensor in pixels."""
-        return IVec2D(y=self._sensor_height, x=self._sensor_width)
-
-    @property
-    @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D:
-        """Get the size of the camera pixel in microns."""
-        return self._pixel_size_um
+    def sensor(self) -> CameraSensor:
+        return CameraSensor(pixel_um=self._pixel_size_um, size_px=IVec2D(y=self._sensor_height, x=self._sensor_width))
 
     # ==================== Pixel Format ====================
 
@@ -240,16 +227,16 @@ class HamamatsuCamera(Camera):
 
     # ==================== Sensor ROI ====================
 
-    def _get_roi(self) -> SensorROI:
+    def _get_roi(self) -> AreaROI:
         # DCAM subarray properties are in sensor pixel coordinates
-        return SensorROI(
+        return AreaROI(
             x=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_hpos"]), 0.0)),
             y=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_vpos"]), 0.0)),
             w=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_hsize"]), float(self._sensor_width))),
             h=int(_unwrap(self._cam.prop_getvalue(_PROPS["subarray_vsize"]), float(self._sensor_height))),
         )
 
-    def _set_roi(self, roi: SensorROI) -> None:
+    def _set_roi(self, roi: AreaROI) -> None:
         # Reset offsets first to allow full size adjustment
         self._cam.prop_setvalue(_PROPS["subarray_hpos"], 0)
         self._cam.prop_setvalue(_PROPS["subarray_vpos"], 0)

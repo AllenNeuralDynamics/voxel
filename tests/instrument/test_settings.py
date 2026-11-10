@@ -1,15 +1,15 @@
 import pytest
 
-from vxl.devices.camera import SensorROI
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.errors import SettingsPersistenceError, StartupError
+from vxl.roi import AreaROI
 
 
 @pytest.fixture
 def instrument_config(instrument_config: InstrumentConfig) -> InstrumentConfig:
     config = instrument_config.model_dump()
     devices = config["hal"]["devices"]
-    devices["camera_1"]["init"]["frame_source"]["sensor_size_px"] = "128,128"
+    devices["camera_1"]["init"]["frame_source"]["sensor_size_px"] = {"x": 128, "y": 128}
     devices["camera_1"]["autosave"] = ["exposure_time_ms"]
     devices["laser_488"]["autosave"] = "*"
     devices["laser_561"]["autosave"] = "*"
@@ -22,7 +22,12 @@ async def test_autosave_merges_accepted_values_and_ignores_other_writes(
 ) -> None:
     instrument = opened_instrument
     result = await instrument.set_device_properties(
-        "camera_1", {"exposure_time_ms": 12.3456, "binning": 1, "sensor_size_px": "64,64"}
+        "camera_1",
+        {
+            "exposure_time_ms": 12.3456,
+            "binning": 1,
+            "sensor": {"pixel_um": {"x": 1, "y": 1}, "size_px": {"x": 64, "y": 64}},
+        },
     )
     assert not result.is_ok
     accepted = result.ok["exposure_time_ms"].value
@@ -54,7 +59,7 @@ async def test_roi_autosaves_applied_rectangle_and_explicit_full_frame(
     instrument = opened_instrument
     requested = {"x": 0, "y": 0, "w": 81, "h": 81}
     result = await instrument.execute_device_command("camera_1", "update_roi", kwargs={"roi": requested})
-    applied = SensorROI.model_validate(result.unwrap())
+    applied = AreaROI.model_validate(result.unwrap())
     assert applied.w != requested["w"]  # The camera snapped the requested size.
     assert instrument.active_profile.rois["camera_1"] == applied
     saved = instrument_store.value
@@ -63,7 +68,7 @@ async def test_roi_autosaves_applied_rectangle_and_explicit_full_frame(
     assert instrument_store.value == saved
 
     (await instrument.execute_device_command("camera_1", "reset_roi")).unwrap()
-    full_frame = SensorROI(x=0, y=0, w=128, h=128)
+    full_frame = AreaROI(x=0, y=0, w=128, h=128)
     assert instrument.active_profile.rois["camera_1"] == full_frame
     restored = InstrumentStore.load(instrument_store.home)
     assert restored.value.imaging.profiles["single_gfp"].rois["camera_1"] == full_frame
@@ -86,7 +91,7 @@ async def test_save_failure_reports_hardware_change_without_committing_profile(
     assert InstrumentStore.load(instrument_store.home).value == saved
 
 
-@pytest.mark.parametrize("property_name", ["missing", "sensor_size_px"])
+@pytest.mark.parametrize("property_name", ["missing", "sensor"])
 async def test_explicit_autosave_policy_requires_writable_properties(
     instrument: Instrument, property_name: str
 ) -> None:

@@ -19,7 +19,6 @@ from ome_zarr_writer import (
 )
 from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
-from pydantic import BaseModel, ConfigDict
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
@@ -28,9 +27,17 @@ from vxlib.vector import IVec2D, Vec2D
 from rigup import Device, DeviceController, describe, enumerated, numeric, numeric_int
 from vxl.devices.base import DeviceType
 from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
+from vxl.roi import AreaROI, ROIGrid
 from vxl.system import System, remote_store_fingerprint
 
 log = logging.getLogger(__name__)
+
+
+class CameraSensor(FrozenModel):
+    """The size of a camera's sensor, and of 1 pixel on it."""
+
+    pixel_um: Vec2D
+    size_px: IVec2D
 
 
 class StorageStatus(FrozenModel):
@@ -40,59 +47,6 @@ class StorageStatus(FrozenModel):
     host: str
     root: str
     free_bytes: int
-
-
-class IntRange(BaseModel):
-    """Integer range with min, max, and step."""
-
-    min: int
-    max: int
-    step: int = 1
-
-
-class ROIGrid(BaseModel):
-    """Hardware constraints for sensor ROI, one range per axis.
-
-    Each axis describes valid sizes (width/height) with min, max, and step.
-    Offset constraints are derived: min=0, max=axis.max - snapped_size, same step.
-    """
-
-    h: IntRange  # horizontal: valid widths
-    v: IntRange  # vertical: valid heights
-
-
-class SensorROI(BaseModel):
-    """Region of interest on the camera sensor, in physical sensor pixels (pre-binning).
-
-    All coordinates are in the unbinned sensor pixel space. FOV depends only on
-    (x, y, w, h) and the camera's pixel_size_um — binning is independent.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    x: int = 0
-    y: int = 0
-    w: int
-    h: int
-
-    def snap(self, grid: ROIGrid) -> "SensorROI":
-        """Return a new SensorROI clamped and aligned to the given grid.
-
-        Snaps size first, then derives offset bounds from the snapped size.
-        """
-
-        def _snap(value: int, r: IntRange) -> int:
-            value = max(r.min, min(value, r.max))
-            remainder = (value - r.min) % r.step
-            if remainder != 0:
-                value = value - remainder if remainder < r.step / 2 else value + (r.step - remainder)
-            return min(value, r.max)
-
-        w = _snap(self.w, grid.h)
-        h = _snap(self.h, grid.v)
-        x = _snap(self.x, IntRange(min=0, max=grid.h.max - w, step=grid.h.step))
-        y = _snap(self.y, IntRange(min=0, max=grid.v.max - h, step=grid.v.step))
-        return SensorROI(x=x, y=y, w=w, h=h)
 
 
 class TriggerMode(StrEnum):
@@ -558,15 +512,9 @@ class Camera(Device):
 
     @property
     @abstractmethod
-    @describe(label="Sensor Size", units="px")
-    def sensor_size_px(self) -> IVec2D:
-        """Get the size of the camera sensor in pixels."""
-
-    @property
-    @abstractmethod
-    @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D:
-        """Get the size of the camera pixel in microns."""
+    @describe(label="Sensor")
+    def sensor(self) -> CameraSensor:
+        """The size of the sensor, and of 1 pixel on it."""
 
     @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     @abstractmethod
@@ -621,11 +569,11 @@ class Camera(Device):
     # ==================== Sensor ROI ====================
 
     @abstractmethod
-    def _get_roi(self) -> SensorROI:
+    def _get_roi(self) -> AreaROI:
         """Read the current ROI from hardware in sensor pixel coordinates."""
 
     @abstractmethod
-    def _set_roi(self, roi: SensorROI) -> None:
+    def _set_roi(self, roi: AreaROI) -> None:
         """Apply ROI to hardware. Values are pre-snapped by update_roi."""
 
     @property
@@ -640,12 +588,12 @@ class Camera(Device):
 
     @property
     @describe(label="Sensor ROI", stream=True)
-    def roi(self) -> SensorROI:
+    def roi(self) -> AreaROI:
         """Current sensor ROI in physical sensor pixels (pre-binning)."""
         return self._get_roi()
 
     @describe(label="Update ROI")
-    def update_roi(self, roi: SensorROI, *, snap: bool = True) -> SensorROI:
+    def update_roi(self, roi: AreaROI, *, snap: bool = True) -> AreaROI:
         """Set sensor ROI. Returns the actual applied ROI.
 
         Args:
@@ -661,9 +609,9 @@ class Camera(Device):
         return self._get_roi()
 
     @describe(label="Reset ROI")
-    def reset_roi(self) -> SensorROI:
+    def reset_roi(self) -> AreaROI:
         """Reset the sensor ROI to the full sensor."""
-        return self.update_roi(SensorROI(w=self.sensor_size_px.x, h=self.sensor_size_px.y))
+        return self.update_roi(AreaROI(x=0, y=0, w=self.sensor.size_px.x, h=self.sensor.size_px.y))
 
     @property
     @describe(label="Frame Size", units="px", stream=True)
@@ -683,11 +631,8 @@ class Camera(Device):
     @describe(label="Frame Area", units="µm", stream=True)
     def frame_area_um(self) -> Vec2D:
         """Get the physical frame size in micrometers."""
-        roi = self.roi
-        return Vec2D(
-            x=roi.w * self.pixel_size_um.x,
-            y=roi.h * self.pixel_size_um.y,
-        )
+        roi, pixel = self.roi, self.sensor.pixel_um
+        return Vec2D(x=roi.w * pixel.x, y=roi.h * pixel.y)
 
     @property
     @abstractmethod
@@ -706,7 +651,8 @@ class Camera(Device):
     def effective_pixel_size_um(self, magnification: float = 1.0) -> Vec2D:
         """Physical size of each output pixel in µm, accounting for binning."""
         b = int(self.binning)
-        return Vec2D(x=self.pixel_size_um.x * b, y=self.pixel_size_um.y * b) / magnification
+        pixel = self.sensor.pixel_um
+        return Vec2D(x=pixel.x * b, y=pixel.y * b) / magnification
 
     @abstractmethod
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:

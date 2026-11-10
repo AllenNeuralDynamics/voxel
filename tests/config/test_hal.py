@@ -3,163 +3,163 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from vxl.config.capture import CaptureSettings
 from vxl.config.hal import HALConfig
 from vxl.config.instrument import InstrumentConfig
-from vxl.config.nets import AnalogKind, DigitalKind, Net
+from vxl.config.wiring import AnalogWire, DigitalWire, WireConfig
+from vxl.engines.spim import ClockedStep, StageSweep
 
-from .support import CONTEXT, codes, load
-
-
-class _LineScanSettings(CaptureSettings):
-    """A stand-in for an engine model with a field of its own and an axis that optics space."""
-
-    tdi_switch: bool = False
-
-    def spacing_axes(self) -> list[Any]:
-        return [axis for axis in self.scan_axes if axis != "x"]
+from .support import codes, load
 
 
 def test_config_round_trips_through_json(config_data: dict[str, Any]) -> None:
     config = load(config_data)
-    assert InstrumentConfig.model_validate(config.model_dump(mode="json"), context=CONTEXT) == config
-
-
-def test_capture_needs_an_installed_engine_for_its_modality(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["capture"] = {"widefield": config_data["hal"]["capture"]["light_sheet"]}
-    with pytest.raises(ValidationError, match="no CaptureEngine is installed for modality 'widefield'"):
-        load(config_data)
-
-
-def test_capture_has_exactly_one_modality(config_data: dict[str, Any]) -> None:
-    block = config_data["hal"]["capture"]["light_sheet"]
-    config_data["hal"]["capture"] = {"light_sheet": block, "line_scan": block}
-    with pytest.raises(ValidationError, match="exactly 1 key"):
-        load(config_data)
-
-
-def test_engine_settings_keep_their_own_fields(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["capture"] = {
-        "line_scan": {
-            "sync": {"time": "ao_main"},
-            "scan": [{"sweep": {"axis": "x", "margin": "2 %"}}, {"step": {"axis": "z"}}],
-            "tdi_switch": True,
-        }
-    }
-    context = {"capture_settings": {"line_scan": _LineScanSettings}}
-    config = load(config_data, context)
-
-    settings = config.hal.capture_settings
-    assert isinstance(settings, _LineScanSettings)
-    assert settings.tdi_switch
-    assert config.model_dump(mode="json")["hal"]["capture"]["line_scan"]["scan"][0] == {
-        "sweep": {"axis": "x", "margin": "2 %"}
-    }
-
-
-def test_sync_and_movement_take_one_key(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["capture"]["light_sheet"]["sync"] = {"time": "ao_main", "position": "z_axis"}
-    with pytest.raises(ValidationError):
-        load(config_data)
-
-
-def test_margin_is_written_as_a_percentage(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["capture"]["light_sheet"]["scan"] = [{"sweep": {"axis": "z", "margin": 0.05}}]
-    with pytest.raises(ValidationError, match="such as '25 %'"):
-        load(config_data)
-
-
-def test_detection_width_and_height_must_be_at_right_angles(config_data: dict[str, Any]) -> None:
-    geometry = config_data["hal"]["detection"]["camera"]["geometry"]
-    geometry["height"] = {"x": 1, "y": 0.1}
-    with pytest.raises(ValidationError, match="at 90°"):
-        load(config_data)
-
-    geometry["width"] = {"x": 1, "y": 0.0087}
-    geometry["height"] = {"x": -0.0087, "y": 1}
-    geometry["height"] = {"x": 1, "z": 1}
-    geometry["width"] = {"y": 1}
-    assert load(config_data).hal.detection["camera"].geometry.height == {"x": 1, "z": 1}
-
-
-@pytest.mark.parametrize(
-    ("kind", "match"),
-    [
-        ({"digital": {"off": "0 V"}}, "both 'off' and 'on'"),
-        ({"analog": {"unit": "mm"}}, "down to 'V'"),
-        ({"analog": {"limits": {"mm": [0, 1]}}}, "not on the path"),
-        ({"analog": {"jerk_time": "1 ms"}}, "needs 'travel_time'"),
-        ({"analog": {"park": "0 mm"}}, "this net's unit is V"),
-        ({"digital": {"off": 0, "on": 5}}, "number and a unit"),
-        ({"analog": {"limits": {"V": [0, 1]}}, "digital": {}}, "write exactly 1 of: 'digital', 'analog'"),
-    ],
-)
-def test_net_kind_rules(kind: dict[str, Any], match: str) -> None:
-    with pytest.raises(ValidationError, match=match):
-        TypeAdapter(Net).validate_python({"pin": "ao0", "to": [], **kind})
-
-
-def test_analog_scales_lead_to_volts() -> None:
-    kind = AnalogKind.model_validate(
-        {
-            "unit": "mm",
-            "scales": {"mm": {"mm": [-1, 1], "deg": [-10, 10]}, "deg": {"deg": [-10, 10], "V": [-5, 5]}},
-            "limits": {"mm": [-0.5, 0.5], "V": [-5, 5]},
-        }
-    )
-    assert kind.units == ["mm", "deg", "V"]
-
-
-def test_digital_levels_parse_as_volts() -> None:
-    on = DigitalKind.model_validate({"off": "0 V", "on": "500 mV"}).on
-    assert on == pytest.approx(0.5)
-    assert str(on) == "500 mV"
-
-
-def test_a_pin_belongs_to_one_net(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["nets"]["ao_main"]["laser"]["to"] = ["camera/trigger_in"]
-    assert "hal.nets.pin_shared" in codes(load(config_data))
-
-
-def test_net_devices_must_exist(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["nets"]["ao_main"]["laser"]["to"] = ["lazer/enable_in"]
-    assert "hal.nets.device_missing" in codes(load(config_data))
+    assert InstrumentConfig.model_validate(config.model_dump(mode="json")) == config
 
 
 def test_example_config_has_no_violations(config_data: dict[str, Any]) -> None:
     assert codes(load(config_data)) == []
 
 
-def test_position_sender_must_sweep_and_be_wired(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["capture"]["light_sheet"]["sync"] = {"position": "z_axis"}
-    found = codes(load(config_data))
-    assert "hal.capture.position_sender_not_sweeping" in found
-    assert "hal.capture.sender_unwired" in found
+def test_engine_target_names_its_pattern_class(config_data: dict[str, Any]) -> None:
+    engine = load(config_data).engine
+    assert isinstance(engine, ClockedStep)
+    assert engine.axes()["z"].motion == "step"
 
-    config_data["hal"]["capture"]["light_sheet"]["scan"] = [{"sweep": {"axis": "z", "margin": "5 %"}}]
-    config_data["hal"]["nets"]["z_axis"] = {"z_pulse": {"pin": "ttl_out", "to": ["ao_main/PFI0"], "digital": {}}}
-    assert codes(load(config_data)) == []
+
+@pytest.mark.parametrize(
+    ("target", "match"),
+    [
+        ("ClockedStep", "a target is a dotted path"),
+        ("vxl.engines.nothing.ClockedStep", "cannot import 'vxl.engines.nothing'"),
+        ("vxl.config.hal.HALConfig", "is not a subclass of EngineSettings"),
+        ("vxl.engines.spim.SpimPattern", "is abstract: name 1 of its subclasses"),
+    ],
+)
+def test_engine_target_must_import_a_pattern_class(config_data: dict[str, Any], target: str, match: str) -> None:
+    config_data["engine"]["target"] = target
+    with pytest.raises(ValidationError, match=match):
+        load(config_data)
+
+
+def test_engine_needs_a_target(config_data: dict[str, Any]) -> None:
+    del config_data["engine"]["target"]
+    with pytest.raises(ValidationError, match="write target"):
+        load(config_data)
+
+
+def test_a_pattern_takes_only_its_own_fields(config_data: dict[str, Any]) -> None:
+    config_data["engine"]["margin"] = "5 %"
+    with pytest.raises(ValidationError, match=r"engine\.margin\s+Extra inputs are not permitted"):
+        load(config_data)
+
+
+def test_a_pattern_takes_its_own_target_only() -> None:
+    block = {"target": "vxl.engines.spim.ClockedStep", "play": ["ao_main"], "sweep": "z", "margin": "5 %"}
+    with pytest.raises(ValidationError, match="names another class"):
+        StageSweep.model_validate(block)
+
+
+def test_the_engine_reports_the_tiled_axes(config_data: dict[str, Any]) -> None:
+    assert load(config_data).engine.tiled_axes() == ["x", "y"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "match"),
+    [
+        ({"kind": "digital", "off": "0 V"}, "both 'off' and 'on'"),
+        ({"kind": "analog", "unit": "mm"}, "down to 'V'"),
+        ({"kind": "analog", "limits": {"mm": [0, 1]}}, "not on the path"),
+        ({"kind": "analog", "jerk_time": "1 ms"}, "needs 'travel_time'"),
+        ({"kind": "analog", "park": "0 mm"}, "this wire's unit is V"),
+        ({"kind": "digital", "off": 0, "on": 5}, "number and a unit"),
+        ({"kind": "digital", "unit": "mm"}, "Extra inputs are not permitted"),
+        ({"limits": {"V": [0, 1]}}, "Unable to extract tag"),
+    ],
+)
+def test_wire_kind_rules(kind: dict[str, Any], match: str) -> None:
+    with pytest.raises(ValidationError, match=match):
+        TypeAdapter(WireConfig).validate_python({"pin": "ao0", "to": [], **kind})
+
+
+def test_analog_scales_lead_to_volts() -> None:
+    wire = AnalogWire.model_validate(
+        {
+            "pin": "ao0",
+            "to": [],
+            "kind": "analog",
+            "unit": "mm",
+            "scales": {"mm": {"mm": [-1, 1], "deg": [-10, 10]}, "deg": {"deg": [-10, 10], "V": [-5, 5]}},
+            "limits": {"mm": [-0.5, 0.5], "V": [-5, 5]},
+        }
+    )
+    assert wire.units == ["mm", "deg", "V"]
+
+
+def test_digital_levels_parse_as_volts() -> None:
+    on = DigitalWire.model_validate({"pin": "ao0", "to": [], "kind": "digital", "off": "0 V", "on": "500 mV"}).on
+    assert on == pytest.approx(0.5)
+    assert str(on) == "500 mV"
+
+
+def test_a_pin_belongs_to_one_wire(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["wiring"]["ao_main"]["laser"]["to"] = ["camera/trigger_in"]
+    assert "hal.wiring.pin_shared" in codes(load(config_data))
+
+
+def test_a_wire_is_sent_by_a_device(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["wiring"]["galvo"] = {"back": {"pin": "out", "to": ["ao_main/ai0"], "kind": "analog"}}
+    assert "hal.wiring.device_missing" in codes(load(config_data))
+
+
+def test_a_wire_reaches_devices_and_parts(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["wiring"]["ao_main"]["galvo"]["to"] = ["galvoo/in"]
+    found = codes(load(config_data))
+    assert "hal.wiring.receiver_missing" in found
+
+
+def test_a_part_is_not_also_a_device(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["parts"]["camera"] = {}
+    assert "hal.parts.device_name" in codes(load(config_data))
+
+
+def test_every_part_is_used(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["parts"]["spare_lens"] = {}
+    assert codes(load(config_data)) == ["hal.parts.unused"]
+
+
+def test_a_part_has_only_a_label(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["parts"]["galvo"] = {"label": "Sheet galvo"}
+    assert load(config_data).hal.parts["galvo"].label == "Sheet galvo"
+    config_data["hal"]["parts"]["galvo"] = {"model": "6215H"}
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        load(config_data)
+
+
+def test_sample_is_not_a_device_or_part_name(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["parts"]["sample"] = {}
+    assert "hal.reserved_name" in codes(load(config_data))
+
+
+def test_stage_devices_must_exist(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["stage"]["x"] = "x_axiss"
+    assert "hal.stage.device_missing" in codes(load(config_data))
 
 
 def test_hal_config_rejects_unknown_fields(config_data: dict[str, Any]) -> None:
     config_data["hal"]["stgae"] = {}
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        HALConfig.model_validate(config_data["hal"], context=CONTEXT)
+        HALConfig.model_validate(config_data["hal"])
 
 
-@pytest.mark.parametrize(
-    ("scan", "match"),
-    [
-        ([{"step": {"axis": "z"}}, {"step": {"axis": "z"}}], "at most once"),
-        ([{"step": {"axis": "z"}}, {"sweep": {"axis": "x", "margin": "2 %"}}], "every sweep comes before every step"),
-    ],
-)
-def test_scan_rules(config_data: dict[str, Any], scan: list[Any], match: str) -> None:
-    config_data["hal"]["capture"]["light_sheet"]["scan"] = scan
-    with pytest.raises(ValidationError, match=match):
+def test_the_engine_sits_next_to_hal(config_data: dict[str, Any]) -> None:
+    config_data["hal"]["engine"] = config_data.pop("engine")
+    with pytest.raises(ValidationError, match=r"hal\.engine\s+Extra inputs are not permitted"):
         load(config_data)
 
 
-def test_axes_that_no_capture_moves_are_tiled(config_data: dict[str, Any]) -> None:
-    settings = load(config_data).hal.capture_settings
-    assert (settings.scan_axes, settings.tiled_axes) == (["z"], ["x", "y"])
+def test_wires_are_found_by_their_2_ends(config_data: dict[str, Any]) -> None:
+    hal = load(config_data).hal
+    (wire,) = hal.wiring.between("ao_main", "z_axis")
+    assert (wire.name, wire.inputs_on("z_axis")) == ("z_step", ["ttl_in"])
+    assert hal.wiring.between("ao_main", "fw") == []
+    assert set(hal.wiring.outputs("ao_main")) == {"camera_trigger", "laser", "galvo", "z_step"}

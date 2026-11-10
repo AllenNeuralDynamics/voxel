@@ -20,7 +20,7 @@ def instrument_config(instrument_template: Path, request: pytest.FixtureRequest)
     # Keep ordinary instrument tests independent of simulated source startup delays.
     for uid in ("laser_488", "laser_561"):
         config["hal"]["devices"][uid]["init"]["source_enable_delay_s"] = 0
-    config["hal"]["devices"]["camera_1"]["init"]["frame_source"]["sensor_size_px"] = "64,64"
+    config["hal"]["devices"]["camera_1"]["init"]["frame_source"]["sensor_size_px"] = {"x": 64, "y": 64}
     if routing_type := getattr(request, "param", None):
         dimension = config["hal"]["optical_routing"]["excitation_side"]
         dimension["type"] = routing_type

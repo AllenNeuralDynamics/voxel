@@ -1,6 +1,7 @@
 """Ximea camera driver using xiapi SDK."""
 
 import re
+from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any
 
@@ -11,16 +12,10 @@ from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 
 from rigup import describe
-from vxl.devices.camera.base import (
-    Camera,
-    IntRange,
-    PixelFormat,
-    ROIGrid,
-    SensorROI,
-    StreamInfo,
-    TriggerMode,
-    TriggerPolarity,
-)
+from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
+from vxl.roi import AreaROI, IntRange, ROIGrid
+
+DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 
 
 def _to_int(value: Any) -> int:
@@ -63,19 +58,19 @@ class XimeaCamera(Camera):
         self,
         uid: str,
         serial: str,
-        pixel_size_um: Vec2D | tuple[float, float] | list[float] | str = (1.0, 1.0),
+        pixel_size_um: Vec2D | Mapping[str, float] = DEFAULT_PIXEL_SIZE_UM,
     ) -> None:
         """Initialize the Ximea camera.
 
         Args:
             uid: Unique identifier for this device.
             serial: Camera serial number.
-            pixel_size_um: Physical pixel size in microns (y, x).
+            pixel_size_um: Physical pixel size in microns, as {x, y}.
         """
         super().__init__(uid=uid)
 
         self._serial = str(serial)
-        self._pixel_size_um = pixel_size_um if isinstance(pixel_size_um, Vec2D) else Vec2D.parse(pixel_size_um)
+        self._pixel_size_um = Vec2D.parse(pixel_size_um)
         self._buffer_size_frames = 0
 
         # Initialize camera
@@ -99,16 +94,8 @@ class XimeaCamera(Camera):
     # ==================== Sensor Properties ====================
 
     @property
-    @describe(label="Sensor Size", units="px", desc="The size of the camera sensor in pixels.")
-    def sensor_size_px(self) -> IVec2D:
-        """Get the size of the camera sensor in pixels."""
-        return IVec2D(y=self._sensor_height, x=self._sensor_width)
-
-    @property
-    @describe(label="Pixel Size", units="µm", desc="The size of the camera pixel in microns.")
-    def pixel_size_um(self) -> Vec2D:
-        """Get the size of the camera pixel in microns."""
-        return self._pixel_size_um
+    def sensor(self) -> CameraSensor:
+        return CameraSensor(pixel_um=self._pixel_size_um, size_px=IVec2D(y=self._sensor_height, x=self._sensor_width))
 
     # ==================== Pixel Format ====================
 
@@ -184,17 +171,17 @@ class XimeaCamera(Camera):
 
     # ==================== Sensor ROI ====================
 
-    def _get_roi(self) -> SensorROI:
+    def _get_roi(self) -> AreaROI:
         # Ximea width/height/offset are post-downsampling; convert to sensor pixels
         b = self.binning
-        return SensorROI(
+        return AreaROI(
             x=_to_int(self._camera.get_offsetX()) * b,
             y=_to_int(self._camera.get_offsetY()) * b,
             w=_to_int(self._camera.get_width()) * b,
             h=_to_int(self._camera.get_height()) * b,
         )
 
-    def _set_roi(self, roi: SensorROI) -> None:
+    def _set_roi(self, roi: AreaROI) -> None:
         # Convert sensor pixels to post-downsampling coordinates
         b = self.binning
         # Reset offsets first to allow full size adjustment

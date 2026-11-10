@@ -4,13 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from vxl.config.instrument import InstrumentPreset
-from vxl.config.specimen import Surface
-from vxl.config.tasks import Task
+from vxl.config.tasks import Surface, Task
 
-from .support import CONTEXT, load
+from .support import ONE_WAY_SWEEP, load, sweep_x
 
 _REGION = {
-    "xy": {"convex_hull": [{"x": 0, "y": 0}, {"x": 8000, "y": 500}, {"x": 7000, "y": 6000}]},
+    "xy": {"kind": "convex_hull", "points": [{"x": 0, "y": 0}, {"x": 8000, "y": 500}, {"x": 7000, "y": 6000}]},
     "z": {"start": 0, "end": 3000},
 }
 
@@ -18,19 +17,23 @@ _REGION = {
 def _preset(config_data: dict[str, Any], *tasks: dict[str, Any]) -> InstrumentPreset:
     config = load(config_data)
     plan = [Task.complete(task, config.default.task) for task in tasks]
-    return InstrumentPreset.model_validate({**config.default.model_dump(mode="json"), "plan": plan}, context=CONTEXT)
+    context = config.engine.validation_context()
+    return InstrumentPreset.model_validate({**config.default.model_dump(mode="json"), "plan": plan}, context=context)
 
 
 def _codes(config_data: dict[str, Any], *tasks: dict[str, Any]) -> list[str]:
-    preset = _preset(config_data, *tasks)
-    return [v.code or "" for v in preset.semantic_violations(load(config_data).hal, loc=("state",))]
+    preset, config = _preset(config_data, *tasks), load(config_data)
+    return [v.code or "" for v in preset.semantic_violations(config.hal, config.engine, loc=("state",))]
 
 
 def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any]) -> None:
     task = _preset(config_data, {"id": "brain", "region": _REGION, "profiles": ["gfp"]}).plan[0]
     assert str(task.overlap["x"]) == "10 %"
     assert task.path.scan == {"z": "forward"}
-    assert task.model_dump(mode="json")["path"]["tiles"] == {"grid": [{"x": "alternate"}, {"y": "forward"}]}
+    assert task.model_dump(mode="json")["path"]["tiles"] == {
+        "kind": "grid",
+        "axes": [{"x": "alternate"}, {"y": "forward"}],
+    }
 
 
 def test_example_plan_has_no_violations(config_data: dict[str, Any]) -> None:
@@ -42,7 +45,7 @@ def test_z_bounds_can_be_surfaces() -> None:
         {
             "id": "uneven",
             "region": {
-                "xy": {"bounding_box": [{"x": 0, "y": 0}, {"x": 6000, "y": 4000}]},
+                "xy": {"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 6000, "y": 4000}]},
                 "z": {
                     "start": {
                         "points": [
@@ -56,7 +59,7 @@ def test_z_bounds_can_be_surfaces() -> None:
             },
             "profiles": ["gfp"],
             "overlap": {},
-            "path": {"scan": {}, "tiles": {"nearest_neighbor": {}}},
+            "path": {"scan": {}, "tiles": {"kind": "nearest_neighbor"}},
             "iteration": "position_major",
         }
     )
@@ -85,7 +88,7 @@ def test_z_bound_rules(z: dict[str, Any], match: str) -> None:
                 "region": {"xy": _REGION["xy"], "z": z},
                 "profiles": ["gfp"],
                 "overlap": {},
-                "path": {"scan": {}, "tiles": {"optimized": {}}},
+                "path": {"scan": {}, "tiles": {"kind": "optimized"}},
                 "iteration": "position_major",
             }
         )
@@ -96,13 +99,21 @@ def test_z_bound_rules(z: dict[str, Any], match: str) -> None:
     [
         ({"overlap": {"x": "10 %"}}, "task.overlap.missing"),
         ({"overlap": {"x": "10 %", "y": "10 %", "z": "10 %"}}, "task.overlap.unexpected"),
-        ({"path": {"scan": {"x": "forward"}, "tiles": {"nearest_neighbor": {}}}}, "task.path.scan.missing"),
-        ({"path": {"scan": {"z": "forward"}, "tiles": {"grid": [{"x": "alternate"}]}}}, "task.path.grid_axes"),
+        ({"path": {"scan": {"x": "forward"}, "tiles": {"kind": "nearest_neighbor"}}}, "task.path.scan.missing"),
         (
-            {"path": {"scan": {"z": "forward"}, "tiles": {"grid": [{"x": "forward"}, {"y": "alternate"}]}}},
+            {"path": {"scan": {"z": "forward"}, "tiles": {"kind": "grid", "axes": [{"x": "alternate"}]}}},
+            "task.path.grid_axes",
+        ),
+        (
+            {
+                "path": {
+                    "scan": {"z": "forward"},
+                    "tiles": {"kind": "grid", "axes": [{"x": "forward"}, {"y": "alternate"}]},
+                }
+            },
             "task.path.slowest_alternate",
         ),
-        ({"path": {"scan": {"z": "forward"}, "tiles": {"as_given": {}}}}, "task.path.as_given_needs_points"),
+        ({"path": {"scan": {"z": "forward"}, "tiles": {"kind": "as_given"}}}, "task.path.as_given_needs_points"),
         ({"profiles": ["missing"]}, "task.profile_missing"),
     ],
 )
@@ -111,12 +122,12 @@ def test_task_axes_must_match_the_instrument(config_data: dict[str, Any], change
 
 
 def test_explicit_points_need_x_and_y_tiled(config_data: dict[str, Any]) -> None:
-    config_data["hal"]["capture"]["light_sheet"]["scan"] = [{"sweep": {"axis": "x", "margin": "5 %"}}]
-    config_data["hal"]["nets"]["x_axis"] = {"x_pulse": {"pin": "ttl_out", "to": ["ao_main/PFI0"], "digital": {}}}
-    config_data["default"]["task"]["overlap"] = {"y": "10 %", "z": "10 %"}
-    config_data["default"]["task"]["path"] = {"scan": {"x": "alternate"}, "tiles": {"as_given": {}}}
-    config_data["default"]["imaging"]["profiles"]["gfp"]["spacing"] = {"x": 0.5}
-    task = {"id": "points", "region": {"xy": {"explicit_points": [{"x": 0, "y": 0}]}, "z": {"start": 0, "end": 1}}}
+    sweep_x(config_data)
+    config_data["default"]["task"]["path"]["tiles"] = {"kind": "as_given"}
+    task = {
+        "id": "points",
+        "region": {"xy": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]}, "z": {"start": 0, "end": 1}},
+    }
     assert "task.region.explicit_points_untiled" in _codes(config_data, {**task, "profiles": ["gfp"]})
 
 
@@ -124,3 +135,10 @@ def test_task_ids_are_unique(config_data: dict[str, Any]) -> None:
     task = {"id": "same", "region": _REGION, "profiles": ["gfp"]}
     with pytest.raises(ValidationError, match="task ids must be unique"):
         _preset(config_data, task, task)
+
+
+def test_a_task_alternates_only_where_the_engine_allows(config_data: dict[str, Any]) -> None:
+    sweep_x(config_data)
+    assert _codes(config_data, {"id": "t", "region": _REGION, "profiles": ["gfp"]}) == []
+    config_data["engine"]["target"] = ONE_WAY_SWEEP
+    assert "task.path.scan_one_way" in _codes(config_data, {"id": "t", "region": _REGION, "profiles": ["gfp"]})

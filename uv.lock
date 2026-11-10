@@ -2908,6 +2908,7 @@ dependencies = [
     { name = "rich" },
     { name = "rigup" },
     { name = "ruamel-yaml" },
+    { name = "scipy" },
     { name = "vxl-records" },
     { name = "vxlib" },
 ]
@@ -2953,6 +2954,7 @@ requires-dist = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "rigup", editable = "rigup" },
     { name = "ruamel-yaml", specifier = ">=0.19.1,<0.20" },
+    { name = "scipy", specifier = ">=1.16" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.38.0" },
     { name = "uvloop", marker = "sys_platform != 'win32' and extra == 'web'" },
     { name = "vxl-records", editable = "records" },

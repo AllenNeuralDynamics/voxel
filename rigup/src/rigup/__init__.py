@@ -1,4 +1,10 @@
-from .build import BuildConfig, BuildError, BuildGroupSpec, build_objects, build_objects_async
+"""rigup: devices as plain Python objects, built from config, on this process or on nodes.
+
+The package exports config, build and device definitions, which open nothing. The runtime that starts nodes and talks
+over the network is ``rigup.rig.Rig``: import it from there.
+"""
+
+from .build import BuildConfig, BuildError, BuildGroupSpec, build_objects, build_objects_async, import_class
 from .config import DeviceConfig, NodeConfig, RigConfig
 from .device import (
     CommandRequest,
@@ -19,7 +25,6 @@ from .device import (
     numeric,
     numeric_int,
 )
-from .rig import Rig
 
 __all__ = [
     "BuildConfig",
@@ -39,13 +44,13 @@ __all__ = [
     "PropertyModel",
     "Result",
     "Results",
-    "Rig",
     "RigConfig",
     "StreamCallback",
     "build_objects",
     "build_objects_async",
     "describe",
     "enumerated",
+    "import_class",
     "numeric",
     "numeric_int",
 ]

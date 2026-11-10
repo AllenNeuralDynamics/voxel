@@ -1,124 +1,107 @@
-"""The whole instrument file: ``hal`` plus the defaults that seed each instrument's state."""
+"""The instrument files: ``config.yaml``, its defaults, ``state.json`` and presets."""
 
 import datetime
 import secrets
-from collections.abc import Mapping
-from typing import Annotated, Any, Self
+from pathlib import Path
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from ome_zarr_writer import WriterSettings
 from pydantic import Field, field_validator
+from rigup.config import DeviceUid
+from ruamel.yaml import YAML
 from vxlib.schema import FrozenModel, repeated
 
-from .hal import HALConfig, SelectRoutingDefinition, SplitRoutingDefinition
-from .identifiers import RouteName, RoutingDimension
-from .imaging import ImagingConfig
+from .basics import NodeName, Violation, assignment_violations, not_configured, under
+from .engine import EngineConfig
+from .hal import HALConfig
+from .imaging import ImagingConfig, PropertyName
+from .light import FixedSelection, Selection, SetBy, SetByInstrument
 from .metadata import ExperimentMetadata, MetadataCls
 from .tasks import Task, TaskSettings
-from .violations import Violation, ViolationLoc, assignment_violations, not_configured
+
+if TYPE_CHECKING:
+    from vxl.instrument_next.engine import Engine
+
+_ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
+"""Crockford's base32 in lowercase: digits and letters without i, l, o and u, which are easy to misread."""
+
+InstrumentId = Annotated[str, Field(pattern=f"^[0-7][{_ID_ALPHABET}]{{25}}$")]
+"""128 random bits in 26 characters, safe in URLs and file names."""
+
+InstrumentName = Annotated[str, Field(min_length=1, max_length=32)]
+"""A label for people."""
+
+InstrumentModel = Annotated[str, Field(min_length=1, max_length=64)]
+"""The lab's own label for the kind of instrument, such as ``exaSPIM`` or ``exaspim.v2``."""
 
 
-class SelectRoutingRule(FrozenModel):
-    selected: RouteName
-
-
-class SplitRoutingRule(FrozenModel):
-    threshold: float = Field(allow_inf_nan=False)
-
-    def resolve(self, coordinate: float, *, previous: str | None = None, margin: float = 0) -> str:
-        """Resolve 1 side, keeping ``previous`` within the symmetric hysteresis margin."""
-        if margin < 0:
-            raise ValueError("margin must be non-negative")
-        if previous == "lower":
-            return "upper" if coordinate >= self.threshold + margin else "lower"
-        if previous == "upper":
-            return "lower" if coordinate < self.threshold - margin else "upper"
-        return "lower" if coordinate < self.threshold else "upper"
-
-
-type RoutingRule = SelectRoutingRule | SplitRoutingRule
+def held_by_instrument(hal: HALConfig) -> dict[NodeName, SetBy]:
+    """Each node of ``hal.light`` whose position the instrument holds in ``selections``, with its rule."""
+    return {
+        node: rule
+        for node, rule in hal.light.rules().items()
+        if rule == "instrument" or isinstance(rule, SetByInstrument)
+    }
 
 
 class InstrumentDefaults(FrozenModel):
-    """Everything that can live in ``config.default``."""
+    """``config.default``: what seeds each instrument's state. ``props`` holds the device properties that every profile
+    starts from, and a profile's ``props`` override them. ``selections`` holds how the instrument sets each
+    ``set_by: instrument`` node."""
 
     imaging: ImagingConfig
     task: TaskSettings
-    """The settings a new task takes when it leaves them out."""
-    routing: dict[RoutingDimension, RoutingRule] = Field(default_factory=dict)
+    props: dict[DeviceUid, dict[PropertyName, Any]] = Field(default_factory=dict)
+    selections: dict[NodeName, Selection] = Field(default_factory=dict)
     metadata_cls: MetadataCls = ExperimentMetadata
     output: WriterSettings = Field(default_factory=WriterSettings)
 
-    def resolve_routes(
-        self,
-        hal: HALConfig,
-        *,
-        x: float,
-        y: float,
-        previous: Mapping[str, str] | None = None,
-        margins: Mapping[str, float] | None = None,
-    ) -> dict[RoutingDimension, RouteName]:
-        """Resolve each routing dimension from its rule and an XY position."""
-        coordinates = {"x": x, "y": y}
-        previous = previous or {}
-        margins = margins or {}
-        routes = {}
-        for dimension, rule in self.routing.items():
-            definition = hal.optical_routing.root[dimension]
-            match definition, rule:
-                case SelectRoutingDefinition(), SelectRoutingRule(selected=route):
-                    routes[dimension] = route
-                case SplitRoutingDefinition(), SplitRoutingRule():
-                    routes[dimension] = rule.resolve(
-                        coordinates[definition.axis],
-                        previous=previous.get(dimension),
-                        margin=margins.get(definition.axis, 0),
-                    )
-                case _:
-                    raise ValueError(f"Routing settings do not match dimension '{dimension}'")
-        return routes
-
-    def semantic_violations(self, hal: HALConfig, *, loc: ViolationLoc) -> list[Violation]:
-        imaging_loc = (*loc, "imaging")
+    def violations(self, hal: HALConfig, engine: "Engine[Any]") -> list[Violation]:
+        """Return the problems of these settings against ``hal`` and ``engine``."""
         return [
-            *self.imaging.logical_violations(loc=imaging_loc),
-            *self.imaging.hal_violations(hal, loc=imaging_loc),
-            *self.task.capture_violations(hal.capture_settings, loc=(*loc, "task")),
-            *self._routing_violations(hal, loc=(*loc, "routing")),
+            *under(("imaging",), self.imaging.violations(hal, engine)),
+            *under(("task",), self.task.violations(engine)),
+            *under(("props",), self._props_violations(hal, engine)),
+            *under(("selections",), self._selection_violations(hal)),
         ]
 
-    def _routing_violations(self, hal: HALConfig, *, loc: ViolationLoc) -> list[Violation]:
-        participating = {
-            dimension
-            for paths in (hal.detection, hal.illumination)
-            for path in paths.values()
-            for dimension in path.routing
-            if dimension in hal.optical_routing.root
-        }
-        violations = assignment_violations(
-            expected=participating,
-            assigned=self.routing,
-            loc=loc,
-            code="optical_routing.rule",
-            label="routing rule",
-        )
-        for dimension, rule in self.routing.items():
-            definition = hal.optical_routing.root.get(dimension)
-            if definition is None or dimension not in participating:
-                continue
-            if isinstance(definition, SelectRoutingDefinition) != isinstance(rule, SelectRoutingRule):
+    def _props_violations(self, hal: HALConfig, engine: "Engine[Any]") -> list[Violation]:
+        owned = engine.owned_devices()
+        violations: list[Violation] = []
+        for device in self.props:
+            if device not in hal.device_uids:
+                violations.append(not_configured("Device", device, code="props.device_missing", loc=(device,)))
+            elif device in owned:
                 violations.append(
                     Violation(
-                        code="optical_routing.rule.type_mismatch",
-                        msg=f"Routing settings must match configured type '{definition.type}'.",
-                        loc=(*loc, dimension),
+                        code="props.engine_owned",
+                        msg=f"The engine names '{device}', so it sets it.",
+                        loc=(device,),
                     )
                 )
-            elif isinstance(rule, SelectRoutingRule) and rule.selected not in definition.routes:
+        return violations
+
+    def _selection_violations(self, hal: HALConfig) -> list[Violation]:
+        """1 entry for each node that the instrument holds, a position that the node has, and a split only where the
+        node's rule has one."""
+        held = held_by_instrument(hal)
+        violations = assignment_violations(
+            expected=held, assigned=self.selections, loc=(), code="selections", label="selection"
+        )
+        for node, selection in self.selections.items():
+            if (rule := held.get(node)) is None:
+                continue
+            if isinstance(selection, FixedSelection):
+                if (problem := hal.position_problem(node, selection.position)) is not None:
+                    violations.append(
+                        Violation(code="selections.position_invalid", msg=problem, loc=(node, "position"))
+                    )
+            elif not isinstance(rule, SetByInstrument):
                 violations.append(
                     Violation(
-                        code="optical_routing.rule.route_missing",
-                        msg=f"Route '{rule.selected}' is not defined for routing dimension '{dimension}'.",
-                        loc=(*loc, dimension, "selected"),
+                        code="selections.split_unknown",
+                        msg=f"'{node}' has no split in hal.light, so its selection must be fixed.",
+                        loc=(node, "kind"),
                     )
                 )
         return violations
@@ -139,23 +122,18 @@ class InstrumentPreset(InstrumentDefaults):
     @classmethod
     def from_state(cls, state: "InstrumentState") -> Self:
         """The reusable preset fields of a complete instrument state."""
-        return cls.model_validate(state.model_dump(include=set(cls.model_fields)))
+        return cls.model_validate({name: getattr(state, name) for name in cls.model_fields})
 
-    def semantic_violations(self, hal: HALConfig, *, loc: ViolationLoc) -> list[Violation]:
-        violations = super().semantic_violations(hal, loc=loc)
+    def violations(self, hal: HALConfig, engine: "Engine[Any]") -> list[Violation]:
+        violations = super().violations(hal, engine)
         for index, task in enumerate(self.plan):
-            task_loc = (*loc, "plan", index)
-            violations += task.capture_violations(hal.capture_settings, loc=task_loc)
-            for profile_index, profile_id in enumerate(task.profiles):
-                if profile_id not in self.imaging.profiles:
-                    violations.append(
-                        not_configured(
-                            "Profile",
-                            profile_id,
-                            code="task.profile_missing",
-                            loc=(*task_loc, "profiles", profile_index),
-                        )
-                    )
+            found = task.violations(engine)
+            found += [
+                not_configured("Profile", profile_id, code="task.profile_missing", loc=("profiles", profile_index))
+                for profile_index, profile_id in enumerate(task.profiles)
+                if profile_id not in self.imaging.profiles
+            ]
+            violations += under(("plan", index), found)
         return violations
 
 
@@ -166,29 +144,16 @@ class InstrumentState(InstrumentPreset):
     last_modified: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(tz=datetime.UTC))
 
 
-_ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
-"""Crockford's base32 in lowercase: digits and letters without i, l, o and u, which are easy to misread."""
-
-InstrumentId = Annotated[str, Field(pattern=f"^[0-7][{_ID_ALPHABET}]{{25}}$")]
-"""128 random bits in 26 characters: as unique as a UUID, and safe in URLs and file names."""
-
-InstrumentName = Annotated[str, Field(min_length=1, max_length=32)]
-"""A label for people. Records and the Lab use the ID."""
-
-InstrumentModel = Annotated[str, Field(min_length=1, max_length=64)]
-"""The lab's own label for the kind of instrument, such as ``exaSPIM`` or ``exaspim.v2``."""
-
-
 def new_instrument_id() -> str:
-    """Return a new random :data:`InstrumentId`."""
     value = secrets.randbits(128)
     return "".join(_ID_ALPHABET[(value >> shift) & 31] for shift in range(125, -1, -5))
 
 
-def _file_violations(hal: HALConfig, default: InstrumentDefaults) -> list[Violation]:
+def _file_violations(hal: HALConfig, engine: "Engine[Any]", default: InstrumentDefaults) -> list[Violation]:
     return [
-        *hal.semantic_violations(loc=("config", "hal")),
-        *default.semantic_violations(hal, loc=("config", "default")),
+        *under(("hal",), hal.violations()),
+        *under(("engine",), engine.violations()),
+        *under(("default",), default.violations(hal, engine)),
     ]
 
 
@@ -197,15 +162,16 @@ class InstrumentTemplate(FrozenModel):
 
     model: InstrumentModel | None = None
     hal: HALConfig
+    engine: EngineConfig
     default: InstrumentDefaults
 
     def instantiate(self, name: str) -> "InstrumentConfig":
         """Make a new instrument from this design, with a new ID."""
         return InstrumentConfig.model_validate({"id": new_instrument_id(), "name": name, **dict(self)})
 
-    def semantic_violations(self) -> list[Violation]:
-        """Return every relationship that the file alone shows cannot resolve."""
-        return _file_violations(self.hal, self.default)
+    def violations(self, engine: "Engine[Any]") -> list[Violation]:
+        """Return the problems that the file shows. ``engine`` is the engine that the file names."""
+        return _file_violations(self.hal, engine, self.default)
 
 
 class InstrumentConfig(FrozenModel):
@@ -215,11 +181,17 @@ class InstrumentConfig(FrozenModel):
     name: InstrumentName
     model: InstrumentModel | None = None
     hal: HALConfig
+    engine: EngineConfig
     default: InstrumentDefaults
 
-    def semantic_violations(self) -> list[Violation]:
-        """Return every relationship that the file alone shows cannot resolve."""
-        return _file_violations(self.hal, self.default)
+    @classmethod
+    def load(cls, path: Path) -> Self:
+        """Read and validate 1 instrument file."""
+        return cls.model_validate(YAML(typ="safe").load(path.read_text(encoding="utf-8")))
+
+    def violations(self, engine: "Engine[Any]") -> list[Violation]:
+        """Return the problems that the file shows. ``engine`` is the engine that the file names."""
+        return _file_violations(self.hal, engine, self.default)
 
 
 __all__ = [
@@ -231,8 +203,6 @@ __all__ = [
     "InstrumentPreset",
     "InstrumentState",
     "InstrumentTemplate",
-    "RoutingRule",
-    "SelectRoutingRule",
-    "SplitRoutingRule",
+    "held_by_instrument",
     "new_instrument_id",
 ]

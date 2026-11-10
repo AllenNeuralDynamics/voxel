@@ -17,7 +17,7 @@ hal:
     camera:
       target: vxl_drivers.cameras.egrabber.VieworksCamera
       autosave: [exposure_time_ms, binning, pixel_format]
-      init: {pixel_size_um: "3.76,3.76", serial: MP151BDZ014}
+      init: {pixel_size_um: {x: 3.76, y: 3.76}, serial: MP151BDZ014}
     fw_emission:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
       init:

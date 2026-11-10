@@ -5,7 +5,6 @@ from random import randint
 from typing import ClassVar, cast, final
 
 import numpy as np
-from vxlib.vector import IVec2D, Vec2D
 
 from rigup import enumerated, numeric, numeric_int
 from vxl.devices.camera.base import (
@@ -13,15 +12,14 @@ from vxl.devices.camera.base import (
     PIXEL_FMT_TO_DTYPE,
     PIXEL_FMT_TO_VALID_BITS,
     Camera,
-    IntRange,
+    CameraSensor,
     PixelFormat,
-    ROIGrid,
-    SensorROI,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
 )
 from vxl.devices.camera.simulated.frame_source import FrameSource, FrameSourceConfig, create_frame_source
+from vxl.roi import AreaROI, IntRange, ROIGrid
 
 
 @final
@@ -81,8 +79,8 @@ class SimulatedCamera(Camera):
         self._buffer_update_interval_s = buffer_update_interval_s
         self._last_buffer_update = time.monotonic()
         self._frame_source = create_frame_source(frame_source)
-        self._roi_width_px = self.sensor_size_px.x
-        self._roi_height_px = self.sensor_size_px.y
+        self._roi_width_px = self.sensor.size_px.x
+        self._roi_height_px = self.sensor.size_px.y
         self._roi_width_offset_px = 0
         self._roi_height_offset_px = 0
         self._pixel_format: PixelFormat = "MONO16"
@@ -105,12 +103,8 @@ class SimulatedCamera(Camera):
         return line_interval_us * effective_rows / 1000
 
     @property
-    def sensor_size_px(self) -> IVec2D:
-        return self._frame_source.sensor_size_px
-
-    @property
-    def pixel_size_um(self) -> Vec2D:
-        return self._frame_source.pixel_size_um
+    def sensor(self) -> CameraSensor:
+        return CameraSensor(pixel_um=self._frame_source.pixel_size_um, size_px=self._frame_source.sensor_size_px)
 
     @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     def pixel_format(self) -> PixelFormat:
@@ -150,15 +144,15 @@ class SimulatedCamera(Camera):
     def frame_rate_hz(self, value: float) -> None:
         self._frame_rate_hz = value
 
-    def _get_roi(self) -> SensorROI:
-        return SensorROI(
+    def _get_roi(self) -> AreaROI:
+        return AreaROI(
             x=self._roi_width_offset_px,
             y=self._roi_height_offset_px,
             w=self._roi_width_px,
             h=self._roi_height_px,
         )
 
-    def _set_roi(self, roi: SensorROI) -> None:
+    def _set_roi(self, roi: AreaROI) -> None:
         self._roi_width_offset_px = roi.x
         self._roi_height_offset_px = roi.y
         self._roi_width_px = roi.w
@@ -167,8 +161,8 @@ class SimulatedCamera(Camera):
     @property
     def roi_grid(self) -> ROIGrid:
         return ROIGrid(
-            h=IntRange(min=self._min_width, max=self.sensor_size_px.x, step=self._roi_step_width_px),
-            v=IntRange(min=self._min_height, max=self.sensor_size_px.y, step=self._roi_step_height_px),
+            h=IntRange(min=self._min_width, max=self.sensor.size_px.x, step=self._roi_step_width_px),
+            v=IntRange(min=self._min_height, max=self.sensor.size_px.y, step=self._roi_step_height_px),
         )
 
     @property

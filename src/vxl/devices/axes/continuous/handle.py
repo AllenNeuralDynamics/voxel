@@ -33,6 +33,14 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
     async def get_upper_limit(self) -> float:
         return await self.upper_limit.get()
 
+    async def get_limits(self) -> tuple[float, float]:
+        """The lower and upper limits, read in 1 request."""
+        results = await self.props.get("lower_limit", "upper_limit")
+        return (
+            _FLOAT_ADAPTER.validate_python(results["lower_limit"].unwrap().value),
+            _FLOAT_ADAPTER.validate_python(results["upper_limit"].unwrap().value),
+        )
+
     async def get_speed(self) -> float | None:
         return await self.props.get_value("speed")
 

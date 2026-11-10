@@ -204,7 +204,7 @@ async def test_camera_geometry_transport_failures_are_collected_and_close_the_ri
     assert any("first failure" in v.msg for v in violations)
     assert any("second failure" in v.msg for v in violations)
     for camera in cameras.values():
-        cast("AsyncMock", camera.props.get).assert_awaited_once_with("pixel_size_um", "sensor_size_px")
+        cast("AsyncMock", camera.props.get).assert_awaited_once_with("sensor")
 
 
 async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -213,7 +213,7 @@ async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch
         "camera",
         properties=PropResults(
             results={
-                "pixel_size_um": Result[PropertyModel].err("pixel size unavailable"),
+                "sensor": Result[PropertyModel].err("sensor unavailable"),
             }
         ),
     )
@@ -232,6 +232,5 @@ async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch
     assert rig.closed
     assert {v.code for v in raised.value.violations} == {"build.import", "hal.camera.geometry"}
     assert {v.loc for v in raised.value.violations if v.code == "hal.camera.geometry"} == {
-        ("hal", "devices", "camera", "pixel_size_um"),
-        ("hal", "devices", "camera", "sensor_size_px"),
+        ("hal", "devices", "camera", "sensor"),
     }

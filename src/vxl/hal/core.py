@@ -6,8 +6,9 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from pydantic import TypeAdapter
+from rigup.rig import Rig
 
-from rigup import DeviceHandle, DeviceInterface, Rig
+from rigup import DeviceHandle, DeviceInterface
 from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
@@ -19,7 +20,7 @@ from .topology import HardwareTopology, OpticalRouteDefinition
 
 logger = logging.getLogger(__name__)
 
-_CAMERA_GEOMETRY_PROPERTIES = ("pixel_size_um", "sensor_size_px")
+_CAMERA_GEOMETRY_PROPERTIES = ("sensor",)
 _SELECTOR_LABELS = TypeAdapter(dict[int, str | None])
 
 
