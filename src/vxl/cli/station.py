@@ -7,8 +7,9 @@ from uuid import UUID
 from pydantic import ValidationError
 from vxl_records import RecordsError, SQLiteRecords
 
-from vxl.station.errors import StationNotConfiguredError
-from vxl.system import StationConfig, load_voxel_env
+from vxl.core.config import StationConfig
+from vxl.core.errors import StationNotConfiguredError
+from vxl.system import load_voxel_env
 
 
 def initialize(name: str, *, station_id: UUID | None, output: TextIO, errors: TextIO) -> int:

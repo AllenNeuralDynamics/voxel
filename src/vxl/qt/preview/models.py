@@ -13,6 +13,8 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 from vxlib.lifecycle import Teardown
 
+from vxl.core.feed import StationFeed
+from vxl.core.models import StationFeedView, StreamCursor
 from vxl.instrument import Instrument
 from vxl.preview import (
     PreviewFrame,
@@ -22,7 +24,6 @@ from vxl.preview import (
     VoxelPreviewHeader,
     VoxelPreviewPacket,
 )
-from vxl.station import StationFeed, StationFeedView, StreamCursor
 
 log = logging.getLogger(__name__)
 

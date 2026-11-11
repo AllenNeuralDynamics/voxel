@@ -11,7 +11,7 @@ from vxl.system import System
 
 @pytest.fixture
 def instrument_template() -> Path:
-    return Path(__file__).parents[2] / "src/vxl/station/templates/builtins/simulated-local.voxel.yaml"
+    return Path(__file__).parents[2] / "src/vxl/core/templates/builtins/simulated-local.voxel.yaml"
 
 
 @pytest.fixture

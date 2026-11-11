@@ -1,4 +1,4 @@
-from vxl.metadata import ExperimentMetadata, annotation
+from vxl.core.metadata import ExperimentMetadata, annotation
 
 from .config import (
     AcquisitionTask,

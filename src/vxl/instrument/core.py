@@ -29,11 +29,11 @@ from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Re
 from vxlib.schema import FrozenModel
 
 from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
+from vxl.core.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
-from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.models import AreaROI
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.preview.protocol import StagePosition

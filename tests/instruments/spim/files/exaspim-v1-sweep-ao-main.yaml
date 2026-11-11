@@ -1,0 +1,221 @@
+# exaSPIM v1 with a Z sweep, and ao_main's own clock sets the rhythm.
+# The same bench as exaspim-v1.yaml, with 1 more wire: z_axis.z_pulse. A bench with both Z wires can step or sweep.
+# Only hal.scan and the timelines differ from exaspim-v1.yaml: a sweep plays no z_step signal.
+# A sketch from the design talk of 2026-11-10. Numbers are examples.
+
+id: 7epw7gnsxyfeqbata46qt17en0   # made when the instrument is created; never edited
+name: exaSPIM sweep Z, ao_main paces
+model: exaSPIM
+kind: vxl.instruments.spim
+
+hal:
+  devices:
+    nidaq_1:
+      target: vxl.devices.daq.hub_ni.NiDaqmx
+      init: {device_name: Dev3, product: PCIe-6738}
+
+    ao_main:
+      target: vxl.devices.daq.clocked.ni.NiSignalGenerator
+      init: {hub: nidaq_1}
+
+    camera:
+      target: vxl_drivers.cameras.egrabber.VieworksCamera
+      autosave: [exposure_time_ms, binning, pixel_format]
+      init: {pixel_size_um: {x: 3.76, y: 3.76}, serial: MP151BDZ014}
+
+    laser_488:
+      target: vxl.devices.laser.simulated.SimulatedLaser
+      autosave: [source_power_setpoint_mw, output_level_percent]
+      init: {wavelength: 488, source_enable_delay_s: 1}
+    laser_561:
+      target: vxl.devices.laser.simulated.SimulatedLaser
+      autosave: [source_power_setpoint_mw, output_level_percent]
+      init: {wavelength: 561, source_enable_delay_s: 1}
+    laser_640:
+      target: vxl.devices.laser.simulated.SimulatedLaser
+      autosave: [source_power_setpoint_mw, output_level_percent]
+      init: {wavelength: 640, source_enable_delay_s: 1}
+
+    fw_emission:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": BP525, "1": BP600, "2": BP700}
+
+    excitation_side_axis:                         # moves the mirror that picks the illumination arm
+      target: vxl.devices.axes.simulated.SimulatedContinuousAxis
+      init: {lower_limit: 0, upper_limit: 100, has_ttl_stepper: false}
+    excitation_side_selector:                     # the same mirror, as 2 named positions
+      target: vxl.devices.axes.discrete.MappedDiscreteAxis
+      init:
+        axis: excitation_side_axis
+        tolerance: 1
+        slots:
+          "0": {label: left, position: 0}
+          "1": {label: right, position: 100}
+
+    tiger_controller:
+      target: vxl_drivers.tigerhub.TigerHub
+      init: {box: COM3}
+    x_axis:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: x, units: um}
+    y_axis:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: v, units: um}
+    z_axis:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: z, units: um}
+    left_focus:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: a, units: um}
+    right_focus:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: b, units: um}
+    camera_focus:
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: m, units: um}
+
+  parts:                                          # things with no driver. kind says what each one is. A filter gives its band, an objective its magnification
+    combiner:           {kind: combiner}
+    left_tunable_lens:  {kind: tunable_lens}
+    right_tunable_lens: {kind: tunable_lens}
+    positive_galvo:     {kind: galvo}
+    negative_galvo:     {kind: galvo}
+    objective:          {kind: objective, magnification: 5.0}   # the objective and the tube lens together
+    BP525:              {kind: filter, band: [500 nm, 550 nm]}
+    BP600:              {kind: filter, band: [575 nm, 625 nm]}
+    BP700:              {kind: filter, band: [663 nm, 737 nm]}
+
+  stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
+
+  wiring:                                         # every wire on the bench, grouped by the device that sends it
+    ao_main:
+      camera_trigger: {pin: ao21, to: [camera/trigger_in],     kind: digital, off: 0 V, on: 5 V}
+      laser_488:      {pin: ao17, to: [laser_488/enable_in],   kind: digital, off: 0 V, on: 5 V}
+      laser_561:      {pin: ao13, to: [laser_561/enable_in],   kind: digital, off: 0 V, on: 5 V}
+      laser_640:      {pin: ao9,  to: [laser_640/enable_in],   kind: digital, off: 0 V, on: 5 V}
+      lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
+      lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
+      galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
+    z_axis:
+      z_pulse:        {pin: ttl_out, to: [ao_main/PFI0], kind: digital}   # 1 pulse every spacing while Z sweeps
+
+  optics:                                         # where the light goes: light sources → sample → detectors
+    # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
+    # Rule 2: what a part does to the light is in hal.parts, not here.
+    # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
+    # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
+
+    laser_488:          {to: combiner}            # the 3 lasers point at 1 node: the beams join there
+    laser_561:          {to: combiner}
+    laser_640:          {to: combiner}
+    combiner:           {to: excitation_side_selector}
+
+    excitation_side_selector:                     # a device that sends the light to 1 arm at a time (to check: the real bench may split to both)
+      to: {left: left_tunable_lens, right: right_tunable_lens}   # the node that gets the light at each position
+
+    left_tunable_lens:  {to: positive_galvo}      # the wire lens_left drives it
+    positive_galvo:     {to: left_focus}          # the wire galvo_positive drives it (its arm: to check)
+    left_focus:         {to: sample}              # a focus stage: a profile sets it in props
+
+    right_tunable_lens: {to: negative_galvo}      # the wire lens_right drives it
+    negative_galvo:     {to: right_focus}         # the wire galvo_negative drives it
+    right_focus:        {to: sample}
+
+    sample:             {to: objective}
+    objective:          {to: camera_focus}
+    camera_focus:       {to: fw_emission}         # a focus stage: a profile sets it in props
+
+    fw_emission:                                  # it holds the filters that its slot labels name
+      to: camera
+
+    camera:             {width: {y: 1}, height: {x: -1}}   # no to: a detector. Width along +y, height along -x
+
+  scan:                                           # how 1 capture runs. Only the choices: the rest follows from the wires
+    axis: z                                       # the stage axis that 1 capture moves. X and Y are tiled
+    motion: sweep                                 # sweep: take frames while moving
+    pacer: ao_main                                # what sets the rhythm: this device's own clock
+    # Worked out from the wires, and shown by the check:
+    #   ao_main   repeats on its own clock, 1 cycle for each frame
+    #   camera    takes 1 frame on each pulse of ao_main.camera_trigger
+    #   z_axis    sweeps at spacing ÷ duration. Nothing ties it to the frames, so the error grows over a long scan
+    # Not used by this scan: ao_main.z_step and z_axis.z_pulse
+
+default:
+  task:                                           # what a new task takes when it leaves these out
+    overlap: {x: 10 %, y: 10 %}                   # 1 key for each tiled axis
+    path:
+      scan:  {z: forward}                         # the axis in hal.scan
+      tiles: {kind: grid, axes: [{x: alternate}, {y: forward}]}
+    iteration: position_major
+
+  positions:                                      # the devices that the instrument sets, the same for every profile
+    excitation_side_selector: {axis: x, order: [left, right], at: [20000], margin: 100}
+    # it follows the stage along X: left below 20000 µm, right above. Within 100 µm of that point it keeps its side
+
+  profiles:                                       # a profile is a mini instrument: what is on at the same moment, and all it needs to run
+    gfp:
+      label: GFP
+      channels:                                   # 1 entry for each camera that is on: its light and the region it reads out
+        camera: {illumination: laser_488, fov: {x: 0, y: 0, w: 14192, h: 10640}}
+      positions: {fw_emission: BP525}             # the devices that this profile sets, 1 value each
+      props:
+        laser_488: {source_power_setpoint_mw: 100, output_level_percent: 10}
+      timelines:                                  # 1 for each signal generator that plays. Only the wires it plays
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms                        # 1 camera frame. No z_step signal: that wire stays at rest
+          signals:
+            camera_trigger: &camera {kind: on, start: {timeline: start, offset: 25 ms}, end: {timeline: start, offset: 136 ms}}
+            laser_488:      &laser {kind: on, start: {timeline: start, offset: 15 ms}}
+            lens_left:      &lens_left {kind: wave, shape: triangle, split: 1, center: 3.13 V, amplitude: 1.15 V}
+            lens_right:     &lens_right {kind: constant, value: 4.85 V}
+            galvo_positive: &galvo {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            galvo_negative: *galvo
+      spacing: 1.0                                # µm between frames along the scan axis
+
+    rfp:                                          # real profiles differ in focus, timing and signal size. Here they share values only because this is an example
+      label: RFP
+      channels:
+        camera: {illumination: laser_561, fov: {x: 0, y: 0, w: 14192, h: 10640}}
+      positions: {fw_emission: BP600}
+      props:
+        laser_561: {source_power_setpoint_mw: 100, output_level_percent: 10}
+      timelines:
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms
+          signals:
+            camera_trigger: *camera
+            laser_561:      *laser
+            lens_left:      *lens_left
+            lens_right:     *lens_right
+            galvo_positive: *galvo
+            galvo_negative: *galvo
+      spacing: 1.0
+
+    cy5:
+      label: Cy5
+      channels:
+        camera: {illumination: laser_640, fov: {x: 0, y: 0, w: 14192, h: 10640}}
+      positions: {fw_emission: BP700}
+      props:
+        laser_640: {source_power_setpoint_mw: 100, output_level_percent: 10}
+      timelines:
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms
+          signals:
+            camera_trigger: *camera
+            laser_640:      *laser
+            lens_left:      *lens_left
+            lens_right:     *lens_right
+            galvo_positive: *galvo
+            galvo_negative: *galvo
+      spacing: 1.0
+
+  output:
+    max_level: 3
+    compression: blosc.lz4

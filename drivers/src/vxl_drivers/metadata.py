@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from vxl.metadata import ExperimentMetadata
+from vxl.core.metadata import ExperimentMetadata
 
 AnatomicalDirectionX = Literal["Anterior_to_posterior", "Posterior_to_anterior"]
 AnatomicalDirectionY = Literal["Inferior_to_superior", "Superior_to_inferior"]

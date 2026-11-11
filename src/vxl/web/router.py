@@ -19,6 +19,11 @@ from vxlib.history import Change
 
 from rigup import PropResults, Result
 from vxl._utils.color import ColormapGroup, get_colormap_catalog
+from vxl.core.config import StationInfo
+from vxl.core.metadata import resolve_metadata_class
+from vxl.core.models import SessionInfo, StationFeedView
+from vxl.core.station import Station
+from vxl.core.templates import InstrumentTemplates
 from vxl.devices.daq.clocked import Signals
 from vxl.instrument import (
     AcquisitionRequest,
@@ -35,10 +40,7 @@ from vxl.instrument.config import (
     TaskPatch,
     WriterPatch,
 )
-from vxl.metadata import resolve_metadata_class
 from vxl.preview.protocol import VOXEL_PREVIEW_FRAMING_VERSION
-from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
-from vxl.system import StationInfo
 
 station_router = APIRouter(prefix="/stations", tags=["station"])
 instrument_router = APIRouter(
