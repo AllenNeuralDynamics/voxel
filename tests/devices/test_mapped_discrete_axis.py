@@ -31,7 +31,7 @@ def test_mapped_axis_delegates_motion_and_resolves_slot() -> None:
 
     assert mapped.state == DiscreteAxisState(position=0, target=None, is_moving=False)
 
-    mapped.select("right", wait=True)
+    mapped.move_to("right", wait=True)
 
     assert continuous.position == 100
     assert mapped.state == DiscreteAxisState(position=1, target=1, is_moving=False)
@@ -48,11 +48,11 @@ def test_mapped_axis_reports_unknown_position_and_preserves_commanded_target() -
         },
         tolerance=0.5,
     )
-    continuous.move_abs(50, wait=True)
+    continuous.move_to(50, wait=True)
     assert mapped.state == DiscreteAxisState(position=None, target=None, is_moving=False)
 
-    mapped.move(1, wait=True)
-    continuous.move_abs(0, wait=True)
+    mapped.move_to_slot(1, wait=True)
+    continuous.move_to(0, wait=True)
     assert mapped.state == DiscreteAxisState(position=0, target=1, is_moving=False)
 
     mapped.home(wait=True)
@@ -110,7 +110,7 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
 
     monkeypatch.setattr(mapped._owned_axis, "close", track_close)
 
-    mapped.select("right", wait=True)
+    mapped.move_to("right", wait=True)
     mapped.close()
     mapped.close()
 
@@ -142,14 +142,14 @@ def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(mo
 
     monkeypatch.setattr(continuous, "await_movement", timeout)
     with pytest.raises(TimeoutError):
-        mapped.move(1, wait=True, timeout=0)
+        mapped.move_to_slot(1, wait=True, timeout_s=0)
     continuous.halt()
     assert mapped.state.target == 1
 
     def reject(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("command rejected")
 
-    monkeypatch.setattr(continuous, "move_abs", reject)
+    monkeypatch.setattr(continuous, "move_to", reject)
     with pytest.raises(RuntimeError, match="command rejected"):
-        mapped.move(0)
+        mapped.move_to_slot(0)
     assert mapped.state.target == 1

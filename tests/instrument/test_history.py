@@ -6,7 +6,11 @@ from vxlib.history import HistoryState
 from vxl.instrument import CaptureActivity, IdleActivity, Instrument, InstrumentStore
 from vxl.instrument.config import InstrumentPreset, ProfilePatch
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
-from vxl.instrument.metadata import ExaspimMetadata
+from vxl.metadata import ExperimentMetadata
+
+
+class _LabMetadata(ExperimentMetadata):
+    subject_id: str = ""
 
 
 @pytest.mark.parametrize("boundary", ["close", "defaults", "preset", "metadata_schema"])
@@ -25,7 +29,7 @@ async def test_state_replacements_and_close_clear_both_stacks(instrument: Instru
         case "preset":
             await instrument.apply_preset(InstrumentPreset.from_state(instrument.state.value))
         case "metadata_schema":
-            await instrument.set_metadata_schema(ExaspimMetadata)
+            await instrument.set_metadata_schema(_LabMetadata)
 
     assert instrument.history.value == HistoryState()
     state = instrument.state.value

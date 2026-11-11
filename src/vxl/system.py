@@ -38,6 +38,7 @@ from vxl_records import (
 from vxlib.s3 import S3Store
 
 from vxl._utils.files import load_yaml, save_yaml
+from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
 
 log = logging.getLogger(__name__)
 
@@ -290,6 +291,23 @@ class StationConfig(System):
     schema_version: Literal[1] = 1
     id: UUID
     name: str = Field(min_length=1)
+    metadata_schemas: dict[str, str] = Field(
+        default_factory=dict, description="menu name -> dotted path of an ExperimentMetadata subclass"
+    )
+
+    @field_validator("metadata_schemas")
+    @classmethod
+    def _check_metadata_schemas(cls, value: dict[str, str]) -> dict[str, str]:
+        for name, target in value.items():
+            try:
+                resolve_metadata_class(target)
+            except (ImportError, AttributeError, TypeError, ValueError) as error:
+                raise ValueError(f"'{name}': {error}") from error
+        return value
+
+    def metadata_menu(self) -> dict[str, str]:
+        """The metadata forms that this station offers: the base form, then those of ``metadata_schemas``."""
+        return {"Base": BASE_METADATA_SCHEMA, **self.metadata_schemas}
 
     @classmethod
     def config_path(cls) -> Path:

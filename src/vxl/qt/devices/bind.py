@@ -90,7 +90,8 @@ class _SliderBinder(_PropertyBinder):
     The model supplies both the range (``minimum``/``maximum``) and the live value: ``_reflect`` drives
     the slider's *actual* layer and range from it on every update; committing — via the widget's own
     signal (release for a bare slider, value-change for a slider+spinbox) — pushes the new value through
-    ``adapter.set`` (which, for a settable-as-move property like an axis ``position``, issues the move).
+    ``adapter.set``, or, when ``command`` is given, calls that device command with the value. An axis ``position``
+    is read-only, so its slider gives ``command="move_to"``.
 
     ``sync_target`` governs the *target* layer on reflect: on (typical for a spinbox) → it follows the
     live value too, **except while the user has focus in the widget** (a focus guard, so a streamed
@@ -106,9 +107,11 @@ class _SliderBinder(_PropertyBinder):
         committed: SignalInstance,
         *,
         sync_target: bool,
+        command: str | None = None,
     ) -> None:
         self._slider = slider
         self._sync_target = sync_target
+        self._command = command
         super().__init__(slider, adapter, prop)
         committed.connect(self._push)
 
@@ -129,7 +132,10 @@ class _SliderBinder(_PropertyBinder):
 
     def _push(self, value: float) -> None:
         self._slider.setTarget(value)  # show the commanded value immediately
-        super()._push(value)
+        if self._command is None:
+            super()._push(value)
+        else:
+            spawn(self._adapter.call(self._command, value), log=log)
 
 
 def bind_select(select: Select, adapter: DeviceHandleQt, prop: str) -> None:
@@ -150,11 +156,19 @@ def bind_slider(slider: LockableSlider, adapter: DeviceHandleQt, prop: str) -> N
     _SliderBinder(slider, adapter, prop, slider.inputReleased, sync_target=False)
 
 
-def bind_slider_spinbox(slider: SliderSpinBox, adapter: DeviceHandleQt, prop: str, *, sync_target: bool = True) -> None:
-    """Two-way-bind ``slider`` to a deliminated numeric ``prop`` (range + value + edits).
+def bind_slider_spinbox(
+    slider: SliderSpinBox,
+    adapter: DeviceHandleQt,
+    prop: str,
+    *,
+    sync_target: bool = True,
+    command: str | None = None,
+) -> None:
+    """Two-way-bind ``slider`` to a deliminated numeric ``prop`` (range + value + edits). With ``command``, an edit
+    calls that device command with the value and does not set the property.
 
     ``sync_target`` (default): the spinbox/target follow the device value when not being edited — right
     for an instant-settling control. Pass ``sync_target=False`` for a *moving* device (e.g. a stage axis)
     so the continuous position stream tracks only the *actual* bar and never clobbers the spinbox value.
     """
-    _SliderBinder(slider, adapter, prop, slider.valueChanged, sync_target=sync_target)
+    _SliderBinder(slider, adapter, prop, slider.valueChanged, sync_target=sync_target, command=command)

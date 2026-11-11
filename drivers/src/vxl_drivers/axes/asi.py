@@ -120,7 +120,7 @@ class TigerLinearAxis(ContinuousAxis):
     # Unit specification _____________________________________________________________________________________________
 
     # ---- motion ----
-    def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+    def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.box.move_abs(
             {self._axis_label: float(position * self.POS_MULT)},
             wait=wait,

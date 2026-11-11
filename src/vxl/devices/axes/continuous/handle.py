@@ -61,8 +61,8 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
                 raise TimeoutError(msg)
             await asyncio.sleep(_POLL_INTERVAL)
 
-    async def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        await self.call("move_abs", position, wait=False)
+    async def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        await self.call("move_to", position, wait=False)
         if wait:
             await self._poll_until_idle(timeout_s)
 

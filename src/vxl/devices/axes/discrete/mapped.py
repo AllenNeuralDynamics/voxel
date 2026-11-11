@@ -66,29 +66,29 @@ class MappedDiscreteAxis(DiscreteAxis):
         ]
         return min(candidates)[1] if candidates else None
 
-    def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
+    def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         try:
             target = self._specs[slot].position
         except KeyError as exc:
             raise ValueError(f"Invalid slot {slot}; valid slots are {sorted(self._specs)}") from exc
-        self._axis.move_abs(target, wait=False)
+        self._axis.move_to(target, wait=False)
         self._target = slot
         if wait:
-            self.await_movement(timeout)
+            self.await_movement(timeout_s)
 
-    def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
+    def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         home_position = self._axis.home
         target = self._slot_at(home_position) if home_position is not None else None
         self._axis.go_home(wait=False)
         self._target = target
         if wait:
-            self.await_movement(timeout)
+            self.await_movement(timeout_s)
 
     def halt(self) -> None:
         self._axis.halt()
 
-    def await_movement(self, timeout: float | None = None) -> None:
-        self._axis.await_movement(timeout_s=timeout)
+    def await_movement(self, timeout_s: float | None = None) -> None:
+        self._axis.await_movement(timeout_s=timeout_s)
 
     @staticmethod
     def _validate_specs(specs: dict[int, MappedSlot], tolerance: float) -> None:

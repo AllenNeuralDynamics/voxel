@@ -1,18 +1,12 @@
 """Experiment metadata models for Voxel sessions."""
 
 import importlib
-from importlib.metadata import entry_points
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
-ENTRY_POINT_GROUP = "vxl.instrument.metadata"
-BASE_METADATA_SCHEMA = "vxl.instrument.metadata.ExperimentMetadata"
-
-AnatomicalDirectionX = Literal["Anterior_to_posterior", "Posterior_to_anterior"]
-AnatomicalDirectionY = Literal["Inferior_to_superior", "Superior_to_inferior"]
-AnatomicalDirectionZ = Literal["Left_to_right", "Right_to_left"]
+BASE_METADATA_SCHEMA = "vxl.metadata.ExperimentMetadata"
 
 
 def annotation(**kwargs: Any) -> Any:
@@ -70,41 +64,8 @@ class ExperimentMetadata(BaseModel):
         return schema
 
 
-class ExaspimMetadata(ExperimentMetadata):
-    """Metadata for exaSPIM light-sheet microscopy sessions."""
-
-    subject_id: str = Field(default="", description="Unique subject/specimen identifier")
-    experimenters: list[str] = Field(default_factory=list, description="Experimenter name(s)")
-
-    # Chamber settings
-    chamber_medium: str = Field(default="other", description="Immersion medium")
-    chamber_refractive_index: float = Field(default=1.33, description="Refractive index of medium")
-
-    # Anatomical directions
-    x_anatomical_direction: AnatomicalDirectionX = Field(
-        default="Anterior_to_posterior", description="X-axis anatomical direction"
-    )
-    y_anatomical_direction: AnatomicalDirectionY = Field(
-        default="Inferior_to_superior", description="Y-axis anatomical direction"
-    )
-    z_anatomical_direction: AnatomicalDirectionZ = Field(
-        default="Left_to_right", description="Z-axis anatomical direction"
-    )
-
-
-def discover_metadata_schema() -> dict[str, str]:
-    """Discover registered metadata schema via entry points.
-
-    Returns {name: import_path} for UI selection. Always includes
-    the base ExperimentMetadata as the first entry.
-    """
-    schema: dict[str, str] = {"Base": BASE_METADATA_SCHEMA}
-    schema.update({ep.name: ep.value for ep in entry_points(group=ENTRY_POINT_GROUP)})
-    return schema
-
-
 def resolve_metadata_class(target: str) -> type[ExperimentMetadata]:
-    """Import a metadata class from a dotted target path (e.g. ``vxl.instrument.metadata.ExaspimMetadata``)."""
+    """Import a metadata class from a dotted target path (e.g. ``vxl_drivers.metadata.ExaspimMetadata``)."""
     module_path, class_name = target.rsplit(".", 1)
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name)

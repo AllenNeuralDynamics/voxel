@@ -33,9 +33,10 @@ from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
+from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.models import AreaROI
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.preview.protocol import StagePosition
-from vxl.roi import AreaROI
 from vxl.system import Remote, System, remote_store_fingerprint
 
 from .config import (
@@ -63,7 +64,6 @@ from .errors import (
     Violation,
     ViolationLoc,
 )
-from .metadata import ExperimentMetadata, resolve_metadata_class
 from .planning import resolve_xy, resolve_z
 from .store import PROMOTABLE_FIELDS, InstrumentStore
 
@@ -450,7 +450,7 @@ class Instrument:
             self._ensure_not_busy("move the stage")
             stage = self._hal.stage
             moves = [
-                axis.move_abs(position, wait=wait)
+                axis.move_to(position, wait=wait)
                 for axis, position in ((stage.x, x), (stage.y, y), (stage.z, z))
                 if position is not None
             ]
@@ -1233,7 +1233,7 @@ class Instrument:
         desired: dict[str, str] = {}
         for ch_id in self.active_channels:
             desired.update(self._channel_config(ch_id).filters)
-        await asyncio.gather(*(self._hal.fws[fw_id].select(label, wait=True) for fw_id, label in desired.items()))
+        await asyncio.gather(*(self._hal.fws[fw_id].move_to(label, wait=True) for fw_id, label in desired.items()))
 
     async def _apply_signals(self) -> None:
         for uid, signals in self.active_profile.sync.items():
@@ -1589,9 +1589,9 @@ class Instrument:
             await _gather_hardware(*(ch.prepare_laser() for ch in channels.values()))
             await self._update_acquisition(manifest, phase=AcquisitionPhase.POSITIONING)
             await _gather_hardware(
-                self._hal.stage.x.move_abs(volume.x, wait=True),
-                self._hal.stage.y.move_abs(volume.y, wait=True),
-                self._hal.stage.z.move_abs(volume.z_start, wait=True),
+                self._hal.stage.x.move_to(volume.x, wait=True),
+                self._hal.stage.y.move_to(volume.y, wait=True),
+                self._hal.stage.z.move_to(volume.z_start, wait=True),
             )
             await self._update_acquisition(manifest, phase=AcquisitionPhase.CONFIGURING)
             async with self._lock:

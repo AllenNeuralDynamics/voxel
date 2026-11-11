@@ -10,7 +10,7 @@ from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.roi import AreaROI, IntRange, ROIGrid
+from vxl.models import AreaROI, IntRange, ROIGrid
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=6.5, x=6.5)
 

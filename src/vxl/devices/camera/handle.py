@@ -11,8 +11,8 @@ from vxlib.vector import Vec2D
 
 from rigup import DeviceHandle
 from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
+from vxl.models import AreaROI
 from vxl.preview import PreviewViewport
-from vxl.roi import AreaROI
 
 _DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])

@@ -100,14 +100,14 @@ class PulseDiscreteAxis(DiscreteAxis):
 
         self._target: int | None = None
         self._is_moving = False
-        self.move(0)
+        self.move_to_slot(0)
 
     @property
     def state(self) -> DiscreteAxisState:
         return DiscreteAxisState(position=None, target=self._target, is_moving=self._is_moving)
 
-    def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
-        del wait, timeout  # the pulse is synchronous and fixed-duration; nothing to wait on
+    def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        del wait, timeout_s  # the pulse is synchronous and fixed-duration; nothing to wait on
         if not (0 <= slot < self.slot_count):
             raise ValueError(f"Invalid slot {slot}; valid range is 0..{self.slot_count - 1}")
 
@@ -122,8 +122,8 @@ class PulseDiscreteAxis(DiscreteAxis):
         finally:
             self._is_moving = False
 
-    def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
-        self.move(0, wait=wait, timeout=timeout)
+    def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        self.move_to_slot(0, wait=wait, timeout_s=timeout_s)
 
     def halt(self) -> None:
         try:
@@ -150,9 +150,9 @@ class PulseDiscreteAxis(DiscreteAxis):
         finally:
             self._is_moving = False
 
-    def await_movement(self, timeout: float | None = None) -> None:
+    def await_movement(self, timeout_s: float | None = None) -> None:
         start = time.monotonic()
         while self._is_moving:
-            if timeout is not None and (time.monotonic() - start) >= timeout:
+            if timeout_s is not None and (time.monotonic() - start) >= timeout_s:
                 raise TimeoutError("Movement did not complete within timeout")
             time.sleep(0.01)

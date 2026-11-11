@@ -3,7 +3,7 @@ import pickle
 
 import pytest
 from pydantic import BaseModel, ValidationError
-from vxlib.units import Angle, Percent, Quantity, Time, Voltage
+from vxlib.units import Angle, Percent, Quantity, Time, Voltage, Wavelength
 
 
 class _Timing(BaseModel):
@@ -22,6 +22,7 @@ def test_equal_values_in_different_units_compare_equal() -> None:
     assert Time("25 ms") == Time("0.025 s")
     assert Angle("180 deg") == pytest.approx(3.141592653589793)
     assert Percent("5 %") == pytest.approx(0.05)
+    assert Wavelength("0.5 um") == pytest.approx(Wavelength("500 nm"))
 
 
 @pytest.mark.parametrize(

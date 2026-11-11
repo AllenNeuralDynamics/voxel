@@ -1,3 +1,5 @@
+from vxl.metadata import ExperimentMetadata, annotation
+
 from .config import (
     AcquisitionTask,
     Bounds,
@@ -24,7 +26,6 @@ from .core import (
     PreviewActivity,
 )
 from .errors import InstrumentBusyError, InstrumentError, OperationRejectedError, StartupError, Violation
-from .metadata import ExaspimMetadata, ExperimentMetadata, annotation
 from .store import InstrumentInspection, InstrumentStore
 
 __all__ = [
@@ -35,7 +36,6 @@ __all__ = [
     "Activity",
     "Bounds",
     "CaptureActivity",
-    "ExaspimMetadata",
     "ExperimentMetadata",
     "IdleActivity",
     "Instrument",

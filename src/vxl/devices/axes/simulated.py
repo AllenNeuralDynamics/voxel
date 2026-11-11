@@ -79,7 +79,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
 
     # Motion commands ________________________________________________________________________________________________
 
-    def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+    def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move to an absolute position."""
         if position < self._lower_limit or position > self._upper_limit:
             self.log.warning(
@@ -136,11 +136,11 @@ class SimulatedContinuousAxis(ContinuousAxis):
     def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move a relative distance."""
         target_pos = self._position + delta
-        self.move_abs(target_pos, wait=wait, timeout_s=timeout_s)
+        self.move_to(target_pos, wait=wait, timeout_s=timeout_s)
 
     def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move to the home position."""
-        self.move_abs(self._home, wait=wait, timeout_s=timeout_s)
+        self.move_to(self._home, wait=wait, timeout_s=timeout_s)
 
     def halt(self) -> None:
         """Emergency stop - halt all motion immediately."""
@@ -300,7 +300,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         return self._state
 
     # --------- commands ----------
-    def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
+    def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         if not (0 <= slot < self.slot_count):
             msg = f"Invalid slot {slot}; valid range is 0..{self.slot_count - 1}"
             raise ValueError(msg)
@@ -312,11 +312,11 @@ class SimulatedDiscreteAxis(DiscreteAxis):
             self._state = DiscreteAxisState(position=None, target=slot, is_moving=True)
             self._settle_deadline = time.monotonic() + self._settle
         if wait:
-            self.await_movement(timeout)
+            self.await_movement(timeout_s)
 
-    def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
+    def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.log.debug("SimulatedDiscreteAxis %s: home() called - moving to slot 0", self.uid)
-        self.move(0, wait=wait, timeout=timeout)
+        self.move_to_slot(0, wait=wait, timeout_s=timeout_s)
 
     def halt(self) -> None:
         """Halt motion, retaining the target and any resolved position."""
@@ -324,9 +324,9 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         self._settle_deadline = None
         self._state = DiscreteAxisState(position=state.position, target=state.target, is_moving=False)
 
-    def await_movement(self, timeout: float | None = None) -> None:
+    def await_movement(self, timeout_s: float | None = None) -> None:
         """Wait for idle using a monotonic timeout in seconds."""
-        deadline = time.monotonic() + timeout if timeout is not None else None
+        deadline = time.monotonic() + timeout_s if timeout_s is not None else None
         while self.state.is_moving:
             now = time.monotonic()
             if deadline is not None and now >= deadline:

@@ -136,7 +136,7 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"]):
         self._scan_mode = ScanMode.IDLE
 
 
-class ContinuousAxis(Axis):
+class ContinuousAxis(Axis[float]):
     """Base class for continuous motion axes (linear or rotational).
 
     All position values are expressed in the configured ``units`` (default "um").
@@ -145,7 +145,7 @@ class ContinuousAxis(Axis):
     Implementations must provide:
         - position: Current position in `units`
         - is_moving: Whether the axis is currently in motion
-        - Motion commands: move_abs, move_rel, go_home, halt, await_movement
+        - Motion commands: move_to, move_rel, go_home, halt, await_movement
         - Calibration: set_zero_here, set_logical_position
         - Limits: upper_limit, lower_limit
         - Kinematics: speed, acceleration (optional: backlash, home)
@@ -171,9 +171,9 @@ class ContinuousAxis(Axis):
 
     # Motion commands ________________________________________________________________________________________________
 
-    @describe(label="Move Absolute", desc="Move to an absolute position.")
+    @describe(label="Move To", desc="Move to an absolute position.")
     @abstractmethod
-    def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+    def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move to an absolute position.
 
         Args:
@@ -225,11 +225,6 @@ class ContinuousAxis(Axis):
     def position(self) -> float:
         """The current position in axis units."""
         return self._get_position()
-
-    @position.setter
-    def position(self, value: float) -> None:
-        """Set the current position in axis units."""
-        self.move_abs(value)
 
     @abstractmethod
     def _get_position(self) -> float:

@@ -3,7 +3,7 @@
 import re
 from collections.abc import Hashable, Iterable, Mapping
 from functools import partial
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
 from pydantic_core import ErrorDetails
@@ -71,6 +71,16 @@ def repeated[T: Hashable](values: Iterable[T]) -> list[T]:
     return list(found)
 
 
+def _check_unique[T: Hashable](values: list[T]) -> list[T]:
+    if duplicates := repeated(values):
+        raise ValueError(f"each item must appear once (repeated: {[str(value) for value in duplicates]})")
+    return values
+
+
+type UniqueList[T] = Annotated[list[T], AfterValidator(_check_unique)]
+"""A list where each item appears 1 time."""
+
+
 def duplicate_keys[K: Hashable](scopes: Mapping[str, Iterable[K]]) -> dict[K, list[str]]:
     """Return each key that appears more than once across ``scopes``, with the scopes that hold it.
 
@@ -86,6 +96,7 @@ def duplicate_keys[K: Hashable](scopes: Mapping[str, Iterable[K]]) -> dict[K, li
 __all__ = [
     "FrozenModel",
     "SparseModel",
+    "UniqueList",
     "check_identifier",
     "duplicate_keys",
     "error_message",

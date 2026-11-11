@@ -2,7 +2,7 @@ import pytest
 
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.errors import SettingsPersistenceError, StartupError
-from vxl.roi import AreaROI
+from vxl.models import AreaROI
 
 
 @pytest.fixture

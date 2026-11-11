@@ -14,8 +14,8 @@ from pydantic import Field, TypeAdapter, model_validator
 from vxlib.schema import FrozenModel, SparseModel
 from vxlib.vector import IVec2D, Vec2D
 
+from vxl.models import AreaROI
 from vxl.preview import ValidBits
-from vxl.roi import AreaROI
 from vxl.system import System
 
 DEFAULT_REFERENCE_PATH = Path(__file__).with_name("default_reference.png")

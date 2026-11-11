@@ -52,7 +52,7 @@ class RouteDimension:
         selections = [(uid, self.selectors[uid], position) for uid, position in definition.selectors.items()]
 
         async def select_and_verify(handle: DiscreteAxisHandle, position: str) -> None:
-            await handle.select(position, wait=True)
+            await handle.move_to(position, wait=True)
             actual = await self._read_position(handle)
             if actual != position:
                 raise HALError(f"Selector did not settle at {position!r}; settled label is {actual!r}")

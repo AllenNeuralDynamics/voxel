@@ -52,7 +52,7 @@ async def test_current_route_reads_all_selectors_and_requires_a_unique_stationar
 
 async def test_selection_requires_feedback_even_when_target_matches() -> None:
     selector = _selector(None, False, target=0)
-    selector.select = AsyncMock()
+    selector.move_to = AsyncMock()
     dimension = RouteDimension(
         uid="side",
         selectors={"a": cast("DiscreteAxisHandle", selector)},
@@ -88,8 +88,10 @@ async def test_selection_waits_for_all_failures_and_identifies_the_selectors() -
     dimension = RouteDimension(
         uid="side",
         selectors={
-            "a": cast("DiscreteAxisHandle", SimpleNamespace(select=AsyncMock(side_effect=ValueError("first failure")))),
-            "b": cast("DiscreteAxisHandle", SimpleNamespace(select=AsyncMock(side_effect=delayed_failure))),
+            "a": cast(
+                "DiscreteAxisHandle", SimpleNamespace(move_to=AsyncMock(side_effect=ValueError("first failure")))
+            ),
+            "b": cast("DiscreteAxisHandle", SimpleNamespace(move_to=AsyncMock(side_effect=delayed_failure))),
         },
         _definitions={"left": OpticalRouteDefinition(selectors={"a": "left", "b": "left"})},
     )
@@ -111,7 +113,7 @@ async def test_selection_preserves_cancellation() -> None:
     dimension = RouteDimension(
         uid="side",
         selectors={
-            "a": cast("DiscreteAxisHandle", SimpleNamespace(select=AsyncMock(side_effect=asyncio.CancelledError))),
+            "a": cast("DiscreteAxisHandle", SimpleNamespace(move_to=AsyncMock(side_effect=asyncio.CancelledError))),
         },
         _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )
@@ -123,7 +125,7 @@ async def test_unknown_route_is_rejected_without_moving_selectors() -> None:
     select = AsyncMock()
     dimension = RouteDimension(
         uid="side",
-        selectors={"a": cast("DiscreteAxisHandle", SimpleNamespace(select=select))},
+        selectors={"a": cast("DiscreteAxisHandle", SimpleNamespace(move_to=select))},
         _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )
     with pytest.raises(HALError, match=r"No optical route 'side\.missing'"):

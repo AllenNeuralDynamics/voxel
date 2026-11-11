@@ -54,29 +54,29 @@ class LinkedDiscreteAxis(DiscreteAxis):
         is_moving = any(state.is_moving for state in states.values())
         return DiscreteAxisState(position=position, target=self._target, is_moving=is_moving)
 
-    def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
+    def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         targets = self._slot_targets.get(slot)
         if targets is None:
             raise ValueError(f"Invalid slot {slot}; valid slots are {sorted(self._slot_targets)}")
         for member in self._members:
-            member.move(targets[member.uid], wait=False)
+            member.move_to_slot(targets[member.uid], wait=False)
         self._target = slot
         if wait:
-            self.await_movement(timeout)
+            self.await_movement(timeout_s)
 
-    def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
+    def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         for member in self._members:
             member.home(wait=False)
         self._target = None
         if wait:
-            self.await_movement(timeout)
+            self.await_movement(timeout_s)
 
     def halt(self) -> None:
         for member in self._members:
             member.halt()
 
-    def await_movement(self, timeout: float | None = None) -> None:
-        deadline = time.monotonic() + timeout if timeout is not None else None
+    def await_movement(self, timeout_s: float | None = None) -> None:
+        deadline = time.monotonic() + timeout_s if timeout_s is not None else None
         for member in self._members:
             left = None if deadline is None else max(0.0, deadline - time.monotonic())
             member.await_movement(left)

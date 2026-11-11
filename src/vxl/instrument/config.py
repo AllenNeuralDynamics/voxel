@@ -12,10 +12,10 @@ from vxl._utils.color import Color
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import DiscreteAxisPositions, HardwareTopology
 from vxl.hal.topology import SelectRoutingDefinition, SplitRoutingDefinition
-from vxl.roi import AreaROI
+from vxl.metadata import ExperimentMetadata, MetadataCls
+from vxl.models import AreaROI
 
 from .errors import Violation, ViolationLoc, assignment_violations
-from .metadata import ExperimentMetadata, MetadataCls
 
 
 class Patch(FrozenModel):

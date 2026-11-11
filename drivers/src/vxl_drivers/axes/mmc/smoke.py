@@ -116,7 +116,7 @@ def main() -> None:  # noqa: C901, PLR0915 - keep hardware exercise and recovery
             )
 
         log.warning("Moving axis %s from %.9g to %.9g %s", args.axis, start, target, args.units)
-        axis.move_abs(target)
+        axis.move_to(target)
         motion_attempted = True
         axis.await_movement(timeout_s=args.timeout)
         motion_completed = True
@@ -146,7 +146,7 @@ def main() -> None:  # noqa: C901, PLR0915 - keep hardware exercise and recovery
                             start,
                             args.units,
                         )
-                        axis.move_abs(start)
+                        axis.move_to(start)
                         axis.await_movement(timeout_s=args.timeout)
             except MMCCommunicationError:
                 communication_failed = True

@@ -2,6 +2,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 
 from pydantic import BaseModel
+from vxlib.schema import check_identifier
 
 from rigup import describe
 from vxl.devices.axes.base import Axis
@@ -21,7 +22,7 @@ class DiscreteAxisState(BaseModel, frozen=True):
     is_moving: bool
 
 
-class DiscreteAxis(Axis):
+class DiscreteAxis(Axis[str]):
     """Named discrete slots with synchronous motion commands and streamed state."""
 
     __DEVICE_TYPE__ = DeviceType.DISCRETE_AXIS
@@ -34,12 +35,16 @@ class DiscreteAxis(Axis):
     ) -> None:
         """Define zero-based slots, inferring slot count from the largest index when omitted.
 
-        String keys are normalized to integers; missing labels remain ``None``.
+        String keys are normalized to integers; missing labels remain ``None``. A label has the form of a name:
+        letters, digits, ``_`` and ``-``.
         """
         super().__init__(uid=uid)
 
         # Normalize slots: convert string keys to int (YAML might parse numeric keys as strings)
         normalized_slots: dict[int, str | None] = {int(k): v for k, v in slots.items()}
+        for label in normalized_slots.values():
+            if label is not None:
+                check_identifier(label, "Slot label")
 
         # Determine slot count
         max_idx = max(normalized_slots.keys()) if normalized_slots else -1
@@ -73,36 +78,31 @@ class DiscreteAxis(Axis):
     # Motion commands ________________________________________________________________________________________________
 
     @abstractmethod
-    @describe(label="Move", desc="Move to a slot by index.", stream=True)
-    def move(self, slot: int, *, wait: bool = False, timeout: float | None = None) -> None:
+    @describe(label="Move To Slot", desc="Move to a slot by index.", stream=True)
+    def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Command a slot, optionally waiting for completion.
 
-        ``timeout`` bounds the wait in seconds. Invalid slots raise ``ValueError``;
+        ``timeout_s`` bounds the wait in seconds. Invalid slots raise ``ValueError``;
         an expired wait raises ``TimeoutError``.
         """
 
-    @describe(label="Select", desc="Move to a slot by label.", stream=True)
-    def select(self, label: str | None, *, wait: bool = False, timeout: float | None = None) -> None:
-        """Command the first slot matching ``label``; ``None`` selects the first unlabeled slot.
+    @describe(label="Move To", desc="Move to a slot by its label.", stream=True)
+    def move_to(self, position: str, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        """Command the first slot whose label is ``position``.
 
-        Missing labels raise ``KeyError``. Wait and timeout semantics match ``move``.
+        A missing label raises ``KeyError``. Wait and timeout semantics match ``move_to_slot``. A slot with no
+        label is reached with ``move_to_slot``.
         """
-        if label is None:
-            # Choose first unlabeled slot
-            for i in range(self._slot_count):
-                if self._labels.get(i) is None:
-                    return self.move(i, wait=wait, timeout=timeout)
-            raise KeyError("No unlabeled slot available")
-        # Choose first matching label
-        for i in range(self._slot_count):
-            if self._labels.get(i) == label:
-                return self.move(i, wait=wait, timeout=timeout)
-        raise KeyError(f"Label not found: {label!r}")
+        try:
+            slot = self.index_of(position)
+        except KeyError:
+            raise KeyError(f"Label not found: {position!r}") from None
+        self.move_to_slot(slot, wait=wait, timeout_s=timeout_s)
 
     @abstractmethod
     @describe(label="Home", desc="Home/calibrate the device.", stream=True)
-    def home(self, *, wait: bool = False, timeout: float | None = None) -> None:
-        """Home the axis using the wait and timeout semantics of ``move``."""
+    def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        """Home the axis using the wait and timeout semantics of ``move_to_slot``."""
 
     @abstractmethod
     @describe(label="Halt", desc="Emergency stop - halt all motion immediately.", stream=True)
@@ -111,8 +111,8 @@ class DiscreteAxis(Axis):
 
     @abstractmethod
     @describe(label="Await Movement", desc="Wait until the device stops moving.", stream=True)
-    def await_movement(self, timeout: float | None = None) -> None:
-        """Wait for idle; ``timeout`` is in seconds, with ``None`` unbounded.
+    def await_movement(self, timeout_s: float | None = None) -> None:
+        """Wait for idle; ``timeout_s`` is in seconds, with ``None`` unbounded.
 
         An expired wait raises ``TimeoutError``.
         """

@@ -394,8 +394,8 @@ class StageControls(QWidget):
 
     The ``position`` model is deliminated, so a single property carries both the live value and the
     range (``minimum``/``maximum`` = the axis limits); :func:`bind_slider_spinbox` drives the range and
-    value from it and, on edit (type or drag), sets ``position`` — the axis's settable-as-move setter —
-    issuing an animated move. The spinbox follows the live position as the stage moves (from anywhere),
+    value from it and, on edit (type or drag), calls the axis's ``move_to`` command, issuing an animated
+    move. The spinbox follows the live position as the stage moves (from anywhere),
     pausing only while you're editing it. Binding waits for ``DevicesStore.ready`` so the controls pick
     up real limits the moment the adapters are live.
     """
@@ -425,7 +425,7 @@ class StageControls(QWidget):
         self._bound = True
         for name, uid in self._axis_uids.items():
             if (adapter := self._devices.get_adapter(uid)) is not None:
-                bind_slider_spinbox(self._sliders[name], adapter, "position")
+                bind_slider_spinbox(self._sliders[name], adapter, "position", command="move_to")
 
     def teardown(self) -> None:
         self._devices.ready.disconnect(self._bind)

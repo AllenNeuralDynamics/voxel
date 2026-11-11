@@ -63,3 +63,22 @@ def test_station_config_initialize_promotes_system_config_and_preserves_file_ide
 
     with pytest.raises(FileExistsError, match="already configured"):
         StationConfig.initialize("scope-b")
+
+
+def test_station_file_gives_the_metadata_forms(voxel_home: Path) -> None:
+    voxel_home.mkdir()
+    station = voxel_home / "station.yaml"
+    head = "schema_version: 1\nid: 12345678-1234-5678-1234-567812345678\nname: scope\n"
+
+    station.write_text(head, encoding="utf-8")
+    assert StationConfig.load().metadata_menu() == {"Base": "vxl.metadata.ExperimentMetadata"}
+
+    station.write_text(head + "metadata_schemas:\n  exaspim: vxl_drivers.metadata.ExaspimMetadata\n", encoding="utf-8")
+    assert StationConfig.load().metadata_menu() == {
+        "Base": "vxl.metadata.ExperimentMetadata",
+        "exaspim": "vxl_drivers.metadata.ExaspimMetadata",
+    }
+
+    station.write_text(head + "metadata_schemas:\n  lab: vxl.system.StationConfig\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"'lab': vxl\.system\.StationConfig is not an ExperimentMetadata subclass"):
+        StationConfig.load()

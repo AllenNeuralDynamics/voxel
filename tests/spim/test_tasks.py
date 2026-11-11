@@ -3,10 +3,9 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.config.instrument import InstrumentPreset
-from vxl.config.tasks import Surface, Task
+from vxl.spim.config import InstrumentPreset, Surface, Task
 
-from .support import ONE_WAY_SWEEP, load, sweep_x
+from .support import load, sweep_x
 
 _REGION = {
     "xy": {"kind": "convex_hull", "points": [{"x": 0, "y": 0}, {"x": 8000, "y": 500}, {"x": 7000, "y": 6000}]},
@@ -17,13 +16,12 @@ _REGION = {
 def _preset(config_data: dict[str, Any], *tasks: dict[str, Any]) -> InstrumentPreset:
     config = load(config_data)
     plan = [Task.complete(task, config.default.task) for task in tasks]
-    context = config.engine.validation_context()
-    return InstrumentPreset.model_validate({**config.default.model_dump(mode="json"), "plan": plan}, context=context)
+    return InstrumentPreset.model_validate({**config.default.model_dump(mode="json"), "plan": plan})
 
 
 def _codes(config_data: dict[str, Any], *tasks: dict[str, Any]) -> list[str]:
     preset, config = _preset(config_data, *tasks), load(config_data)
-    return [v.code or "" for v in preset.semantic_violations(config.hal, config.engine, loc=("state",))]
+    return [v.code or "" for v in preset.violations(config.hal)]
 
 
 def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any]) -> None:
@@ -37,7 +35,9 @@ def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any])
 
 
 def test_example_plan_has_no_violations(config_data: dict[str, Any]) -> None:
-    assert _codes(config_data, {"id": "brain", "region": _REGION, "profiles": ["gfp"]}) == []
+    task = {"id": "brain", "region": _REGION, "profiles": ["gfp"]}
+    assert _codes(config_data, task) == []
+    assert _codes(sweep_x(config_data), task) == []
 
 
 def test_z_bounds_can_be_surfaces() -> None:
@@ -135,10 +135,3 @@ def test_task_ids_are_unique(config_data: dict[str, Any]) -> None:
     task = {"id": "same", "region": _REGION, "profiles": ["gfp"]}
     with pytest.raises(ValidationError, match="task ids must be unique"):
         _preset(config_data, task, task)
-
-
-def test_a_task_alternates_only_where_the_engine_allows(config_data: dict[str, Any]) -> None:
-    sweep_x(config_data)
-    assert _codes(config_data, {"id": "t", "region": _REGION, "profiles": ["gfp"]}) == []
-    config_data["engine"]["target"] = ONE_WAY_SWEEP
-    assert "task.path.scan_one_way" in _codes(config_data, {"id": "t", "region": _REGION, "profiles": ["gfp"]})

@@ -35,7 +35,7 @@ from vxl.instrument.config import (
     TaskPatch,
     WriterPatch,
 )
-from vxl.instrument.metadata import discover_metadata_schema, resolve_metadata_class
+from vxl.metadata import resolve_metadata_class
 from vxl.preview.protocol import VOXEL_PREVIEW_FRAMING_VERSION
 from vxl.station import InstrumentTemplates, SessionInfo, Station, StationFeedView
 from vxl.system import StationInfo
@@ -194,7 +194,7 @@ async def get_discovery(
         instruments=station.discover_instruments(),
         templates=templates.discover(),
         colormaps=get_colormap_catalog(),
-        metadata_schemas=discover_metadata_schema(),
+        metadata_schemas=station.config.metadata_menu(),
         realtime=RealtimeDiscovery(
             state_websocket_url=AnyWebsocketUrl(
                 str(request.url_for("station_state_websocket", station_id=str(station_id)))

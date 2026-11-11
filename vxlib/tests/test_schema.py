@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 import pytest
 from pydantic import Field, ValidationError
-from vxlib.schema import FrozenModel, check_identifier, duplicate_keys, error_message, repeated
+from vxlib.schema import FrozenModel, UniqueList, check_identifier, duplicate_keys, error_message, repeated
 
 
 def test_duplicate_keys_reports_each_shared_key_with_its_scopes_in_order():
@@ -26,6 +26,16 @@ def test_check_identifier_allows_only_letters_digits_underscore_and_hyphen():
 def test_repeated_lists_each_repeat_once_in_first_repeat_order() -> None:
     assert repeated(["a", "b", "a", "c", "b", "a"]) == ["a", "b"]
     assert repeated([1, 2, 3]) == []
+
+
+class _Wire(FrozenModel):
+    to: UniqueList[str]
+
+
+def test_unique_list_refuses_a_repeated_item() -> None:
+    assert _Wire(to=["a", "b"]).to == ["a", "b"]
+    with pytest.raises(ValidationError, match=r"each item must appear once \(repeated: \['a'\]\)"):
+        _Wire(to=["a", "b", "a"])
 
 
 class _Clock(FrozenModel):

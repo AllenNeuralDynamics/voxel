@@ -58,9 +58,6 @@ voxel = "vxl.cli:main"
 Repository = "https://github.com/AllenNeuralDynamics/voxel"
 Issues = "https://github.com/AllenNeuralDynamics/voxel/issues"
 
-[project.entry-points."vxl.instrument.metadata"]
-exaspim = "vxl.instrument.metadata.ExaspimMetadata"
-
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13"]
 build-backend = "uv_build"

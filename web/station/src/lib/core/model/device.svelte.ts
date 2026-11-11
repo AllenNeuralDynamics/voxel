@@ -178,7 +178,7 @@ export class AxisHandle extends DeviceHandle {
   move(position: number): Promise<unknown> {
     const lower = this.lowerLimit?.value ?? 0;
     const upper = this.upperLimit?.value ?? 100;
-    return this.runCommand('move_abs', [Math.max(lower, Math.min(upper, position))], { wait: false });
+    return this.runCommand('move_to', [Math.max(lower, Math.min(upper, position))], { wait: false });
   }
 
   halt(): Promise<unknown> {
@@ -201,11 +201,11 @@ export class DiscreteAxisHandle extends DeviceHandle {
   }
 
   move(slot: number): Promise<unknown> {
-    return this.runCommand('move', [slot], { wait: false });
+    return this.runCommand('move_to_slot', [slot], { wait: false });
   }
 
   select(label: string | null): Promise<unknown> {
-    return this.runCommand('select', [label], { wait: false });
+    return this.runCommand('move_to', [label], { wait: false });
   }
 
   halt(): Promise<unknown> {

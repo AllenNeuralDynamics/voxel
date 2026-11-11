@@ -95,7 +95,7 @@ class MMCLinearAxis(ContinuousAxis):
 
     # Generic continuous-axis motion -------------------------------------------------------------------------------
 
-    def move_abs(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
+    def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.command(self.axis_id, Cmd.MOVE_ABSOLUTE, self._to_mm(position))
         if wait:
             self.await_movement(timeout_s)

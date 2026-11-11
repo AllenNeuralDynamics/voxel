@@ -17,9 +17,9 @@ class XYZStage[A: ContinuousAxis]:
         self.z = z
 
     def move_abs(self, x: float, y: float, z: float, *, wait: bool = False) -> None:
-        self.x.move_abs(x, wait=False)
-        self.y.move_abs(y, wait=False)
-        self.z.move_abs(z, wait=wait)
+        self.x.move_to(x, wait=False)
+        self.y.move_to(y, wait=False)
+        self.z.move_to(z, wait=wait)
 
     @property
     def position(self) -> tuple[float, float, float]:

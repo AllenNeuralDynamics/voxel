@@ -17,13 +17,13 @@ class DiscreteAxisHandle(DeviceHandle[DiscreteAxis]):
         super().__init__(adapter)
         self.state: DeviceProperty[DiscreteAxisState] = self.props.property("state", DiscreteAxisState.model_validate)
 
-    async def select(self, label: str | None, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        """Select a label, optionally waiting for idle without occupying the device worker.
+    async def move_to(self, position: str, *, wait: bool = False, timeout_s: float | None = None) -> None:
+        """Move to the slot whose label is ``position``, optionally waiting for idle without occupying the device
+        worker.
 
-        ``None`` selects the first unlabeled slot. ``timeout_s`` bounds only the
-        movement wait and raises ``TimeoutError`` without halting the axis.
+        ``timeout_s`` bounds only the movement wait and raises ``TimeoutError`` without halting the axis.
         """
-        await self.call("select", label, wait=False)
+        await self.call("move_to", position, wait=False)
         if wait:
             async with asyncio.timeout(timeout_s):
                 # Read directly: property streaming need not be enabled for this handle.

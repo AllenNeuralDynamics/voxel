@@ -96,6 +96,12 @@ class Angle(Quantity):
     UNITS: ClassVar[dict[str, float] | None] = {"rad": 1.0, "deg": math.pi / 180, "°": math.pi / 180}
 
 
+class Wavelength(Quantity):
+    """Base unit: nanometers."""
+
+    UNITS: ClassVar[dict[str, float] | None] = {"nm": 1.0, "um": 1e3}
+
+
 class Percent(Quantity):
     """A part of a whole. Base unit: the fraction, so ``5 %`` is 0.05."""
 
@@ -112,4 +118,4 @@ Portion = Annotated[Percent, AfterValidator(_below_whole)]
 """A part of a whole from 0 % up to, but not including, 100 %, such as an overlap or a margin."""
 
 
-__all__ = ["Angle", "Frequency", "Percent", "Portion", "Quantity", "Time", "Voltage"]
+__all__ = ["Angle", "Frequency", "Percent", "Portion", "Quantity", "Time", "Voltage", "Wavelength"]

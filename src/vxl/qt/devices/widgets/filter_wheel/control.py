@@ -200,7 +200,7 @@ class FilterWheelControl(QWidget):
     async def _move_to_slot(self, slot: int) -> None:
         """Send move command to the device."""
         try:
-            await self._adapter.call("move", slot)
+            await self._adapter.call("move_to_slot", slot)
         except Exception:
             log.exception("Failed to move to slot %s", slot)
 
