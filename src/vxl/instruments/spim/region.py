@@ -12,7 +12,7 @@ import numpy as np
 from scipy.spatial import ConvexHull, Delaunay
 from vxlib.vector import Span, Vec2D
 
-from vxl.hal_next.config import SpecimenAxis
+from vxl.core.instrument.config import SpecimenAxis
 
 from .config import Bound, Region, Surface, ZBounds
 

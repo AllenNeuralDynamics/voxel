@@ -4,19 +4,25 @@ import inspect
 import logging
 import traceback
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from typing import Any, Literal
+from types import UnionType
+from typing import Any, Literal, Union, cast, get_args, get_origin, get_type_hints, is_protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .component import Part
+
 logger = logging.getLogger(__name__)
 
+type _BaseClass[T] = type[T] | tuple[type[T], ...]
 
-def import_class[T](target: str, base: type[T]) -> type[T]:
+
+def import_class[T](target: str, base: _BaseClass[T]) -> type[T]:
     """Import the class that a dotted path such as ``vxl.engines.spim.ClockedStep`` names.
 
-    The class must extend ``base`` and must not be abstract, because every target names a class to build.
+    The class must extend ``base``, or 1 of the classes in it, and must not be abstract, because every target names a
+    class to build.
     """
     module_name, _, name = target.rpartition(".")
     if not module_name:
@@ -29,7 +35,8 @@ def import_class[T](target: str, base: type[T]) -> type[T]:
     if found is None:
         raise ValueError(f"'{module_name}' has no '{name}'")
     if not (isinstance(found, type) and issubclass(found, base)):
-        raise ValueError(f"'{target}' is not a subclass of {base.__qualname__}")
+        bases = " or ".join(cls.__qualname__ for cls in (base if isinstance(base, tuple) else (base,)))
+        raise ValueError(f"'{target}' is not a subclass of {bases}")
     if inspect.isabstract(found):
         raise ValueError(f"'{target}' is abstract: name 1 of its subclasses")
     return found
@@ -65,12 +72,120 @@ type BuildGroupSpec = Mapping[str, BuildConfig]
 type BuildObjectsResult[T] = tuple[Mapping[str, T], Mapping[str, BuildError]]
 
 
-def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildObjectsResult[T]:  # noqa: C901 - factory with dependency resolution
+def _resolve(value: Any, built: Mapping[str, object]) -> Any:
+    """``value`` with each name of a built object replaced by that object, at any depth."""
+    if isinstance(value, str) and value in built:
+        return built[value]
+    if isinstance(value, list):
+        return [_resolve(item, built) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve(item, built) for key, item in value.items()}
+    return value
+
+
+def _allowed(hint: Any) -> tuple[type, ...] | None:
+    """The classes that ``hint`` allows, or ``None`` when ``hint`` is not a class or a union of classes."""
+    if isinstance(hint, type):
+        return None if is_protocol(hint) else (hint,)
+    if get_origin(hint) in (Union, UnionType):
+        members = [_allowed(member) for member in get_args(hint)]
+        if all(member is not None for member in members):
+            return tuple(cls for member in members if member is not None for cls in member)
+    return None
+
+
+def _item_hint(hint: Any) -> Any:
+    """The hint of 1 item of a hint such as ``Sequence[X]``, or ``None`` when ``hint`` is not of that form."""
+    origin, items = get_origin(hint), get_args(hint)
+    if isinstance(origin, type) and issubclass(origin, Sequence) and items:
+        return items[0]
+    return None
+
+
+def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, object]) -> str | None:
+    """Why a built object that ``init`` names does not fit the type hint of the input of ``cls`` that gets it, or
+    ``None``. An input is checked when it names 1 object or a list of objects, and its hint is a class or a union of
+    classes."""
+    given = {
+        name: [
+            item for item in (value if isinstance(value, list) else [value]) if isinstance(item, str) and item in built
+        ]
+        for name, value in init.items()
+    }
+    given = {name: named for name, named in given.items() if named}
+    if not given:
+        return None
+    try:
+        hints = get_type_hints(cls.__init__)
+    except Exception:
+        logger.warning(
+            "Cannot read the type hints of %s: what %s gives to %s is not checked", cls.__name__, uid, list(given)
+        )
+        return None
+    for name, named in given.items():
+        hint = hints.get(name)
+        allowed = _allowed(_item_hint(hint) if isinstance(init[name], list) else hint)
+        for other in named:
+            if allowed is not None and not isinstance(built[other], allowed):
+                wanted = " or ".join(found.__name__ for found in allowed)
+                return f"'{uid}.{name}' needs a {wanted}, and '{other}' is a {type(built[other]).__name__}"
+    return None
+
+
+def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: _BaseClass) -> T | BuildError:
+    """Make 1 object: import its class, construct it with its ``init``, in which each name of an object in ``built``
+    is that object, and set its defaults."""
+    try:
+        cls = import_class(cfg.target, base_cls)
+    except Exception as e:
+        return BuildError(
+            uid=uid,
+            error_type="import",
+            message=f"Failed to import '{cfg.target}': {e}",
+            traceback=traceback.format_exc(),
+        )
+
+    if misfit := _misfit(uid, cls, cfg.init, built):
+        return BuildError(uid=uid, error_type="dependency", message=misfit)
+
+    make = cast("Callable[..., T]", cls)
+    try:
+        obj = make(**{"uid": uid, **_resolve(cfg.init, built)})
+    except Exception as e:
+        return BuildError(
+            uid=uid,
+            error_type="instantiation",
+            message=f"Failed to instantiate {cfg.target.rsplit('.', 1)[-1]}: {e}",
+            traceback=traceback.format_exc(),
+        )
+
+    if not cfg.defaults:
+        return obj
+    if isinstance(obj, Part):
+        message = f"'{uid}' is a part: it takes its values in init, not in defaults"
+        return BuildError(uid=uid, error_type="defaults", message=message)
+
+    # A failing setattr means the device's initial state would diverge from config, so we fail the
+    # build for this device rather than continuing with a silently-wrong default.
+    for name, value in cfg.defaults.items():
+        try:
+            setattr(obj, name, value)
+        except Exception as e:
+            return BuildError(
+                uid=uid,
+                error_type="defaults",
+                message=f"Failed to set default {name}={value!r} on {uid}: {e}",
+                traceback=traceback.format_exc(),
+            )
+    return obj
+
+
+def build_objects[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> BuildObjectsResult[T]:
     """Build objects from configuration with error accumulation and dependency resolution.
 
     Args:
         cfgs: Node configuration containing obj specifications
-        base_cls: Base class for type checking (default: object)
+        base_cls: The class, or the classes, that each object must be an instance of (default: object)
 
     Returns:
         Tuple of (successful_objects, build_errors)
@@ -85,36 +200,6 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildO
         for uid in _find_cyclic_uids(cfgs)
     }
     building: set[str] = set()
-
-    def _resolve_references(value: Any) -> Any:
-        """Recursively resolve string references to built objects."""
-        if isinstance(value, str) and value in built:
-            return built[value]
-        if isinstance(value, list):
-            return [_resolve_references(item) for item in value]
-        if isinstance(value, dict):
-            return {k: _resolve_references(v) for k, v in value.items()}
-        return value
-
-    def _extract_dependencies(uid: str) -> set[str]:
-        """Extract obj UIDs referenced in kwargs."""
-        dependencies = set()
-        obj_cfg = cfgs[uid]
-
-        def _scan(value: Any) -> None:
-            if isinstance(value, str) and value in cfgs and value != uid:
-                dependencies.add(value)
-            elif isinstance(value, list):
-                for item in value:
-                    _scan(item)
-            elif isinstance(value, dict):
-                for v in value.values():
-                    _scan(v)
-
-        for v in obj_cfg.init.values():
-            _scan(v)
-
-        return dependencies
 
     def _build_one(uid: str) -> T | BuildError:
         """Build a single obj, resolving dependencies first."""
@@ -135,11 +220,8 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildO
 
         building.add(uid)
         try:
-            obj_cfg = cfgs[uid]
-
             # Build dependencies first
-            deps = _extract_dependencies(uid)
-            for dep_uid in deps:
+            for dep_uid in dependencies(cfgs, uid):
                 if dep_uid in errors:
                     error = BuildError(
                         uid=uid,
@@ -159,63 +241,12 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildO
                     errors[uid] = error
                     return error
 
-            # Import the obj class
-            try:
-                cls = obj_cfg.get_obj_class()
-                if not issubclass(cls, base_cls):
-                    logger.warning(
-                        "object of uid: %s uses class: %s which is not a subclass of the common base class: %s",
-                        uid,
-                        cls.__name__,
-                        base_cls.__name__,
-                    )
-            except Exception as e:
-                error = BuildError(
-                    uid=uid,
-                    error_type="import",
-                    message=f"Failed to import '{obj_cfg.target}': {e}",
-                    traceback=traceback.format_exc(),
-                )
-                errors[uid] = error
-                return error
-
-            # Resolve references in init
-            resolved_init = _resolve_references(obj_cfg.init)
-            if "uid" not in resolved_init:
-                resolved_init["uid"] = uid
-
-            # Instantiate the obj
-            try:
-                obj = cls(**resolved_init)
-            except Exception as e:
-                error = BuildError(
-                    uid=uid,
-                    error_type="instantiation",
-                    message=f"Failed to instantiate {cls.__name__}: {e}",
-                    traceback=traceback.format_exc(),
-                )
-                errors[uid] = error
-                return error
-
-            # Apply defaults after construction. A failing setattr means the device's initial
-            # state would diverge from config, so we fail the build for this device rather than
-            # continuing with a silently-wrong default.
-            if obj_cfg.defaults:
-                for name, value in obj_cfg.defaults.items():
-                    try:
-                        setattr(obj, name, value)
-                    except Exception as e:
-                        error = BuildError(
-                            uid=uid,
-                            error_type="defaults",
-                            message=f"Failed to set default {name}={value!r} on {uid}: {e}",
-                            traceback=traceback.format_exc(),
-                        )
-                        errors[uid] = error
-                        return error
-
-            built[uid] = obj
-            return obj
+            result = _make(uid, cfgs[uid], built, base_cls)
+            if isinstance(result, BuildError):
+                errors[uid] = result
+            else:
+                built[uid] = result
+            return result
 
         finally:
             building.discard(uid)
@@ -257,23 +288,20 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildO
 #            (2 groups: lasers share a target, axes share a target)
 
 
-def _extract_deps(cfgs: BuildGroupSpec, uid: str) -> set[str]:
-    """Extract device UIDs referenced in a device's init kwargs."""
-    deps: set[str] = set()
-
-    def scan(value: Any) -> None:
-        if isinstance(value, str) and value in cfgs and value != uid:
-            deps.add(value)
+def dependencies(cfgs: BuildGroupSpec, uid: str) -> set[str]:
+    """The entries of ``cfgs`` that the ``init`` of ``uid`` names, at any depth."""
+    found: set[str] = set()
+    pending: list[Any] = [cfgs[uid].init]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, str):
+            if value in cfgs and value != uid:
+                found.add(value)
         elif isinstance(value, list):
-            for item in value:
-                scan(item)
+            pending.extend(value)
         elif isinstance(value, dict):
-            for v in value.values():
-                scan(v)
-
-    for v in cfgs[uid].init.values():
-        scan(v)
-    return deps
+            pending.extend(value.values())
+    return found
 
 
 def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
@@ -291,7 +319,7 @@ def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
         state[uid] = "visiting"
         stack_index[uid] = len(stack)
         stack.append(uid)
-        for dependency in _extract_deps(cfgs, uid):
+        for dependency in dependencies(cfgs, uid):
             match state.get(dependency):
                 case None:
                     visit(dependency)
@@ -317,7 +345,7 @@ def _topological_layers(cfgs: BuildGroupSpec) -> list[list[list[str]]]:
     Groups within a layer can be built concurrently.
     """
     # Build adjacency and in-degree
-    deps_map: dict[str, set[str]] = {uid: _extract_deps(cfgs, uid) for uid in cfgs}
+    deps_map: dict[str, set[str]] = {uid: dependencies(cfgs, uid) for uid in cfgs}
     in_degree: dict[str, int] = dict.fromkeys(cfgs, 0)
     for uid, deps in deps_map.items():
         in_degree[uid] = len(deps)
@@ -354,92 +382,18 @@ def _build_group_sync[T](
     group: list[str],
     cfgs: BuildGroupSpec,
     built: dict[str, T],
-    base_cls: type[T],
+    base_cls: _BaseClass,
 ) -> list[tuple[str, T | BuildError]]:
     """Build a group of devices sequentially (same target/driver). Runs in a worker thread.
 
     Does not write to `built` — the caller merges results after all groups complete.
     `built` is read-only here (references from prior layers).
     """
-
-    def resolve(value: Any) -> Any:
-        """Recursively resolve string references to already-built devices."""
-        if isinstance(value, str) and value in built:
-            return built[value]
-        if isinstance(value, list):
-            return [resolve(item) for item in value]
-        if isinstance(value, dict):
-            return {k: resolve(v) for k, v in value.items()}
-        return value
-
     results: list[tuple[str, T | BuildError]] = []
     for uid in group:
         cfg = cfgs[uid]
         logger.info("Building device: %s (%s)", uid, cfg.target.rsplit(".", 1)[-1])
-
-        # Import class
-        try:
-            cls = cfg.get_obj_class()
-            if not issubclass(cls, base_cls):
-                logger.warning(
-                    "object %s uses class %s which is not a subclass of %s", uid, cls.__name__, base_cls.__name__
-                )
-        except Exception as e:
-            results.append(
-                (
-                    uid,
-                    BuildError(
-                        uid=uid,
-                        error_type="import",
-                        message=f"Failed to import '{cfg.target}': {e}",
-                        traceback=traceback.format_exc(),
-                    ),
-                )
-            )
-            continue
-
-        # Resolve references and instantiate
-        resolved_init = resolve(cfg.init)
-        if "uid" not in resolved_init:
-            resolved_init["uid"] = uid
-
-        try:
-            obj = cls(**resolved_init)
-        except Exception as e:
-            results.append(
-                (
-                    uid,
-                    BuildError(
-                        uid=uid,
-                        error_type="instantiation",
-                        message=f"Failed to instantiate {cls.__name__}: {e}",
-                        traceback=traceback.format_exc(),
-                    ),
-                )
-            )
-            continue
-
-        # Apply defaults. A failing setattr fails this device's build (same rationale as the
-        # sync path above). Record the BuildError and move on to the next uid.
-        default_error: BuildError | None = None
-        if cfg.defaults:
-            for name, value in cfg.defaults.items():
-                try:
-                    setattr(obj, name, value)
-                except Exception as e:
-                    default_error = BuildError(
-                        uid=uid,
-                        error_type="defaults",
-                        message=f"Failed to set default {name}={value!r} on {uid}: {e}",
-                        traceback=traceback.format_exc(),
-                    )
-                    break
-
-        if default_error is not None:
-            results.append((uid, default_error))
-            continue
-
-        results.append((uid, obj))
+        results.append((uid, _make(uid, cfg, built, base_cls)))
     return results
 
 
@@ -460,7 +414,7 @@ def _prewarm_parent_modules(cfgs: BuildGroupSpec) -> None:
             importlib.import_module(mod_name)
 
 
-async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: type[T] = object) -> BuildObjectsResult[T]:
+async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> BuildObjectsResult[T]:
     """Build devices asynchronously with dependency resolution.
 
     Devices are sorted into dependency layers. Within each layer, devices
@@ -489,7 +443,7 @@ async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: type[T] = objec
         for group in layer:
             valid_uids: list[str] = []
             for uid in group:
-                deps = _extract_deps(cfgs, uid)
+                deps = dependencies(cfgs, uid)
                 failed_deps = deps & errors.keys()
                 if failed_deps:
                     errors[uid] = BuildError(

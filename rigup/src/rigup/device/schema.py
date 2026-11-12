@@ -183,11 +183,13 @@ class CommandInfo(AttributeInfo):
         return cls(name=name, label=label, desc=desc, params=kwargs)
 
 
-class DeviceInterface(BaseModel):
+class ComponentInterface(BaseModel):
+    """What a built device or part is, and what can be called on it. A part has no commands and no properties."""
+
     uid: str
-    type: str
-    commands: dict[str, CommandInfo]
-    properties: dict[str, PropertyInfo]
+    kind: str
+    commands: dict[str, CommandInfo] = Field(default_factory=dict)
+    properties: dict[str, PropertyInfo] = Field(default_factory=dict)
 
 
 class CommandParamsError(Exception):

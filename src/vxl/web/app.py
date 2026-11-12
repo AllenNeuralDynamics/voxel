@@ -16,8 +16,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
 from vxl._utils.logging import configure_logging, get_uvicorn_log_config
-from vxl.core.config import StationConfig
-from vxl.core.station import Station
+from vxl.core.station import Station, StationConfig
 from vxl.core.templates import InstrumentTemplates
 from vxl.hal import HALStartupError
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, SettingsPersistenceError, StartupError

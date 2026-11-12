@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter
 from rigup.rig import Rig
 
-from rigup import DeviceHandle, DeviceInterface
+from rigup import ComponentInterface, DeviceHandle
 from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
@@ -102,7 +102,7 @@ class HAL:
 
     def __init__(self, topology: HardwareTopology, name: str = "VoxelHAL") -> None:
         self._topology = topology
-        self._rig = Rig(topology, name)
+        self._rig = Rig(topology.to_rig(), name)
 
         self.cameras: dict[str, CameraHandle] = {}
         self.lasers: dict[str, DeviceHandle] = {}
@@ -111,7 +111,7 @@ class HAL:
         self.fws: dict[str, DiscreteAxisHandle] = {}
         self.routing: dict[str, RouteDimension] = {}
         self.signal_generators: dict[str, SignalGeneratorHandle] = {}
-        self._device_interfaces: dict[str, DeviceInterface] = {}
+        self._device_interfaces: dict[str, ComponentInterface] = {}
         self._stage: Stage | None = None
 
     @property
@@ -127,7 +127,7 @@ class HAL:
         return self.rig.devices
 
     @property
-    def device_interfaces(self) -> Mapping[str, DeviceInterface]:
+    def device_interfaces(self) -> Mapping[str, ComponentInterface]:
         """Interfaces retained from the successful startup inspection."""
         return dict(self._device_interfaces)
 
@@ -211,7 +211,7 @@ class HAL:
 
             self._device_interfaces[uid] = interface
 
-            match interface.type:
+            match interface.kind:
                 case "camera":
                     self.cameras[uid] = CameraHandle.wrap(handle)
                 case "signal_generator":
@@ -223,7 +223,7 @@ class HAL:
                 case "discrete_axis":
                     self.discrete_axes[uid] = DiscreteAxisHandle.wrap(handle)
                 case _:
-                    logger.debug("Uncategorized device '%s' of type '%s'", uid, interface.type)
+                    logger.debug("Uncategorized device '%s' of type '%s'", uid, interface.kind)
 
         self.fws.update(
             (uid, self.discrete_axes[uid]) for uid in self._topology.filter_wheels if uid in self.discrete_axes

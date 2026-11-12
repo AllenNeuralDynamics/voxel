@@ -18,10 +18,11 @@ import logging
 from pydantic import BaseModel
 
 from rigup.build import build_objects_async
+from rigup.component import Part
 from rigup.device import (
+    ComponentInterface,
     Device,
     DeviceController,
-    DeviceInterface,
     PropResults,
     PublishBytesFn,
     PublishTypedFn,
@@ -67,6 +68,7 @@ class NodeDaemon:
         self._log = logging.getLogger(f"rigup.daemon.{node_id}")
 
         self._controllers: dict[str, DeviceController] = {}
+        self._parts: dict[str, ComponentInterface] = {}
         self._authority_owner: str | None = None
         self._shutdown_event = asyncio.Event()
         self._log_handler: NodeLogHandler | None = None
@@ -126,7 +128,7 @@ class NodeDaemon:
         d.on_request(Action.CLOSE_DEVICE, CloseDeviceRequest, Empty, self._handle_close_device)
         d.on_request(Action.CLOSE_ALL_DEVICES, Empty, Empty, self._handle_close_all)
 
-        d.on_request(Action.GET_INTERFACE, GetInterfaceRequest, DeviceInterface, self._handle_get_interface)
+        d.on_request(Action.GET_INTERFACE, GetInterfaceRequest, ComponentInterface, self._handle_get_interface)
         d.on_request(Action.RUN_COMMANDS, RunCommandsRequest, Results, self._handle_run_commands)
         d.on_request(Action.GET_PROPS, GetPropsRequest, PropResults, self._handle_get_props)
         d.on_request(Action.SET_PROPS, SetPropsRequest, PropResults, self._handle_set_props)
@@ -153,29 +155,33 @@ class NodeDaemon:
     # ==================== Introspection ====================
 
     async def _handle_list_devices(self, _req: Empty) -> ListDevicesResponse:
-        return ListDevicesResponse(devices={uid: ctrl.interface for uid, ctrl in self._controllers.items()})
+        devices = {uid: ctrl.interface for uid, ctrl in self._controllers.items()}
+        return ListDevicesResponse(devices=devices, parts=dict(self._parts))
 
     # ==================== Device lifecycle ====================
 
     async def _handle_build(self, req: BuildDevicesRequest) -> BuildDevicesResponse:
         await self._close_all_controllers()
-        built_devices, errors = await build_objects_async(req.devices, Device)
+        built, errors = await build_objects_async(req.devices, (Device, Part))
 
-        built_interfaces: dict[str, DeviceInterface] = {}
-        for uid, device in built_devices.items():
-            controller_cls = type(device).__CONTROLLER_TYPE__
-            controller: DeviceController = controller_cls(device)
+        built_interfaces: dict[str, ComponentInterface] = {}
+        for uid, component in built.items():
+            if isinstance(component, Part):
+                self._parts[uid] = ComponentInterface(uid=uid, kind=component.kind)
+                self._log.info("Built part %s (%s)", uid, component.__class__.__name__)
+                continue
+            controller = component.make_controller()
             controller.set_typed_publisher(self._make_typed_publisher(uid))
             controller.set_bytes_publisher(self._make_bytes_publisher(uid))
             controller.start_streaming()
             self._controllers[uid] = controller
             built_interfaces[uid] = controller.interface
-            self._log.info("Built device %s (%s)", uid, device.__class__.__name__)
+            self._log.info("Built device %s (%s)", uid, component.__class__.__name__)
 
         for uid, err in errors.items():
             self._log.error("Failed to build %s: %s", uid, err.message)
 
-        return BuildDevicesResponse(built=built_interfaces, errors=errors)
+        return BuildDevicesResponse(built=built_interfaces, parts=dict(self._parts), errors=errors)
 
     def _make_typed_publisher(self, device_uid: str) -> PublishTypedFn:
         """Pack typed events into wire bytes and publish on ZMQ topic ``{uid}.{topic}``."""
@@ -195,6 +201,7 @@ class NodeDaemon:
 
     async def _handle_close_device(self, req: CloseDeviceRequest) -> Empty:
         controller = self._controllers.pop(req.uid, None)
+        self._parts.pop(req.uid, None)
         if controller is not None:
             await controller.close()
             self._log.info("Closed device %s", req.uid)
@@ -209,6 +216,7 @@ class NodeDaemon:
             await controller.close()
             self._log.debug("Closed device %s", uid)
         self._controllers.clear()
+        self._parts.clear()
 
     # ==================== Device RPC ====================
 
@@ -218,7 +226,7 @@ class NodeDaemon:
             raise ValueError(f"No device with uid {uid!r}")
         return controller
 
-    async def _handle_get_interface(self, req: GetInterfaceRequest) -> DeviceInterface:
+    async def _handle_get_interface(self, req: GetInterfaceRequest) -> ComponentInterface:
         return self._get_controller(req.uid).interface
 
     async def _handle_run_commands(self, req: RunCommandsRequest) -> Results:

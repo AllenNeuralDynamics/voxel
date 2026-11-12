@@ -136,7 +136,7 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"]):
         self._scan_mode = ScanMode.IDLE
 
 
-class ContinuousAxis(Axis[float]):
+class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=ContinuousAxisController):
     """Base class for continuous motion axes (linear or rotational).
 
     All position values are expressed in the configured ``units`` (default "um").
@@ -150,9 +150,6 @@ class ContinuousAxis(Axis[float]):
         - Limits: upper_limit, lower_limit
         - Kinematics: speed, acceleration (optional: backlash, home)
     """
-
-    __DEVICE_TYPE__ = DeviceType.CONTINUOUS_AXIS
-    __CONTROLLER_TYPE__ = ContinuousAxisController
 
     def __init__(self, uid: str, units: str = "um") -> None:
         super().__init__(uid=uid)

@@ -88,7 +88,7 @@ def _parse_status(reply: str) -> ControllerState:
     return ControllerState(lines=lines, blanking=blanking)
 
 
-class MPDS(Device):
+class MPDS(Device, kind="aotf"):
     """Own one connection, shared configuration, and exclusive RF line reservations.
 
     Construction connects, discovers RF lines, and disables them. Shared operating
@@ -97,8 +97,6 @@ class MPDS(Device):
     permit operation in internal mode. Shared settings cannot change while a line
     is reserved. Direct per-line commands remain available for diagnostics.
     """
-
-    __DEVICE_TYPE__ = "aotf"
 
     def __init__(
         self,

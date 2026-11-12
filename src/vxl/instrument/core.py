@@ -28,8 +28,8 @@ from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Readable, Subscribable
 from vxlib.schema import FrozenModel
 
-from rigup import DeviceHandle, DeviceInterface, DeviceProps, PropResults, Result
-from vxl.core.metadata import ExperimentMetadata, resolve_metadata_class
+from rigup import ComponentInterface, DeviceHandle, DeviceProps, PropResults, Result
+from vxl.core.instrument.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.daq.clocked import Signals
@@ -289,7 +289,7 @@ class Instrument:
         return {device_id: handle.props.cache for device_id, handle in self._hal.devices.items()}
 
     @property
-    def device_interfaces(self) -> Mapping[str, DeviceInterface]:
+    def device_interfaces(self) -> Mapping[str, ComponentInterface]:
         """Device interfaces discovered during startup."""
         return self._hal.device_interfaces
 
@@ -812,7 +812,7 @@ class Instrument:
                 )
         return violations
 
-    def _autosave_policy_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
+    def _autosave_policy_violations(self, interfaces: Mapping[str, ComponentInterface]) -> list[Violation]:
         """Reject explicit autosave names that cannot be persisted as writable properties."""
         topology = self._hal.topology
         groups = [(None, topology.devices), *((uid, node.devices) for uid, node in topology.nodes.items())]
@@ -837,17 +837,17 @@ class Instrument:
                         )
         return violations
 
-    def _profile_interface_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
+    def _profile_interface_violations(self, interfaces: Mapping[str, ComponentInterface]) -> list[Violation]:
         violations = []
         for profile_id, profile in self._store.value.imaging.profiles.items():
             profile_loc = ("state", "imaging", "profiles", profile_id)
             for uid in profile.sync:
                 interface = interfaces.get(uid)
-                if interface is not None and interface.type != "signal_generator":
+                if interface is not None and interface.kind != "signal_generator":
                     violations.append(
                         Violation(
                             code="imaging.profile.sync.not_signal_generator",
-                            msg=f"Device '{uid}' is a '{interface.type}', not a signal generator.",
+                            msg=f"Device '{uid}' is a '{interface.kind}', not a signal generator.",
                             loc=(*profile_loc, "sync", uid),
                         )
                     )

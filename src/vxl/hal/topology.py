@@ -7,9 +7,8 @@ from typing import Annotated, Literal, Self
 from pydantic import ConfigDict, Field, RootModel, field_validator, model_validator
 from vxlib.schema import FrozenModel, identifier
 
-from rigup import RigConfig
-
 from .errors import Violation, ViolationLoc, assignment_violations
+from .rig_config import RigConfig
 
 logger = logging.getLogger(__name__)
 

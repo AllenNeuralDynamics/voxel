@@ -21,7 +21,7 @@ class AxisAlreadyReservedError(ValueError):
         super().__init__(f"Axis {axis} is already reserved.")
 
 
-class TigerHub(Device):
+class TigerHub(Device, kind="generic"):
     """Hub wrapper around a single TigerBox. Manages axis reservations."""
 
     def __init__(self, box: TigerBox | str, uid: str = "tiger_controller") -> None:

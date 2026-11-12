@@ -16,8 +16,8 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from .build import BuildError
-from .config import DeviceConfig
-from .device import CommandRequest, DeviceInterface, PropResults, Results
+from .config import ComponentConfig
+from .device import CommandRequest, ComponentInterface, PropResults, Results
 from .transport import TransportClient, TransportServer
 
 # ==================== Vocabulary ====================
@@ -88,21 +88,25 @@ class ReleaseResponse(BaseModel):
 class GetConfigResponse(BaseModel):
     """Node's self-reported view of its devices, for rig-side config comparison."""
 
-    devices: Mapping[str, DeviceConfig]
+    devices: Mapping[str, ComponentConfig]
 
 
 class ListDevicesResponse(BaseModel):
-    """Currently-built devices on the node, keyed by uid."""
+    """Currently-built devices and parts on the node, keyed by uid."""
 
-    devices: Mapping[str, DeviceInterface]
+    devices: Mapping[str, ComponentInterface]
+    parts: Mapping[str, ComponentInterface] = Field(default_factory=dict)
 
 
 class BuildDevicesRequest(BaseModel):
-    devices: Mapping[str, DeviceConfig]
+    devices: Mapping[str, ComponentConfig]
 
 
 class BuildDevicesResponse(BaseModel):
-    built: Mapping[str, DeviceInterface] = Field(default_factory=dict)
+    """``built`` holds the devices, which get a handle. ``parts`` holds the parts, which do not."""
+
+    built: Mapping[str, ComponentInterface] = Field(default_factory=dict)
+    parts: Mapping[str, ComponentInterface] = Field(default_factory=dict)
     errors: Mapping[str, BuildError] = Field(default_factory=dict)
 
 
@@ -115,7 +119,7 @@ class CloseDeviceRequest(BaseModel):
 # RUN_COMMANDS / GET_PROPS / SET_PROPS use the rigup.device request models directly
 # (``CommandRequest`` list, ``PropsGetRequest``, ``PropsSetRequest``) and return
 # ``Results`` / ``PropResults`` — no duplicate shapes needed here. Only the
-# interface-query needs a tiny wrapper because ``DeviceInterface`` itself is
+# interface-query needs a tiny wrapper because ``ComponentInterface`` itself is
 # the response and has no matching request type.
 
 
@@ -295,7 +299,7 @@ async def send_notify(transport: TransportClient | TransportServer, action: str 
         await transport.notify(key, payload_bytes)
 
 
-# ``Results`` / ``PropResults`` / ``DeviceInterface`` are re-exported from ``rigup.device``
+# ``Results`` / ``PropResults`` / ``ComponentInterface`` are re-exported from ``rigup.device``
 # so call sites can import all protocol types from one place.
 __all__ = [
     "Action",
@@ -304,8 +308,8 @@ __all__ = [
     "ClaimRequest",
     "ClaimResponse",
     "CloseDeviceRequest",
+    "ComponentInterface",
     "DeviceErrorPayload",
-    "DeviceInterface",
     "Dispatcher",
     "Empty",
     "GetConfigResponse",

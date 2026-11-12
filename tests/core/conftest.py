@@ -6,8 +6,7 @@ import pytest
 
 from vxl import system as system_module
 from vxl._utils.files import load_and_validate_yaml
-from vxl.core.config import StationConfig
-from vxl.core.station import Station
+from vxl.core.station import Station, StationConfig
 from vxl.instrument import InstrumentConfig
 
 

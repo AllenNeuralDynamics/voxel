@@ -6,15 +6,13 @@ from rigup import Device, describe, numeric
 from vxl.devices.base import DeviceType
 
 
-class PowerMeter(Device, ABC):
+class PowerMeter(Device, ABC, kind=DeviceType.POWER_METER):
     """Optional rig device measuring light at the sensor.
 
     The instrument or calibration workflow defines the measurement location and
     any association with a laser. Registration does not populate Laser.output_power_mw.
     Settling delays and repeated sampling belong to the caller.
     """
-
-    __DEVICE_TYPE__ = DeviceType.POWER_METER
 
     @property
     @abstractmethod

@@ -3,31 +3,32 @@
 import pytest
 from pydantic import ValidationError
 from rigup.build import BuildConfig
-from rigup.config import DeviceConfig, NodeConfig, RigConfig
+from rigup.config import ComponentConfig, NodeConfig, RigConfig
 from rigup.device import CommandRequest
 from rigup.protocol import BuildDevicesRequest
 
 
-def test_autosave_policy_survives_config_and_build_request_roundtrips():
+def test_details_survive_config_and_build_request_roundtrips():
     cfg = RigConfig(
-        devices={"local": DeviceConfig(target="some.Device", autosave=["power"])},
+        components={"local": ComponentConfig(target="some.Device", details={"vendor": "ACME"})},
         nodes={
             "remote": NodeConfig(
                 kind="remote",
                 address="tcp://10.0.0.2:5555",
-                devices={"camera": DeviceConfig(target="some.Camera", autosave="*")},
+                components={"camera": ComponentConfig(target="some.Camera", details={"serial": "42"})},
             )
         },
     )
     restored = RigConfig.model_validate_json(cfg.model_dump_json())
-    assert restored.devices["local"].autosave == ["power"]
-    request = BuildDevicesRequest(devices=restored.nodes["remote"].devices)
-    assert BuildDevicesRequest.model_validate_json(request.model_dump_json()).devices["camera"].autosave == "*"
+    assert restored.components["local"].details == {"vendor": "ACME"}
+    request = BuildDevicesRequest(devices=restored.nodes["remote"].components)
+    received = BuildDevicesRequest.model_validate_json(request.model_dump_json())
+    assert received.devices["camera"].details == {"serial": "42"}
 
 
 class TestNodeConfigKindAutofill:
     def test_no_address_infers_subprocess(self):
-        cfg = NodeConfig.model_validate({"devices": {}})
+        cfg = NodeConfig.model_validate({"components": {}})
         assert cfg.kind == "subprocess"
 
     def test_localhost_tcp_infers_subprocess(self):
@@ -80,17 +81,17 @@ class TestNodeConfigValidation:
 class TestRigConfig:
     def test_minimal_config(self):
         cfg = RigConfig.model_validate({})
-        assert cfg.devices == {}
+        assert cfg.components == {}
         assert cfg.nodes == {}
 
     def test_devices_and_nodes(self):
         cfg = RigConfig.model_validate(
             {
-                "devices": {"stage": {"target": "some.Module", "init": {}}},
-                "nodes": {"cam_host": {"address": "tcp://10.0.0.2:5555", "devices": {}}},
+                "components": {"stage": {"target": "some.Module", "init": {}}},
+                "nodes": {"cam_host": {"address": "tcp://10.0.0.2:5555", "components": {}}},
             }
         )
-        assert "stage" in cfg.devices
+        assert "stage" in cfg.components
         assert cfg.nodes["cam_host"].kind == "remote"
         assert cfg.nodes["cam_host"].address == "tcp://10.0.0.2:5555"
 
@@ -107,14 +108,14 @@ class TestRigConfig:
             CommandRequest.model_validate({"attr": "enable", "arguments": []})
 
     def test_device_uids_must_be_unique_across_nodes(self):
-        with pytest.raises(ValidationError, match="Device UID 'camera' is duplicated"):
+        with pytest.raises(ValidationError, match="Component UID 'camera' is duplicated"):
             RigConfig.model_validate(
                 {
-                    "devices": {"camera": {"target": "some.Camera"}},
+                    "components": {"camera": {"target": "some.Camera"}},
                     "nodes": {
                         "remote": {
                             "kind": "subprocess",
-                            "devices": {"camera": {"target": "some.OtherCamera"}},
+                            "components": {"camera": {"target": "some.OtherCamera"}},
                         }
                     },
                 }
@@ -126,7 +127,7 @@ class TestRigConfig:
                 "nodes": {
                     "motion": {
                         "kind": "subprocess",
-                        "devices": {
+                        "components": {
                             "hub": {"target": "some.Hub"},
                             "axis": {"target": "some.Axis", "init": {"hub": "hub"}},
                         },
@@ -135,20 +136,35 @@ class TestRigConfig:
             }
         )
 
-        assert cfg.nodes["motion"].devices["axis"].init["hub"] == "hub"
+        assert cfg.nodes["motion"].components["axis"].init["hub"] == "hub"
+
+    def test_references_are_the_devices_that_init_names(self):
+        cfg = RigConfig.model_validate(
+            {
+                "components": {
+                    "hub": {"target": "some.Hub", "init": {"port": "COM4"}},
+                    "axis": {"target": "some.Axis", "init": {"hub": "hub", "label": "axis"}},
+                    "pair": {"target": "some.Pair", "init": {"members": {"first": ["axis"], "second": "hub"}}},
+                }
+            }
+        )
+
+        assert cfg.references("hub") == set()
+        assert cfg.references("axis") == {"hub"}
+        assert cfg.references("pair") == {"axis", "hub"}
 
     def test_cross_node_device_reference_is_rejected(self):
-        with pytest.raises(ValidationError, match="constructor-injected device dependencies must be on the same node"):
+        with pytest.raises(ValidationError, match="constructor-injected dependencies must be on the same node"):
             RigConfig.model_validate(
                 {
                     "nodes": {
                         "motion": {
                             "kind": "subprocess",
-                            "devices": {"hub": {"target": "some.Hub"}},
+                            "components": {"hub": {"target": "some.Hub"}},
                         },
                         "camera": {
                             "kind": "subprocess",
-                            "devices": {
+                            "components": {
                                 "camera": {
                                     "target": "some.Camera",
                                     "init": {"trigger_source": {"devices": ["hub"]}},

@@ -1,7 +1,7 @@
 """Tests for LocalNode + LocalAdapter — full in-process device path."""
 
 import pytest
-from rigup.config import DeviceConfig
+from rigup.config import ComponentConfig
 from rigup.node import LocalNode
 
 MOCK_TARGET = "tests._mock.MockDevice"
@@ -13,10 +13,10 @@ def node() -> LocalNode:
 
 
 @pytest.fixture
-def device_configs() -> dict[str, DeviceConfig]:
+def device_configs() -> dict[str, ComponentConfig]:
     return {
-        "dev_a": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0}, autosave=["value"]),
-        "dev_b": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
+        "dev_a": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 1.0}),
+        "dev_b": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
     }
 
 
@@ -30,8 +30,8 @@ class TestLocalNodeBuild:
         await node.close()
 
     async def test_build_is_declarative(self, node: LocalNode):
-        configs_1 = {"dev_1": DeviceConfig(target=MOCK_TARGET, init={})}
-        configs_2 = {"dev_2": DeviceConfig(target=MOCK_TARGET, init={})}
+        configs_1 = {"dev_1": ComponentConfig(target=MOCK_TARGET, init={})}
+        configs_2 = {"dev_2": ComponentConfig(target=MOCK_TARGET, init={})}
 
         await node.build_devices(configs_1)
         assert "dev_1" in node.devices
@@ -42,11 +42,28 @@ class TestLocalNodeBuild:
         await node.close()
 
     async def test_build_with_bad_target(self, node: LocalNode):
-        configs = {"bad": DeviceConfig(target="nonexistent.Module", init={})}
+        configs = {"bad": ComponentConfig(target="nonexistent.Module", init={})}
         handles, errors = await node.build_devices(configs)
         assert not handles
         assert "bad" in errors
         await node.close()
+
+    async def test_a_part_is_built_and_gets_no_handle(self, node: LocalNode):
+        configs = {
+            "holder": ComponentConfig(target="tests._mock.MockHolder", init={"held": "glass"}),
+            "glass": ComponentConfig(target="tests._mock.MockPart", init={"value": 1.5}),
+        }
+
+        handles, errors = await node.build_devices(configs)
+
+        assert not errors
+        assert set(handles) == set(node.devices) == {"holder"}
+        assert set(node.parts) == {"glass"}
+        glass = node.parts["glass"]
+        assert (glass.uid, glass.kind, glass.commands, glass.properties) == ("glass", "mock_part", {}, {})
+
+        await node.close()
+        assert not node.parts
 
 
 class TestLocalNodeDeviceOps:
@@ -83,7 +100,7 @@ class TestLocalNodeDeviceOps:
         handle = node.devices["dev_a"]
 
         iface = await handle.interface()
-        assert iface.type == "mock"
+        assert iface.kind == "mock"
         assert "set_value" in iface.commands
         assert "value" in iface.properties
         await node.close()

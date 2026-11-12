@@ -1,7 +1,8 @@
 import logging
 from types import TracebackType
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
+from vxl_drivers.tigerhub.hub import TigerHub
 from vxl_drivers.tigerhub.model.axis_state import AxisState
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.params import TigerParam, TigerParams
@@ -20,9 +21,6 @@ from vxl.devices.axes.continuous.base import (
     TTLStepper,
     TTLStepperConfig,
 )
-
-if TYPE_CHECKING:
-    from vxl_drivers.tigerhub.hub import TigerHub
 
 
 class TigerTTLStepper(TTLStepper):
@@ -250,7 +248,6 @@ if __name__ == "__main__":
     import logging
 
     from rich import print as rprint
-    from vxl_drivers.tigerhub.hub import TigerHub
 
     logging.basicConfig(level=logging.DEBUG)
 

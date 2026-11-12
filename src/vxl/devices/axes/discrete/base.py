@@ -22,10 +22,8 @@ class DiscreteAxisState(BaseModel, frozen=True):
     is_moving: bool
 
 
-class DiscreteAxis(Axis[str]):
+class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
     """Named discrete slots with synchronous motion commands and streamed state."""
-
-    __DEVICE_TYPE__ = DeviceType.DISCRETE_AXIS
 
     def __init__(
         self,

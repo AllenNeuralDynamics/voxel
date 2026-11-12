@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from vxlib.reactivity import Readable, Subscribable
 
-    from .config import StationInfo
+    from .models import StationInfo
 
 from .errors import StationFeedLaggedError
 from .models import StationFeedView, StationState, StationStatus, StreamCursor

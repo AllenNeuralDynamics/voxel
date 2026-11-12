@@ -1,13 +1,17 @@
-"""The ``hal`` part of an instrument file: the bench, for every kind of instrument."""
+"""The files of an instrument: ``rig.yaml``, ``default.yaml`` and ``state.json``."""
 
 import math
+import secrets
+from abc import abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Annotated, Any, Literal, NamedTuple, Self
 
+from ome_zarr_writer import WriterSettings
 from pydantic import (
     AfterValidator,
+    BaseModel,
     BeforeValidator,
     ConfigDict,
     Discriminator,
@@ -18,14 +22,49 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from rigup.config import DeviceUid, RigConfig
+from rigup.config import RigConfig
 from vxlib.schema import FrozenModel, UniqueList, check_identifier, identifier
 from vxlib.units import Quantity, Time, Voltage, Wavelength
 from vxlib.vector import Span, Vec3D
 
 from vxl.models import AxisPosition
 
-from .errors import Violation, ViolationLoc, not_configured, under
+from .errors import Violation, ViolationLoc, Violations
+from .metadata import ExperimentMetadata, MetadataCls
+
+_ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
+"""Crockford's base32 in lowercase: digits and letters without i, l, o and u, which are easy to misread."""
+
+InstrumentId = Annotated[str, Field(pattern=f"^[0-7][{_ID_ALPHABET}]{{25}}$")]
+"""128 random bits in 26 characters, safe in URLs and file names."""
+
+InstrumentName = Annotated[str, Field(min_length=1, max_length=32)]
+"""A label for people."""
+
+InstrumentModel = Annotated[str, Field(min_length=1, max_length=64)]
+"""The lab's own label for the kind of instrument, such as ``exaSPIM`` or ``exaspim.v2``."""
+
+InstrumentTarget = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")]
+"""The class that runs the instrument, as a dotted path such as ``vxl.instruments.spim.Instrument``."""
+
+DeviceUid = Annotated[str, identifier("Device UID")]
+"""The name of a device of the rig."""
+
+
+def new_instrument_id() -> str:
+    value = secrets.randbits(128)
+    return "".join(_ID_ALPHABET[(value >> shift) & 31] for shift in range(125, -1, -5))
+
+
+class _NotDefault:
+    def __repr__(self) -> str:
+        return "NotDefault"
+
+
+NotDefault = _NotDefault()
+"""The mark of a state field that is about the specimen on the stage, and not about the instrument. Such a field is
+never saved as a default: ``plan: Annotated[list[Task], NotDefault]``."""
+
 
 # === Stage and Specimen space ===
 
@@ -265,7 +304,7 @@ class Wire:
 
 
 class Wiring(RootModel[dict[DeviceUid, dict[WireName, WireConfig]]]):
-    """``hal.wiring``: each sending device's wires, by name."""
+    """``wiring``: each sending device's wires, by name."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -273,40 +312,32 @@ class Wiring(RootModel[dict[DeviceUid, dict[WireName, WireConfig]]]):
         """Every wire that ``device`` sends, by name."""
         return dict(self.root.get(device, {}))
 
-    def violations(self, *, devices: Collection[str], parts: Collection[str]) -> list[Violation]:
-        """Return the problems of the wiring that ``hal`` alone shows."""
-        violations: list[Violation] = []
+    def violations(self, *, devices: Collection[str], parts: Collection[str]) -> Violations:
+        """Return the problems of the wiring that the file alone shows."""
+        violations = Violations()
         owner: dict[str, tuple[str, str]] = {}
 
         def claim(pin: str, sender: str, name: str, pin_loc: ViolationLoc) -> None:
             if pin in owner:
                 first_sender, first_name = owner[pin]
-                violations.append(
-                    Violation(
-                        code="hal.wiring.pin_shared",
-                        msg=f"Pin '{pin}' is already in wire '{first_sender}.{first_name}'.",
-                        loc=pin_loc,
-                    )
-                )
+                msg = f"Pin '{pin}' is already in wire '{first_sender}.{first_name}'."
+                violations.add("rig.wiring.pin_shared", msg, *pin_loc)
             else:
                 owner[pin] = (sender, name)
 
         for sender, group in self.root.items():
             if sender not in devices:
-                violations.append(not_configured("Device", sender, code="hal.wiring.device_missing", loc=(sender,)))
+                violations.append(
+                    Violation.not_configured("Device", sender, code="rig.wiring.device_missing", loc=(sender,))
+                )
                 continue
             for name, wire in group.items():
                 wire_loc = (sender, name)
                 claim(f"{sender}/{wire.pin}", sender, name, (*wire_loc, "pin"))
                 for index, pin in enumerate(wire.to):
                     if pin.device not in devices and pin.device not in parts:
-                        violations.append(
-                            Violation(
-                                code="hal.wiring.receiver_missing",
-                                msg=f"'{pin.device}' is not a device or a part; declare a part in hal.parts.",
-                                loc=(*wire_loc, "to", index),
-                            )
-                        )
+                        msg = f"'{pin.device}' is not a device or a part; declare a part in 'parts'."
+                        violations.add("rig.wiring.receiver_missing", msg, *wire_loc, "to", index)
                     else:
                         claim(str(pin), sender, name, (*wire_loc, "to", index))
         return violations
@@ -390,7 +421,7 @@ type OpticalNode = Annotated[
 
 
 class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
-    """``hal.optics``: each node, by name."""
+    """``optics``: each node, by name."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -413,188 +444,121 @@ class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
         *,
         devices: Collection[str],
         parts: Collection[str],
-        labels: Mapping[str, Collection[str]],
-    ) -> list[Violation]:
-        """Return the problems of the optical graph that ``hal`` alone shows."""
-        found: list[tuple[str, str, ViolationLoc]] = []
+    ) -> Violations:
+        """Return the problems of the optical graph that the file alone shows."""
+        violations = Violations()
         if _SAMPLE not in self.elements():
-            found.append(
-                ("sample_missing", "The optical graph needs a 'sample' node with 'to': where the light goes on.", ())
-            )
-        for name in self.root:
-            problems = self._node_problems(name, labels.get(name), parts, is_device=name in devices)
-            found += [(code, msg, (name, *at)) for code, msg, at in problems]
-        return [Violation(code=f"hal.optics.{code}", msg=msg, loc=at) for code, msg, at in found]
-
-    def _node_problems(
-        self, name: str, labels: Collection[str] | None, parts: Collection[str], *, is_device: bool
-    ) -> list[tuple[str, str, ViolationLoc]]:
-        """The problems of 1 node, as (code, message, location in the node)."""
-        node = self.root[name]
-        found: list[tuple[str, str, ViolationLoc]] = []
-        if name != _SAMPLE and not is_device and name not in parts:
-            found.append(("node_unknown", f"'{name}' is not a device or a part; declare it in hal.parts.", ()))
-        if isinstance(node, Detector):
-            if not is_device:
-                found.append(("detector_not_device", f"'{name}' is a detector, and a detector is a device.", ()))
-            return found
-        found += [
-            ("target_missing", f"'{target}' is not a node of hal.optics.", ("to",) if label is None else ("to", label))
-            for label, targets in node.ways().items()
-            for target in targets
-            if target not in self.root
-        ]
-        if isinstance(node.to, dict) and labels is None:
-            found.append(
-                (
-                    "positions_missing",
-                    f"'{name}' gives 'to' for each position, but it is not a device that declares slots.",
-                    ("to",),
-                )
-            )
-        elif isinstance(node.to, dict):
-            found += [
-                ("position_unknown", f"'{label}' is not a position of '{name}' {list(labels or ())}.", ("to", label))
-                for label in node.to
-                if label not in (labels or ())
-            ]
-        return found
+            msg = "The optical graph needs a 'sample' node with 'to': where the light goes on."
+            violations.add("rig.optics.sample_missing", msg)
+        for name, node in self.root.items():
+            is_device = name in devices
+            if name != _SAMPLE and not is_device and name not in parts:
+                msg = f"'{name}' is not a device or a part; declare it in 'parts'."
+                violations.add("rig.optics.node_unknown", msg, name)
+            if isinstance(node, Detector):
+                if not is_device:
+                    msg = f"'{name}' is a detector, and a detector is a device."
+                    violations.add("rig.optics.detector_not_device", msg, name)
+                continue
+            for label, targets in node.ways().items():
+                for target in targets:
+                    if target not in self.root:
+                        place = ("to",) if label is None else ("to", label)
+                        msg = f"'{target}' is not a node of 'optics'."
+                        violations.add("rig.optics.target_missing", msg, name, *place)
+        return violations
 
 
-# === The hal ===
+# === Instrument config ===
 
 
 @dataclass(frozen=True)
 class LightPath:
-    """1 way the light goes from a source, through the sample, to a detector. ``positions`` gives the position of
-    each device on it that has positions. ``magnification`` and ``band`` come from the parts that the light passes
-    after the sample, in nm for the band, and are ``None`` when no part gives one."""
+    """1 way the light goes on 1 side of the sample: from a source to the sample, or from the sample to a detector.
+    ``magnification`` and ``band`` come from the parts that the light passes, in nm for the band, and are ``None``
+    when no part gives one."""
 
     nodes: tuple[OpticalNodeName, ...]
-    positions: Mapping[OpticalNodeName, str]
     magnification: float | None
     band: tuple[float | None, float | None] | None
 
 
-class HALConfig(RigConfig, frozen=True):
-    """The rig's devices and nodes, plus parts, the stage, wiring and the optical graph."""
+class InstrumentConfig(RigConfig, frozen=True):
+    """An instrument's ``rig.yaml``: who the instrument is and what is on its bench. The ID is made when the
+    instrument is created and never changes. ``target`` names the class that runs the instrument. ``autosave``
+    names, for each device, the properties that a change by a person saves in the active profile: a list of
+    names, or ``*`` for each property that can be written."""
 
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    id: InstrumentId
+    name: InstrumentName
+    model: InstrumentModel | None = None
+    target: InstrumentTarget
     parts: dict[PartName, _AnyPart] = Field(default_factory=dict)
     stage: Stage
     wiring: Wiring = Field(default_factory=lambda: Wiring({}))
     optics: OpticalGraph
+    autosave: dict[DeviceUid, Literal["*"] | list[str]] = Field(default_factory=dict)
 
-    @property
-    def _slot_labels(self) -> dict[str, list[str]]:
-        """The named positions of each discrete axis, from its ``init.slots``."""
-        found: dict[str, list[str]] = {}
-        for uid, config in self.device_configs.items():
-            slots = config.init.get("slots")
-            if isinstance(slots, Mapping):
-                found[uid] = [
-                    slot if isinstance(slot, str) else slot["label"]
-                    for slot in slots.values()
-                    if isinstance(slot, str) or (isinstance(slot, Mapping) and isinstance(slot.get("label"), str))
-                ]
-        return found
+    def violations(self) -> Violations:
+        """Return the problems of the bench that the file shows."""
+        devices, parts = self.component_uids, self.parts
+        violations = self._name_violations()
+        violations += self.wiring.violations(devices=devices, parts=parts).under("wiring")
+        violations += self.optics.violations(devices=devices, parts=parts).under("optics")
+        return violations
 
-    def position_problem(self, device: DeviceUid, value: AxisPosition) -> str | None:
-        """Why ``value`` is not a position of ``device``, or ``None`` when it is."""
-        labels = self._slot_labels.get(device)
-        if labels is not None:
-            return None if value in labels else f"'{value}' is not a position of '{device}' {labels}."
-        if isinstance(value, str):
-            return f"'{device}' declares no slots, so its position is a number in µm, not '{value}'."
-        return None
+    def illumination_paths(self, source: str, positions: Mapping[str, AxisPosition]) -> list[LightPath]:
+        """Every way the light goes from ``source`` to the sample, with each device in ``positions`` at its position
+        there. A device that ``positions`` leaves out can be at any position, and holds no part."""
+        return self._paths(source, _SAMPLE, positions)
 
-    def light_paths(self, source: str, detector: str) -> list[LightPath]:
-        """Every way the light goes from ``source``, through the sample, to ``detector``."""
-        holds = self._holds()
+    def detection_paths(self, detector: str, positions: Mapping[str, AxisPosition]) -> list[LightPath]:
+        """Every way the light goes from the sample to ``detector``, with each device in ``positions`` at its
+        position there. A device that ``positions`` leaves out can be at any position, and holds no part."""
+        return self._paths(_SAMPLE, detector, positions)
+
+    def _paths(self, start: str, end: str, positions: Mapping[str, AxisPosition]) -> list[LightPath]:
+        """Every way the light goes from ``start`` to ``end``. No way passes a node 2 times."""
         found: list[LightPath] = []
 
-        def walk(
-            name: str, nodes: tuple[str, ...], positions: tuple[tuple[str, str], ...], held: tuple[str, ...]
-        ) -> None:
-            if name == detector:
-                if _SAMPLE in nodes:
-                    found.append(self._path(nodes, dict(positions), held))
+        def walk(name: str, nodes: tuple[str, ...], held: tuple[str, ...]) -> None:
+            if name == end:
+                found.append(self._path(nodes, held))
                 return
-            after_sample = _SAMPLE in nodes
-            for target, label, part in self._steps(name, holds):
+            for target, part in self._steps(name, positions):
                 if target not in nodes:
-                    walk(
-                        target,
-                        (*nodes, target),
-                        positions if label is None else (*positions, (name, label)),
-                        (*held, part) if part is not None and after_sample else held,
-                    )
+                    walk(target, (*nodes, target), held if part is None else (*held, part))
 
-        walk(source, (source,), (), ())
+        walk(start, (start,), ())
         return found
 
-    def selectors(self) -> set[DeviceUid]:
-        """The devices of the optical graph whose position changes the light: each sends the light a different way
-        at each position, or holds parts."""
-        holds = self._holds()
-        return {
-            name
-            for name, node in self.optics.elements().items()
-            if name in self.device_uids and (isinstance(node.to, dict) or name in holds)
-        }
-
-    def generators(self) -> set[DeviceUid]:
-        """The devices that send wires and are not a camera or a stage axis. From the file alone, these are the
-        signal generators."""
-        others = {*self.optics.detectors(), *self.stage.devices().values()}
-        return {sender for sender in self.wiring.root if sender in self.device_uids and sender not in others}
-
-    def violations(self) -> list[Violation]:
-        """Return the problems that ``hal`` alone shows."""
-        devices, parts = self.device_uids, self.parts
-        return [
-            *self._name_violations(),
-            *self._slot_violations(),
-            *under(("wiring",), self.wiring.violations(devices=devices, parts=parts)),
-            *under(("optics",), self.optics.violations(devices=devices, parts=parts, labels=self._slot_labels)),
-            *self._magnification_violations(),
-        ]
-
-    def _holds(self) -> dict[DeviceUid, dict[str, PartName | None]]:
-        """Each device of the optical graph that holds parts, with the part at each of its positions, or ``None``
-        for a position with no part. A device holds a part when 1 of its slot labels is the name of that part."""
-        found: dict[DeviceUid, dict[str, PartName | None]] = {}
-        for name in self.optics.elements():
-            slots = {
-                label: label if label in self.parts and label not in self.optics.root else None
-                for label in self._slot_labels.get(name, ())
-            }
-            if any(part is not None for part in slots.values()):
-                found[name] = slots
-        return found
-
-    def _steps(
-        self, name: str, holds: Mapping[str, Mapping[str, PartName | None]]
-    ) -> list[tuple[OpticalNodeName, str | None, PartName | None]]:
-        """Each node that ``name`` sends light to. With it: the position that ``name`` needs for that, and the part
-        that ``name`` holds in the light's way at that position. Each is ``None`` when there is none."""
+    def _steps(self, name: str, positions: Mapping[str, AxisPosition]) -> list[tuple[OpticalNodeName, PartName | None]]:
+        """Each node that ``name`` sends light to, with ``name`` at its position in ``positions``. With it: the part
+        that ``name`` holds in the light's way at that position, or ``None``."""
         node = self.optics.root.get(name)
         if not isinstance(node, OpticalElement):
             return []
-        held = holds.get(name, {})
-        steps: list[tuple[OpticalNodeName, str | None, PartName | None]] = []
+        given = positions.get(name)
+        steps: list[tuple[OpticalNodeName, PartName | None]] = []
         for label, targets in node.ways().items():
-            if label is not None:
-                steps += [(target, label, held.get(label)) for target in targets]
-            elif held:
-                steps += [(target, slot, part) for slot, part in held.items() for target in targets]
-            else:
-                steps += [(target, None, None) for target in targets]
+            if label is None or given is None or given == label:
+                held = self._part_at(given if label is None else label)
+                steps += [(target, held) for target in targets]
         return steps
 
-    def _path(self, nodes: tuple[str, ...], positions: dict[str, str], held: tuple[str, ...]) -> LightPath:
-        """The path with the magnification and the band of the parts after the sample: the nodes that are parts,
-        and the parts that the devices there hold."""
-        passed = [self.parts[name] for name in (*nodes[nodes.index(_SAMPLE) :], *held) if name in self.parts]
+    def _part_at(self, position: AxisPosition | None) -> PartName | None:
+        """The part that a device holds at ``position``: the part of that name, when the part is not a node of the
+        optical graph."""
+        if isinstance(position, str) and position in self.parts and position not in self.optics.root:
+            return position
+        return None
+
+    def _path(self, nodes: tuple[str, ...], held: tuple[str, ...]) -> LightPath:
+        """The path with the magnification and the band of its parts: the nodes that are parts, and the parts in
+        ``held``, which the devices on it hold."""
+        passed = [self.parts[name] for name in (*nodes, *held) if name in self.parts]
         magnifications = [part.magnification for part in passed if isinstance(part, Objective)]
         low: float | None = None
         high: float | None = None
@@ -604,93 +568,52 @@ class HALConfig(RigConfig, frozen=True):
                 banded = True
                 low = part.band[0] if low is None else low if part.band[0] is None else max(low, part.band[0])
                 high = part.band[1] if high is None else high if part.band[1] is None else min(high, part.band[1])
-        return LightPath(
-            nodes, positions, math.prod(magnifications) if magnifications else None, (low, high) if banded else None
-        )
+        return LightPath(nodes, math.prod(magnifications) if magnifications else None, (low, high) if banded else None)
 
-    def _magnification_violations(self) -> list[Violation]:
-        """Each path to a detector needs a part that gives a magnification."""
-        sources = self.optics.sources()
-        return [
-            Violation(
-                code="hal.optics.magnification_missing",
-                msg=f"A path to '{detector}' has no part that gives a magnification.",
-                loc=("optics", detector),
-            )
-            for detector in self.optics.detectors()
-            if any(path.magnification is None for source in sources for path in self.light_paths(source, detector))
-        ]
-
-    def _slot_violations(self) -> list[Violation]:
-        """A slot label can be the name of a part, so it has the form of a name."""
-        violations: list[Violation] = []
-        for device, labels in self._slot_labels.items():
-            for label in labels:
-                try:
-                    check_identifier(label, "Slot label")
-                except ValueError as error:
-                    loc = ("devices", device, "init", "slots")
-                    violations.append(Violation(code="hal.devices.slot_label", msg=str(error), loc=loc))
-        return violations
-
-    def _name_violations(self) -> list[Violation]:
-        violations = [
-            not_configured("Device", device, code="hal.stage.device_missing", loc=("stage", axis))
+    def _name_violations(self) -> Violations:
+        violations = Violations(
+            Violation.not_configured("Device", device, code="rig.stage.device_missing", loc=("stage", axis))
             for axis, device in self.stage.devices().items()
-            if device not in self.device_uids
-        ]
-        if _SAMPLE in self.parts or _SAMPLE in self.device_uids:
-            violations.append(
-                Violation(
-                    code="hal.reserved_name",
-                    msg="'sample' names the node where the 2 sides of the optical graph meet, so no device or part "
-                    "takes it.",
-                    loc=("parts" if _SAMPLE in self.parts else "devices", _SAMPLE),
-                )
-            )
-        violations += [
-            Violation(
-                code="hal.parts.device_name",
-                msg=f"'{part}' is a device, so it is not also a part.",
-                loc=("parts", part),
-            )
-            for part in self.parts
-            if part in self.device_uids
-        ]
-        used = {pin.device for group in self.wiring.root.values() for wire in group.values() for pin in wire.to}
-        used.update(self.optics.root)
-        used.update(part for slots in self._holds().values() for part in slots.values() if part is not None)
-        violations += [
-            Violation(
-                code="hal.parts.unused",
-                msg=f"Part '{part}' is not used by any wire or optical node.",
-                loc=("parts", part),
-            )
-            for part in self.parts
-            if part not in used
-        ]
+            if device not in self.component_uids
+        )
+        violations += Violations(
+            Violation.not_configured("Device", device, code="rig.autosave.device_missing", loc=("autosave", device))
+            for device in self.autosave
+            if device not in self.component_uids
+        )
+        if _SAMPLE in self.parts or _SAMPLE in self.component_uids:
+            msg = "'sample' names the node where the 2 sides of the optical graph meet, so no device or part takes it."
+            violations.add("rig.reserved_name", msg, "parts" if _SAMPLE in self.parts else "components", _SAMPLE)
+        for part in self.parts:
+            if part in self.component_uids:
+                msg = f"'{part}' is a device, so it is not also a part."
+                violations.add("rig.parts.device_name", msg, "parts", part)
         return violations
 
 
-__all__ = [
-    "AnalogWire",
-    "Detector",
-    "DigitalWire",
-    "Filter",
-    "HALConfig",
-    "LightPath",
-    "Objective",
-    "OpticalElement",
-    "OpticalGraph",
-    "OpticalNode",
-    "OpticalNodeName",
-    "Part",
-    "PartName",
-    "Pin",
-    "SpecimenAxis",
-    "Stage",
-    "Wire",
-    "WireConfig",
-    "WireName",
-    "Wiring",
-]
+# === Instrument state ===
+
+
+class InstrumentState(BaseModel, frozen=True):
+    """What the operator edits. ``state.json`` has this form, and so do ``default.yaml`` and a preset. A kind of
+    instrument adds its own fields in a subclass. ``metadata`` is the facts about the specimen, in the form that
+    ``metadata_cls`` gives."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    metadata_cls: MetadataCls = ExperimentMetadata
+    output: WriterSettings = Field(default_factory=WriterSettings)
+    metadata: Annotated[dict[str, Any], NotDefault] = Field(default_factory=dict)
+
+    @classmethod
+    def default_fields(cls) -> frozenset[str]:
+        """The fields that can be saved as a default: those with no ``NotDefault`` mark."""
+        return frozenset(name for name, field in cls.model_fields.items() if NotDefault not in field.metadata)
+
+    def as_preset(self) -> Self:
+        """This state with no specimen metadata."""
+        return self.model_copy(update={"metadata": {}})
+
+    @abstractmethod
+    def violations(self, config: InstrumentConfig) -> Violations:
+        """Return the problems of this state against ``config``."""

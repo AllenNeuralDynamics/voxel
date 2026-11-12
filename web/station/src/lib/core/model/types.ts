@@ -658,9 +658,9 @@ export interface CommandInfo {
 }
 
 /** A device's introspected surface: identity, commands, and properties. */
-export interface DeviceInterface {
+export interface ComponentInterface {
   uid: string;
-  type: string;
+  kind: string;
   commands: Record<string, CommandInfo>;
   properties: Record<string, PropertyInfo>;
 }
@@ -669,7 +669,7 @@ export interface DeviceInterface {
 export interface DeviceSnapshot {
   id: string;
   connected: boolean;
-  interface?: DeviceInterface | null;
+  interface?: ComponentInterface | null;
   error?: string | null;
 }
 
@@ -710,7 +710,7 @@ export interface InstrumentView extends InstrumentState {
 }
 
 export interface DeviceState {
-  interface: DeviceInterface;
+  interface: ComponentInterface;
   props: Record<string, PropSnapshot<unknown>>;
 }
 

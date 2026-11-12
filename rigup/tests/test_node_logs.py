@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 import pytest
-from rigup.config import DeviceConfig, NodeConfig
+from rigup.config import ComponentConfig, NodeConfig
 from rigup.node import SubprocessNode
 from rigup.node._logs import NodeLogHandler, relay_logs
 from rigup.transport import IPCAddress, ZMQTransportClient, ZMQTransportServer
@@ -88,7 +88,7 @@ async def test_subprocess_node_forwards_logs() -> None:
     try:
         await node.open()
         await asyncio.sleep(0.5)  # let the PUB/SUB subscription propagate before the log we assert on
-        _, errors = await node.build_devices({"cam0": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0})})
+        _, errors = await node.build_devices({"cam0": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 1.0})})
         assert not errors, errors
         await asyncio.sleep(0.3)  # let the daemon's build log drain across the wire
     finally:

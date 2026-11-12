@@ -85,10 +85,8 @@ class _Source(Device, ABC):
         """Establish the mode without enabling emission; readback reflects success."""
 
 
-class LaserSource(_Source):
+class LaserSource(_Source, kind="laser_source"):
     """A source controlled in mW; constraints belong on the numeric property."""
-
-    __DEVICE_TYPE__ = "laser_source"
 
     @numeric()
     @abstractmethod
@@ -111,10 +109,8 @@ class LaserSource(_Source):
         return None
 
 
-class CurrentControlledLaserSource(_Source):
+class CurrentControlledLaserSource(_Source, kind="current_controlled_laser_source"):
     """A source controlled in mA, awaiting calibration for a power-based interface."""
-
-    __DEVICE_TYPE__ = "current_controlled_laser_source"
 
     @numeric()
     @abstractmethod

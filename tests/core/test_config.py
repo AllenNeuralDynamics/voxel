@@ -3,8 +3,8 @@ from uuid import UUID
 
 import pytest
 
-from vxl.core.config import StationConfig
 from vxl.core.errors import StationNotConfiguredError
+from vxl.core.station import StationConfig
 from vxl.system import System
 
 
@@ -72,11 +72,11 @@ def test_station_file_gives_the_metadata_forms(voxel_home: Path) -> None:
     head = "schema_version: 1\nid: 12345678-1234-5678-1234-567812345678\nname: scope\n"
 
     station.write_text(head, encoding="utf-8")
-    assert StationConfig.load().metadata_menu() == {"Base": "vxl.core.metadata.ExperimentMetadata"}
+    assert StationConfig.load().metadata_menu() == {"Base": "vxl.core.instrument.metadata.ExperimentMetadata"}
 
     station.write_text(head + "metadata_schemas:\n  exaspim: vxl_drivers.metadata.ExaspimMetadata\n", encoding="utf-8")
     assert StationConfig.load().metadata_menu() == {
-        "Base": "vxl.core.metadata.ExperimentMetadata",
+        "Base": "vxl.core.instrument.metadata.ExperimentMetadata",
         "exaspim": "vxl_drivers.metadata.ExaspimMetadata",
     }
 

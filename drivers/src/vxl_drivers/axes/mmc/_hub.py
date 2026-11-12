@@ -22,7 +22,7 @@ class MMCAxisAlreadyReservedError(ValueError):
     """An MMC axis address is already owned by another driver instance."""
 
 
-class MMCHub(Device):
+class MMCHub(Device, kind="generic"):
     """Own one serial bus shared by one or more addressed MMC axes."""
 
     def __init__(

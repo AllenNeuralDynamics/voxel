@@ -12,7 +12,7 @@ from vxlib.reactivity import Subscribable
 
 from .driver import Device, StreamCallback
 from .props import PropertyModel
-from .schema import CommandRequest, DeviceInterface, PropResults, Result, Results
+from .schema import CommandRequest, ComponentInterface, PropResults, Result, Results
 
 type PropertyCallback[T] = Callable[[T], Awaitable[None] | None]
 type PropertyParser[T] = Callable[[object], T]
@@ -29,7 +29,7 @@ class Adapter[D: Device](ABC):
     """
 
     def __init__(self) -> None:
-        self._interface_cache: DeviceInterface | None = None
+        self._interface_cache: ComponentInterface | None = None
         self._props: DeviceProperties | None = None
 
     @property
@@ -39,7 +39,7 @@ class Adapter[D: Device](ABC):
             self._props = DeviceProperties(self)
         return self._props
 
-    async def cached_interface(self) -> DeviceInterface:
+    async def cached_interface(self) -> ComponentInterface:
         """Return the device interface, fetching it once per adapter."""
         if self._interface_cache is None:
             self._interface_cache = await self.interface()
@@ -54,7 +54,7 @@ class Adapter[D: Device](ABC):
     def device(self) -> D | None: ...
 
     @abstractmethod
-    async def interface(self) -> DeviceInterface: ...
+    async def interface(self) -> ComponentInterface: ...
 
     @abstractmethod
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result: ...
@@ -270,7 +270,7 @@ class DeviceHandle[D: Device]:
         """Live property hub for this device."""
         return self._props
 
-    async def interface(self) -> DeviceInterface:
+    async def interface(self) -> ComponentInterface:
         return await self._adapter.cached_interface()
 
     async def call(self, command: str, *args: Any, **kwargs: Any) -> Any:

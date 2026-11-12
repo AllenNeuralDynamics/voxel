@@ -19,9 +19,8 @@ from vxlib.history import Change
 
 from rigup import PropResults, Result
 from vxl._utils.color import ColormapGroup, get_colormap_catalog
-from vxl.core.config import StationInfo
-from vxl.core.metadata import resolve_metadata_class
-from vxl.core.models import SessionInfo, StationFeedView
+from vxl.core.instrument.metadata import resolve_metadata_class
+from vxl.core.models import SessionInfo, StationFeedView, StationInfo
 from vxl.core.station import Station
 from vxl.core.templates import InstrumentTemplates
 from vxl.devices.daq.clocked import Signals

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from rigup import DeviceConfig
+from vxl.hal.rig_config import DeviceConfig
 from vxl.hal.topology import DetectionAssembly, HardwareTopology, IlluminationAssembly, OpticalRouting, StageAxes
 
 

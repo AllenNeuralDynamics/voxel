@@ -31,10 +31,8 @@ class SkyraError(ConnectionError):
     """A rejected command, missing reply, or failed readback."""
 
 
-class SkyraController(Device):
+class SkyraController(Device, kind="laser_controller"):
     """Own the Skyra port, discover its lines, and reserve each line for one SkyraSource."""
-
-    __DEVICE_TYPE__ = "laser_controller"
 
     def __init__(self, uid: str, port: str, *, baud: int = 115200, timeout_s: float = 1.0) -> None:
         super().__init__(uid=uid)

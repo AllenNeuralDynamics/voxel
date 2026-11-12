@@ -1,8 +1,6 @@
 import pytest
 
-from vxl.instruments.spim.config import Config
-
-from .support import FILES
+from .support import FILES, load_file
 
 
 @pytest.mark.parametrize(
@@ -21,10 +19,11 @@ from .support import FILES
 def test_an_example_file_has_no_problems_and_a_full_chain(
     name: str, starters: tuple[str, ...], waits: dict[str, str]
 ) -> None:
-    config = Config.load(FILES / name)
-    assert config.violations() == []
+    file = load_file(FILES / name)
+    assert file.violations() == []
 
-    chain = config.hal.chain()
-    assert chain.starters == starters
-    assert {device: f"{wire.sender}.{wire.name}" for device, wire in chain.waits.items()} == waits
-    assert chain.unstarted == ()
+    for profile in file.default.profiles.values():
+        chain = file.config.trigger_chain(profile.channels, profile.timelines)
+        assert chain.starters == starters
+        assert {device: f"{wire.sender}.{wire.name}" for device, wire in chain.waits.items()} == waits
+        assert chain.unstarted == ()

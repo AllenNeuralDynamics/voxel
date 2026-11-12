@@ -10,7 +10,7 @@ from scipy.interpolate import PchipInterpolator
 from vxlib.vector import Span
 
 from .config import AnalogWire, DigitalWire, WireConfig, WireName
-from .errors import Violation, under
+from .errors import Violations
 from .signals import (
     AnalogConstant,
     AnalogFollow,
@@ -47,22 +47,17 @@ class Rendered:
     """Each wire's samples during 1 timeline, and the problems in them."""
 
     wires: dict[WireName, WireSamples]
-    violations: list[Violation]
+    violations: Violations
 
 
 def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered:
     """Each wire's samples during 1 timeline, and the problems in them. A signal that the timeline's own checks reject
     is left out."""
     rate, n = float(timeline.sample_rate), timeline.samples
-    found: list[Violation] = []
+    found = Violations()
     if abs(timeline.duration * rate - n) > 1e-6:
-        found.append(
-            Violation(
-                code="timeline.samples_not_whole",
-                msg=f"{timeline.duration * 1e3:g} ms at {rate:g} Hz is not a whole number of samples.",
-                loc=("duration",),
-            )
-        )
+        msg = f"{timeline.duration * 1e3:g} ms at {rate:g} Hz is not a whole number of samples."
+        found.add("timeline.samples_not_whole", msg, "duration")
     windows = timeline.windows()
     samples: dict[WireName, WireSamples] = {}
     for name, signal in timeline.signals.items():
@@ -75,9 +70,8 @@ def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered
         smooth, turn = _smooth(ideal, wire, rate)
         output, outside = _output(smooth, signal, wire)
         samples[name] = WireSamples(ideal, smooth, output)
-        found += under(
-            ("signals", name), _sample_violations(ideal, smooth, turn, output, outside, wire, window, timeline)
-        )
+        problems = _sample_violations(ideal, smooth, turn, output, outside, wire, window, timeline)
+        found += problems.under("signals", name)
 
     # Each follow copies the volts of its source, so it comes after it. A loop is never ready; the timeline's edge
     # checks report it.
@@ -89,7 +83,7 @@ def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered
             copied = follow.scale * np.roll(source, round(follow.delay * rate)) + follow.offset
             samples[name] = WireSamples(copied, copied, {"V": copied})
             if isinstance(wire := wires.get(name), AnalogWire):
-                found += under(("signals", name), _limit_violations({"V": copied}, wire))
+                found += _limit_violations({"V": copied}, wire).under("signals", name)
     return Rendered(samples, found)
 
 
@@ -216,13 +210,13 @@ def _sample_violations(
     wire: WireConfig,
     window: Span,
     timeline: Timeline,
-) -> list[Violation]:
+) -> Violations:
     """Every problem in 1 wire's samples."""
     rate, n = float(timeline.sample_rate), timeline.samples
-    found: list[Violation] = []
+    found = Violations()
 
     def add(code: str, msg: str, *at: str) -> None:
-        found.append(Violation(code=f"timeline.signal.{code}", msg=msg, loc=at))
+        found.add(f"timeline.signal.{code}", msg, *at)
 
     if isinstance(wire, DigitalWire):
         on = round(window.b * rate) - round(window.a * rate)
@@ -253,25 +247,24 @@ def _sample_violations(
         else:
             add("outside_table", f"Some values are outside the scale from {table}; they are held at its ends.")
     # Limits in the wire's own unit check the values wanted; limits in the units below check the output.
-    return found + _limit_violations({**output, unit: smooth}, wire)
+    found += _limit_violations({**output, unit: smooth}, wire)
+    return found
 
 
-def _limit_violations(values: Mapping[str, np.ndarray], wire: AnalogWire) -> list[Violation]:
+def _limit_violations(values: Mapping[str, np.ndarray], wire: AnalogWire) -> Violations:
     """The limits in each unit, against the values in that unit."""
-    found: list[Violation] = []
+    found = Violations()
     for unit, limits in wire.limits.items():
         if (checked := values.get(unit)) is None:
             continue
         low, high = float(checked.min()), float(checked.max())
         margin = _TOLERANCE * max(abs(limits.low), abs(limits.high), 1.0)
         if low < limits.low - margin or high > limits.high + margin:
-            found.append(
-                Violation(
-                    code="timeline.signal.limit",
-                    msg=f"The values reach {low:g} to {high:g} {unit}, outside the limits {limits.low:g} to "
-                    f"{limits.high:g} {unit}.",
-                )
+            msg = (
+                f"The values reach {low:g} to {high:g} {unit}, outside the limits {limits.low:g} to "
+                f"{limits.high:g} {unit}."
             )
+            found.add("timeline.signal.limit", msg)
     return found
 
 

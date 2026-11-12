@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from rigup import DeviceInterface, PropertyModel
+    from rigup import ComponentInterface, PropertyModel
     from vxl.core.models import SessionView
     from vxl.instrument import Instrument
 
@@ -37,7 +37,7 @@ class DeviceHandleQt(QObject):
     connected = Signal(bool)  # Connection status change
     fault = Signal(str)  # Error message
 
-    def __init__(self, instrument: Instrument, interface: DeviceInterface, parent: QObject | None = None) -> None:
+    def __init__(self, instrument: Instrument, interface: ComponentInterface, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._instrument = instrument
         self._interface = interface
@@ -54,7 +54,7 @@ class DeviceHandleQt(QObject):
     @property
     def kind(self) -> str:
         """Device interface type."""
-        return self._interface.type
+        return self._interface.kind
 
     def start(self, props: Mapping[str, PropertyModel]) -> None:
         """Start the adapter from one complete StationFeed device view."""
@@ -148,11 +148,11 @@ class DeviceHandleQt(QObject):
         results = await self._instrument.set_device_properties(self._uid, {property_name: value})
         results.unwrap()
 
-    async def interface(self) -> DeviceInterface:
+    async def interface(self) -> ComponentInterface:
         """Get the device interface (introspection).
 
         Returns:
-            DeviceInterface with properties, commands, etc.
+            ComponentInterface with properties, commands, etc.
         """
         return self._interface
 
@@ -162,7 +162,7 @@ class DeviceHandleQt(QObject):
         Returns:
             Device type string
         """
-        return self._interface.type
+        return self._interface.kind
 
 
 class DevicesStore(QObject):

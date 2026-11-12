@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.instruments.spim.config import State, Surface, Task
+from vxl.instruments.spim.config import SPIMState, Surface, Task
 
 from .support import load, sweep_x
 
@@ -13,15 +13,15 @@ _REGION = {
 }
 
 
-def _preset(config_data: dict[str, Any], *tasks: dict[str, Any]) -> State:
-    config = load(config_data)
-    plan = [Task.complete(task, config.default.task) for task in tasks]
-    return State.model_validate({**config.default.model_dump(mode="json"), "plan": plan})
+def _preset(config_data: dict[str, Any], *tasks: dict[str, Any]) -> SPIMState:
+    default = load(config_data).default
+    plan = [Task.complete(task, default.task) for task in tasks]
+    return SPIMState.model_validate({**default.model_dump(mode="json"), "plan": plan})
 
 
 def _codes(config_data: dict[str, Any], *tasks: dict[str, Any]) -> list[str]:
-    preset, config = _preset(config_data, *tasks), load(config_data)
-    return [v.code or "" for v in preset.violations(config.hal)]
+    preset, example = _preset(config_data, *tasks), load(config_data)
+    return [v.code or "" for v in preset.violations(example.config)]
 
 
 def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any]) -> None:

@@ -14,7 +14,7 @@ from .props import PropertyModel
 from .schema import (
     Command,
     CommandRequest,
-    DeviceInterface,
+    ComponentInterface,
     PropResults,
     Result,
     Results,
@@ -62,9 +62,9 @@ class DeviceController[D: "Device"]:
         all_properties = {**self._device_props, **self._ctrl_props}
 
         # Build interface
-        self._interface = DeviceInterface(
+        self._interface = ComponentInterface(
             uid=device.uid,
-            type=device.__DEVICE_TYPE__,
+            kind=device.kind,
             commands={name: cmd.info for name, cmd in self._commands.items()},
             properties=all_properties,
         )
@@ -82,7 +82,7 @@ class DeviceController[D: "Device"]:
         return self._device.uid
 
     @property
-    def interface(self) -> DeviceInterface:
+    def interface(self) -> ComponentInterface:
         return self._interface
 
     @property
@@ -237,12 +237,39 @@ class DeviceController[D: "Device"]:
 
 
 class Device[T: StrEnum]:
-    __DEVICE_TYPE__: ClassVar[str] = "generic"
-    __CONTROLLER_TYPE__: ClassVar[type] = DeviceController
+    """A component with a driver. A device class says its kind in its class line, ``class Camera(Device,
+    kind="camera")``, and a class below it has the same kind or says a new one. A device class that needs its own
+    controller says it in the same place, ``controller=CameraController``."""
+
+    _kind: ClassVar[str] = ""
+    _controller: ClassVar[type[DeviceController[Any]]] = DeviceController
+
+    def __init_subclass__(
+        cls, *, kind: str = "", controller: type[DeviceController[Any]] | None = None, **kwargs: Any
+    ) -> None:
+        super().__init_subclass__(**kwargs)
+        if kind:
+            cls._kind = kind
+        if controller is not None:
+            cls._controller = controller
 
     def __init__(self, uid: str):
-        self.uid = uid
-        self.log = logging.getLogger(self.uid)
+        if not self._kind:
+            raise TypeError(f"{type(self).__name__} does not say its kind")
+        self._uid = uid
+        self.log = logging.getLogger(uid)
+
+    @property
+    def uid(self) -> str:
+        return self._uid
+
+    @property
+    def kind(self) -> str:
+        return self._kind
+
+    def make_controller(self) -> DeviceController[Any]:
+        """Make a new controller of this device's class around this device."""
+        return self._controller(self)
 
     def close(self) -> None:
         pass

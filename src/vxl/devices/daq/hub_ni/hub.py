@@ -13,7 +13,7 @@ from rigup import Device
 from .resources import NiDaqModel, NiTaskLease, _NiResourceManager, capabilities_for_model
 
 
-class NiDaqmx(Device):
+class NiDaqmx(Device, kind="generic"):
     """NI-DAQmx hub owning one card's topology and task reservations."""
 
     def __init__(self, uid: str, *, device_name: str) -> None:

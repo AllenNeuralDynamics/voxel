@@ -13,7 +13,7 @@ import logging
 
 from rigup.build import BuildError
 from rigup.config import NodeConfig, RigConfig
-from rigup.device import DeviceHandle
+from rigup.device import ComponentInterface, DeviceHandle
 from rigup.node import LocalNode, Node, RemoteNode, SubprocessNode
 
 
@@ -49,6 +49,14 @@ class Rig:
         result: dict[str, DeviceHandle] = {}
         for node in self._nodes.values():
             result.update(node.devices)
+        return result
+
+    @property
+    def parts(self) -> dict[str, ComponentInterface]:
+        """The interface of each built part, keyed by uid. A part has no handle."""
+        result: dict[str, ComponentInterface] = {}
+        for node in self._nodes.values():
+            result.update(node.parts)
         return result
 
     @property
@@ -89,7 +97,7 @@ class Rig:
         self._log.info("Rig '%s' closed", self.name)
 
     def _create_nodes(self) -> None:
-        if self._config.devices:
+        if self._config.components:
             self._nodes["local"] = LocalNode()
 
         for node_id, node_cfg in self._config.nodes.items():
@@ -103,14 +111,14 @@ class Rig:
                 return RemoteNode(node_id, config)
 
     async def _build_all_devices(self) -> None:
-        if self._config.devices:
+        if self._config.components:
             local = self._nodes.get("local")
             if local is not None:
-                _, errors = await local.build_devices(self._config.devices)
+                _, errors = await local.build_devices(self._config.components)
                 self._build_errors.update(errors)
 
         for node_id, node_cfg in self._config.nodes.items():
             node = self._nodes.get(node_id)
-            if node is not None and node_cfg.devices:
-                _, errors = await node.build_devices(node_cfg.devices)
+            if node is not None and node_cfg.components:
+                _, errors = await node.build_devices(node_cfg.components)
                 self._build_errors.update(errors)

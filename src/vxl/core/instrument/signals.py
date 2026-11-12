@@ -11,7 +11,7 @@ from vxlib.units import Angle, Frequency, Percent, Quantity, Time, Voltage
 from vxlib.vector import Span
 
 from .config import AnalogWire, DigitalWire, WireConfig, WireName
-from .errors import Violation, ViolationLoc, under
+from .errors import ViolationLoc, Violations
 
 type EdgeName = Literal["start", "end"]
 
@@ -244,36 +244,25 @@ class Timeline(FrozenModel):
         """Each signal's start and end, in seconds. A signal whose edges cannot be placed is left out."""
         return _place_edges(self.signals, self.duration)[0]
 
-    def violations(self, wires: Mapping[WireName, WireConfig]) -> list[Violation]:
+    def violations(self, wires: Mapping[WireName, WireConfig]) -> Violations:
         """Return the problems of this timeline against the wires that its generator sends."""
-        violations: list[Violation] = []
+        violations = Violations()
         known: dict[str, Signal] = {}
         for name, signal in self.signals.items():
             wire = wires.get(name)
-            signal_loc = ("signals", name)
             if wire is None:
-                violations.append(
-                    Violation(
-                        code="timeline.signal.unexpected",
-                        msg=f"'{name}' is not a wire that this generator sends.",
-                        loc=signal_loc,
-                    )
-                )
+                msg = f"'{name}' is not a wire that this generator sends."
+                violations.add("timeline.signal.unexpected", msg, "signals", name)
                 continue
             known[name] = signal
             if isinstance(wire, DigitalWire) != isinstance(signal, _DIGITAL_KINDS):
                 takes = (
                     "on, off" if isinstance(wire, DigitalWire) else "constant, pulse, staircase, points, wave, follow"
                 )
-                violations.append(
-                    Violation(
-                        code="timeline.signal.kind_mismatch",
-                        msg=f"A {wire.kind} wire takes {takes}, not '{signal.kind}'.",
-                        loc=(*signal_loc, "kind"),
-                    )
-                )
+                msg = f"A {wire.kind} wire takes {takes}, not '{signal.kind}'."
+                violations.add("timeline.signal.kind_mismatch", msg, "signals", name, "kind")
             else:
-                violations += under(signal_loc, _unit_violations(signal, wire))
+                violations += _unit_violations(signal, wire).under("signals", name)
 
         windows, problems = _place_edges(known, self.duration)
         for problem in problems:
@@ -283,44 +272,28 @@ class Timeline(FrozenModel):
                 msg = (
                     f"'{problem.detail}' is not a signal in this timeline; an edge names a wire of the same generator."
                 )
-            violations.append(
-                Violation(code=f"timeline.signal.edge_{problem.reason}", msg=msg, loc=("signals", problem.signal))
-            )
+            violations.add(f"timeline.signal.edge_{problem.reason}", msg, "signals", problem.signal)
         for name, (start, end) in windows.items():
             if start < -_EDGE_TOLERANCE or end > self.duration + _EDGE_TOLERANCE:
-                violations.append(
-                    Violation(
-                        code="timeline.signal.window_outside_timeline",
-                        msg=(
-                            f"The window {start * 1e3:g} to {end * 1e3:g} ms is outside the "
-                            f"timeline of {self.duration * 1e3:g} ms."
-                        ),
-                        loc=("signals", name),
-                    )
+                msg = (
+                    f"The window {start * 1e3:g} to {end * 1e3:g} ms is outside the "
+                    f"timeline of {self.duration * 1e3:g} ms."
                 )
+                violations.add("timeline.signal.window_outside_timeline", msg, "signals", name)
             elif end < start - _EDGE_TOLERANCE:
-                violations.append(
-                    Violation(
-                        code="timeline.signal.window_reversed",
-                        msg=f"'end' ({end * 1e3:g} ms) is before 'start' ({start * 1e3:g} ms).",
-                        loc=("signals", name),
-                    )
-                )
+                msg = f"'end' ({end * 1e3:g} ms) is before 'start' ({start * 1e3:g} ms)."
+                violations.add("timeline.signal.window_reversed", msg, "signals", name)
         return violations
 
 
-def _unit_violations(signal: object, wire: WireConfig) -> list[Violation]:
-    if not isinstance(wire, AnalogWire):
-        return []
-    return [
-        Violation(
-            code="timeline.signal.unit_mismatch",
-            msg=f"{value} is not in this wire's unit, {wire.unit}.",
-            loc=path,
-        )
-        for path, value in _values(signal)
-        if value.unit != wire.unit
-    ]
+def _unit_violations(signal: object, wire: WireConfig) -> Violations:
+    violations = Violations()
+    if isinstance(wire, AnalogWire):
+        for path, value in _values(signal):
+            if value.unit != wire.unit:
+                msg = f"{value} is not in this wire's unit, {wire.unit}."
+                violations.add("timeline.signal.unit_mismatch", msg, *path)
+    return violations
 
 
 def _values(signal: object) -> list[tuple[ViolationLoc, Quantity]]:

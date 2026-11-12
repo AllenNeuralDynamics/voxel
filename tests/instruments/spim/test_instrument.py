@@ -4,11 +4,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.core.config import new_instrument_id
-from vxl.core.store import InstrumentStore, OperationRejectedError
-from vxl.instruments.spim.config import Config, StageFollowRule, State, Task, Template
+from vxl._utils.files import load_yaml
+from vxl.core.instrument.config import new_instrument_id
+from vxl.core.instrument.store import InstrumentStore, OperationRejectedError
+from vxl.instruments.spim.config import SPIMConfig, SPIMState, StageFollowRule, Task
 
-from .support import codes, load, two_arms
+from .support import codes, load, template, two_arms
 
 
 def test_new_ids_are_26_safe_characters_and_differ() -> None:
@@ -38,42 +39,38 @@ def test_names_are_labels_of_at_most_32_characters(config_data: dict[str, Any]) 
         load(config_data)
 
 
-def test_a_template_makes_instruments_with_new_ids(config_data: dict[str, Any]) -> None:
-    template_data = {key: value for key, value in config_data.items() if key not in {"id", "name"}}
-    template = Template.model_validate(template_data)
-
-    first, second = Config.from_template(template, "left"), Config.from_template(template, "right")
-    assert first.id != second.id
-    assert (first.name, first.model) == ("left", "exaspim.v2")
-    assert Config.model_validate(first.model_dump(mode="json")) == first
-
-
-def test_a_template_has_no_id(config_data: dict[str, Any]) -> None:
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        Template.model_validate(config_data)
+def test_a_template_makes_instruments_with_new_ids(config_data: dict[str, Any], tmp_path: Path) -> None:
+    homes = [InstrumentStore.create(template(config_data), name, tmp_path) for name in ("left", "right")]
+    first, second = (InstrumentStore.check(home, SPIMConfig, SPIMState) for home in homes)
+    assert first.ok
+    assert second.ok
+    assert first.config is not None
+    assert second.config is not None
+    assert first.config.id != second.config.id
+    assert (first.config.name, first.config.model) == ("left", "exaspim.v2")
 
 
-def test_a_file_names_its_kind(config_data: dict[str, Any]) -> None:
-    config_data["kind"] = "vxl.instruments.linescan"
-    with pytest.raises(ValidationError, match="this file is for"):
-        load(config_data)
+def test_a_template_has_no_id(config_data: dict[str, Any], tmp_path: Path) -> None:
+    with_identity = template(config_data)
+    with_identity["rig"] |= {"id": config_data["id"], "name": config_data["name"]}
+    with pytest.raises(ValueError, match="a template has no id and no name"):
+        InstrumentStore.create(with_identity, "left", tmp_path)
 
 
-def test_a_default_has_no_plan_and_no_metadata(config_data: dict[str, Any]) -> None:
-    assert State.default_fields() == {"metadata_cls", "output", "task", "positions", "profiles"}
-    assert set(load(config_data).model_dump()["default"]) == State.default_fields()
+def test_a_default_has_no_plan_and_no_metadata(config_data: dict[str, Any], tmp_path: Path) -> None:
+    assert SPIMState.default_fields() == {"metadata_cls", "output", "task", "positions", "profiles"}
 
     config_data["default"]["metadata"] = {"notes": "left hemisphere"}
-    with pytest.raises(ValidationError, match="'metadata' is not saved as a default"):
-        load(config_data)
+    home = InstrumentStore.create(template(config_data), "left", tmp_path)
+    assert InstrumentStore.check(home, SPIMConfig, SPIMState).violations.codes() == ["default.not_default"]
 
 
 async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
     config_data: dict[str, Any], tmp_path: Path
 ) -> None:
-    home = InstrumentStore.instantiate(load(config_data), "left", tmp_path)
-    store = InstrumentStore[Config, State].load(home, Config)
-    assert store.value == store.config.default
+    home = InstrumentStore.create(template(config_data), "left", tmp_path)
+    store = InstrumentStore.from_inspection(InstrumentStore.check(home, SPIMConfig, SPIMState), SPIMState)
+    assert store.value == store.default.value
     assert store.last_modified is None
 
     xy = {"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 500, "y": 500}]}
@@ -86,8 +83,8 @@ async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
     assert store.last_modified is not None
 
     await store.save_as_default()
-    saved = Config.load(home / "config.yaml").default
-    assert (saved.profiles["gfp"].spacing, saved.plan, saved.metadata) == (2.0, [], {})
+    assert store.default.value.profiles["gfp"].spacing == 2.0
+    assert set(load_yaml(home / "default.yaml")) <= SPIMState.default_fields()
     with pytest.raises(OperationRejectedError, match="plan"):
         await store.save_as_default(["plan"])
 
@@ -99,8 +96,13 @@ async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
     await store.apply_preset(store.value.as_preset().model_copy(update={"plan": []}))
     assert (store.value.plan, store.value.metadata) == ([], {"notes": "left hemisphere"})
 
-    again = InstrumentStore[Config, State].check(home, Config)
+    with pytest.raises(OperationRejectedError, match="'x_axis' is not a device of 'optics'"):
+        await store.update(positions={"x_axis": 10})
+    assert store.value.positions == store.default.value.positions
+
+    again = InstrumentStore.check(home, SPIMConfig, SPIMState)
     assert again.ok
+    assert again.default == store.default.value
     assert again.state == store.value
 
 
@@ -121,8 +123,6 @@ _FOLLOW_X = {"axis": "x", "order": ["left", "right"], "at": [12000], "margin": 5
         ({"arm_switch": "left"}, []),
         ({"arm_switch": "left", "fw": "GFP"}, ["profile.position.two_levels"]),
         ({"arm_switch": "left", "x_axis": 10}, ["positions.unexpected"]),
-        ({"arm_switch": "up"}, ["positions.invalid"]),
-        ({"arm_switch": {**_FOLLOW_X, "order": ["left", "up"]}}, ["positions.invalid"]),
         ({"arm_switch": {**_FOLLOW_X, "axis": "z"}}, ["positions.follows_scan_axis"]),
     ],
 )
@@ -141,23 +141,23 @@ def test_a_device_gets_its_position_from_the_instrument_or_from_each_profile(con
     assert codes(load(config_data)) == []
 
     gfp["positions"] = {"fw": "RFP"}
-    config = load(config_data)
-    assert codes(config) == ["profile.position.two_levels"]
-    assert [violation.loc for violation in config.violations()] == [("default", "profiles", "gfp", "positions", "fw")]
+    example = load(config_data)
+    assert codes(example) == ["profile.position.two_levels"]
+    assert [violation.loc for violation in example.violations()] == [("default", "profiles", "gfp", "positions", "fw")]
 
 
 def test_a_device_that_1_profile_sets_each_profile_sets(config_data: dict[str, Any]) -> None:
-    hal, profiles = config_data["hal"], config_data["default"]["profiles"]
-    hal["devices"]["focus"] = {"target": "builtins.object"}
+    hal, profiles = config_data, config_data["default"]["profiles"]
+    hal["components"]["focus"] = {"target": "builtins.object"}
     hal["optics"]["objective"]["to"] = "focus"
     hal["optics"]["focus"] = {"to": "fw"}
     profiles["rfp"] = {**profiles["gfp"], "positions": {"fw": "RFP"}}
     assert codes(load(config_data)) == []
 
     profiles["gfp"]["positions"]["focus"] = 120.5
-    config = load(config_data)
-    assert codes(config) == ["profile.position.not_in_all_profiles"]
-    assert [violation.loc for violation in config.violations()] == [
+    example = load(config_data)
+    assert codes(example) == ["profile.position.not_in_all_profiles"]
+    assert [violation.loc for violation in example.violations()] == [
         ("default", "profiles", "rfp", "positions", "focus")
     ]
 

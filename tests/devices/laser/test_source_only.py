@@ -2,7 +2,7 @@ import pytest
 from rigup.device.props import PropertyModel
 from rigup.rig import Rig
 
-from rigup import DeviceConfig, RigConfig, describe, numeric
+from rigup import ComponentConfig, RigConfig, describe, numeric
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl.devices.laser.source_only import SourceOnlyLaser
 
@@ -184,9 +184,9 @@ def test_close_retries_failed_inhibition_and_leaves_source_with_owner():
 async def test_rig_registers_source_and_adapter_with_separate_discovery():
     rig = Rig(
         RigConfig(
-            devices={
-                "source": DeviceConfig(target=f"{__name__}.RecordingSource"),
-                "laser": DeviceConfig(
+            components={
+                "source": ComponentConfig(target=f"{__name__}.RecordingSource"),
+                "laser": ComponentConfig(
                     target="vxl.devices.laser.source_only.SourceOnlyLaser", init={"source": "source"}
                 ),
             }

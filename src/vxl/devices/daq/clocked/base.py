@@ -1,7 +1,7 @@
 import logging
 from abc import abstractmethod
 from collections.abc import Mapping
-from typing import ClassVar, Literal
+from typing import Literal
 
 import numpy as np
 from pydantic import TypeAdapter
@@ -108,15 +108,12 @@ class SignalGeneratorController(DeviceController["SignalGenerator"]):
         await self._run_sync(self.device.wait_until_done, timeout_s)
 
 
-class SignalGenerator(Device):
+class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=SignalGeneratorController):
     """Hardware-clocked analog waveform generator.
 
     Timing and trigger configuration are driver-specific. The vendor-neutral
     surface accepts per-port voltage waveforms sharing one sample rate and cycle.
     """
-
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.SIGNAL_GENERATOR
-    __CONTROLLER_TYPE__: ClassVar[type] = SignalGeneratorController
 
     def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
         super().__init__(uid=uid)

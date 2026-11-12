@@ -9,7 +9,7 @@ from vxlib.schema import FrozenModel, identifier
 
 from rigup import CommandRequest
 from vxl._utils.color import Color
-from vxl.core.metadata import ExperimentMetadata, MetadataCls
+from vxl.core.instrument.metadata import ExperimentMetadata, MetadataCls
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import DiscreteAxisPositions, HardwareTopology
 from vxl.hal.topology import SelectRoutingDefinition, SplitRoutingDefinition

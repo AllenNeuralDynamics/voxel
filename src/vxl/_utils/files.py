@@ -4,6 +4,7 @@ import io
 import os
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -155,34 +156,52 @@ def _apply_collection_style(value: Any, *, inline_limit: int = 100) -> Any:
     return value
 
 
-def save_yaml(path: Path, model: BaseModel) -> None:
-    """Write a model as YAML while preserving comments and formatting from an existing file."""
+def _merge(dst: Any, src: Any) -> Any:
+    if dst == src:
+        return dst
+    if isinstance(dst, dict) and isinstance(src, dict):
+        for key in [key for key in dst if key not in src]:
+            del dst[key]
+        for key, value in src.items():
+            dst[key] = _merge(dst.get(key), value)
+        return dst
+    return src
 
-    def merge(dst: Any, src: Any) -> Any:
-        if dst == src:
-            return dst
-        if isinstance(dst, dict) and isinstance(src, dict):
-            for key in [key for key in dst if key not in src]:
-                del dst[key]
-            for key, value in src.items():
-                dst[key] = merge(dst.get(key), value)
-            return dst
-        return src
 
+def _round_trip() -> YAML:
     rt = YAML()
     rt.Emitter = _FlowMapEmitter
     rt.default_flow_style = None
     rt.preserve_quotes = True
     rt.width = 120
+    return rt
 
-    data: Any = model.model_dump(mode="json", exclude_none=True)
-    if path.exists():
-        data = merge(rt.load(path.read_text(encoding="utf-8")), data)
-    data = _apply_collection_style(data)
 
+def _dump(path: Path, rt: YAML, data: Any) -> None:
     buffer = io.StringIO()
-    rt.dump(data, buffer)
+    rt.dump(_apply_collection_style(data), buffer)
     atomic_write(path, buffer.getvalue())
 
 
-__all__ = ["load_and_validate_yaml", "load_yaml", "save_yaml"]
+def save_yaml(path: Path, model: BaseModel) -> None:
+    """Write a model as YAML while preserving comments and formatting from an existing file."""
+    rt = _round_trip()
+    data: Any = model.model_dump(mode="json", exclude_none=True)
+    if path.exists():
+        data = _merge(rt.load(path.read_text(encoding="utf-8")), data)
+    _dump(path, rt, data)
+
+
+def update_yaml(path: Path, updates: Mapping[str, Any]) -> None:
+    """Set top-level keys of a YAML file while preserving the comments and formatting of the rest.
+
+    A missing file is created.
+    """
+    rt = _round_trip()
+    data: Any = (rt.load(path.read_text(encoding="utf-8")) if path.exists() else None) or {}
+    for key, value in updates.items():
+        data[key] = _merge(data.get(key), value)
+    _dump(path, rt, data)
+
+
+__all__ = ["load_and_validate_yaml", "load_yaml", "save_yaml", "update_yaml"]

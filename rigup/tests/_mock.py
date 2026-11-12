@@ -1,7 +1,9 @@
-"""Shared mock device for rigup tests."""
+"""Shared mock device and mock part for rigup tests."""
 
 from enum import StrEnum
+from typing import Literal
 
+from rigup.component import Part, RigComponent
 from rigup.device import Device, describe
 
 
@@ -10,9 +12,12 @@ class MockState(StrEnum):
     ACTIVE = "active"
 
 
-class MockDevice(Device[MockState]):
-    __DEVICE_TYPE__ = "mock"
+class MockPart(Part, frozen=True):
+    kind: Literal["mock_part"] = "mock_part"
+    value: float = 0.0
 
+
+class MockDevice(Device[MockState], kind="mock"):
     def __init__(self, uid: str, initial_value: float = 0.0):
         super().__init__(uid)
         self._value = initial_value
@@ -52,3 +57,11 @@ class MockDevice(Device[MockState]):
     @describe(label="Fail", desc="Always raises")
     def fail(self) -> None:
         raise RuntimeError("intentional failure")
+
+
+class MockHolder(MockDevice):
+    """A mock device that is given 1 other component."""
+
+    def __init__(self, uid: str, held: RigComponent):
+        super().__init__(uid)
+        self.held = held

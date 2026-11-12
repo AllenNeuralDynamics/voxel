@@ -5,15 +5,13 @@ import logging
 from collections.abc import Awaitable, Mapping
 from typing import Any
 
-from rigup.config import DeviceUid
-
-from rigup import DeviceHandle, DeviceInterface
+from rigup import ComponentInterface, DeviceHandle
 from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.camera import CameraHandle
 from vxl.devices.daq.clocked import SignalGeneratorHandle
 
-from .config import HALConfig
+from .config import DeviceUid, InstrumentConfig
 from .errors import StartupError, Violation, ViolationLoc
 
 logger = logging.getLogger(__name__)
@@ -30,18 +28,18 @@ class HAL:
     """The rig of 1 instrument. Once open, ``handles`` has a handle for each device, of the class its kind has, such as
     :class:`CameraHandle`, and ``interfaces`` has what each device says it is."""
 
-    def __init__(self, config: HALConfig, name: str = "VoxelHAL") -> None:
+    def __init__(self, config: InstrumentConfig) -> None:
         from rigup.rig import Rig  # noqa: PLC0415  # the network runtime loads only when devices open
 
         self._config = config
-        self._rig = Rig(config, name)
+        self._rig = Rig(config, config.name)
         self.handles: dict[DeviceUid, DeviceHandle[Any]] = {}
-        self.interfaces: dict[DeviceUid, DeviceInterface] = {}
+        self.interfaces: dict[DeviceUid, ComponentInterface] = {}
 
     async def open(self) -> None:
         """Open the rig and check each device against the kind that its role needs. Then read every device's
         properties and turn off every laser's output. Raise :class:`StartupError` with every problem found, at its
-        path in ``hal``."""
+        path in ``rig.yaml``."""
         try:
             await self._rig.open()
             violations = [*self._build_violations(), *await self._inspect()]
@@ -111,49 +109,48 @@ class HAL:
                     raise answer
                 violations.append(
                     Violation(
-                        code="hal.device.interface",
+                        code="rig.device.interface",
                         msg=f"Unable to inspect device '{uid}': {answer}",
                         loc=self._device_loc(uid),
                     )
                 )
                 continue
             self.interfaces[uid] = answer
-            if (wrapper := _HANDLES.get(answer.type)) is not None:
+            if (wrapper := _HANDLES.get(answer.kind)) is not None:
                 self.handles[uid] = wrapper.wrap(handle)
             else:
                 self.handles[uid] = handle
-                if answer.type != "laser":
-                    logger.debug("Uncategorized device '%s' of type '%s'", uid, answer.type)
+                if answer.kind != "laser":
+                    logger.debug("Uncategorized device '%s' of type '%s'", uid, answer.kind)
         return violations
 
     def _role_violations(self, roles: Mapping[DeviceUid, str]) -> list[Violation]:
         """A device that did not build or answer has its own violation already."""
         return [
             Violation(
-                code=f"hal.device.not_{needed}",
-                msg=f"'{uid}' is not a {needed} device: it is a {interface.type} device.",
+                code=f"rig.device.not_{needed}",
+                msg=f"'{uid}' is not a {needed} device: it is a {interface.kind} device.",
                 loc=self._device_loc(uid),
             )
             for uid, needed in roles.items()
-            if (interface := self.interfaces.get(uid)) is not None and interface.type != needed
+            if (interface := self.interfaces.get(uid)) is not None and interface.kind != needed
         ]
 
     def _autosave_violations(self) -> list[Violation]:
         """Each explicit ``autosave`` name must be a property that the device can write."""
         violations: list[Violation] = []
-        for uid, config in self._config.device_configs.items():
+        for uid, names in self._config.autosave.items():
             interface = self.interfaces.get(uid)
-            if config.autosave == "*" or interface is None:
+            if names == "*" or interface is None:
                 continue
-            loc = (*self._device_loc(uid), "autosave")
-            for index, name in enumerate(config.autosave):
+            for index, name in enumerate(names):
                 info = interface.properties.get(name)
                 if info is None or info.access != "rw":
                     violations.append(
                         Violation(
                             code="device.autosave.not_writable",
                             msg=f"Autosave requires a writable property: '{uid}.{name}'.",
-                            loc=(*loc, index),
+                            loc=("autosave", uid, index),
                         )
                     )
         return violations
@@ -164,7 +161,7 @@ class HAL:
         results = await asyncio.gather(*(camera.sensor.get() for _, camera in cameras), return_exceptions=True)
         return [
             Violation(
-                code="hal.camera.geometry",
+                code="rig.camera.geometry",
                 msg=f"Unable to read camera geometry for '{uid}': {error}",
                 loc=self._device_loc(uid),
             )
@@ -188,7 +185,7 @@ class HAL:
                     raise result
                 violations.append(
                     Violation(
-                        code="hal.stage.limit_unavailable",
+                        code="rig.stage.limit_unavailable",
                         msg=f"Unable to read the {axis}-axis limits: {result}",
                         loc=loc,
                     )
@@ -198,7 +195,7 @@ class HAL:
             if lower > upper:
                 violations.append(
                     Violation(
-                        code="hal.stage.limits_invalid",
+                        code="rig.stage.limits_invalid",
                         msg=f"The {axis}-axis lower limit ({lower}) exceeds its upper limit ({upper}).",
                         loc=loc,
                     )
@@ -215,7 +212,7 @@ class HAL:
         results = await asyncio.gather(*(generator.ports.get() for _, generator in generators), return_exceptions=True)
         return [
             Violation(
-                code="hal.signal_generator.ports",
+                code="rig.signal_generator.ports",
                 msg=f"Unable to read ports for signal generator '{uid}': {error}",
                 loc=(*self._device_loc(uid), "ports"),
             )
@@ -237,24 +234,24 @@ class HAL:
                 logger.warning("Could not refresh properties %s for device %s", failed, uid)
 
     def _lasers(self) -> list[DeviceHandle[Any]]:
-        return [self.handles[uid] for uid, interface in self.interfaces.items() if interface.type == "laser"]
+        return [self.handles[uid] for uid, interface in self.interfaces.items() if interface.kind == "laser"]
 
     def _device_loc(self, uid: DeviceUid) -> ViolationLoc:
-        """Where ``uid`` is in ``hal``."""
+        """Where ``uid`` is in ``rig.yaml``."""
         for node, found in self._config.nodes.items():
-            if uid in found.devices:
-                return ("nodes", node, "devices", uid)
-        return ("devices", uid)
+            if uid in found.components:
+                return ("nodes", node, "components", uid)
+        return ("components", uid)
 
 
-def _roles(config: HALConfig) -> dict[DeviceUid, str]:
-    """The kind of device that each role needs: each stage axis, camera, light source, signal generator, and device
-    whose position changes the light."""
+def _roles(config: InstrumentConfig) -> dict[DeviceUid, str]:
+    """The kind of device that each role needs: each stage axis, camera, light source, and device that sends the
+    light a different way at each position."""
     kinds = dict.fromkeys(config.stage.devices().values(), "continuous_axis")
     kinds |= dict.fromkeys(config.optics.detectors(), "camera")
-    kinds |= dict.fromkeys((node for node in config.optics.sources() if node in config.device_uids), "laser")
-    kinds |= dict.fromkeys(config.selectors(), "discrete_axis")
-    kinds |= dict.fromkeys(config.generators(), "signal_generator")
+    kinds |= dict.fromkeys((node for node in config.optics.sources() if node in config.component_uids), "laser")
+    by_position = (name for name, node in config.optics.elements().items() if isinstance(node.to, dict))
+    kinds |= dict.fromkeys((name for name in by_position if name in config.component_uids), "discrete_axis")
     return kinds
 
 

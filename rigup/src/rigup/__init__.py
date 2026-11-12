@@ -5,13 +5,14 @@ over the network is ``rigup.rig.Rig``: import it from there.
 """
 
 from .build import BuildConfig, BuildError, BuildGroupSpec, build_objects, build_objects_async, import_class
-from .config import DeviceConfig, NodeConfig, RigConfig
+from .component import Part, RigComponent
+from .config import ComponentConfig, NodeConfig, RigConfig
 from .device import (
     CommandRequest,
+    ComponentInterface,
     Device,
     DeviceController,
     DeviceHandle,
-    DeviceInterface,
     DeviceProperties,
     DeviceProperty,
     DeviceProps,
@@ -31,19 +32,21 @@ __all__ = [
     "BuildError",
     "BuildGroupSpec",
     "CommandRequest",
+    "ComponentConfig",
+    "ComponentInterface",
     "Device",
-    "DeviceConfig",
     "DeviceController",
     "DeviceHandle",
-    "DeviceInterface",
     "DeviceProperties",
     "DeviceProperty",
     "DeviceProps",
     "NodeConfig",
+    "Part",
     "PropResults",
     "PropertyModel",
     "Result",
     "Results",
+    "RigComponent",
     "RigConfig",
     "StreamCallback",
     "build_objects",

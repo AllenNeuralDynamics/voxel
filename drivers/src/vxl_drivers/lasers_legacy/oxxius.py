@@ -135,7 +135,7 @@ class LaserAlreadyReservedError(ValueError):
 # ==================== OxxiusHub ====================
 
 
-class OxxiusHub(Device):
+class OxxiusHub(Device, kind="generic"):
     """Oxxius L4CC/L6CC laser combiner hub.
 
     Manages serial communication and laser reservations for Oxxius

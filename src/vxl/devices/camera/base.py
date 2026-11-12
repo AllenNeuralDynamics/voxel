@@ -501,10 +501,7 @@ class CameraController(DeviceController["Camera"]):
         return CaptureState.DONE if self._task_kind == "batch" else CaptureState.CLOSED
 
 
-class Camera(Device):
-    __DEVICE_TYPE__ = DeviceType.CAMERA
-    __CONTROLLER_TYPE__ = CameraController
-
+class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
     trigger_mode: TriggerMode = TriggerMode.OFF
     trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE
 

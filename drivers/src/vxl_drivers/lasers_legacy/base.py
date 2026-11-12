@@ -3,10 +3,8 @@ from abc import abstractmethod
 from rigup import Device, describe, numeric
 
 
-class Laser(Device):
+class Laser(Device, kind="laser_legacy"):
     """Legacy laser interface, discoverable separately from canonical lasers."""
-
-    __DEVICE_TYPE__ = "laser_legacy"
 
     def __init__(self, uid: str, wavelength: int) -> None:
         self._wavelength = wavelength

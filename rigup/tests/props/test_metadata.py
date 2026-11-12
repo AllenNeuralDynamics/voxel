@@ -7,7 +7,7 @@ from rigup.wire import pack, unpack
 from rigup import Device, DeviceController, DeviceHandle, PropResults, describe, numeric, numeric_int
 
 
-class ChoicesDevice(Device):
+class ChoicesDevice(Device, kind="mock"):
     def __init__(self):
         super().__init__("choices")
         self.level_options = [0.0, 25.5, 100.0]

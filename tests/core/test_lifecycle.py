@@ -8,10 +8,9 @@ from vxl_records import PlannedVolume, VoxelRecords
 from vxlib.history import HistoryState
 from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
-from rigup import DeviceInterface, DeviceProps
-from vxl.core.config import StationConfig
+from rigup import ComponentInterface, DeviceProps
 from vxl.core.models import StationStatus
-from vxl.core.station import Station
+from vxl.core.station import Station, StationConfig
 from vxl.instrument import (
     Activity,
     Bounds,
@@ -37,7 +36,7 @@ class FakeInstrument:
         self.preview_channels = Cell[tuple[str, ...]](())
         self.active_profile_id = Cell(next(iter(self.state.value.imaging.profiles)))
         self.history = Cell(HistoryState())
-        self.device_interfaces: dict[str, DeviceInterface] = {}
+        self.device_interfaces: dict[str, ComponentInterface] = {}
         self.device_props: dict[str, DeviceProps] = {}
         self.remote_stores = {}
         self.device_props_updates = Emitter[tuple[str, DeviceProps]]()

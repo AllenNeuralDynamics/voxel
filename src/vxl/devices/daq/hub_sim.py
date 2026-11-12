@@ -13,7 +13,7 @@ from vxlib.quantity import Voltage, VoltageRange
 from rigup import Device
 
 
-class SimulatedDaqmx(Device):
+class SimulatedDaqmx(Device, kind="generic"):
     """Simulated NI-DAQmx-shaped hub. Owns pin namespace + allocation bookkeeping.
 
     Multiple output engines may share one hub. Pin allocation is tracked here so

@@ -91,4 +91,4 @@ The same metadata is available in `handle.props.cache` and a typed property's `.
 
 Constraints can change without the value changing. Subscribe to `handle.props` for complete observations;
 typed property subscriptions notify only when the parsed value changes. Labels, units, and access information
-come separately from `DeviceInterface`.
+come separately from `ComponentInterface`.

@@ -10,14 +10,13 @@ from dataclasses import dataclass
 from itertools import product
 
 import numpy as np
-from rigup.config import DeviceUid
 from vxlib.vector import Span, Vec3D
 
+from vxl.core.instrument.config import Detector, DeviceUid, SpecimenAxis
 from vxl.devices.camera import CameraSensor
-from vxl.hal_next.config import Detector, SpecimenAxis
 from vxl.models import AreaROI, AxisPosition
 
-from .config import HALConfig, ProfileId, StageFollowRule, State, Task, TaskId
+from .config import Profile, ProfileId, SPIMConfig, SPIMState, StageFollowRule, Task, TaskId
 from .region import tile_positions, tile_spans
 
 _COUNT_TOLERANCE = 1e-9
@@ -34,7 +33,7 @@ class AxisRun:
 
 
 @dataclass(frozen=True)
-class Scan:
+class Volume:
     """1 profile at 1 tile. The stage starts at ``start``; ``positions`` are set before the scan runs; ``transforms``
     give where each camera's pixels land."""
 
@@ -46,15 +45,20 @@ class Scan:
     transforms: Mapping[DeviceUid, "Transform"]
 
 
-def plan_task(task: Task, hal: HALConfig, settings: State, sensors: Mapping[DeviceUid, CameraSensor]) -> list[Scan]:
-    """The scans of 1 task, in the order they run: each profile at each tile. ``settings`` is the instrument's
-    state or the file's ``default``."""
+def plan_task(
+    task: Task,
+    config: SPIMConfig,
+    state: SPIMState,
+    sensors: Mapping[DeviceUid, CameraSensor],
+) -> list[Volume]:
+    """The volumes of 1 task, in the order they run: each profile at each tile. ``state`` is the instrument's state
+    or its defaults. The open devices give ``sensors``."""
     previous: dict[DeviceUid, AxisPosition] = {}
-    scans: list[Scan] = []
-    for tile in tile_positions(task.region, {hal.scan.axis: hal.scan.motion}):
-        previous = _picks(settings.positions, tile, previous)
-        scans += [_scan(task, profile, tile, previous, hal, settings, sensors) for profile in task.profiles]
-    return scans
+    volumes: list[Volume] = []
+    for tile in tile_positions(task.region, {config.scan.axis: config.scan.motion}):
+        previous = _picks(state.positions, tile, previous)
+        volumes += [_volume(task, profile, tile, previous, config, state, sensors) for profile in task.profiles]
+    return volumes
 
 
 def _picks(
@@ -69,49 +73,71 @@ def _picks(
         if not isinstance(position, StageFollowRule):
             picks[device] = position
             continue
-        if position.axis not in tile:
-            raise ValueError(f"'{device}' follows '{position.axis}', which moves during a scan")
         before = previous.get(device)
         picks[device] = position.position(tile[position.axis], previous=before if isinstance(before, str) else None)
     return picks
 
 
-def _scan(
+def _light(
+    config: SPIMConfig, profile: Profile, picks: Mapping[str, AxisPosition]
+) -> tuple[dict[DeviceUid, AxisPosition], dict[DeviceUid, float]]:
+    """The positions to set for 1 volume, and each camera's magnification. ``picks`` gives the position of each
+    device that the instrument holds. Raise ``ValueError`` when a camera gets no light, or the paths from the sample
+    to it do not agree on 1 magnification."""
+    chosen = {**picks, **profile.positions}
+    positions: dict[DeviceUid, AxisPosition] = {}
+    magnification: dict[DeviceUid, float] = {}
+    for camera, channel in profile.channels.items():
+        lit = config.illumination_paths(channel.illumination, chosen)
+        seen = config.detection_paths(camera, chosen)
+        if not lit or not seen:
+            raise ValueError(f"No light reaches '{camera}' with {chosen}.")
+        found = {path.magnification for path in seen}
+        only = next(iter(found)) if len(found) == 1 else None
+        if only is None:
+            raise ValueError(f"The light paths from the sample to '{camera}' do not give 1 magnification.")
+        magnification[camera] = only
+        on_paths = {node for path in (*lit, *seen) for node in path.nodes}
+        positions.update({node: value for node, value in chosen.items() if node in on_paths})
+    return positions, magnification
+
+
+def _volume(
     task: Task,
     profile_id: ProfileId,
     tile: Mapping[SpecimenAxis, float],
     picks: Mapping[str, AxisPosition],
-    hal: HALConfig,
-    settings: State,
+    config: SPIMConfig,
+    state: SPIMState,
     sensors: Mapping[DeviceUid, CameraSensor],
-) -> Scan:
+) -> Volume:
     """1 profile at 1 tile."""
-    profile = settings.profiles[profile_id]
-    light = profile.light_setting(hal, picks)
-    detectors = hal.optics.detectors()
+    profile = state.profiles[profile_id]
+    positions, magnification = _light(config, profile, picks)
+    detectors = config.optics.detectors()
     frames = {
         camera: frame_transform(
             detectors[camera],
             sensors[camera],
             channel.fov,
             binning=_binning(profile.props.get(camera, {})),
-            magnification=light.magnification[camera],
+            magnification=magnification[camera],
         )
         for camera, channel in profile.channels.items()
     }
-    spans = tile_spans(task.region, tile, {hal.scan.axis: hal.scan.motion}, _footprint(frames))
+    spans = tile_spans(task.region, tile, {config.scan.axis: config.scan.motion}, _footprint(frames))
     runs = [
         AxisRun(axis, span.low, profile.spacing, math.floor(span.length / profile.spacing + _COUNT_TOLERANCE) + 1)
         for axis, span in spans.items()
     ]
     at = {**tile, **{run.axis: run.first for run in runs}}
     start = Vec3D(z=at["z"], y=at["y"], x=at["x"])
-    return Scan(
+    return Volume(
         task=task.id,
         profile=profile_id,
         start=start,
         runs=runs,
-        positions=light.positions,
+        positions=positions,
         transforms={camera: frame.scanned(start, runs) for camera, frame in frames.items()},
     )
 
@@ -194,4 +220,4 @@ def frame_transform(
     return Transform(origin, (_ZERO, y_step, x_step), (1, ny, nx))
 
 
-__all__ = ["AxisRun", "Scan", "Transform", "frame_transform", "plan_task"]
+__all__ = ["AxisRun", "Transform", "Volume", "frame_transform", "plan_task"]

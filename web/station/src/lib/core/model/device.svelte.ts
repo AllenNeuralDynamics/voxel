@@ -15,7 +15,7 @@ import {
 
 import { Client } from './client.svelte';
 import type { DeviceRoleAssignment } from './device-rules';
-import type { DeviceInterface, DeviceSnapshot, DiscreteAxisState, PropResults, AreaROI, Signals } from './types';
+import type { ComponentInterface, DeviceSnapshot, DiscreteAxisState, PropResults, AreaROI, Signals } from './types';
 
 export interface PropertyInfo {
   name: string;
@@ -61,7 +61,7 @@ export class DeviceHandle {
   readonly roleIndex: number;
   connected = $state(false);
   error = $state<string | undefined>(undefined);
-  interface = $state<DeviceInterface | undefined>(undefined);
+  interface = $state<ComponentInterface | undefined>(undefined);
   props = new SvelteMap<string, Prop>();
 
   #client: Client;
@@ -534,7 +534,7 @@ export class CameraHandle extends DeviceHandle {
   frameAreaUm = $derived.by<Vec2D | null>(() => parseVec2D(this.getProp('frame_area_um')?.value));
 }
 
-/** Instantiate the typed handle matching a device's introspected `interface.type`. */
+/** Instantiate the typed handle matching a device's introspected `interface.kind`. */
 export function createDevice(
   client: Client,
   base: string,
@@ -542,7 +542,7 @@ export function createDevice(
   disabled: () => boolean,
   assignment: DeviceRoleAssignment
 ): DeviceHandle {
-  switch (snapshot.interface?.type) {
+  switch (snapshot.interface?.kind) {
     case 'camera':
       return new CameraHandle(client, base, snapshot, disabled, assignment);
     case 'laser':

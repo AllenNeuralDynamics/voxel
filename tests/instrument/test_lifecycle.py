@@ -8,7 +8,7 @@ import pytest
 from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 
-from rigup import CommandRequest, DeviceInterface, DeviceProps
+from rigup import CommandRequest, ComponentInterface, DeviceProps
 from vxl.devices.laser.simulated import SimulatedLaser
 from vxl.instrument import (
     AcquisitionRequest,
@@ -145,10 +145,10 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             ],
         }
     )
-    camera_interface = DeviceInterface.model_validate(
+    camera_interface = ComponentInterface.model_validate(
         {
             "uid": "camera_1",
-            "type": "camera",
+            "kind": "camera",
             "commands": {},
             "properties": {
                 "temperature": {
@@ -160,7 +160,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             },
         }
     )
-    daq_interface = DeviceInterface(uid="daq", type="signal_generator", commands={}, properties={})
+    daq_interface = ComponentInterface(uid="daq", kind="signal_generator", commands={}, properties={})
 
     def axis():
         return SimpleNamespace(lower_limit=Cell(0), upper_limit=Cell(100))

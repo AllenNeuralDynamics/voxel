@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from rigup.device import CommandRequest, DeviceInterface, PropResults, Results
+from rigup.device import CommandRequest, ComponentInterface, PropResults, Results
 from rigup.node import NodeDaemon
 from rigup.protocol import (
     Action,
@@ -28,7 +28,7 @@ from rigup.protocol import (
 )
 from rigup.transport import TCPAddress, ZMQTransportClient, ZMQTransportServer
 
-from rigup import DeviceConfig
+from rigup import ComponentConfig
 
 MOCK_TARGET = "tests._mock.MockDevice"
 
@@ -92,8 +92,8 @@ class TestDaemonDeviceLifecycle:
             Action.BUILD_DEVICES,
             BuildDevicesRequest(
                 devices={
-                    "dev_a": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0}, autosave="*"),
-                    "dev_b": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
+                    "dev_a": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 1.0}),
+                    "dev_b": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
                 }
             ),
             BuildDevicesResponse,
@@ -106,13 +106,37 @@ class TestDaemonDeviceLifecycle:
         list_resp = await call(client, Action.LIST_DEVICES, Empty(), ListDevicesResponse, timeout_s=5.0)
         assert len(list_resp.devices) == 2
 
+    async def test_build_reports_the_parts_apart_from_the_devices(self, daemon_pair):
+        client, _daemon = daemon_pair
+
+        build_resp = await call(
+            client,
+            Action.BUILD_DEVICES,
+            BuildDevicesRequest(
+                devices={
+                    "holder": ComponentConfig(target="tests._mock.MockHolder", init={"held": "glass"}),
+                    "glass": ComponentConfig(target="tests._mock.MockPart", init={"value": 1.5}),
+                }
+            ),
+            BuildDevicesResponse,
+            timeout_s=10.0,
+        )
+        assert not build_resp.errors
+        assert set(build_resp.built) == {"holder"}
+        assert set(build_resp.parts) == {"glass"}
+        assert build_resp.parts["glass"].kind == "mock_part"
+
+        list_resp = await call(client, Action.LIST_DEVICES, Empty(), ListDevicesResponse, timeout_s=5.0)
+        assert set(list_resp.devices) == {"holder"}
+        assert set(list_resp.parts) == {"glass"}
+
     async def test_close_device(self, daemon_pair):
         client, _daemon = daemon_pair
 
         await call(
             client,
             Action.BUILD_DEVICES,
-            BuildDevicesRequest(devices={"dev": DeviceConfig(target=MOCK_TARGET, init={})}),
+            BuildDevicesRequest(devices={"dev": ComponentConfig(target=MOCK_TARGET, init={})}),
             BuildDevicesResponse,
             timeout_s=10.0,
         )
@@ -128,7 +152,7 @@ class TestDaemonDeviceLifecycle:
         await call(
             client,
             Action.BUILD_DEVICES,
-            BuildDevicesRequest(devices={"old": DeviceConfig(target=MOCK_TARGET, init={})}),
+            BuildDevicesRequest(devices={"old": ComponentConfig(target=MOCK_TARGET, init={})}),
             BuildDevicesResponse,
             timeout_s=10.0,
         )
@@ -136,7 +160,7 @@ class TestDaemonDeviceLifecycle:
         await call(
             client,
             Action.BUILD_DEVICES,
-            BuildDevicesRequest(devices={"new": DeviceConfig(target=MOCK_TARGET, init={})}),
+            BuildDevicesRequest(devices={"new": ComponentConfig(target=MOCK_TARGET, init={})}),
             BuildDevicesResponse,
             timeout_s=10.0,
         )
@@ -151,7 +175,7 @@ class TestDaemonDeviceLifecycle:
         resp = await call(
             client,
             Action.BUILD_DEVICES,
-            BuildDevicesRequest(devices={"bad": DeviceConfig(target="nonexistent.Mod", init={})}),
+            BuildDevicesRequest(devices={"bad": ComponentConfig(target="nonexistent.Mod", init={})}),
             BuildDevicesResponse,
             timeout_s=10.0,
         )
@@ -166,7 +190,7 @@ class TestDaemonDeviceRPC:
         await call(
             client,
             Action.BUILD_DEVICES,
-            BuildDevicesRequest(devices={"dev": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 5.0})}),
+            BuildDevicesRequest(devices={"dev": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 5.0})}),
             BuildDevicesResponse,
             timeout_s=10.0,
         )
@@ -215,10 +239,10 @@ class TestDaemonDeviceRPC:
             client,
             Action.GET_INTERFACE,
             GetInterfaceRequest(uid="dev"),
-            DeviceInterface,
+            ComponentInterface,
             timeout_s=5.0,
         )
-        assert iface.type == "mock"
+        assert iface.kind == "mock"
         assert "set_value" in iface.commands
 
 

@@ -6,11 +6,12 @@ from typing import Any
 
 import yaml
 
-from rigup import BuildError, Device, DeviceConfig, RigConfig, build_objects
+from rigup import BuildError, Device, build_objects
 from vxl.devices.axes.continuous.base import ContinuousAxis
 from vxl.devices.axes.discrete.base import DiscreteAxis
 from vxl.devices.camera.base import Camera
 from vxl.devices.laser.source import CurrentControlledLaserSource, LaserSource
+from vxl.hal.rig_config import DeviceConfig, RigConfig
 
 
 def load_configs(path: Path) -> dict[str, DeviceConfig]:

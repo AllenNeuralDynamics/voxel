@@ -15,7 +15,7 @@ class BlankingMode(StrEnum):
     INTERNAL = "internal"
 
 
-class AOTF(Device):
+class AOTF(Device, kind="aotf"):
     """Base class for AOTF (Acousto-Optic Tunable Filter) devices.
 
     AOTFs provide fast wavelength selection and intensity modulation for
@@ -25,8 +25,6 @@ class AOTF(Device):
     Laser devices that use this AOTF register themselves via register_channel(),
     which tracks channel assignments and prevents collisions.
     """
-
-    __DEVICE_TYPE__ = "aotf"
 
     def __init__(self, uid: str) -> None:
         super().__init__(uid=uid)

@@ -8,10 +8,8 @@ from vxl_drivers.lasers.obis.link import ObisError, ObisLink
 _ABSENT = ("ERR-100", "ERR-241")
 
 
-class ObisController(Device):
+class ObisController(Device, kind="laser_controller"):
     """Own the hub link, discover lasers, and reserve each channel for one ObisSource."""
-
-    __DEVICE_TYPE__ = "laser_controller"
 
     def __init__(self, uid: str, port: str, *, channels: int = 6, baud: int = 115200, timeout_s: float = 1.0) -> None:
         super().__init__(uid=uid)

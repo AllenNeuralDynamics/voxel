@@ -18,9 +18,9 @@ from vxlib.lifecycle import Teardown
 from rigup.device import (
     Adapter,
     CommandRequest,
+    ComponentInterface,
     Device,
     DeviceHandle,
-    DeviceInterface,
     PropResults,
     Result,
     Results,
@@ -74,8 +74,8 @@ class TransportAdapter[D: Device](Adapter[D]):
     def device(self) -> D | None:
         return None
 
-    async def interface(self) -> DeviceInterface:
-        return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), DeviceInterface)
+    async def interface(self) -> ComponentInterface:
+        return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), ComponentInterface)
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         results = await self.run_commands([CommandRequest(attr=command, args=list(args), kwargs=kwargs)])
@@ -170,6 +170,7 @@ class TransportNode(Node):
         self._log = logging.getLogger(f"rigup.node.{node_id}")
         self._adapters: dict[str, TransportAdapter] = {}
         self._handles: dict[str, DeviceHandle] = {}
+        self._parts: dict[str, ComponentInterface] = {}
         self._log_relay: Teardown | None = None
 
     def _start_log_relay(self) -> None:
@@ -212,6 +213,7 @@ class TransportNode(Node):
             self._adapters[uid] = adapter
             self._handles[uid] = handle
             handles[uid] = handle
+        self._parts = dict(response.parts)
 
         return handles, response.errors
 
@@ -220,6 +222,7 @@ class TransportNode(Node):
             await call(self._transport, Action.CLOSE_DEVICE, CloseDeviceRequest(uid=uid), Empty)
         adapter = self._adapters.pop(uid, None)
         self._handles.pop(uid, None)
+        self._parts.pop(uid, None)
         if adapter is not None:
             await adapter.close()
 
@@ -230,7 +233,12 @@ class TransportNode(Node):
             await adapter.close()
         self._adapters.clear()
         self._handles.clear()
+        self._parts.clear()
 
     @property
     def devices(self) -> dict[str, DeviceHandle]:
         return dict(self._handles)
+
+    @property
+    def parts(self) -> dict[str, ComponentInterface]:
+        return dict(self._parts)

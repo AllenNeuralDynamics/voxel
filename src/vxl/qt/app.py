@@ -30,10 +30,9 @@ from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
 from vxl._utils.color import Color
 from vxl._utils.logging import configure_logging
-from vxl.core.config import StationConfig
 from vxl.core.feed import StationFeedConnection
 from vxl.core.models import SessionInfo, SessionView, StationFeedView
-from vxl.core.station import Station
+from vxl.core.station import Station, StationConfig
 from vxl.core.templates import InstrumentTemplates
 from vxl.instrument import Instrument
 from vxl.instrument.store import InstrumentInspection

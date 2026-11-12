@@ -1,15 +1,13 @@
 # exaSPIM v1 with a Z sweep, and the Z stage's pulses set the rhythm.
 # The same bench as exaspim-v1.yaml, with 1 more wire: z_axis.z_pulse. A bench with both Z wires can step or sweep.
-# Only hal.scan and the timelines differ from exaspim-v1.yaml: a sweep plays no z_step signal.
+# Only rig.scan and the timelines differ from exaspim-v1.yaml: a sweep plays no z_step signal.
 # A sketch from the design talk of 2026-11-10. Numbers are examples.
 
-id: 2k9d4hq7m1xw8vzc5t3nb6yr0p   # made when the instrument is created; never edited
-name: exaSPIM sweep Z, z_axis paces
-model: exaSPIM
-kind: vxl.instruments.spim
+rig:
+  model: exaSPIM
+  target: vxl.instruments.spim.Instrument
 
-hal:
-  devices:
+  components:
     nidaq_1:
       target: vxl.devices.daq.hub_ni.NiDaqmx
       init: {device_name: Dev3, product: PCIe-6738}
@@ -20,20 +18,16 @@ hal:
 
     camera:
       target: vxl_drivers.cameras.egrabber.VieworksCamera
-      autosave: [exposure_time_ms, binning, pixel_format]
       init: {pixel_size_um: {x: 3.76, y: 3.76}, serial: MP151BDZ014}
 
     laser_488:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 488, source_enable_delay_s: 1}
     laser_561:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 561, source_enable_delay_s: 1}
     laser_640:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 640, source_enable_delay_s: 1}
 
     fw_emission:
@@ -75,6 +69,12 @@ hal:
       target: vxl_drivers.axes.asi.TigerLinearAxis
       init: {hub: tiger_controller, axis_label: m, units: um}
 
+  autosave:                                       # the properties that a change by a person saves in the active profile
+    camera:    [exposure_time_ms, binning, pixel_format]
+    laser_488: [source_power_setpoint_mw, output_level_percent]
+    laser_561: [source_power_setpoint_mw, output_level_percent]
+    laser_640: [source_power_setpoint_mw, output_level_percent]
+
   parts:                                          # things with no driver. kind says what each one is. A filter gives its band, an objective its magnification
     combiner:           {kind: combiner}
     left_tunable_lens:  {kind: tunable_lens}
@@ -104,7 +104,7 @@ hal:
 
   optics:                                         # where the light goes: light sources → sample → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
-    # Rule 2: what a part does to the light is in hal.parts, not here.
+    # Rule 2: what a part does to the light is in rig.parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
     # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
 
@@ -148,7 +148,7 @@ default:
   task:                                           # what a new task takes when it leaves these out
     overlap: {x: 10 %, y: 10 %}                   # 1 key for each tiled axis
     path:
-      scan:  {z: forward}                         # the axis in hal.scan
+      scan:  {z: forward}                         # the axis in rig.scan
       tiles: {kind: grid, axes: [{x: alternate}, {y: forward}]}
     iteration: position_major
 

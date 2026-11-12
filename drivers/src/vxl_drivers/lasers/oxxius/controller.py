@@ -45,10 +45,8 @@ class OxxiusCommunicationError(ConnectionError):
     """A rejected command, invalid reply, or failed readback."""
 
 
-class OxxiusController(Device):
+class OxxiusController(Device, kind="laser_controller"):
     """Own the serial connection and exclusive reservations of populated slots."""
-
-    __DEVICE_TYPE__ = "laser_controller"
 
     def __init__(
         self, uid: str, port: str, *, model: Literal["L4cc", "L6cc"] = "L6cc", baud: int = 9600, timeout_s: float = 1.0

@@ -99,8 +99,8 @@ export function roleLabel(hal: HALConfig, deviceId: string, role: DeviceRole, de
     return axis ? `Stage ${axis.toUpperCase()}` : ROLE_LABELS.stage;
   }
   if (role !== 'other') return ROLE_LABELS[role];
-  const type = device?.interface?.type;
-  if (type && type !== 'generic') return displayName(type);
+  const kind = device?.interface?.kind;
+  if (kind && kind !== 'generic') return displayName(kind);
   return driverClass(hal, deviceId) ?? ROLE_LABELS.other;
 }
 

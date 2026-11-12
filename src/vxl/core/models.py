@@ -4,17 +4,24 @@ from enum import StrEnum
 from typing import Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from vxl_records import PlannedVolume
 from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
 
-from rigup import DeviceInterface, PropertyModel
+from rigup import ComponentInterface, PropertyModel
 from vxl.instrument import Activity, Bounds, InstrumentConfig, InstrumentState
 from vxl.preview import StreamCursor
 from vxl.system import Remote
 
-from .config import StationInfo
+
+class StationInfo(BaseModel):
+    """Stable public identity of a Voxel control station."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
 
 
 class StationStatus(StrEnum):
@@ -38,7 +45,7 @@ class SessionInfo(FrozenModel):
 class DeviceState(FrozenModel):
     """Serializable interface and latest-successful properties for one open device."""
 
-    interface: DeviceInterface
+    interface: ComponentInterface
     props: dict[str, PropertyModel]
 
 
@@ -102,6 +109,7 @@ __all__ = [
     "SessionInfo",
     "SessionView",
     "StationFeedView",
+    "StationInfo",
     "StationState",
     "StationStatus",
     "StreamCursor",

@@ -2,7 +2,6 @@ import logging
 import time
 from abc import abstractmethod
 from collections.abc import Mapping
-from typing import ClassVar
 
 import numpy as np
 from vxlib.quantity import VoltageRange
@@ -48,16 +47,13 @@ class OnDemandAOController(DeviceController["OnDemandAO"]):
         await self._run_sync(self.device.reset)
 
 
-class OnDemandAO(Device):
+class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController):
     """Abstract on-demand (unclocked) voltage output.
 
     Subclasses implement the hardware primitives; ``ports`` maps logical names to
     physical AO pins, as for ``SignalGenerator``, but there are no triggers —
     an on-demand output neither watches for nor emits a clock edge.
     """
-
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_AO
-    __CONTROLLER_TYPE__: ClassVar[type] = OnDemandAOController
 
     def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
         super().__init__(uid=uid)
@@ -201,7 +197,7 @@ class OnDemandDOController(DeviceController["OnDemandDO"]):
         await self._run_sync(self.device.reset)
 
 
-class OnDemandDO(Device):
+class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController):
     """Abstract software-timed digital output.
 
     ``lines`` maps stable logical names to vendor-specific physical terminals.
@@ -209,9 +205,6 @@ class OnDemandDO(Device):
     ``False`` is low. A mapping update may include any subset of the declared lines;
     omitted lines retain their current state.
     """
-
-    __DEVICE_TYPE__: ClassVar[str] = DeviceType.DAQ_DO
-    __CONTROLLER_TYPE__: ClassVar[type] = OnDemandDOController
 
     def __init__(self, uid: str, *, lines: Mapping[str, str]) -> None:
         super().__init__(uid=uid)

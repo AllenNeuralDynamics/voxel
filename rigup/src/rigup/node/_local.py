@@ -14,13 +14,14 @@ from pydantic import BaseModel
 from vxlib.lifecycle import Teardown
 
 from rigup.build import build_objects_async
+from rigup.component import Part
 from rigup.device import (
     Adapter,
     CommandRequest,
+    ComponentInterface,
     Device,
     DeviceController,
     DeviceHandle,
-    DeviceInterface,
     PropResults,
     Result,
     Results,
@@ -67,7 +68,7 @@ class LocalAdapter[D: Device](Adapter[D]):
     def device(self) -> D | None:
         return self._controller.device
 
-    async def interface(self) -> DeviceInterface:
+    async def interface(self) -> ComponentInterface:
         return self._controller.interface
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
@@ -101,8 +102,8 @@ class LocalAdapter[D: Device](Adapter[D]):
 class LocalNode(Node):
     """In-process node — devices live in the orchestrator's own process.
 
-    ``open`` is a no-op; ``build_devices`` constructs devices via
-    :func:`build_objects_async`, wraps each in a controller + local adapter,
+    ``open`` is a no-op; ``build_devices`` constructs devices and parts via
+    :func:`build_objects_async`, wraps each device in a controller + local adapter,
     and returns device handles. Closing tears down controllers directly.
     """
 
@@ -111,6 +112,7 @@ class LocalNode(Node):
         self._log = logging.getLogger(f"rigup.node.{node_id}")
         self._controllers: dict[str, DeviceController] = {}
         self._handles: dict[str, DeviceHandle] = {}
+        self._parts: dict[str, ComponentInterface] = {}
 
     @property
     def node_id(self) -> str:
@@ -124,15 +126,17 @@ class LocalNode(Node):
 
     async def build_devices(self, configs: DevicesConfig) -> DevicesBuildResult:
         await self.close_all_devices()
-        built, errors = await build_objects_async(configs, Device)
+        built, errors = await build_objects_async(configs, (Device, Part))
 
         for uid, err in errors.items():
             self._log.error("Failed to build %s: %s", uid, err.message)
 
         handles: dict[str, DeviceHandle] = {}
-        for uid, device in built.items():
-            controller_cls = type(device).__CONTROLLER_TYPE__
-            controller: DeviceController = controller_cls(device)
+        for uid, component in built.items():
+            if isinstance(component, Part):
+                self._parts[uid] = ComponentInterface(uid=uid, kind=component.kind)
+                continue
+            controller = component.make_controller()
             controller.start_streaming()
             adapter: LocalAdapter = LocalAdapter(controller)
             handle: DeviceHandle = DeviceHandle(adapter)
@@ -145,13 +149,19 @@ class LocalNode(Node):
     async def close_device(self, uid: str) -> None:
         controller = self._controllers.pop(uid, None)
         self._handles.pop(uid, None)
+        self._parts.pop(uid, None)
         if controller is not None:
             await controller.close()
 
     async def close_all_devices(self) -> None:
         for uid in list(self._controllers):
             await self.close_device(uid)
+        self._parts.clear()
 
     @property
     def devices(self) -> dict[str, DeviceHandle]:
         return dict(self._handles)
+
+    @property
+    def parts(self) -> dict[str, ComponentInterface]:
+        return dict(self._parts)

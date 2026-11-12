@@ -3,21 +3,17 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.hal_next.config import HALConfig, OpticalGraph
+from vxl.core.instrument.config import InstrumentConfig, OpticalGraph
+
+from .support import bench
 
 
-def _hal(optics: dict[str, Any], *, parts: dict[str, Any], slots: dict[str, list[str]]) -> HALConfig:
-    """A bench with ``optics``. Each key of ``slots`` is a device with those slot labels."""
+def _hal(optics: dict[str, Any], *, parts: dict[str, Any], devices: list[str]) -> InstrumentConfig:
+    """A bench with ``optics``, the stage axes, and ``devices``."""
     axes = ("x_axis", "y_axis", "z_axis")
-    return HALConfig.model_validate(
+    return bench(
         {
-            "devices": {
-                **{uid: {"target": "builtins.object"} for uid in axes},
-                **{
-                    uid: {"target": "builtins.object", "init": {"slots": dict(enumerate(labels))}}
-                    for uid, labels in slots.items()
-                },
-            },
+            "components": {uid: {"target": "builtins.object"} for uid in (*axes, *devices)},
             "parts": parts,
             "stage": dict(zip("xyz", axes, strict=True)),
             "optics": optics,
@@ -68,30 +64,24 @@ def test_a_path_gives_the_magnification_and_the_band_of_its_parts() -> None:
             "long_pass": {"kind": "filter", "band": ["500 nm", None]},
             "green": {"kind": "filter", "band": ["510 nm", "550 nm"]},
         },
-        slots={"wheel": ["green", "open"]},
+        devices=["wheel"],
     )
     graph = hal.optics
     assert list(graph.sources()) == ["laser"]
     assert list(graph.detectors()) == ["camera_a", "camera_b"]
     assert list(graph.elements()) == ["laser", "sample", "objective", "splitter", "tube_a", "long_pass", "wheel"]
-    assert hal.selectors() == {"wheel"}
 
-    by_position = {path.positions["wheel"]: path for path in hal.light_paths("laser", "camera_a")}
-    assert by_position["green"].nodes == (
-        "laser",
-        "sample",
-        "objective",
-        "splitter",
-        "tube_a",
-        "long_pass",
-        "wheel",
-        "camera_a",
-    )
-    assert (by_position["green"].magnification, by_position["green"].band) == (10, (510, 550))
-    assert by_position["open"].band == (500, None)
+    (lit,) = hal.illumination_paths("laser", {})
+    assert lit.nodes == ("laser", "sample")
 
-    (to_b,) = hal.light_paths("laser", "camera_b")
-    assert (to_b.magnification, to_b.band, dict(to_b.positions)) == (20, None, {})
+    (green,) = hal.detection_paths("camera_a", {"wheel": "green"})
+    assert green.nodes == ("sample", "objective", "splitter", "tube_a", "long_pass", "wheel", "camera_a")
+    assert (green.magnification, green.band) == (10, (510, 550))
+    (clear,) = hal.detection_paths("camera_a", {"wheel": "open"})
+    assert clear.band == (500, None)
+
+    (to_b,) = hal.detection_paths("camera_b", {"wheel": "green"})
+    assert (to_b.magnification, to_b.band) == (20, None)
 
 
 def test_a_position_can_send_the_light_to_another_node() -> None:
@@ -106,11 +96,15 @@ def test_a_position_can_send_the_light_to_another_node() -> None:
             "camera": {"width": {"y": 1}, "height": {"x": 1}},
         },
         parts={},
-        slots={"arm_switch": ["left", "right", "off"]},
+        devices=["arm_switch"],
     )
-    assert hal.selectors() == {"arm_switch"}
-    assert sorted((path.positions["arm_switch"], path.nodes[2]) for path in hal.light_paths("laser", "camera")) == [
-        ("left", "left_lens"),
-        ("right", "monitor"),
-        ("right", "right_lens"),
-    ]
+
+    def ways(position: str | None) -> list[str]:
+        positions = {} if position is None else {"arm_switch": position}
+        return sorted(path.nodes[2] for path in hal.illumination_paths("laser", positions))
+
+    assert ways(None) == ["left_lens", "monitor", "right_lens"]
+    assert ways("left") == ["left_lens"]
+    assert ways("right") == ["monitor", "right_lens"]
+    assert ways("off") == []
+    assert [path.nodes for path in hal.detection_paths("camera", {"arm_switch": "off"})] == [("sample", "camera")]

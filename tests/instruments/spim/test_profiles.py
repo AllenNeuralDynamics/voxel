@@ -13,13 +13,14 @@ def _channel(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _messages(data: dict[str, Any], code: str) -> list[str]:
-    return [v.msg for v in load(data).violations() if v.code == code]
+    example = load(data)
+    return [v.msg for v in example.violations() if v.code == code]
 
 
 def _second_camera(data: dict[str, Any]) -> None:
     """The filter wheel sends the light to ``camera`` at GFP and to ``camera_2`` at RFP."""
-    hal = data["hal"]
-    hal["devices"]["camera_2"] = {"target": "builtins.object"}
+    hal = data
+    hal["components"]["camera_2"] = {"target": "builtins.object"}
     hal["wiring"]["ao_main"]["camera_2_trigger"] = {"pin": "ao4", "to": ["camera_2/trigger_in"], "kind": "digital"}
     hal["optics"]["fw"] = {"to": {"GFP": "camera", "RFP": "camera_2"}}
     hal["optics"]["camera_2"] = {"width": {"y": 1}, "height": {"x": -1}}
@@ -27,8 +28,8 @@ def _second_camera(data: dict[str, Any]) -> None:
 
 
 def _unlit_laser(data: dict[str, Any]) -> None:
-    hal = data["hal"]
-    hal["devices"]["laser_2"] = {"target": "builtins.object"}
+    hal = data
+    hal["components"]["laser_2"] = {"target": "builtins.object"}
     hal["parts"]["dump"] = {}
     hal["optics"].update(laser_2={"to": "dump"}, dump={"to": "camera"})
     _channel(data)["illumination"] = "laser_2"
@@ -41,14 +42,15 @@ def _unlit_laser(data: dict[str, Any]) -> None:
         (lambda d: _channel(d).update(illumination="galvo"), "profile.channel.not_source"),
         (_unlit_laser, "profile.channel.no_path"),
         (_second_camera, "profile.channel.dark"),
-        (lambda d: profile(d).update(positions={}), "profile.position.missing"),
         (lambda d: profile(d)["positions"].update(camera="x"), "profile.position.unexpected"),
-        (lambda d: profile(d).update(positions={"fw": "YFP"}), "profile.position_invalid"),
         (lambda d: profile(d).update(setup={"x_axis": []}), "profile.setup_inactive"),
         (
             lambda d: profile(d)["timelines"].update(camera=profile(d)["timelines"]["ao_main"]),
             "profile.timeline.no_wires",
         ),
+        (lambda d: d["wiring"]["ao_main"].pop("z_step"), "profile.unstarted"),
+        (lambda d: d["wiring"]["ao_main"].pop("camera_trigger"), "profile.unstarted"),
+        (lambda d: profile(d).update(timelines={}), "profile.trigger_not_played"),
         (lambda d: signals(d).pop("z_step"), "profile.trigger_not_played"),
         (lambda d: signals(d).pop("camera_trigger"), "profile.trigger_not_played"),
         (lambda d: signals(d).update(shutter={"kind": "off"}), "timeline.signal.unexpected"),
@@ -92,19 +94,17 @@ def test_props_go_to_free_devices_on_the_light_paths(config_data: dict[str, Any]
 
 
 def test_a_device_can_hold_parts_that_magnify(config_data: dict[str, Any]) -> None:
-    hal = config_data["hal"]
-    hal["devices"]["turret"] = {"target": "builtins.object", "init": {"slots": {"0": "10x", "1": "20x"}}}
+    hal = config_data
+    hal["components"]["turret"] = {"target": "builtins.object", "init": {"slots": {"0": "10x", "1": "20x"}}}
     del hal["parts"]["objective"], hal["optics"]["objective"]
     hal["parts"]["10x"] = {"kind": "objective", "magnification": 10}
     hal["parts"]["20x"] = {"kind": "objective", "magnification": 20}
     hal["optics"]["sample"]["to"] = "turret"
     hal["optics"]["turret"] = {"to": "fw"}
-    assert "profile.position.missing" in codes(load(config_data))
+    assert "profile.channel.magnification" in codes(load(config_data))
 
     profile(config_data)["positions"]["turret"] = "20x"
-    config = load(config_data)
-    assert codes(config) == []
-    setting = config.default.profiles["gfp"].light_setting(config.hal, {})
-    assert setting.positions == {"turret": "20x", "fw": "GFP"}
-    assert setting.magnification == {"camera": 20}
-    assert setting.band == {"camera": (500, 550)}
+    example = load(config_data)
+    assert codes(example) == []
+    (seen,) = example.config.detection_paths("camera", example.default.profiles["gfp"].positions)
+    assert (seen.magnification, seen.band) == (20, (500, 550))

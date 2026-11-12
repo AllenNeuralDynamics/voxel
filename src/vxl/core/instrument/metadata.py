@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
-BASE_METADATA_SCHEMA = "vxl.core.metadata.ExperimentMetadata"
+BASE_METADATA_SCHEMA = "vxl.core.instrument.metadata.ExperimentMetadata"
 
 
 def annotation(**kwargs: Any) -> Any:

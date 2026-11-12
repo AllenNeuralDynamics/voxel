@@ -5,22 +5,20 @@
 # The selector and the galvo arms are assumptions to check on the bench.
 #
 # What is new, top to bottom:
-#   no engine      hal.scan says how 1 capture runs.
-#   hal.parts      kind says what each part is. A filter has its band, an objective its magnification.
-#   hal.optics     3 rules. No kind in the graph. A device that moves lists its positions.
-#   hal.scan       the axis, its motion, and the pacer. The rest of the chain follows from the wires.
+#   no engine      rig.scan says how 1 capture runs.
+#   rig.parts      kind says what each part is. A filter has its band, an objective its magnification.
+#   rig.optics     3 rules. No kind in the graph. A device that moves lists its positions.
+#   rig.scan       the axis, its motion, and the pacer. The rest of the chain follows from the wires.
 #   default        positions and profiles: no imaging wrapper, no channel map, no instrument-level props.
 #   positions      a plain position, or the rule by which a device follows the stage.
 #   a profile      channels by camera (with fov), positions, props, timelines and spacing.
 #   a timeline     only the wires it plays. A wire with no signal stays at rest: off for a digital wire, park for an analog wire.
 
-id: 581w39a91mw3zbwtsd7arnfv4m   # made when the instrument is created; never edited
-name: exaSPIM
-model: exaSPIM
-kind: vxl.instruments.spim
+rig:
+  model: exaSPIM
+  target: vxl.instruments.spim.Instrument
 
-hal:
-  devices:
+  components:
     nidaq_1:
       target: vxl.devices.daq.hub_ni.NiDaqmx
       init: {device_name: Dev3, product: PCIe-6738}
@@ -31,20 +29,16 @@ hal:
 
     camera:
       target: vxl_drivers.cameras.egrabber.VieworksCamera
-      autosave: [exposure_time_ms, binning, pixel_format]
       init: {pixel_size_um: {x: 3.76, y: 3.76}, serial: MP151BDZ014}
 
     laser_488:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 488, source_enable_delay_s: 1}
     laser_561:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 561, source_enable_delay_s: 1}
     laser_640:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 640, source_enable_delay_s: 1}
 
     fw_emission:
@@ -86,6 +80,12 @@ hal:
       target: vxl_drivers.axes.asi.TigerLinearAxis
       init: {hub: tiger_controller, axis_label: m, units: um}
 
+  autosave:                                       # the properties that a change by a person saves in the active profile
+    camera:    [exposure_time_ms, binning, pixel_format]
+    laser_488: [source_power_setpoint_mw, output_level_percent]
+    laser_561: [source_power_setpoint_mw, output_level_percent]
+    laser_640: [source_power_setpoint_mw, output_level_percent]
+
   parts:                                          # things with no driver. kind says what each one is. A filter gives its band, an objective its magnification
     combiner:           {kind: combiner}
     left_tunable_lens:  {kind: tunable_lens}
@@ -113,7 +113,7 @@ hal:
 
   optics:                                         # where the light goes: light sources → sample → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
-    # Rule 2: what a part does to the light is in hal.parts, not here.
+    # Rule 2: what a part does to the light is in rig.parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
     # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
 
@@ -155,7 +155,7 @@ default:
   task:                                           # what a new task takes when it leaves these out
     overlap: {x: 10 %, y: 10 %}                   # 1 key for each tiled axis
     path:
-      scan:  {z: forward}                         # the axis in hal.scan
+      scan:  {z: forward}                         # the axis in rig.scan
       tiles: {kind: grid, axes: [{x: alternate}, {y: forward}]}
     iteration: position_major
 

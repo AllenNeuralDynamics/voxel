@@ -4,11 +4,13 @@ from pathlib import Path
 import pytest
 from vxlib.vector import IVec2D, Vec2D, Vec3D
 
+from vxl.core.instrument.config import Detector
 from vxl.devices.camera import CameraSensor
-from vxl.hal_next.config import Detector
-from vxl.instruments.spim.config import Config, Task
-from vxl.instruments.spim.scans import AxisRun, Scan, frame_transform, plan_task
+from vxl.instruments.spim.config import Task
+from vxl.instruments.spim.scans import AxisRun, Volume, frame_transform, plan_task
 from vxl.models import AreaROI
+
+from .support import load_file
 
 _EXASPIM = Detector(width={"y": 1}, height={"x": -1})
 _OPEN_TOP = Detector(width={"y": 1}, height={"x": 1, "z": 1})
@@ -76,15 +78,16 @@ def test_a_run_needs_a_free_frame_axis() -> None:
         frame.scanned(Vec3D(z=0, y=0, x=0), [AxisRun("x", 0, 1.0, 5), AxisRun("z", 0, 1.0, 5)])
 
 
-def _plan(name: str, sensor: CameraSensor, x: tuple[float, float], y: tuple[float, float], z: float) -> list[Scan]:
+def _plan(name: str, sensor: CameraSensor, x: tuple[float, float], y: tuple[float, float], z: float) -> list[Volume]:
     """The scans of 1 task over a box, with the ``gfp`` profile of an example file."""
-    config = Config.load(_FILES / name)
+    example = load_file(_FILES / name)
     region = {
         "xy": {"kind": "bounding_box", "points": [{"x": x[0], "y": y[0]}, {"x": x[1], "y": y[1]}]},
         "z": {"start": 0, "end": z},
     }
-    task = Task.complete({"id": "t", "region": region, "profiles": ["gfp"]}, config.default.task)
-    return plan_task(task, config.hal, config.default, dict.fromkeys(config.hal.optics.detectors(), sensor))
+    task = Task.complete({"id": "t", "region": region, "profiles": ["gfp"]}, example.default.task)
+    sensors = dict.fromkeys(example.config.optics.detectors(), sensor)
+    return plan_task(task, example.config, example.default, sensors)
 
 
 def test_exaspim_steps_z_and_its_side_selector_follows_x() -> None:

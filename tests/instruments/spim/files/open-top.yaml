@@ -4,13 +4,11 @@
 # Pins and numbers are examples. Filter bands are guesses to check.
 # Hardware facts come from notes/platform/examples/_archive/open-top.yaml.
 
-id: 3d8w3cxssxkgm8kmcsqydzchpa   # made when the instrument is created; never edited
-name: Open-top
-model: open-top light sheet
-kind: vxl.instruments.spim
+rig:
+  model: open-top light sheet
+  target: vxl.instruments.spim.Instrument
 
-hal:
-  devices:
+  components:
     nidaq_1:
       target: vxl.devices.daq.hub_ni.NiDaqmx
       init: {device_name: Dev1, product: PCIe-6738}
@@ -21,16 +19,13 @@ hal:
 
     camera:
       target: vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera   # ORCA-Flash4.0: 2048 × 2048 px
-      autosave: [exposure_time_ms]
       init: {pixel_size_um: {x: 6.5, y: 6.5}, serial: "000123"}
 
     laser_488:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw]
       init: {wavelength: 488, source_enable_delay_s: 1}
     laser_638:
       target: vxl.devices.laser.simulated.SimulatedLaser
-      autosave: [source_power_setpoint_mw]
       init: {wavelength: 638, source_enable_delay_s: 1}
 
     fw_emission:
@@ -50,6 +45,11 @@ hal:
     z_axis:
       target: vxl_drivers.axes.asi.TigerLinearAxis
       init: {hub: tiger_controller, axis_label: z, units: um}
+
+  autosave:                                       # the properties that a change by a person saves in the active profile
+    camera:    [exposure_time_ms]
+    laser_488: [source_power_setpoint_mw]
+    laser_638: [source_power_setpoint_mw]
 
   parts:                                          # things with no driver. kind says what each one is. A filter gives its band, an objective its magnification
     combiner:    {kind: combiner}
@@ -72,7 +72,7 @@ hal:
 
   optics:                                         # where the light goes: light sources → sample → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
-    # Rule 2: what a part does to the light is in hal.parts, not here.
+    # Rule 2: what a part does to the light is in rig.parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
     # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
 
@@ -103,7 +103,7 @@ default:
   task:                                           # what a new task takes when it leaves these out
     overlap: {y: 10 %, z: 15 %}                   # 1 key for each tiled axis
     path:
-      scan:  {x: alternate}                       # the axis in hal.scan
+      scan:  {x: alternate}                       # the axis in rig.scan
       tiles: {kind: grid, axes: [{y: alternate}, {z: forward}]}
     iteration: position_major
 

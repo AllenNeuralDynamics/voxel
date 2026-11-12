@@ -8,14 +8,12 @@ from vxl.devices.base import DeviceType
 from .source import LaserSource, ModulationMode
 
 
-class Laser(LaserSource):
+class Laser(LaserSource, kind=DeviceType.LASER):
     """Source settings and controlled output, before microscope illumination optics.
 
     Implementations may combine multiple devices. Permissions do not report
     optical readiness; enable commands offer optional, bounded startup waits.
     """
-
-    __DEVICE_TYPE__ = DeviceType.LASER
 
     @abstractmethod
     @describe(label="Enable Source")
