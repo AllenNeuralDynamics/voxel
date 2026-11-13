@@ -109,7 +109,7 @@ class NiSignalGenerator(SignalGenerator):
         duration = signals.duration
         rest_time = signals.rest_time
 
-        num_samples = int(float(sample_rate) * float(duration))
+        num_samples = signals.num_samples
         frame_freq = 1.0 / (float(duration) + float(rest_time))
 
         # Input PFIs are validated but not exclusively claimed; an output PFI

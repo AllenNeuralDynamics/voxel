@@ -172,3 +172,39 @@ def two_arms(data: dict[str, Any]) -> dict[str, Any]:
         right_lens={"to": "galvo"},
     )
     return data
+
+
+_SIMULATED_AXIS = "vxl.devices.axes.simulated.SimulatedContinuousAxis"
+
+
+def simulated(data: dict[str, Any]) -> dict[str, Any]:
+    """``data`` with simulated devices that open for real: a signal generator on a simulated hub, a 2048 by 2048
+    camera, a laser, stage axes, and a filter wheel on a simulated axis. The camera's exposure and every property of
+    the X axis are saved into the active profile when edited."""
+    data["autosave"] = {"camera": ["exposure_time_ms"], "x_axis": "*"}
+    devices = data["devices"]
+    devices["ao_hub"] = {"target": "vxl.devices.daq.SimulatedDaqmx", "init": {"device_name": "MockDev1"}}
+    devices["ao_main"] = {
+        "target": "vxl.devices.daq.SimulatedSignalGenerator",
+        "init": {"hub": "ao_hub", "ports": {f"ao{i}": f"ao{i}" for i in range(4)}},
+    }
+    sensor = {"sensor_size_px": {"x": 2048, "y": 2048}, "pixel_size_um": {"x": 6.5, "y": 6.5}}
+    devices["camera"] = {
+        "target": "vxl.devices.camera.simulated.SimulatedCamera",
+        "init": {"frame_source": sensor, "start_delay_s": 0, "stop_delay_s": 0},
+    }
+    devices["laser"] = {
+        "target": "vxl.devices.laser.simulated.SimulatedLaser",
+        "init": {"wavelength": 488, "source_enable_delay_s": 0},
+    }
+    for axis in ("x_axis", "y_axis", "z_axis"):
+        devices[axis] = {"target": _SIMULATED_AXIS, "init": {"lower_limit": -50000, "upper_limit": 50000}}
+    devices["fw"] = {
+        "target": "vxl.devices.axes.discrete.mapped.OwnedMappedDiscreteAxis",
+        "init": {
+            "axis": {"target": _SIMULATED_AXIS, "init": {"lower_limit": 0, "upper_limit": 100}},
+            "slots": {"0": {"label": "GFP", "position": 0}, "1": {"label": "RFP", "position": 10}},
+            "tolerance": 1,
+        },
+    }
+    return data

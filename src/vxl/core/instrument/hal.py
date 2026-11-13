@@ -244,7 +244,8 @@ class HAL:
         return problems
 
     async def _signal_port_problems(self) -> Problems:
-        """Read each signal generator's ports into its handle's cache."""
+        """Read each signal generator's ports into its handle's cache, and check that each of its wires leaves from 1
+        of them."""
         generators = list(self.signal_generators.items())
         results = await asyncio.gather(*(generator.ports.get() for _, generator in generators), return_exceptions=True)
         problems = Problems()
@@ -253,6 +254,12 @@ class HAL:
                 error = _error(result)
                 msg = f"Unable to read ports for signal generator '{uid}': {error}"
                 problems.add("rig.signal_generator.ports", msg, *self._config.component_location(uid), "ports")
+                continue
+            for name, wire in self._config.wiring.outputs(uid).items():
+                if wire.pin not in result:
+                    ports = ", ".join(sorted(result))
+                    msg = f"Wire '{name}' leaves '{uid}' from pin '{wire.pin}', which is not 1 of its ports ({ports})."
+                    problems.add("rig.signal_generator.unknown_pin", msg, "wiring", uid, name, "pin")
         return problems
 
     async def _refresh_props(self) -> None:

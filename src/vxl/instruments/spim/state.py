@@ -1,5 +1,6 @@
 """The state of a SPIM instrument: what the operator edits, saved in ``state.json``."""
 
+from collections.abc import Mapping
 from itertools import product
 from typing import TYPE_CHECKING, Annotated, TypedDict
 
@@ -14,6 +15,7 @@ from vxl.core.instrument.config import (
     InstrumentConfig,
     InstrumentState,
     NotDefault,
+    SpecimenAxis,
 )
 
 from .config import PositionRule, Profile, ProfileId, SPIMConfig, StageFollowRule
@@ -51,6 +53,20 @@ class SPIMState(InstrumentState, frozen=True):
         if duplicates := repeated(task.id for task in plan):
             raise ValueError(f"task ids must be unique (repeated: {duplicates})")
         return plan
+
+    def positions_at(
+        self, stage: Mapping[SpecimenAxis, float], previous: Mapping[DeviceUid, AxisPosition]
+    ) -> dict[DeviceUid, AxisPosition]:
+        """The position of each device in ``positions``, with the stage at ``stage``. ``previous`` gives the positions
+        at the stop before, which a device that follows the stage keeps within its margin."""
+        found: dict[DeviceUid, AxisPosition] = {}
+        for device, rule in self.positions.items():
+            if isinstance(rule, StageFollowRule):
+                before = previous.get(device)
+                found[device] = rule.position(stage[rule.axis], previous=before if isinstance(before, str) else None)
+            else:
+                found[device] = rule
+        return found
 
     def problems(self, config: InstrumentConfig) -> Problems:
         if not isinstance(config, SPIMConfig):

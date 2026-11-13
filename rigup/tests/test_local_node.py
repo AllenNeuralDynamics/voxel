@@ -93,6 +93,18 @@ class TestLocalNodeDeviceOps:
         assert props["value"].unwrap().value == 99.0
         await node.close()
 
+    async def test_props_that_the_device_does_not_describe_or_cannot_write_are_refused(
+        self, node: LocalNode, device_configs
+    ):
+        await node.build_devices(device_configs)
+        handle = node.devices["dev_a"]
+
+        written = await handle.props.set(no_such_property=1, enabled=True)
+        read = await handle.props.get("no_such_property")
+        assert [written[name].is_ok for name in ("no_such_property", "enabled")] == [False, False]
+        assert not read["no_such_property"].is_ok
+        await node.close()
+
     async def test_command_error(self, node: LocalNode, device_configs):
         await node.build_devices(device_configs)
         handle = node.devices["dev_a"]

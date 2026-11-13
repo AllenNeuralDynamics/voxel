@@ -10,7 +10,7 @@ from vxlib.vector import Span, Vec3D
 from vxl.core.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
 from vxl.devices.camera import CameraSensor
 
-from .config import PositionRule, Profile, ProfileId, Scan, SPIMConfig, StageFollowRule
+from .config import Profile, ProfileId, Scan, SPIMConfig
 from .geometry import AxisRun, Transform, footprint, frame_transform
 from .state import SPIMState
 from .task import ExplicitPoints, Grid, Region, Task, TaskDefaults, TaskId
@@ -41,9 +41,9 @@ def plan_task(
     """The volumes of 1 task, in the order they run. ``state`` is the instrument's state or its defaults. The open
     devices give ``sensors``. The smallest area that the task's profiles see sets the tile, with the devices set as
     at the middle of the region."""
-    region, scan, held = task.region, config.scan, state.positions
+    region, scan = task.region, config.scan
 
-    middle = _picks(held, {axis: region.extent(axis).middle for axis in Stage.axes()}, {})
+    middle = state.positions_at({axis: region.extent(axis).middle for axis in Stage.axes()}, {})
     seen = [footprint(_light(config, state.profiles[p], middle, sensors)[1]) for p in task.profiles]
     tile: dict[SpecimenAxis, Span] = {
         axis: min((s[axis] for s in seen), key=lambda s: s.length) for axis in Stage.axes()
@@ -53,7 +53,7 @@ def plan_task(
     stops: list[tuple[dict[SpecimenAxis, float], dict[DeviceUid, AxisPosition]]] = []
     previous: dict[DeviceUid, AxisPosition] = {}
     for stage in _tile_positions(region, scan, task, tile):
-        previous = _picks(held, {**stage, scan.axis: span.middle}, previous)
+        previous = state.positions_at({**stage, scan.axis: span.middle}, previous)
         stops.append((stage, previous))
 
     def volume(stage: Mapping[SpecimenAxis, float], picks: Mapping[str, AxisPosition], profile_id: ProfileId) -> Volume:
@@ -70,23 +70,6 @@ def plan_task(
     if task.iteration == "position_major":
         return [volume(stage, picks, profile) for stage, picks in stops for profile in task.profiles]
     return [volume(stage, picks, profile) for profile in task.profiles for stage, picks in stops]
-
-
-def _picks(
-    held: Mapping[DeviceUid, PositionRule],
-    stage: Mapping[SpecimenAxis, float],
-    previous: Mapping[DeviceUid, AxisPosition],
-) -> dict[DeviceUid, AxisPosition]:
-    """The position of each device that the instrument sets, with the stage at ``stage``. ``previous`` gives the
-    positions at the stop before, which a device that follows the stage keeps within its margin."""
-    picks: dict[DeviceUid, AxisPosition] = {}
-    for device, rule in held.items():
-        if not isinstance(rule, StageFollowRule):
-            picks[device] = rule
-            continue
-        before = previous.get(device)
-        picks[device] = rule.position(stage[rule.axis], previous=before if isinstance(before, str) else None)
-    return picks
 
 
 def _light(

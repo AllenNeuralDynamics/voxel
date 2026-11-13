@@ -1,3 +1,6 @@
+import copy
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -7,17 +10,21 @@ from pydantic import BaseModel, ValidationError
 from vxl_records import SQLiteRecords
 
 from vxl._utils.files import load_yaml
-from vxl.core.errors import RejectedError
+from vxl.core.errors import BusyError, RejectedError, StartupError
 from vxl.core.instrument.config import new_instrument_id
 from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.instrument.store import ABSENT, InstrumentStore
+from vxl.core.instrument.gate import Activity
+from vxl.core.instrument.samples import render
+from vxl.core.instrument.signals import Timeline
+from vxl.core.instrument.store import ABSENT, InstrumentStore, Merge
+from vxl.devices.camera.roi import AreaROI
 from vxl.instruments.spim.config import SPIMConfig, StageFollowRule
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMState, WriterFields
 from vxl.instruments.spim.task import Task, TaskFields
 from vxl.system import System
 
-from .support import codes, load, template, two_arms
+from .support import codes, load, simulated, template, two_arms
 
 
 def test_new_ids_are_26_safe_characters_and_differ() -> None:
@@ -131,6 +138,27 @@ async def test_the_store_sets_and_removes_values_at_key_paths(config_data: dict[
     assert [(problem.code, problem.loc) for problem in caught.value.problems] == [
         ("state.missing", ("profiles", "rfp", "spacing"))
     ]
+
+
+async def test_a_merge_adds_keys_to_a_dict_and_makes_it_when_missing(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    folder = InstrumentFolder.create(template(config_data), "left", tmp_path)
+    assert isinstance(folder.config, SPIMConfig)
+    assert isinstance(folder.default, SPIMState)
+    store = InstrumentStore(folder.home, folder.config, folder.default, folder.default)
+    camera = ("profiles", "gfp", "props", "camera")
+
+    made = await store.update({camera: Merge({"exposure_time_ms": 20.0})})
+    await store.update({camera: Merge({"binning": 2})})
+    await store.update({camera: Merge({"exposure_time_ms": 30.0})})
+    assert store.value.profiles["gfp"].props["camera"] == {"exposure_time_ms": 30.0, "binning": 2}
+    assert made.before == {camera: ABSENT}
+
+    for path in (("profiles", "rfp", "props", "camera"), ("profiles", "gfp", "spacing")):
+        with pytest.raises(RejectedError) as caught:
+            await store.update({path: Merge({"a": 1})})
+        assert [problem.loc for problem in caught.value.problems] == [path]
 
 
 def test_the_file_has_no_engine(config_data: dict[str, Any]) -> None:
@@ -323,3 +351,254 @@ async def test_task_edits_that_name_unknown_tasks_are_refused(microscope: Micros
     with pytest.raises(RejectedError, match="each task of the plan 1 time"):
         await microscope.reorder_tasks(["a", "a"])
     assert [task.id for task in microscope.state.value.plan] == ["a"]
+
+
+@pytest.fixture
+async def opened(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterator[Microscope]:
+    """An open microscope on simulated devices. Profile ``gfp`` sets the camera's exposure to 20 ms, ``slow`` to
+    30 ms, and ``bad`` to a value the camera refuses."""
+    profiles = config_data["default"]["profiles"]
+    gfp = profiles["gfp"]
+    gfp["props"] = {"camera": {"exposure_time_ms": 20.0}}
+    profiles["slow"] = copy.deepcopy(gfp) | {"props": {"camera": {"exposure_time_ms": 30.0}}}
+    profiles["bad"] = copy.deepcopy(gfp) | {"props": {"camera": {"exposure_time_ms": "fast"}}}
+    microscope = _microscope(simulated(config_data), tmp_path)
+    await microscope.open()
+    yield microscope
+    await microscope.close()
+
+
+async def _exposure(microscope: Microscope) -> float:
+    results = await microscope.get_device_properties("camera", ["exposure_time_ms"])
+    return results.results["exposure_time_ms"].unwrap().value
+
+
+async def _filter_slot(microscope: Microscope) -> int | None:
+    return (await microscope.get_device_properties("fw", ["state"])).results["state"].unwrap().value["position"]
+
+
+async def test_opening_sets_the_devices_to_the_first_profile(opened: Microscope) -> None:
+    assert opened.active_profile.value == "gfp"
+    assert await _exposure(opened) == pytest.approx(20.0)
+    assert await _filter_slot(opened) == 0
+
+
+async def test_selecting_a_profile_sets_its_devices_and_makes_it_active(opened: Microscope) -> None:
+    await opened.execute_device_command("fw", "move_to", ["RFP"], {"wait": True})
+    await opened.select_profile("slow")
+    assert opened.active_profile.value == "slow"
+    assert await _exposure(opened) == pytest.approx(30.0)
+    assert await _filter_slot(opened) == 0
+
+
+async def test_applying_the_profile_again_undoes_live_changes(opened: Microscope) -> None:
+    await opened._hal.device("camera").props.set(exposure_time_ms=50.0)  # straight to the device: nothing saved
+    await opened.apply_profile()
+    assert await _exposure(opened) == pytest.approx(20.0)
+
+
+async def test_a_failed_step_keeps_the_active_profile(opened: Microscope) -> None:
+    with pytest.raises(RejectedError, match="refused the properties"):
+        await opened.select_profile("bad")
+    assert opened.active_profile.value == "gfp"
+
+
+async def test_an_unknown_profile_is_refused(opened: Microscope) -> None:
+    with pytest.raises(RejectedError, match="No profile 'missing'"):
+        await opened.select_profile("missing")
+
+
+async def test_a_capture_refuses_selecting_a_profile(opened: Microscope) -> None:
+    gate = opened._gate
+    async with gate.command("start a capture", touches=()):
+        await gate.begin(Activity(kind="capture"), {"camera"})
+    with pytest.raises(BusyError, match="Unable to select a profile while capture is running"):
+        await opened.select_profile("slow")
+
+
+async def test_selecting_a_profile_restarts_an_activity_that_holds_the_active_profile(opened: Microscope) -> None:
+    seen: list[str] = []
+
+    @asynccontextmanager
+    async def restart() -> AsyncGenerator[None]:
+        seen.append(f"stop with {opened.active_profile.value}")
+        yield
+        seen.append(f"start with {opened.active_profile.value}")
+
+    async with opened._gate.command("start a preview", touches=()):
+        await opened._gate.begin(Activity(kind="preview"), {opened.active_profile}, restart=restart)
+    await opened.select_profile("slow")
+    assert seen == ["stop with gfp", "start with slow"]
+
+
+def _saved_camera_props(microscope: Microscope) -> dict[str, Any]:
+    return microscope.state.value.profiles["gfp"].props.get("camera", {})
+
+
+async def test_an_autosaved_edit_is_saved_as_the_device_reports_it(opened: Microscope) -> None:
+    results = await opened.set_device_properties("camera", {"exposure_time_ms": 30.0})
+    reported = results.results["exposure_time_ms"].unwrap().value
+    assert reported == pytest.approx(30.0)
+    assert _saved_camera_props(opened)["exposure_time_ms"] == reported
+    assert opened.history.value.undo_label is None
+
+
+@pytest.mark.parametrize(
+    ("device", "properties"),
+    [("camera", {"binning": 2}), ("x_axis", {"speed": 5.0}), ("camera", {"exposure_time_ms": "fast"})],
+    ids=["not on the autosave list", "off the light paths", "refused by the device"],
+)
+async def test_an_edit_that_is_not_kept_is_not_saved(
+    opened: Microscope, device: str, properties: dict[str, Any]
+) -> None:
+    before = opened.state.value
+    await opened.set_device_properties(device, properties)
+    assert opened.state.value == before
+
+
+async def test_a_camera_region_is_saved_as_the_camera_snapped_it(opened: Microscope) -> None:
+    applied = await opened.set_camera_region("camera", AreaROI(x=3, y=5, w=1001, h=999))
+    assert opened.state.value.profiles["gfp"].channels["camera"].fov == applied
+
+    full = await opened.set_camera_region("camera", None)
+    assert (full.w, full.h) == (2048, 2048)
+    assert opened.state.value.profiles["gfp"].channels["camera"].fov == full
+
+
+async def test_device_first_edits_are_refused_during_a_capture(opened: Microscope) -> None:
+    async with opened._gate.command("start a capture", touches=()):
+        await opened._gate.begin(Activity(kind="capture"), {opened._store})
+    with pytest.raises(BusyError):
+        await opened.set_device_properties("camera", {"exposure_time_ms": 30.0})
+    with pytest.raises(BusyError):
+        await opened.set_camera_region("camera", None)
+
+
+async def test_a_property_edit_does_not_restart_a_preview(opened: Microscope) -> None:
+    seen: list[str] = []
+
+    @asynccontextmanager
+    async def restart() -> AsyncGenerator[None]:
+        seen.append("restarted")
+        yield
+
+    async with opened._gate.command("start a preview", touches=()):
+        await opened._gate.begin(Activity(kind="preview"), {opened.active_profile}, restart=restart)
+    await opened.set_device_properties("camera", {"exposure_time_ms": 30.0})
+    assert seen == []
+
+
+async def test_a_position_that_names_no_slot_stops_the_opening(config_data: dict[str, Any], tmp_path: Path) -> None:
+    config_data["default"]["profiles"]["gfp"]["positions"] = {"fw": "BFP"}
+    microscope = _microscope(simulated(config_data), tmp_path)
+    with pytest.raises(StartupError) as caught:
+        await microscope.open()
+    assert [(p.code, p.loc) for p in caught.value.problems] == [
+        ("position.no_such_slot", ("profiles", "gfp", "positions", "fw"))
+    ]
+
+
+def _second_camera(data: dict[str, Any]) -> dict[str, Any]:
+    """Add a switch after the filter wheel that sends the light to ``camera`` or to a second camera, ``camera2``.
+    Every profile keeps ``camera``."""
+    data["devices"]["det_switch"] = copy.deepcopy(data["devices"]["fw"])
+    data["devices"]["det_switch"]["init"]["slots"] = {
+        "0": {"label": "a", "position": 0},
+        "1": {"label": "b", "position": 10},
+    }
+    data["devices"]["camera2"] = copy.deepcopy(data["devices"]["camera"])
+    data["optics"].update(
+        fw={"to": "det_switch"},
+        det_switch={"to": {"a": "camera", "b": "camera2"}},
+        camera2=copy.deepcopy(data["optics"]["camera"]),
+    )
+    data["default"]["profiles"]["gfp"]["positions"]["det_switch"] = "a"
+    return data
+
+
+async def test_a_region_on_a_camera_outside_the_active_profile_is_set_but_not_saved(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    microscope = _microscope(_second_camera(simulated(config_data)), tmp_path)
+    await microscope.open()
+    try:
+        before = microscope.state.value
+        applied = await microscope.set_camera_region("camera2", AreaROI(x=0, y=0, w=1024, h=1024))
+        assert (applied.w, applied.h) == (1024, 1024)
+        assert microscope.state.value == before
+    finally:
+        await microscope.close()
+
+
+async def _loaded(microscope: Microscope) -> dict[str, list[float]]:
+    """The volts on each pin that ``ao_main`` has loaded."""
+    signals = await microscope._hal.signal_generators["ao_main"].get_loaded()
+    assert signals is not None
+    return {pin: array.tolist() for pin, array in signals.arrays().items()}
+
+
+def _rendered(microscope: Microscope, timeline: Timeline) -> dict[str, list[float]]:
+    wires = microscope.config.wiring.outputs("ao_main")
+    return {wires[name].pin: s.volts.tolist() for name, s in render(timeline, wires).wires.items()}
+
+
+async def test_opening_loads_the_active_profiles_timelines(opened: Microscope) -> None:
+    timeline = opened.state.value.profiles["gfp"].timelines["ao_main"]
+    assert await _loaded(opened) == _rendered(opened, timeline)
+
+
+def _with_laser_offset(timeline: Timeline, offset: str) -> Timeline:
+    data = timeline.model_dump(mode="json")
+    data["signals"]["laser"]["start"]["offset"] = offset
+    return Timeline.model_validate(data)
+
+
+async def test_a_new_timeline_is_loaded_then_saved(opened: Microscope) -> None:
+    timeline = _with_laser_offset(opened.state.value.profiles["gfp"].timelines["ao_main"], "-2 ms")
+    await opened.set_generator_timeline("ao_main", timeline)
+    assert await _loaded(opened) == _rendered(opened, timeline)
+    assert opened.state.value.profiles["gfp"].timelines["ao_main"] == timeline
+    assert opened.history.value.undo_label is None
+
+
+async def test_a_timeline_that_does_not_fit_is_refused_before_the_generator_changes(opened: Microscope) -> None:
+    before_loaded, before_state = await _loaded(opened), opened.state.value
+    data = opened.state.value.profiles["gfp"].timelines["ao_main"].model_dump(mode="json")
+    data["duration"] = "100.05 ms"  # not a whole number of samples at 10 kHz
+    with pytest.raises(RejectedError, match="whole number of samples"):
+        await opened.set_generator_timeline("ao_main", Timeline.model_validate(data))
+    assert (await _loaded(opened), opened.state.value) == (before_loaded, before_state)
+
+
+async def test_a_timeline_edit_restarts_a_preview_and_is_refused_during_a_capture(opened: Microscope) -> None:
+    seen: list[str] = []
+
+    @asynccontextmanager
+    async def restart() -> AsyncGenerator[None]:
+        seen.append("stop")
+        yield
+        seen.append("start")
+
+    timeline = _with_laser_offset(opened.state.value.profiles["gfp"].timelines["ao_main"], "-2 ms")
+    async with opened._gate.command("start a preview", touches=()):
+        preview = await opened._gate.begin(Activity(kind="preview"), {opened.active_profile}, restart=restart)
+    await opened.set_generator_timeline("ao_main", timeline)
+    assert seen == ["stop", "start"]
+
+    await opened._gate.end(preview)
+    async with opened._gate.command("start a capture", touches=()):
+        await opened._gate.begin(Activity(kind="capture"), {opened._store})
+    with pytest.raises(BusyError):
+        await opened.set_generator_timeline("ao_main", timeline)
+
+
+async def test_a_wire_on_a_pin_the_generator_does_not_have_stops_the_opening(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    config_data["wiring"]["ao_main"]["galvo"]["pin"] = "ao9"
+    microscope = _microscope(simulated(config_data), tmp_path)
+    with pytest.raises(StartupError) as caught:
+        await microscope.open()
+    assert [(p.code, p.loc) for p in caught.value.problems] == [
+        ("rig.signal_generator.unknown_pin", ("wiring", "ao_main", "galvo", "pin"))
+    ]

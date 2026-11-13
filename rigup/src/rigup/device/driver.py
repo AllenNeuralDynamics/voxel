@@ -153,6 +153,9 @@ class DeviceController[D: "Device"]:
         def _get() -> PropResults:
             results: dict[str, Result] = {}
             for name in props_to_get:
+                if name not in self._interface.properties:
+                    results[name] = Result.err(f"Unknown property: {name}")
+                    continue
                 try:
                     target = self._device if name in self._device_props else self
                     results[name] = Result.ok(PropertyModel.from_value(getattr(target, name)))
@@ -169,6 +172,12 @@ class DeviceController[D: "Device"]:
         def _set() -> PropResults:
             results: dict[str, Result] = {}
             for name, value in props.items():
+                info = self._interface.properties.get(name)
+                if info is None or info.access != "rw":
+                    results[name] = Result.err(
+                        f"Unknown property: {name}" if info is None else f"Read-only property: {name}"
+                    )
+                    continue
                 try:
                     target = self._device if name in self._device_props else self
                     setattr(target, name, value)
