@@ -44,7 +44,7 @@ InstrumentModel = Annotated[str, Field(min_length=1, max_length=64)]
 """The lab's own label for the kind of instrument, such as ``exaSPIM`` or ``exaspim.v2``."""
 
 InstrumentTarget = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")]
-"""The class that runs the instrument, as a dotted path such as ``vxl.instruments.spim.Instrument``."""
+"""The class that runs the instrument, as a dotted path such as ``vxl.instruments.spim.Microscope``."""
 
 DeviceUid = Annotated[str, identifier("Device UID")]
 """The name of a device of the rig."""

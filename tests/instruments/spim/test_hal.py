@@ -4,7 +4,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.instruments.spim.config import Chain, Scan, SPIMConfig, SPIMState
+from vxl.instruments.spim.config import Scan, SPIMConfig, TriggerChain
+from vxl.instruments.spim.state import SPIMState
 
 from .support import Example, codes, load, sweep_x, two_arms
 
@@ -57,7 +58,7 @@ def test_scan_rules(scan: dict[str, Any], match: str) -> None:
         Scan.model_validate(scan)
 
 
-def _chain(example: Example) -> Chain:
+def _chain(example: Example) -> TriggerChain:
     gfp = example.default.profiles["gfp"]
     return example.config.trigger_chain(gfp.channels, gfp.timelines)
 

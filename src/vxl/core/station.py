@@ -17,7 +17,7 @@ from vxl import system
 from vxl._utils.files import save_yaml
 from vxl.core.errors import BusyError, RejectedError, StationNotConfiguredError
 from vxl.core.feed import StationFeed
-from vxl.core.instrument.base import BaseInstrument
+from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.folder import InstrumentFolder
 from vxl.core.views import InstrumentView, SessionInfo, SessionView, StationInfo, StationStatus, StationView
 from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown
 
 
-type AnyInstrument = BaseInstrument[Any, Any]
+type AnyInstrument = Instrument[Any, Any]
 
 
 def _describe_error(error: BaseException) -> str:

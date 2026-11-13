@@ -3,13 +3,17 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.instruments.spim.config import SPIMState, Surface, Task
+from vxl.instruments.spim.state import SPIMState
+from vxl.instruments.spim.task import (
+    Region,
+    Task,
+)
 
 from .support import load, sweep_x
 
 _REGION = {
-    "xy": {"kind": "convex_hull", "points": [{"x": 0, "y": 0}, {"x": 8000, "y": 500}, {"x": 7000, "y": 6000}]},
-    "z": {"start": 0, "end": 3000},
+    "outline": {"kind": "convex_hull", "points": [{"x": 0, "y": 0}, {"x": 8000, "y": 500}, {"x": 7000, "y": 6000}]},
+    "bounds": [0, 3000],
 }
 
 
@@ -40,58 +44,28 @@ def test_example_plan_has_no_problems(config_data: dict[str, Any]) -> None:
     assert _codes(sweep_x(config_data), task) == []
 
 
-def test_z_bounds_can_be_surfaces() -> None:
-    task = Task.model_validate(
-        {
-            "id": "uneven",
-            "region": {
-                "xy": {"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 6000, "y": 4000}]},
-                "z": {
-                    "start": {
-                        "points": [
-                            {"x": 0, "y": 0, "z": 0},
-                            {"x": 6000, "y": 0, "z": 200},
-                            {"x": 0, "y": 4000, "z": 100},
-                        ]
-                    },
-                    "end": 3000,
-                },
-            },
-            "profiles": ["gfp"],
-            "overlap": {},
-            "path": {"scan": {}, "tiles": {"kind": "nearest_neighbor"}},
-            "iteration": "position_major",
-        }
-    )
-    assert isinstance(task.region.z.start, Surface)
-    assert task.region.z.end == 3000
+@pytest.mark.parametrize(
+    ("points", "across", "along"),
+    [([{"x": 0, "y": 0}, {"x": 1, "y": 1}], ("x", "y"), "z"), ([{"z": 0, "x": 0}, {"z": 1, "x": 1}], ("x", "z"), "y")],
+)
+def test_a_region_names_its_own_axes(points: list[dict[str, float]], across: tuple[str, str], along: str) -> None:
+    region = Region.model_validate({"outline": {"kind": "bounding_box", "points": points}, "bounds": [0, 1]})
+    assert (region.across, region.along) == (across, along)
 
 
 @pytest.mark.parametrize(
-    ("z", "match"),
+    ("outline", "match"),
     [
-        ({"start": 3000, "end": 0}, "must be below"),
-        (
-            {
-                "start": {"points": [{"x": 0, "y": 0, "z": 0}, {"x": 1, "y": 1, "z": 0}, {"x": 2, "y": 2, "z": 0}]},
-                "end": 1,
-            },
-            "1 line",
-        ),
+        ({"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 1, "z": 1}]}, "the same 2 stage axes"),
+        ({"kind": "bounding_box", "points": [{"x": 0, "y": 0, "z": 0}, {"x": 1, "y": 1, "z": 1}]}, "the same 2"),
+        ({"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 1, "y": 0}]}, "span both axes"),
+        ({"kind": "convex_hull", "points": [{"x": 0, "y": 0}, {"x": 1, "y": 1}, {"x": 2, "y": 2}]}, "1 line"),
+        ({"kind": "explicit_points", "points": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]}, "must be unique"),
     ],
 )
-def test_z_bound_rules(z: dict[str, Any], match: str) -> None:
+def test_outline_rules(outline: dict[str, Any], match: str) -> None:
     with pytest.raises(ValidationError, match=match):
-        Task.model_validate(
-            {
-                "id": "t",
-                "region": {"xy": _REGION["xy"], "z": z},
-                "profiles": ["gfp"],
-                "overlap": {},
-                "path": {"scan": {}, "tiles": {"kind": "optimized"}},
-                "iteration": "position_major",
-            }
-        )
+        Region.model_validate({"outline": outline, "bounds": [0, 1]})
 
 
 @pytest.mark.parametrize(
@@ -121,14 +95,15 @@ def test_task_axes_must_match_the_instrument(config_data: dict[str, Any], change
     assert code in _codes(config_data, {"id": "t", "region": _REGION, "profiles": ["gfp"], **change})
 
 
-def test_explicit_points_need_x_and_y_tiled(config_data: dict[str, Any]) -> None:
+@pytest.mark.parametrize(("point", "untiled"), [({"x": 0, "y": 0}, True), ({"y": 0, "z": 0}, False)])
+def test_explicit_points_must_name_the_tiled_axes(
+    config_data: dict[str, Any], point: dict[str, float], untiled: bool
+) -> None:
     sweep_x(config_data)
     config_data["default"]["task"]["path"]["tiles"] = {"kind": "as_given"}
-    task = {
-        "id": "points",
-        "region": {"xy": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]}, "z": {"start": 0, "end": 1}},
-    }
-    assert "task.region.explicit_points_untiled" in _codes(config_data, {**task, "profiles": ["gfp"]})
+    region = {"outline": {"kind": "explicit_points", "points": [point]}, "bounds": [0, 1]}
+    codes = _codes(config_data, {"id": "points", "region": region, "profiles": ["gfp"]})
+    assert ("task.region.explicit_points_untiled" in codes) is untiled
 
 
 def test_task_ids_are_unique(config_data: dict[str, Any]) -> None:

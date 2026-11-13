@@ -6,7 +6,8 @@ from typing import Any
 from vxlib.problems import Problems
 
 from vxl._utils.files import load_yaml
-from vxl.instruments.spim.config import SPIMConfig, SPIMState
+from vxl.instruments.spim.config import SPIMConfig
+from vxl.instruments.spim.state import SPIMState
 
 FILES = Path(__file__).parent / "files"
 """Complete example instrument files."""
@@ -17,7 +18,7 @@ _CONFIG: dict[str, Any] = {
     "id": "5x8k2m9q4r7t1v3w6y0z2b4c8d",
     "name": "exaSPIM left",
     "model": "exaspim.v2",
-    "target": "vxl.instruments.spim.Instrument",
+    "target": "vxl.instruments.spim.Microscope",
     "parts": {
         "galvo": {"kind": "galvo"},
         "objective": {"target": "vxl.parts.Objective", "magnification": 5},

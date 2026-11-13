@@ -7,7 +7,7 @@ from vxl_records import SQLiteRecords
 from vxlib.problems import Problems
 
 from vxl.core.errors import BusyError, RejectedError, StartupError
-from vxl.core.instrument.base import BaseInstrument
+from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import InstrumentConfig, InstrumentState
 from vxl.core.instrument.folder import InstrumentFolder
 from vxl.core.instrument.gate import Activity
@@ -57,7 +57,7 @@ class _State(InstrumentState, frozen=True):
         return config.problems()
 
 
-class _Bench(BaseInstrument[InstrumentConfig, _State]):
+class _Bench(Instrument[InstrumentConfig, _State]):
     """The smallest kind of instrument: the base config and a state with no rules."""
 
 
@@ -190,7 +190,7 @@ def test_the_folder_builds_the_instrument_of_its_kind(tmp_path: Path) -> None:
 
     assert type(folder.instrument(records=records, system=system)) is _Bench
 
-    class _Other(BaseInstrument[InstrumentConfig, _State]):
+    class _Other(Instrument[InstrumentConfig, _State]):
         pass
 
     with pytest.raises(TypeError, match="is run by _Bench, not by _Other"):

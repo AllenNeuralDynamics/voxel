@@ -29,10 +29,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BaseInstrument[C: InstrumentConfig, S: InstrumentState]:
+class Instrument[C: InstrumentConfig, S: InstrumentState]:
     """An instrument: its files, its devices, and the gate that lets 1 command at a time use them. A kind of
     instrument names its config and state classes in its own class line, such as
-    ``Instrument(BaseInstrument[SPIMConfig, SPIMState])``; they are kept as ``config_cls`` and ``state_cls``. It adds
+    ``Microscope(Instrument[SPIMConfig, SPIMState])``; they are kept as ``config_cls`` and ``state_cls``. It adds
     its own commands and activities, and adds to a command of this class by running ``super()`` inside its own command
     with the same touches. A command touches each device it uses by name, and the store when it changes the saved
     state."""
@@ -43,7 +43,7 @@ class BaseInstrument[C: InstrumentConfig, S: InstrumentState]:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         for base in get_original_bases(cls):
-            if get_origin(base) is BaseInstrument:
+            if get_origin(base) is Instrument:
                 args = get_args(base)
                 if not any(isinstance(arg, TypeVar) for arg in args):  # a base that is still generic names none
                     cls.config_cls, cls.state_cls = args

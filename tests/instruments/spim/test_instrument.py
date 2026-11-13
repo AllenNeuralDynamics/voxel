@@ -2,14 +2,20 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from ome_zarr_writer import WriterSettings
+from pydantic import BaseModel, ValidationError
+from vxl_records import SQLiteRecords
 
 from vxl._utils.files import load_yaml
 from vxl.core.errors import RejectedError
 from vxl.core.instrument.config import new_instrument_id
 from vxl.core.instrument.folder import InstrumentFolder
 from vxl.core.instrument.store import ABSENT, InstrumentStore
-from vxl.instruments.spim.config import SPIMConfig, SPIMState, StageFollowRule, Task
+from vxl.instruments.spim.config import SPIMConfig, StageFollowRule
+from vxl.instruments.spim.instrument import Microscope
+from vxl.instruments.spim.state import SPIMState, WriterFields
+from vxl.instruments.spim.task import Task, TaskFields
+from vxl.system import System
 
 from .support import codes, load, template, two_arms
 
@@ -77,7 +83,7 @@ async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
     assert store.last_modified is None
 
     xy = {"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 500, "y": 500}]}
-    region = {"xy": xy, "z": {"start": 0, "end": 100}}
+    region = {"outline": xy, "bounds": [0, 100]}
     task = Task.complete({"id": "brain", "region": region, "profiles": ["gfp"]}, store.value.task)
     await store.update(
         {("plan",): [task], ("metadata",): {"notes": "left hemisphere"}, ("profiles", "gfp", "spacing"): 2.0}
@@ -206,3 +212,114 @@ def test_a_device_that_follows_the_stage_keeps_its_position_inside_the_margin() 
     assert rule.position(111, previous="left") == "right"
     assert rule.position(95, previous="right") == "right"
     assert rule.position(89, previous="right") == "left"
+
+
+_REGION = {"outline": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]}, "bounds": [0, 1]}
+
+
+def _microscope(config_data: dict[str, Any], tmp_path: Path) -> Microscope:
+    folder = InstrumentFolder.create(template(config_data), "left", tmp_path)
+    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
+    return Microscope(folder, records=records, system=system)
+
+
+@pytest.fixture
+def microscope(config_data: dict[str, Any], tmp_path: Path) -> Microscope:
+    return _microscope(config_data, tmp_path)
+
+
+def _task(microscope: Microscope, task_id: str) -> Task:
+    return Task.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.state.value.task)
+
+
+async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope: Microscope) -> None:
+    await microscope.update_writer_settings(shard_z_chunks=4, target_shard_gb=2.0)
+    await microscope.set_spacing("gfp", 2.5)
+    await microscope.update_profile_details("gfp", label="GFP", desc="green", channel_labels={"camera": "green"})
+    state = microscope.state.value
+    assert (state.writer.shard_z_chunks, state.profiles["gfp"].spacing) == (4, 2.5)
+    assert (state.profiles["gfp"].label, state.profiles["gfp"].desc) == ("GFP", "green")
+    assert state.profiles["gfp"].channels["camera"].label == "green"
+
+    for _ in range(3):
+        await microscope.undo()
+    assert microscope.state.value == microscope.default_state.value
+
+
+@pytest.mark.parametrize(
+    ("profile_id", "spacing", "loc"),
+    [("rfp", 2.0, ("profiles", "rfp", "spacing")), ("gfp", -1, ("profiles", "gfp", "spacing"))],
+)
+async def test_a_spacing_edit_is_refused_at_its_path(
+    microscope: Microscope, profile_id: str, spacing: float, loc: tuple[str, ...]
+) -> None:
+    with pytest.raises(RejectedError) as caught:
+        await microscope.set_spacing(profile_id, spacing)
+    assert [problem.loc for problem in caught.value.problems] == [loc]
+    assert microscope.history.value.undo_label is None
+
+
+async def test_a_channel_label_for_a_camera_not_in_the_profile_is_refused(microscope: Microscope) -> None:
+    with pytest.raises(RejectedError) as caught:
+        await microscope.update_profile_details("gfp", channel_labels={"laser": "blue"})
+    assert [problem.loc for problem in caught.value.problems] == [("profiles", "gfp", "channels", "laser", "label")]
+
+
+@pytest.mark.parametrize("name", ["props", "spacing", "spcing"])
+async def test_profile_details_cannot_change_other_fields(microscope: Microscope, name: str) -> None:
+    untyped: dict[str, Any] = {name: {}}  # what a caller with no types can send
+    with pytest.raises(RejectedError, match=f"cannot change \\['{name}'\\] of a profile"):
+        await microscope.update_profile_details("gfp", **untyped)
+
+
+@pytest.mark.parametrize(("fields", "model"), [(TaskFields, Task), (WriterFields, WriterSettings)])
+def test_each_field_list_names_fields_of_its_model(fields: type, model: type[BaseModel]) -> None:
+    assert fields.__annotations__.keys() <= model.model_fields.keys()
+
+
+async def test_quick_position_edits_are_1_undo_step(config_data: dict[str, Any], tmp_path: Path) -> None:
+    del config_data["default"]["profiles"]["gfp"]["positions"]
+    microscope = _microscope(config_data, tmp_path)
+    for at in (4000, 4500, 5000):
+        rule = StageFollowRule(axis="x", order=["GFP", "RFP"], at=[at])
+        await microscope.set_position_rule("fw", rule, edit_id="drag")
+    assert microscope.state.value.positions["fw"] == rule
+
+    await microscope.undo()
+    assert "fw" not in microscope.state.value.positions
+    assert microscope.history.value.undo_label is None
+
+
+async def test_task_edits_keep_their_order_and_undo_in_turn(microscope: Microscope) -> None:
+    for task_id in ("a", "b", "c"):
+        await microscope.add_task(_task(microscope, task_id))
+    for iteration in ("profile_major", "position_major", "profile_major"):
+        await microscope.update_task("b", iteration=iteration, edit_id="typing")
+    await microscope.reorder_tasks(["c", "a", "b"])
+    await microscope.remove_tasks(["a"])
+    assert [(task.id, task.iteration) for task in microscope.state.value.plan] == [
+        ("c", "position_major"),
+        ("b", "profile_major"),
+    ]
+
+    await microscope.undo()
+    await microscope.undo()
+    assert [task.id for task in microscope.state.value.plan] == ["a", "b", "c"]
+    await microscope.undo()
+    assert microscope.state.value.plan[1].iteration == "position_major"
+    assert microscope.history.value.undo_label == "Add task"
+
+
+async def test_task_edits_that_name_unknown_tasks_are_refused(microscope: Microscope) -> None:
+    await microscope.add_task(_task(microscope, "a"))
+
+    with pytest.raises(RejectedError, match="task ids must be unique"):
+        await microscope.add_task(_task(microscope, "a"))
+    with pytest.raises(RejectedError, match="No task 'z'"):
+        await microscope.update_task("z", iteration="profile_major")
+    with pytest.raises(RejectedError, match="No task 'z'"):
+        await microscope.remove_tasks(["a", "z"])
+    with pytest.raises(RejectedError, match="each task of the plan 1 time"):
+        await microscope.reorder_tasks(["a", "a"])
+    assert [task.id for task in microscope.state.value.plan] == ["a"]

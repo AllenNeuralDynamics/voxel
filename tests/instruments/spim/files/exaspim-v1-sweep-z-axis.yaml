@@ -5,7 +5,7 @@
 
 rig:
   model: exaSPIM
-  target: vxl.instruments.spim.Instrument
+  target: vxl.instruments.spim.Microscope
 
   parts:                                          # things with no driver: their facts, and their class when it is not rigup.Part
     combiner:           {kind: combiner}

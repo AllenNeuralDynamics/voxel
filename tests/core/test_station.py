@@ -7,7 +7,7 @@ import pytest
 from vxlib.problems import Problems
 
 from vxl import system as system_module
-from vxl.core.instrument.base import BaseInstrument
+from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import InstrumentConfig, InstrumentState
 from vxl.core.station import Station, StationConfig
 from vxl.core.views import StationStatus
@@ -21,7 +21,7 @@ class _State(InstrumentState, frozen=True):
         return config.problems()
 
 
-class _Kind(BaseInstrument[InstrumentConfig, _State]):
+class _Kind(Instrument[InstrumentConfig, _State]):
     """A kind of instrument with the base config and a state with no rules."""
 
 

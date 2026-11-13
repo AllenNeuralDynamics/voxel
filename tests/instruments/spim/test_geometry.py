@@ -1,5 +1,4 @@
 import math
-from pathlib import Path
 
 import pytest
 from vxlib.vector import IVec2D, Vec2D, Vec3D
@@ -7,14 +6,10 @@ from vxlib.vector import IVec2D, Vec2D, Vec3D
 from vxl.core.instrument.config import Detector
 from vxl.devices.camera import CameraSensor
 from vxl.devices.camera.roi import AreaROI
-from vxl.instruments.spim.config import Task
-from vxl.instruments.spim.scans import AxisRun, Volume, frame_transform, plan_task
-
-from .support import load_file
+from vxl.instruments.spim.geometry import AxisRun, frame_transform
 
 _EXASPIM = Detector(width={"y": 1}, height={"x": -1})
 _OPEN_TOP = Detector(width={"y": 1}, height={"x": 1, "z": 1})
-_FILES = Path(__file__).parent / "files"
 
 
 def _sensor(pixel: float, x: int, y: int) -> CameraSensor:
@@ -60,11 +55,11 @@ def test_a_slanted_frame_reaches_into_the_depth_and_along_x() -> None:
     assert (bounds["x"].low, bounds["x"].high) == pytest.approx((-half, half))
 
 
-def test_scanned_puts_runs_slowest_first() -> None:
+def test_scanned_puts_the_scan_on_array_axis_0() -> None:
     sensor = _sensor(3.76, 100, 80)
     frame = frame_transform(_EXASPIM, sensor, AreaROI(x=0, y=0, w=100, h=80), binning=1, magnification=5.0)
     first = Vec3D(z=30.0, y=20.0, x=10.0)
-    capture = frame.scanned(first, [AxisRun("z", 30.0, 1.0, 50)])
+    capture = frame.scanned(first, AxisRun("z", 30.0, 1.0, 50))
 
     assert capture.shape == (50, 80, 100)
     assert _close(capture.position((49, 0, 0)), capture.position((0, 0, 0)) + Vec3D(z=49.0, y=0.0, x=0.0))
@@ -72,36 +67,8 @@ def test_scanned_puts_runs_slowest_first() -> None:
     assert math.isclose(capture.bounds()["z"].length, 50.0)
 
 
-def test_a_run_needs_a_free_frame_axis() -> None:
+def test_a_scan_needs_a_free_frame_axis() -> None:
     frame = frame_transform(_EXASPIM, _sensor(1.0, 10, 10), AreaROI(x=0, y=0, w=10, h=10), binning=1, magnification=1)
+    capture = frame.scanned(Vec3D(z=0, y=0, x=0), AxisRun("x", 0, 1.0, 5))
     with pytest.raises(ValueError, match="free axis"):
-        frame.scanned(Vec3D(z=0, y=0, x=0), [AxisRun("x", 0, 1.0, 5), AxisRun("z", 0, 1.0, 5)])
-
-
-def _plan(name: str, sensor: CameraSensor, x: tuple[float, float], y: tuple[float, float], z: float) -> list[Volume]:
-    """The scans of 1 task over a box, with the ``gfp`` profile of an example file."""
-    example = load_file(_FILES / name)
-    region = {
-        "xy": {"kind": "bounding_box", "points": [{"x": x[0], "y": y[0]}, {"x": x[1], "y": y[1]}]},
-        "z": {"start": 0, "end": z},
-    }
-    task = Task.complete({"id": "t", "region": region, "profiles": ["gfp"]}, example.default.task)
-    sensors = dict.fromkeys(example.config.optics.detectors(), sensor)
-    return plan_task(task, example.config, example.default, sensors)
-
-
-def test_exaspim_steps_z_and_its_side_selector_follows_x() -> None:
-    sensor = _sensor(3.76, 14192, 10640)
-    (left,) = _plan("exaspim-v1.yaml", sensor, (0, 30000), (0, 9000), 100)
-    (right,) = _plan("exaspim-v1.yaml", sensor, (30000, 50000), (0, 9000), 100)
-
-    assert left.runs == [AxisRun("z", 0.0, 1.0, 101)]
-    assert left.transforms["camera"].shape == (101, 10640, 14192)
-    assert left.positions == {"excitation_side_selector": "left", "fw_emission": "BP525"}
-    assert right.positions == {"excitation_side_selector": "right", "fw_emission": "BP525"}
-
-
-def test_open_top_sweeps_x() -> None:
-    (scan,) = _plan("open-top.yaml", _sensor(6.5, 2048, 2048), (0, 1000), (0, 500), 200)
-    assert scan.runs == [AxisRun("x", 0.0, 0.5, 2001)]
-    assert scan.transforms["camera"].shape == (2001, 2048, 2048)
+        capture.scanned(Vec3D(z=0, y=0, x=0), AxisRun("z", 0, 1.0, 5))

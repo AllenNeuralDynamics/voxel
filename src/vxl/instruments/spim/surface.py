@@ -1,20 +1,20 @@
-"""Where a task's region is imaged: the position of each tile, and the span each moving axis covers there.
+"""Parked: the height of a measured surface at any XY position, and its exact extent over a box.
 
-A Z bound is a flat height or a surface of measured heights. Between the measured points, a surface is a flat
-plane over each triangle of neighbors (Delaunay); past the outer points, it takes the value at the nearest edge.
+Nothing uses this yet. It is for a region with a tilted top, where each tile scans only its own depth. To connect it
+again, let a region's bounds take measured points as well as a number, and give each tile the extent of the surface
+under its footprint.
+
+Between the measured points, the surface is a flat plane over each triangle of neighbors (Delaunay); past the outer
+points, it takes the value at the nearest edge.
 """
 
 import math
-from collections.abc import Mapping
+from collections.abc import Sequence
 from itertools import pairwise
 
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay
-from vxlib.vector import Span, Vec2D
-
-from vxl.core.instrument.config import SpecimenAxis
-
-from .config import Bound, Region, Surface, ZBounds
+from vxlib.vector import Span, Vec3D
 
 type _Point = tuple[float, float]
 """An XY position as ``(x, y)``, for the math inside this module only."""
@@ -22,69 +22,12 @@ type _Point = tuple[float, float]
 _EPS = 1e-9
 
 
-def tile_positions(region: Region, moving: Mapping[SpecimenAxis, object]) -> list[dict[SpecimenAxis, float]]:
-    """The tiles of a region in the order they run. A tile is the position, in µm, of each axis that holds still
-    during a scan. Stand-in: 1 tile at the middle of the region; no tiling, overlap or order yet."""
-    xy = _region_xy(region)
-    tile: dict[SpecimenAxis, float] = {axis: xy[axis].middle for axis in ("x", "y") if axis not in moving}
-    if "z" not in moving:
-        middle = Vec2D(x=xy["x"].middle, y=xy["y"].middle)
-        tile["z"] = _capture_z(region.z, low=middle, high=middle).middle
-    return [tile]
+class Surface:
+    """Measured heights ``z`` at XY positions, joined by flat triangles, and its height at any XY position."""
 
-
-def tile_spans(
-    region: Region,
-    tile: Mapping[SpecimenAxis, float],
-    moving: Mapping[SpecimenAxis, object],
-    footprint: Mapping[SpecimenAxis, Span],
-) -> dict[SpecimenAxis, Span]:
-    """The span, in µm, each moving axis covers at ``tile``, innermost first. ``footprint`` is the area the cameras
-    see around the stage position. A moving X or Y covers the region; a moving Z covers the surface under the
-    footprint."""
-    xy = _region_xy(region)
-
-    def seen(axis: SpecimenAxis) -> Span:
-        if axis in moving:
-            return xy[axis]
-        return Span(tile[axis] + footprint[axis].low, tile[axis] + footprint[axis].high)
-
-    spans: dict[SpecimenAxis, Span] = {}
-    for axis in moving:
-        if axis == "z":
-            x, y = seen("x"), seen("y")
-            spans[axis] = _capture_z(region.z, low=Vec2D(x=x.low, y=y.low), high=Vec2D(x=x.high, y=y.high))
-        else:
-            spans[axis] = xy[axis]
-    return spans
-
-
-def _region_xy(region: Region) -> dict[SpecimenAxis, Span]:
-    points = region.xy.points
-    return {
-        "x": Span(min(p.x for p in points), max(p.x for p in points)),
-        "y": Span(min(p.y for p in points), max(p.y for p in points)),
-    }
-
-
-def _capture_z(z: ZBounds, *, low: Vec2D, high: Vec2D) -> Span:
-    """The Z a capture over the XY area from ``low`` to ``high`` must image: the lowest start to the highest end."""
-    area = ((low.x, low.y), (high.x, high.y))
-    return Span(_extent(z.start, *area).low, _extent(z.end, *area).high)
-
-
-def _extent(bound: Bound, low: _Point, high: _Point) -> Span:
-    if isinstance(bound, Surface):
-        return _Interpolation(bound).extent(low, high)
-    return Span(bound, bound)
-
-
-class _Interpolation:
-    """A surface's height at any XY position, built once from its measured points."""
-
-    def __init__(self, surface: Surface) -> None:
-        self.points: list[_Point] = [(p.x, p.y) for p in surface.points]
-        self.z = [p.z for p in surface.points]
+    def __init__(self, points: Sequence[Vec3D]) -> None:
+        self.points: list[_Point] = [(p.x, p.y) for p in points]
+        self.z = [p.z for p in points]
         self.triangulation = Delaunay(np.array(self.points))
         self.hull: list[int] = [int(i) for i in ConvexHull(np.array(self.points)).vertices]  # counterclockwise
 
@@ -122,7 +65,10 @@ class _Interpolation:
             candidates += [self.at(p) for p in _segment_crossings(self.points[i], self.points[j], low, high)]
         count = len(self.hull)
         for k, v in enumerate(self.hull):
-            before, after = self.points[self.hull[k - 1]], self.points[self.hull[(k + 1) % count]]
+            before, after = (
+                self.points[self.hull[k - 1]],
+                self.points[self.hull[(k + 1) % count]],
+            )
             if _outward_region_meets(self.points[v], before, after, low, high):
                 candidates.append(self.z[v])
         return Span(min(candidates), max(candidates))
@@ -183,4 +129,4 @@ def _outward_region_meets(v: _Point, before: _Point, after: _Point, low: _Point,
     return _ray_meets_box(v, normal_before, low, high) or _ray_meets_box(v, normal_after, low, high)
 
 
-__all__ = ["tile_positions", "tile_spans"]
+__all__ = ["Surface"]

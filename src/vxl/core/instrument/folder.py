@@ -12,7 +12,7 @@ from vxlib.problems import Problems
 
 from vxl._utils.files import load_yaml, update_yaml
 from vxl.core.errors import RejectedError, StartupError
-from vxl.core.instrument.base import BaseInstrument
+from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import InstrumentConfig, InstrumentState, new_instrument_id
 from vxl.system import System
 
@@ -26,7 +26,7 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
     config and state classes; a folder read from disk has them only when the program runs."""
 
     home: Path
-    kind: type[BaseInstrument[C, S]] | None
+    kind: type[Instrument[C, S]] | None
     config: C | None
     default: S | None
     state: S | None
@@ -87,7 +87,7 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
         update_yaml(home / "default.yaml", template["default"])
         return InstrumentFolder.read(home)
 
-    def instrument(self, *, records: VoxelRecords, system: System) -> BaseInstrument[C, S]:
+    def instrument(self, *, records: VoxelRecords, system: System) -> Instrument[C, S]:
         """The instrument of this folder, of its kind, without opening hardware. Raise :class:`StartupError` when
         the folder has a problem."""
         if self.kind is None:
@@ -95,13 +95,13 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
         return self.kind(self, records=records, system=system)
 
     @staticmethod
-    def _kind(rig: object) -> type[BaseInstrument[Any, Any]]:
+    def _kind(rig: object) -> type[Instrument[Any, Any]]:
         """The class that the ``target`` of a ``rig.yaml`` names. Raise :class:`ValueError` when it names none, or
         a class that cannot run an instrument."""
         target = rig.get("target") if isinstance(rig, dict) else None
         if not isinstance(target, str):
             raise ValueError("rig.yaml names no target")
-        kind = import_class(target, BaseInstrument)
+        kind = import_class(target, Instrument)
         if not hasattr(kind, "config_cls"):
             raise ValueError(f"'{target}' names no config and state classes")
         return kind
