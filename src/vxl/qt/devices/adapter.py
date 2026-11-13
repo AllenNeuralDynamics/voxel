@@ -11,8 +11,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from rigup import ComponentInterface, PropertyModel
-    from vxl.core.models import SessionView
     from vxl.instrument import Instrument
+    from vxl.station_legacy.models import SessionView
 
 log = logging.getLogger(__name__)
 

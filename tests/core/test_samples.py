@@ -30,7 +30,7 @@ def test_pulse_is_active_in_its_window_and_idle_outside():
     assert len(volts) == 1000
     assert np.all(volts[200:700] == 2)
     assert volts[100] == volts[800] == 0
-    assert not rendered.violations
+    assert not rendered.problems
 
 
 def test_staircase_steps_evenly():
@@ -45,20 +45,20 @@ def test_rounded_triangle_is_stretched_back_to_full_swing():
     rendered = _render({"galvo": signal}, {"galvo": wire})
     volts = rendered.wires["galvo"].volts
     assert (volts.min(), volts.max()) == (pytest.approx(-2), pytest.approx(2))
-    assert not rendered.violations
+    assert not rendered.problems
 
 
 def test_slow_device_cannot_reach_the_full_swing():
     wire = {**_ANALOG, "travel_time": "10 ms"}
     signal = {"kind": "wave", "shape": "triangle", "center": "0 V", "amplitude": "2 V", **_HALF}
     rendered = _render({"galvo": signal}, {"galvo": wire})
-    assert "timeline.signal.swing_short" in [v.code for v in rendered.violations]
+    assert "timeline.signal.swing_short" in [v.code for v in rendered.problems]
 
 
 def test_turns_closer_than_the_device_can_turn():
     signal = {"kind": "pulse", "idle": "0 V", "active": "2 V", **_HALF}
     rendered = _render({"lens": signal}, {"lens": {**_ANALOG, "travel_time": "20 ms"}})
-    assert "timeline.signal.turn_overlap" in [v.code for v in rendered.violations]
+    assert "timeline.signal.turn_overlap" in [v.code for v in rendered.problems]
 
 
 def test_limits_and_scales():
@@ -71,7 +71,7 @@ def test_limits_and_scales():
     }
     rendered = _render({"stage": {"kind": "constant", "value": "6 mm"}}, {"stage": wire})
     assert rendered.wires["stage"].volts[0] == pytest.approx(3)
-    assert [v.code for v in rendered.violations] == ["timeline.signal.limit"]
+    assert [v.code for v in rendered.problems] == ["timeline.signal.limit"]
 
 
 def test_follows_chain_in_order():
@@ -89,4 +89,4 @@ def test_digital_pulse_shorter_than_the_receiver_takes():
     signal = {"kind": "on", "start": {"timeline": "start"}, "end": {"timeline": "start", "offset": "0.5 ms"}}
     rendered = _render({"trigger": signal}, {"trigger": wire})
     assert rendered.wires["trigger"].volts[:50].tolist() == [1.0] * 50
-    assert [v.code for v in rendered.violations] == ["timeline.signal.on_time"]
+    assert [v.code for v in rendered.problems] == ["timeline.signal.on_time"]

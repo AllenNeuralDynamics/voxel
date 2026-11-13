@@ -7,7 +7,7 @@ from pylablib.devices.Thorlabs import MFF
 from rigup.device.props import numeric_int
 
 from rigup import describe
-from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
+from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotContent
 
 
 class MFF101(DiscreteAxis):
@@ -22,7 +22,7 @@ class MFF101(DiscreteAxis):
         uid: str,
         *,
         conn: str,
-        slots: Mapping[int | str, str | None] | None = None,
+        slots: Mapping[int | str, SlotContent] | None = None,
         flip_time_ms: int = 500,
     ) -> None:
         if any(int(index) not in (0, 1) for index in (slots or {})):

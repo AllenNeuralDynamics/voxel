@@ -1,12 +1,27 @@
 from abc import abstractmethod
 from collections.abc import Mapping
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from vxlib.schema import check_identifier
 
-from rigup import describe
+from rigup import RigComponent, describe
 from vxl.devices.axes.base import Axis
 from vxl.devices.base import DeviceType
+
+type SlotContent = str | RigComponent | None
+"""What a slot holds: a plain name, a component such as a filter, or nothing that the rig names."""
+
+
+def slot_label(content: object) -> object:
+    """The label of a slot: the name of the component that it holds, or ``content`` itself when it is a name."""
+    if content is None or isinstance(content, str):
+        return content
+    return getattr(content, "uid", content)
+
+
+SlotName = Annotated[str, BeforeValidator(slot_label)]
+"""A slot label in the slot settings of a driver. A component given in its place counts as its name."""
 
 
 class DiscreteAxisState(BaseModel, frozen=True):
@@ -28,21 +43,25 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
     def __init__(
         self,
         uid: str,
-        slots: Mapping[int | str, str | None],
+        slots: Mapping[int | str, SlotContent],
         slot_count: int | None = None,
     ) -> None:
         """Define zero-based slots, inferring slot count from the largest index when omitted.
 
         String keys are normalized to integers; missing labels remain ``None``. A label has the form of a name:
-        letters, digits, ``_`` and ``-``.
+        letters, digits, ``_`` and ``-``. A slot that holds a component takes the name of that component.
         """
         super().__init__(uid=uid)
 
         # Normalize slots: convert string keys to int (YAML might parse numeric keys as strings)
-        normalized_slots: dict[int, str | None] = {int(k): v for k, v in slots.items()}
-        for label in normalized_slots.values():
+        normalized_slots: dict[int, str | None] = {}
+        for key, content in slots.items():
+            label = slot_label(content)
+            if label is not None and not isinstance(label, str):
+                raise TypeError(f"slot {key} holds {content!r}, which is neither a name nor a component")
             if label is not None:
                 check_identifier(label, "Slot label")
+            normalized_slots[int(key)] = label
 
         # Determine slot count
         max_idx = max(normalized_slots.keys()) if normalized_slots else -1

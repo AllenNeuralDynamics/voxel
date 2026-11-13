@@ -7,11 +7,11 @@ from itertools import pairwise
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator
+from vxlib.problems import Problems
 from vxlib.vector import Span
 
-from .config import AnalogWire, DigitalWire, WireConfig, WireName
-from .errors import Violations
-from .signals import (
+from vxl.core.instrument.config import AnalogWire, DigitalWire, WireConfig, WireName
+from vxl.core.instrument.signals import (
     AnalogConstant,
     AnalogFollow,
     AnalogPoints,
@@ -47,14 +47,14 @@ class Rendered:
     """Each wire's samples during 1 timeline, and the problems in them."""
 
     wires: dict[WireName, WireSamples]
-    violations: Violations
+    problems: Problems
 
 
 def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered:
     """Each wire's samples during 1 timeline, and the problems in them. A signal that the timeline's own checks reject
     is left out."""
     rate, n = float(timeline.sample_rate), timeline.samples
-    found = Violations()
+    found = Problems()
     if abs(timeline.duration * rate - n) > 1e-6:
         msg = f"{timeline.duration * 1e3:g} ms at {rate:g} Hz is not a whole number of samples."
         found.add("timeline.samples_not_whole", msg, "duration")
@@ -70,7 +70,7 @@ def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered
         smooth, turn = _smooth(ideal, wire, rate)
         output, outside = _output(smooth, signal, wire)
         samples[name] = WireSamples(ideal, smooth, output)
-        problems = _sample_violations(ideal, smooth, turn, output, outside, wire, window, timeline)
+        problems = _sample_problems(ideal, smooth, turn, output, outside, wire, window, timeline)
         found += problems.under("signals", name)
 
     # Each follow copies the volts of its source, so it comes after it. A loop is never ready; the timeline's edge
@@ -83,7 +83,7 @@ def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered
             copied = follow.scale * np.roll(source, round(follow.delay * rate)) + follow.offset
             samples[name] = WireSamples(copied, copied, {"V": copied})
             if isinstance(wire := wires.get(name), AnalogWire):
-                found += _limit_violations({"V": copied}, wire).under("signals", name)
+                found += _limit_problems({"V": copied}, wire).under("signals", name)
     return Rendered(samples, found)
 
 
@@ -201,7 +201,7 @@ def _output(smooth: np.ndarray, signal: Signal, wire: WireConfig) -> tuple[dict[
     return output, outside
 
 
-def _sample_violations(
+def _sample_problems(
     ideal: np.ndarray,
     smooth: np.ndarray,
     turn: int,
@@ -210,10 +210,10 @@ def _sample_violations(
     wire: WireConfig,
     window: Span,
     timeline: Timeline,
-) -> Violations:
+) -> Problems:
     """Every problem in 1 wire's samples."""
     rate, n = float(timeline.sample_rate), timeline.samples
-    found = Violations()
+    found = Problems()
 
     def add(code: str, msg: str, *at: str) -> None:
         found.add(f"timeline.signal.{code}", msg, *at)
@@ -247,13 +247,13 @@ def _sample_violations(
         else:
             add("outside_table", f"Some values are outside the scale from {table}; they are held at its ends.")
     # Limits in the wire's own unit check the values wanted; limits in the units below check the output.
-    found += _limit_violations({**output, unit: smooth}, wire)
+    found += _limit_problems({**output, unit: smooth}, wire)
     return found
 
 
-def _limit_violations(values: Mapping[str, np.ndarray], wire: AnalogWire) -> Violations:
+def _limit_problems(values: Mapping[str, np.ndarray], wire: AnalogWire) -> Problems:
     """The limits in each unit, against the values in that unit."""
-    found = Violations()
+    found = Problems()
     for unit, limits in wire.limits.items():
         if (checked := values.get(unit)) is None:
             continue

@@ -10,12 +10,14 @@ Three concrete implementations:
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 
-from rigup.build import BuildError
-from rigup.config import ComponentConfig
-from rigup.device import ComponentInterface, DeviceHandle
+from vxlib.problems import Problem
 
-type DevicesBuildResult = tuple[Mapping[str, DeviceHandle], Mapping[str, BuildError]]
-type DevicesConfig = Mapping[str, ComponentConfig]
+from rigup.component import Part
+from rigup.config import DeviceConfig
+from rigup.device import DeviceHandle
+
+type DevicesBuildResult = tuple[Mapping[str, DeviceHandle], Mapping[str, Problem]]
+type DevicesConfig = Mapping[str, DeviceConfig]
 
 
 class Node(ABC):
@@ -38,13 +40,15 @@ class Node(ABC):
         """Tear down all devices and release resources (disconnect, terminate, or cleanup)."""
 
     @abstractmethod
-    async def build_devices(self, configs: DevicesConfig) -> DevicesBuildResult:
-        """Instantiate devices and parts from configs.
+    async def build_devices(
+        self, devices: DevicesConfig, parts: Mapping[str, Part] | None = None
+    ) -> DevicesBuildResult:
+        """Instantiate the devices of this node. ``parts`` are the parts of the rig: a device whose ``init`` names
+        1 of them gets it.
 
         Returns a tuple of ``(successful_handles, build_errors)`` — same
         accumulation pattern as :func:`rigup.build.build_objects_async`.
-        Callers decide whether partial success is acceptable. Only a device
-        gets a handle; the built parts are in :attr:`parts`.
+        Callers decide whether partial success is acceptable.
         """
 
     @abstractmethod
@@ -59,8 +63,3 @@ class Node(ABC):
     @abstractmethod
     def devices(self) -> dict[str, DeviceHandle]:
         """Currently-built device handles, keyed by uid."""
-
-    @property
-    @abstractmethod
-    def parts(self) -> dict[str, ComponentInterface]:
-        """The interface of each currently-built part, keyed by uid. A part has no handle."""

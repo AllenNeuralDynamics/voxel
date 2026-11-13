@@ -6,6 +6,7 @@ from vxl.devices.axes.simulated import SimulatedDiscreteAxis
 from vxl.devices.camera.simulated.simulated import SimulatedCamera
 from vxl.devices.laser.simulated import SimulatedLaser
 from vxl.devices.laser.source import ModulationMode
+from vxl.parts import Filter
 
 
 def test_laser_rejects_unsupported_modulation_mode() -> None:
@@ -98,3 +99,13 @@ def test_laser_rejects_invalid_power_noise(noise: float) -> None:
 def test_simulated_device_rejects_invalid_delays(create_device: Callable[[float], object], delay: float) -> None:
     with pytest.raises(ValueError, match="finite and non-negative"):
         create_device(delay)
+
+
+def test_a_slot_that_holds_a_part_takes_its_name() -> None:
+    glass = Filter.model_validate({"uid": "BP525", "band": ["500 nm", "550 nm"]})
+
+    wheel = SimulatedDiscreteAxis(uid="fw", slots={0: glass, 1: "empty"}, settle_seconds=0)
+
+    assert wheel.labels == {0: "BP525", 1: "empty"}
+    wheel.move_to("BP525", wait=True)
+    assert wheel.state.position == 0

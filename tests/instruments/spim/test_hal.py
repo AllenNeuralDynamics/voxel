@@ -17,7 +17,7 @@ def test_config_round_trips_through_json(config_data: dict[str, Any]) -> None:
     assert SPIMState.model_validate(example.default.model_dump(mode="json")) == example.default
 
 
-def test_example_config_has_no_violations(config_data: dict[str, Any]) -> None:
+def test_example_config_has_no_problems(config_data: dict[str, Any]) -> None:
     assert codes(load(config_data)) == []
     assert codes(load(sweep_x(config_data))) == []
 
@@ -34,7 +34,7 @@ def _wires(data: dict[str, Any]) -> dict[str, Any]:
     ("change", "code"),
     [
         (lambda d: d["optics"]["sample"].update(to="fw_emision"), "rig.optics.target_missing"),
-        (lambda d: d["components"].update(software={"target": "builtins.object"}), "rig.reserved_name"),
+        (lambda d: d["devices"].update(software={"target": "builtins.object"}), "rig.reserved_name"),
         (lambda d: d["scan"].update(pacer="ao_mian"), "rig.scan.pacer_missing"),
         (lambda d: _follow(d, "z"), "positions.follows_scan_axis"),
     ],

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from rigup import BuildConfig, build_objects
 from vxl.devices.axes.continuous import ContinuousAxis
-from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
+from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotName
 
 
 class MappedSlot(BaseModel):
@@ -17,7 +17,7 @@ class MappedSlot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     position: float
-    label: str | None = None
+    label: SlotName | None = None
 
 
 class MappedDiscreteAxis(DiscreteAxis):
@@ -137,7 +137,7 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
         axis_uid = f"{uid}_axis"
         built, errors = build_objects({axis_uid: axis_config}, base_cls=ContinuousAxis)
         if error := errors.get(axis_uid):
-            raise RuntimeError(f"Unable to build owned axis for '{uid}' ({error.error_type}): {error.message}")
+            raise RuntimeError(f"Unable to build owned axis for '{uid}' ({error.code}): {error.msg}")
 
         child = built.get(axis_uid)
         if not isinstance(child, ContinuousAxis):

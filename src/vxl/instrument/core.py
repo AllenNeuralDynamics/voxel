@@ -4,7 +4,7 @@ import getpass
 import logging
 import math
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Collection, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from enum import StrEnum
@@ -29,12 +29,12 @@ from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Re
 from vxlib.schema import FrozenModel
 
 from rigup import ComponentInterface, DeviceHandle, DeviceProps, PropResults, Result
-from vxl.core.instrument.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import CameraHandle, CaptureState
+from vxl.devices.camera.roi import AreaROI
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
-from vxl.models import AreaROI
+from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
 from vxl.preview.protocol import StagePosition
 from vxl.system import Remote, System, remote_store_fingerprint
@@ -1028,7 +1028,7 @@ class Instrument:
         await _gather_hardware(*(laser.call("output_disable") for laser in self._hal.lasers.values()))
 
     @asynccontextmanager
-    async def _pause_preview_for_reconfiguration(self) -> AsyncIterator[None]:
+    async def _pause_preview_for_reconfiguration(self) -> AsyncGenerator[None]:
         """Inhibit output and pause preview; resume with the preview channels only after success.
 
         Caller holds the lock.

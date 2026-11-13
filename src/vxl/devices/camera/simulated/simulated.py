@@ -18,8 +18,8 @@ from vxl.devices.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
+from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 from vxl.devices.camera.simulated.frame_source import FrameSource, FrameSourceConfig, create_frame_source
-from vxl.models import AreaROI, IntRange, ROIGrid
 
 
 @final

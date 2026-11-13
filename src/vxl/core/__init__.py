@@ -1,1 +1,1 @@
-"""The station: its lifecycle and its state feed."""
+"""The new core: the instrument, and the station on top of it."""

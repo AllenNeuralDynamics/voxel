@@ -6,7 +6,7 @@
 #
 # What is new, top to bottom:
 #   no engine      rig.scan says how 1 capture runs.
-#   rig.parts      kind says what each part is. A filter has its band, an objective its magnification.
+#   parts          kind says what each part is. A filter has its band, an objective its magnification.
 #   rig.optics     3 rules. No kind in the graph. A device that moves lists its positions.
 #   rig.scan       the axis, its motion, and the pacer. The rest of the chain follows from the wires.
 #   default        positions and profiles: no imaging wrapper, no channel map, no instrument-level props.
@@ -18,7 +18,18 @@ rig:
   model: exaSPIM
   target: vxl.instruments.spim.Instrument
 
-  components:
+  parts:                                          # things with no driver: their facts, and their class when it is not rigup.Part
+    combiner:           {kind: combiner}
+    left_tunable_lens:  {kind: tunable_lens}
+    right_tunable_lens: {kind: tunable_lens}
+    positive_galvo:     {kind: galvo}
+    negative_galvo:     {kind: galvo}
+    objective:          {target: vxl.parts.Objective, magnification: 5.0}   # the objective and the tube lens together
+    BP525:              {target: vxl.parts.Filter, band: [500 nm, 550 nm]}
+    BP600:              {target: vxl.parts.Filter, band: [575 nm, 625 nm]}
+    BP700:              {target: vxl.parts.Filter, band: [663 nm, 737 nm]}
+
+  devices:
     nidaq_1:
       target: vxl.devices.daq.hub_ni.NiDaqmx
       init: {device_name: Dev3, product: PCIe-6738}
@@ -86,17 +97,6 @@ rig:
     laser_561: [source_power_setpoint_mw, output_level_percent]
     laser_640: [source_power_setpoint_mw, output_level_percent]
 
-  parts:                                          # things with no driver. kind says what each one is. A filter gives its band, an objective its magnification
-    combiner:           {kind: combiner}
-    left_tunable_lens:  {kind: tunable_lens}
-    right_tunable_lens: {kind: tunable_lens}
-    positive_galvo:     {kind: galvo}
-    negative_galvo:     {kind: galvo}
-    objective:          {kind: objective, magnification: 5.0}   # the objective and the tube lens together
-    BP525:              {kind: filter, band: [500 nm, 550 nm]}
-    BP600:              {kind: filter, band: [575 nm, 625 nm]}
-    BP700:              {kind: filter, band: [663 nm, 737 nm]}
-
   stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
 
   wiring:                                         # every wire on the bench, grouped by the device that sends it
@@ -113,7 +113,7 @@ rig:
 
   optics:                                         # where the light goes: light sources → sample → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
-    # Rule 2: what a part does to the light is in rig.parts, not here.
+    # Rule 2: what a part does to the light is in parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
     # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
 
@@ -227,6 +227,6 @@ default:
             z_step:         *z_step
       spacing: 1.0
 
-  output:
+  writer:
     max_level: 3
     compression: blosc.lz4

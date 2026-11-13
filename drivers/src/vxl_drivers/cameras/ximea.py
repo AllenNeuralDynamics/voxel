@@ -13,7 +13,7 @@ from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 
 from rigup import describe
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.models import AreaROI, IntRange, ROIGrid
+from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 

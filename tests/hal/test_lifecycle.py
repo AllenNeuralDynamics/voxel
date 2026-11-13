@@ -3,8 +3,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from rigup.device.handle import Adapter, DeviceProperties
+from vxlib.problems import Problem
 
-from rigup import BuildError, ComponentInterface, DeviceHandle, PropertyModel, PropResults, Result
+from rigup import ComponentInterface, DeviceHandle, PropertyModel, PropResults, Result
 from vxl.hal.core import HAL
 from vxl.hal.errors import HALStartupError
 from vxl.hal.rig_config import DeviceConfig
@@ -24,7 +25,7 @@ class _FakeRig:
         self,
         *,
         devices: dict[str, DeviceHandle] | None = None,
-        build_errors: dict[str, BuildError] | None = None,
+        build_errors: dict[str, Problem] | None = None,
     ) -> None:
         self.devices = devices or {}
         self.build_errors = build_errors or {}
@@ -98,7 +99,7 @@ def _routed_hal_config() -> HardwareTopology:
 async def test_build_errors_suppress_follow_on_type_violations(monkeypatch: pytest.MonkeyPatch) -> None:
     config = _routed_hal_config()
     build_errors = {
-        uid: BuildError(uid=uid, error_type="import", message="driver unavailable") for uid in config.device_uids
+        uid: Problem(code="build.import", msg="driver unavailable", loc=(uid,)) for uid in config.device_uids
     }
     rig = _FakeRig(build_errors=build_errors)
     hal = HAL(config)
@@ -116,7 +117,7 @@ async def test_build_errors_suppress_follow_on_type_violations(monkeypatch: pyte
 async def test_optical_routing_selector_must_be_a_discrete_axis(monkeypatch: pytest.MonkeyPatch) -> None:
     config = _routed_hal_config()
     unavailable = config.device_uids - {"selector"}
-    build_errors = {uid: BuildError(uid=uid, error_type="import", message="driver unavailable") for uid in unavailable}
+    build_errors = {uid: Problem(code="build.import", msg="driver unavailable", loc=(uid,)) for uid in unavailable}
     rig = _FakeRig(
         devices={"selector": _handle("selector", "unsupported")},
         build_errors=build_errors,
@@ -189,7 +190,7 @@ async def test_camera_geometry_transport_failures_are_collected_and_close_the_ri
     rig = _FakeRig(
         devices=dict(cameras),
         build_errors={
-            uid: BuildError(uid=uid, error_type="import", message="unavailable")
+            uid: Problem(code="build.import", msg="unavailable", loc=(uid,))
             for uid in config.device_uids - cameras.keys()
         },
     )
@@ -221,8 +222,7 @@ async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch
     rig = _FakeRig(
         devices={"camera": camera},
         build_errors={
-            uid: BuildError(uid=uid, error_type="import", message="unavailable")
-            for uid in config.device_uids - {"camera"}
+            uid: Problem(code="build.import", msg="unavailable", loc=(uid,)) for uid in config.device_uids - {"camera"}
         },
     )
     hal = HAL(config)

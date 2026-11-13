@@ -21,7 +21,7 @@ def _preset(config_data: dict[str, Any], *tasks: dict[str, Any]) -> SPIMState:
 
 def _codes(config_data: dict[str, Any], *tasks: dict[str, Any]) -> list[str]:
     preset, example = _preset(config_data, *tasks), load(config_data)
-    return [v.code or "" for v in preset.violations(example.config)]
+    return [v.code or "" for v in preset.problems(example.config)]
 
 
 def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any]) -> None:
@@ -34,7 +34,7 @@ def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any])
     }
 
 
-def test_example_plan_has_no_violations(config_data: dict[str, Any]) -> None:
+def test_example_plan_has_no_problems(config_data: dict[str, Any]) -> None:
     task = {"id": "brain", "region": _REGION, "profiles": ["gfp"]}
     assert _codes(config_data, task) == []
     assert _codes(sweep_x(config_data), task) == []

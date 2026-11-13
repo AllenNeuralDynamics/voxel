@@ -6,8 +6,8 @@ import pytest
 
 from vxl import system as system_module
 from vxl._utils.files import load_and_validate_yaml
-from vxl.core.station import Station, StationConfig
 from vxl.instrument import InstrumentConfig
+from vxl.station_legacy.station import Station, StationConfig
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +35,7 @@ def station_config(voxel_home: Path) -> StationConfig:
 
 @pytest.fixture
 def instrument_template() -> Path:
-    return Path(__file__).parents[2] / "src/vxl/core/templates/builtins/simulated-local.voxel.yaml"
+    return Path(__file__).parents[2] / "src/vxl/station_legacy/templates/builtins/simulated-local.voxel.yaml"
 
 
 @pytest.fixture

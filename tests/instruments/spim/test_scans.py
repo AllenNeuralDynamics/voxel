@@ -6,9 +6,9 @@ from vxlib.vector import IVec2D, Vec2D, Vec3D
 
 from vxl.core.instrument.config import Detector
 from vxl.devices.camera import CameraSensor
+from vxl.devices.camera.roi import AreaROI
 from vxl.instruments.spim.config import Task
 from vxl.instruments.spim.scans import AxisRun, Volume, frame_transform, plan_task
-from vxl.models import AreaROI
 
 from .support import load_file
 

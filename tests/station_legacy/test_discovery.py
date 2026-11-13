@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from vxl.core.models import StationStatus
-from vxl.core.station import Station
 from vxl.instrument import Instrument
 from vxl.instrument.config import InstrumentConfig, InstrumentState
 from vxl.instrument.errors import StartupError
 from vxl.instrument.store import InstrumentStore, Invalid, Loaded, Missing
+from vxl.station_legacy.models import StationStatus
+from vxl.station_legacy.station import Station
 
 
 def _incompatible_state(config: InstrumentConfig) -> InstrumentState:

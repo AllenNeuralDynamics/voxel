@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from vxlib.reactivity import Emitter
 
-from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, VoxelPreviewPacket
+from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, StreamCursor, VoxelPreviewPacket
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -22,10 +22,10 @@ if TYPE_CHECKING:
 
     from vxlib.reactivity import Readable, Subscribable
 
-    from .models import StationInfo
+    from vxl.core.views import StationInfo
 
-from .errors import StationFeedLaggedError
-from .models import StationFeedView, StationState, StationStatus, StreamCursor
+from vxl.core.errors import FeedLaggedError
+from vxl.core.views import StationFeedView, StationStatus, StationView
 
 
 def _unix_time_us() -> int:
@@ -101,21 +101,21 @@ class StationFeed:
     """Publish station state and preview without depending on a transport.
 
     A slow connection is removed when its bounded buffer fills. Its iterator
-    raises :class:`StationFeedLaggedError`, after which the consumer reconnects
+    raises :class:`FeedLaggedError`, after which the consumer reconnects
     to receive a fresh complete view.
     """
 
     def __init__(
         self,
         station: "StationInfo",
-        source: "Readable[StationState]",
+        source: "Readable[StationView]",
         *,
         update_buffer_size: int = 64,
     ) -> None:
         if update_buffer_size < 1:
             raise ValueError("update_buffer_size must be at least 1")
         self._station = station
-        self._state = source.value
+        self._station_view = source.value
         self._stream_id = uuid.uuid4().hex
         self._seq = 0
         self._frame_seq = 0
@@ -126,7 +126,7 @@ class StationFeed:
         self._connections: dict[StationFeedConnection, _ConnectionState] = {}
         self._lock = asyncio.Lock()
         self._closed = False
-        self._unsubscribe = source.subscribe(self._on_state)
+        self._unsubscribe = source.subscribe(self._on_station_view)
 
     @property
     def frames(self) -> "Subscribable[PreviewEmission]":
@@ -144,7 +144,11 @@ class StationFeed:
         """Stamp and enqueue one source frame from the active station session."""
         channel_id, layer, frame, position = emission
         async with self._lock:
-            if self._closed or self._state.status is not StationStatus.ACTIVE or self._state.session is None:
+            if (
+                self._closed
+                or self._station_view.status is not StationStatus.ACTIVE
+                or self._station_view.session is None
+            ):
                 return
             frame_seq = self._frame_seq
             self._frame_seq += 1
@@ -174,15 +178,15 @@ class StationFeed:
         async with self._lock:
             return self._view_unlocked()
 
-    async def _on_state(self, state: StationState) -> None:
+    async def _on_station_view(self, station_view: StationView) -> None:
         """Materialize one committed reactive station-state change."""
         async with self._lock:
             if self._closed:
                 return
-            if state == self._state:
+            if station_view == self._station_view:
                 return
 
-            self._state = state
+            self._station_view = station_view
             self._seq += 1
             view = self._view_unlocked()
             lagged: list[tuple[StationFeedConnection, _ConnectionState]] = []
@@ -192,9 +196,7 @@ class StationFeed:
             for connection, connection_state in lagged:
                 del self._connections[connection]
                 connection_state.terminate(
-                    StationFeedLaggedError(
-                        f"station feed connection fell behind at {view.cursor.stream_id}:{view.cursor.seq}"
-                    )
+                    FeedLaggedError(f"station feed connection fell behind at {view.cursor.stream_id}:{view.cursor.seq}")
                 )
 
     async def _drain_frames(self) -> None:
@@ -243,10 +245,10 @@ class StationFeed:
             cursor=self._cursor_unlocked(),
             observed_at_unix_us=_unix_time_us(),
             station=self._station,
-            status=self._state.status,
-            session=self._state.session,
-            error=self._state.error,
+            status=self._station_view.status,
+            session=self._station_view.session,
+            error=self._station_view.error,
         )
 
 
-__all__ = ["StationFeed", "StationFeedConnection", "StationFeedLaggedError"]
+__all__ = ["StationFeed", "StationFeedConnection"]

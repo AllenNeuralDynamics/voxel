@@ -1,8 +1,8 @@
 """What rigup builds: a device or a part."""
 
-from typing import Protocol
+from typing import Any, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RigComponent(Protocol):
@@ -17,7 +17,11 @@ class RigComponent(Protocol):
 
 
 class Part(BaseModel, frozen=True):
-    """A component with only data. The data is checked when the part is made, and it does not change."""
+    """A component with only data. The data is checked when the part is made, and it does not change. ``details``
+    holds information for people, such as a vendor or a serial number."""
+
+    model_config = ConfigDict(extra="forbid")
 
     uid: str
     kind: str
+    details: dict[str, Any] = Field(default_factory=dict)

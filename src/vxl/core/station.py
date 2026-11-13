@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 from uuid import UUID, uuid4
 
 from pydantic import Field, field_validator
@@ -16,26 +15,26 @@ from vxlib.schema import check_identifier
 
 from vxl import system
 from vxl._utils.files import save_yaml
-from vxl.instrument import Instrument, InstrumentConfig, InstrumentInspection, InstrumentStore
+from vxl.core.errors import BusyError, RejectedError, StationNotConfiguredError
+from vxl.core.feed import StationFeed
+from vxl.core.instrument.base import BaseInstrument
+from vxl.core.instrument.folder import InstrumentFolder
+from vxl.core.views import InstrumentView, SessionInfo, SessionView, StationInfo, StationStatus, StationView
+from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
 from vxl.system import System
 
-from .errors import StationNotConfiguredError
-from .feed import StationFeed
-from .instrument.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
-from .models import (
-    DeviceState,
-    InstrumentView,
-    SessionInfo,
-    SessionView,
-    StationInfo,
-    StationState,
-    StationStatus,
-)
-
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncGenerator, Mapping
+    from pathlib import Path
 
     from vxlib.lifecycle import Teardown
+
+
+type AnyInstrument = BaseInstrument[Any, Any]
+
+
+def _describe_error(error: BaseException) -> str:
+    return f"{type(error).__name__}: {error}"
 
 
 class _SystemFieldsEnvSource(EnvSettingsSource):
@@ -134,19 +133,13 @@ class StationConfig(System):
         return StationInfo(id=self.id, name=self.name)
 
 
-def _describe_error(error: BaseException) -> str:
-    return f"{type(error).__name__}: {error}"
-
-
-type InstrumentFactory = Callable[[Path, VoxelRecords], Instrument]
-
-
 class Station:
     """Own one station configuration, stable feed, and at most one instrument.
 
     Lifecycle methods are serialized so hardware ownership and the published
     station projection change in one deterministic order. Instrument behavior
-    remains on :class:`~vxl.instrument.Instrument`.
+    remains on the instrument. The ``target`` of an instrument's ``rig.yaml`` names the class that runs it, and that
+    class names the classes of its files.
     """
 
     def __init__(
@@ -154,7 +147,6 @@ class Station:
         config: StationConfig,
         *,
         records: VoxelRecords | None = None,
-        instrument_factory: InstrumentFactory | None = None,
         lease_drain_timeout_s: float = 10.0,
     ) -> None:
         if lease_drain_timeout_s <= 0:
@@ -166,16 +158,15 @@ class Station:
             self._config.dir / "records.sqlite3",
             resolve_root=lambda spec: self._config.resolve_storage(spec).target,
         )
-        self._instrument_factory = instrument_factory
-        self._instrument: Instrument | None = None
+        self._instrument: AnyInstrument | None = None
         self._session_info: SessionInfo | None = None
         self._session_teardowns: list[Teardown] = []
-        self._state = Cell(StationState())
+        self._view = Cell(StationView())
         self._lifecycle_lock = asyncio.Lock()
         self._leases_released = asyncio.Condition(self._lifecycle_lock)
         self._instrument_leases: set[asyncio.Task[object]] = set()
         self._lease_drain_timeout_s = lease_drain_timeout_s
-        self._feed = StationFeed(config.info, self._state)
+        self._feed = StationFeed(config.info, self._view)
 
     @property
     def config(self) -> StationConfig:
@@ -193,45 +184,44 @@ class Station:
         return self._feed
 
     @property
-    def state(self) -> Readable[StationState]:
-        """The current station lifecycle projection as a read-only reactive value."""
-        return self._state
+    def view(self) -> Readable[StationView]:
+        """The live station as a screen sees it."""
+        return self._view
 
     @property
     def instruments_dir(self) -> Path:
         """Root holding the station's ``<name>.voxel`` instrument directories."""
         return self._config.dir / "instruments"
 
-    def discover_instruments(self) -> dict[str, InstrumentInspection]:
+    def discover_instruments(self) -> dict[str, InstrumentFolder]:
         """Inspect every installed instrument without opening hardware."""
         return {
-            directory.stem: InstrumentStore.check(directory)
+            directory.stem: InstrumentFolder.read(directory)
             for directory in sorted(self.instruments_dir.glob("*.voxel"))
             if directory.is_dir()
         }
 
-    async def create_instrument(self, name: str, config: InstrumentConfig) -> InstrumentInspection:
-        """Create and inspect one installed instrument from a supplied configuration."""
+    async def create_instrument(self, name: str, template: Mapping[str, Any]) -> InstrumentFolder:
+        """Create and inspect one installed instrument from a template: a ``rig`` and a ``default``."""
         async with self._lifecycle_lock:
             self._ensure_file_operation_allowed()
             self._instrument_home(name)
-            directory = InstrumentStore.instantiate(config, name, self.instruments_dir)
-            return InstrumentStore.check(directory)
+            return InstrumentFolder.create(template, name, self.instruments_dir)
 
     async def archive_state(self, instrument_name: str) -> Path:
         """Archive an inactive installed instrument's state under the next available name."""
         async with self._lifecycle_lock:
             self._ensure_file_operation_allowed()
-            state = self._state.value
-            if state.session is not None and state.session.info.instrument_name == instrument_name:
-                raise RuntimeError(f"'{instrument_name}' is active; close it first")
+            view = self._view.value
+            if view.session is not None and view.session.info.instrument_name == instrument_name:
+                raise BusyError(f"'{instrument_name}' is active; close it first")
 
             directory = self._instrument_home(instrument_name)
             if not directory.is_dir():
-                raise FileNotFoundError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
+                raise RejectedError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
             state_path = directory / "state.json"
             if not state_path.exists():
-                raise FileNotFoundError(f"No state.json to archive for '{instrument_name}'")
+                raise RejectedError(f"No state.json to archive for '{instrument_name}'")
 
             archive = directory / "state.bak.json"
             index = 2
@@ -248,29 +238,26 @@ class Station:
         succeeds. Failed cleanup leaves the station ``faulted``.
         """
         async with self._lifecycle_lock:
-            state = self._state.value
-            if state.status is StationStatus.CLOSED:
-                raise RuntimeError("station is closed")
-            if state.status is StationStatus.FAULTED:
-                raise RuntimeError("station is faulted; recovery is required before opening a session")
+            view = self._view.value
+            if view.status is StationStatus.CLOSED:
+                raise BusyError("station is closed")
+            if view.status is StationStatus.FAULTED:
+                raise BusyError("station is faulted; recovery is required before opening a session")
             if self._instrument is not None:
-                active_name = state.session.info.instrument_name if state.session is not None else "unknown"
-                raise RuntimeError(f"'{active_name}' is active; close it first")
-            if state.status is not StationStatus.IDLE:
-                raise RuntimeError(f"station cannot open a session while {state.status}")
+                active_name = view.session.info.instrument_name if view.session is not None else "unknown"
+                raise BusyError(f"'{active_name}' is active; close it first")
+            if view.status is not StationStatus.IDLE:
+                raise BusyError(f"station cannot open a session while {view.status}")
 
             instrument_home = self._instrument_home(instrument_name)
             if not instrument_home.is_dir():
-                raise FileNotFoundError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
+                raise RejectedError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
 
-            await self._state.set(StationState(status=StationStatus.OPENING))
-            instrument: Instrument | None = None
+            await self._view.set(StationView(status=StationStatus.OPENING))
+            instrument: AnyInstrument | None = None
             try:
-                instrument = (
-                    self._instrument_factory(instrument_home, self._records)
-                    if self._instrument_factory is not None
-                    else Instrument.from_path(instrument_home, records=self._records, system=self._config)
-                )
+                folder = InstrumentFolder.read(instrument_home)
+                instrument = folder.instrument(records=self._records, system=self._config)
                 await instrument.open()
                 self._instrument = instrument
                 session_id = uuid4()
@@ -278,39 +265,33 @@ class Station:
                     id=session_id,
                     instrument_name=instrument_name,
                 )
-                self._session_teardowns.append(instrument.activity.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.active_profile_id.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.preview_channels.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.stream_revision.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.fov.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.state.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.history.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.profile_fovs.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.planned_volumes.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.default.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.device_props_updates.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.preview.subscribe(self._feed.publish_preview))
+                self._session_teardowns += [
+                    instrument.activities.subscribe(self._refresh_session_view),
+                    instrument.state.subscribe(self._refresh_session_view),
+                    instrument.default_state.subscribe(self._refresh_session_view),
+                    instrument.device_views.subscribe(self._refresh_session_view),
+                ]
                 session_view = self._build_session_view(instrument)
             except BaseException as launch_error:
                 await self._teardown_failed_launch(instrument, launch_error)
                 raise
 
-            await self._state.set(StationState(status=StationStatus.ACTIVE, session=session_view))
+            await self._view.set(StationView(status=StationStatus.ACTIVE, session=session_view))
             return session_view.info
 
     @asynccontextmanager
-    async def instrument(self, session_id: UUID) -> AsyncIterator[Instrument]:
+    async def instrument(self, session_id: UUID) -> AsyncGenerator[AnyInstrument]:
         """Lease the active instrument for the duration of one scoped operation."""
         task = asyncio.current_task()
         if task is None:
             raise RuntimeError("instrument access requires an asyncio task")
 
         async with self._leases_released:
-            state = self._state.value
-            if state.status is not StationStatus.ACTIVE or state.session is None or self._instrument is None:
-                raise RuntimeError("station has no active instrument session")
-            if state.session.info.id != session_id:
-                raise RuntimeError(f"instrument session '{session_id}' is not active")
+            view = self._view.value
+            if view.status is not StationStatus.ACTIVE or view.session is None or self._instrument is None:
+                raise BusyError("station has no active instrument session")
+            if view.session.info.id != session_id:
+                raise BusyError(f"instrument session '{session_id}' is not active")
             if task in self._instrument_leases:
                 raise RuntimeError("nested instrument access from the same task is not supported")
             instrument = self._instrument
@@ -331,46 +312,46 @@ class Station:
     async def close(self) -> None:
         """Close any active session and permanently stop this station's feed."""
         async with self._lifecycle_lock:
-            if self._state.value.status is StationStatus.CLOSED:
+            if self._view.value.status is StationStatus.CLOSED:
                 await self._feed.close()
                 return
             await self._close_session_locked()
-            await self._state.set(StationState(status=StationStatus.CLOSED))
+            await self._view.set(StationView(status=StationStatus.CLOSED))
             await self._feed.close()
 
     async def _close_session_locked(self, expected_session_id: UUID | None = None) -> None:
-        state = self._state.value
-        if state.status is StationStatus.FAULTED:
-            raise RuntimeError("station is faulted; recovery is required before closing normally")
+        view = self._view.value
+        if view.status is StationStatus.FAULTED:
+            raise BusyError("station is faulted; recovery is required before closing normally")
         if self._instrument is None:
             if expected_session_id is not None:
-                raise RuntimeError("station has no active instrument session")
+                raise BusyError("station has no active instrument session")
             return
 
-        session_state = state.session
-        if session_state is None:
+        session_view = view.session
+        if session_view is None:
             raise RuntimeError("station owns an instrument without an active session")
-        if state.status is not StationStatus.ACTIVE:
-            raise RuntimeError(f"station cannot close a session while {state.status}")
-        if expected_session_id is not None and session_state.info.id != expected_session_id:
-            raise RuntimeError(f"instrument session '{expected_session_id}' is not active")
+        if view.status is not StationStatus.ACTIVE:
+            raise BusyError(f"station cannot close a session while {view.status}")
+        if expected_session_id is not None and session_view.info.id != expected_session_id:
+            raise BusyError(f"instrument session '{expected_session_id}' is not active")
 
         task = asyncio.current_task()
         if task is not None and task in self._instrument_leases:
             raise RuntimeError("cannot close an instrument session from a task holding its lease")
 
         try:
-            await self._state.set(StationState(status=StationStatus.CLOSING, session=session_state))
+            await self._view.set(StationView(status=StationStatus.CLOSING, session=session_view))
             async with asyncio.timeout(self._lease_drain_timeout_s):
                 await self._leases_released.wait_for(lambda: not self._instrument_leases)
         except TimeoutError as error:
-            current_session = self._state.value.session or session_state
-            await self._state.set(StationState(status=StationStatus.ACTIVE, session=current_session))
+            current_session = self._view.value.session or session_view
+            await self._view.set(StationView(status=StationStatus.ACTIVE, session=current_session))
             msg = f"instrument session still has active leases after {self._lease_drain_timeout_s:g} seconds"
-            raise TimeoutError(msg) from error
+            raise BusyError(msg) from error
         except BaseException:
-            current_session = self._state.value.session or session_state
-            await self._state.set(StationState(status=StationStatus.ACTIVE, session=current_session))
+            current_session = self._view.value.session or session_view
+            await self._view.set(StationView(status=StationStatus.ACTIVE, session=current_session))
             raise
 
         instrument = self._instrument
@@ -382,9 +363,9 @@ class Station:
         try:
             await instrument.close()
         except BaseException as error:
-            current_session = self._state.value.session or session_state
-            await self._state.set(
-                StationState(
+            current_session = self._view.value.session or session_view
+            await self._view.set(
+                StationView(
                     status=StationStatus.FAULTED,
                     session=current_session,
                     error=_describe_error(error),
@@ -393,24 +374,24 @@ class Station:
             raise
 
         self._instrument = None
-        await self._state.set(StationState())
+        await self._view.set(StationView())
 
     async def _refresh_session_view(self, _value: object) -> None:
         instrument = self._instrument
         if instrument is None or self._session_info is None:
             return
-        current = self._state.value
+        current = self._view.value
         if current.status not in {StationStatus.ACTIVE, StationStatus.CLOSING}:
             return
-        await self._state.set(
-            StationState(
+        await self._view.set(
+            StationView(
                 status=current.status,
                 session=self._build_session_view(instrument),
                 error=current.error,
             )
         )
 
-    async def _teardown_failed_launch(self, instrument: Instrument | None, launch_error: BaseException) -> None:
+    async def _teardown_failed_launch(self, instrument: AnyInstrument | None, launch_error: BaseException) -> None:
         for teardown in self._session_teardowns:
             teardown()
         self._session_teardowns = []
@@ -419,15 +400,15 @@ class Station:
 
         if instrument is None:
             self._instrument = None
-            await self._state.set(StationState(status=StationStatus.IDLE, error=_describe_error(launch_error)))
+            await self._view.set(StationView(status=StationStatus.IDLE, error=_describe_error(launch_error)))
             return
 
         try:
             await instrument.close()
         except BaseException as cleanup_error:
             self._instrument = instrument
-            await self._state.set(
-                StationState(
+            await self._view.set(
+                StationView(
                     status=StationStatus.FAULTED,
                     error=(
                         f"session open failed ({_describe_error(launch_error)}); "
@@ -438,46 +419,30 @@ class Station:
             raise cleanup_error from launch_error
 
         self._instrument = None
-        await self._state.set(StationState(status=StationStatus.IDLE, error=_describe_error(launch_error)))
+        await self._view.set(StationView(status=StationStatus.IDLE, error=_describe_error(launch_error)))
 
     def _instrument_home(self, instrument_name: str) -> Path:
         check_identifier(instrument_name, "Instrument name")
         return self.instruments_dir / f"{instrument_name}.voxel"
 
     def _ensure_file_operation_allowed(self) -> None:
-        status = self._state.value.status
+        status = self._view.value.status
         if status is StationStatus.CLOSED:
-            raise RuntimeError("station is closed")
+            raise BusyError("station is closed")
         if status is StationStatus.FAULTED:
-            raise RuntimeError("station is faulted; recovery is required before modifying instruments")
+            raise BusyError("station is faulted; recovery is required before modifying instruments")
 
-    def _build_session_view(self, instrument: Instrument) -> SessionView:
+    def _build_session_view(self, instrument: AnyInstrument) -> SessionView:
         if self._session_info is None:
             raise RuntimeError("station instrument has no attached session")
-        device_props = instrument.device_props
         return SessionView(
             info=self._session_info,
-            instrument=InstrumentView.model_validate(
-                {
-                    **instrument.state.value.model_dump(),
-                    "config": instrument.config,
-                    "activity": instrument.activity.value,
-                    "active_profile_id": instrument.active_profile_id.value,
-                    "preview_channels": list(instrument.preview_channels.value),
-                    "stream_revision": instrument.stream_revision.value,
-                    "fov": instrument.fov.cache,
-                    "profile_fovs": instrument.profile_fovs.value,
-                    "planned_volumes": instrument.planned_volumes.value,
-                    "devices": {
-                        device_id: DeviceState(
-                            interface=interface,
-                            props=dict(device_props.get(device_id, {})),
-                        )
-                        for device_id, interface in instrument.device_interfaces.items()
-                    },
-                    "history": instrument.history.value,
-                    "remote_stores": dict(instrument.remote_stores),
-                }
+            instrument=InstrumentView(
+                config=instrument.config,
+                state=instrument.state.value,
+                activities=instrument.activities.value,
+                device_views=dict(instrument.device_views.value),
+                remote_stores=dict(instrument.remote_stores),
             ),
         )
 

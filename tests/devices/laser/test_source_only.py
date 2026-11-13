@@ -1,8 +1,9 @@
 import pytest
 from rigup.device.props import PropertyModel
+from rigup.node import LOCAL
 from rigup.rig import Rig
 
-from rigup import ComponentConfig, RigConfig, describe, numeric
+from rigup import DeviceConfig, RigConfig, describe, numeric
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl.devices.laser.source_only import SourceOnlyLaser
 
@@ -183,12 +184,14 @@ def test_close_retries_failed_inhibition_and_leaves_source_with_owner():
 
 async def test_rig_registers_source_and_adapter_with_separate_discovery():
     rig = Rig(
-        RigConfig(
-            components={
-                "source": ComponentConfig(target=f"{__name__}.RecordingSource"),
-                "laser": ComponentConfig(
-                    target="vxl.devices.laser.source_only.SourceOnlyLaser", init={"source": "source"}
-                ),
+        RigConfig.model_validate(
+            {
+                "devices": {
+                    "source": DeviceConfig(target=f"{__name__}.RecordingSource"),
+                    "laser": DeviceConfig(
+                        target="vxl.devices.laser.source_only.SourceOnlyLaser", init={"source": "source"}
+                    ),
+                }
             }
         )
     )
@@ -208,7 +211,7 @@ async def test_rig_registers_source_and_adapter_with_separate_discovery():
         mode = (await laser.props.get("modulation_mode"))["modulation_mode"].unwrap()
         assert mode.value == "digital"
         assert mode.options == [mode.value for mode in ModulationMode]
-        await rig.nodes["local"].close_device("laser")
+        await rig.nodes[LOCAL].close_device("laser")
         assert set(rig.devices) == {"source"}
         assert (await source.props.get("head_type"))["head_type"].unwrap().value == "test head"
     finally:

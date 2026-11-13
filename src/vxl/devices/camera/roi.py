@@ -1,22 +1,8 @@
-"""Models that a device and an instrument file both use.
-
-A model that only a device uses stays with that device. A model that only a file uses stays with that file's models.
-"""
-
-from typing import Annotated
+"""The part of a camera sensor that is read out. Every value is in sensor pixels before binning, so a region does
+not change when the binning does."""
 
 from pydantic import BaseModel, Field
 from vxlib.schema import FrozenModel
-
-# === Axis positions ===
-
-type AxisPosition = Annotated[float, Field(allow_inf_nan=False)] | str
-"""Where an axis is: a number, or the name of a position for an axis that has named positions."""
-
-
-# === Camera regions ===
-# The part of a camera sensor that is read out. Every value is in sensor pixels before binning, so a region does not
-# change when the binning does.
 
 
 class IntRange(BaseModel):
@@ -75,4 +61,4 @@ class LineROI(FrozenModel):
 
 type CameraROI = AreaROI | LineROI
 
-__all__ = ["AreaROI", "AxisPosition", "CameraROI", "IntRange", "LineROI", "ROIGrid"]
+__all__ = ["AreaROI", "CameraROI", "IntRange", "LineROI", "ROIGrid"]

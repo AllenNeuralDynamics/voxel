@@ -13,8 +13,8 @@ def _hal(optics: dict[str, Any], *, parts: dict[str, Any], devices: list[str]) -
     axes = ("x_axis", "y_axis", "z_axis")
     return bench(
         {
-            "components": {uid: {"target": "builtins.object"} for uid in (*axes, *devices)},
             "parts": parts,
+            "devices": {uid: {"target": "builtins.object"} for uid in (*axes, *devices)},
             "stage": dict(zip("xyz", axes, strict=True)),
             "optics": optics,
         }
@@ -58,11 +58,11 @@ def test_a_path_gives_the_magnification_and_the_band_of_its_parts() -> None:
             "camera_b": {"width": {"y": 1}, "height": {"x": 1}},
         },
         parts={
-            "objective": {"kind": "objective", "magnification": 20},
+            "objective": {"target": "vxl.parts.Objective", "magnification": 20},
             "splitter": {"kind": "splitter"},
-            "tube_a": {"kind": "objective", "magnification": 0.5},
-            "long_pass": {"kind": "filter", "band": ["500 nm", None]},
-            "green": {"kind": "filter", "band": ["510 nm", "550 nm"]},
+            "tube_a": {"target": "vxl.parts.Objective", "magnification": 0.5},
+            "long_pass": {"target": "vxl.parts.Filter", "band": ["500 nm", None]},
+            "green": {"target": "vxl.parts.Filter", "band": ["510 nm", "550 nm"]},
         },
         devices=["wheel"],
     )

@@ -1,5 +1,6 @@
 import math
 import time
+from collections.abc import Mapping
 from threading import Event, Thread
 from typing import Any
 
@@ -11,7 +12,7 @@ from vxl.devices.axes.continuous import (
     TTLStepperConfig,
 )
 from vxl.devices.axes.discrete import DiscreteAxis
-from vxl.devices.axes.discrete.base import DiscreteAxisState
+from vxl.devices.axes.discrete.base import DiscreteAxisState, SlotContent
 
 
 class SimulatedTTLStepper(TTLStepper):
@@ -269,7 +270,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
     def __init__(
         self,
         uid: str,
-        slots: dict[int | str, str | None],  # e.g. {0: "GFP", 1: "RFP", 2: "Cy5"}
+        slots: Mapping[int | str, SlotContent],  # e.g. {0: "GFP", 1: "RFP", 2: "Cy5"}
         slot_count: int | None = None,
         start_pos: int = 0,
         settle_seconds: float = 0.05,

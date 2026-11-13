@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
+from vxlib.problems import Problem
 
-from .build import BuildError
-from .config import ComponentConfig
+from .config import DeviceConfig, Parts
 from .device import CommandRequest, ComponentInterface, PropResults, Results
 from .transport import TransportClient, TransportServer
 
@@ -88,26 +88,25 @@ class ReleaseResponse(BaseModel):
 class GetConfigResponse(BaseModel):
     """Node's self-reported view of its devices, for rig-side config comparison."""
 
-    devices: Mapping[str, ComponentConfig]
+    devices: Mapping[str, DeviceConfig]
 
 
 class ListDevicesResponse(BaseModel):
-    """Currently-built devices and parts on the node, keyed by uid."""
+    """Currently-built devices on the node, keyed by uid."""
 
     devices: Mapping[str, ComponentInterface]
-    parts: Mapping[str, ComponentInterface] = Field(default_factory=dict)
 
 
 class BuildDevicesRequest(BaseModel):
-    devices: Mapping[str, ComponentConfig]
+    """The devices of 1 node, and the parts of the rig, which a device's ``init`` can name."""
+
+    devices: Mapping[str, DeviceConfig]
+    parts: Parts = Field(default_factory=dict)
 
 
 class BuildDevicesResponse(BaseModel):
-    """``built`` holds the devices, which get a handle. ``parts`` holds the parts, which do not."""
-
     built: Mapping[str, ComponentInterface] = Field(default_factory=dict)
-    parts: Mapping[str, ComponentInterface] = Field(default_factory=dict)
-    errors: Mapping[str, BuildError] = Field(default_factory=dict)
+    errors: Mapping[str, Problem] = Field(default_factory=dict)
 
 
 class CloseDeviceRequest(BaseModel):

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from vxl.devices.daq.hub_ni import NiDaqmx
 from vxl.devices.daq.on_demand.ni import NiOnDemandAO, NiOnDemandDO
 
+from .base import SlotName
 from .pulse import PulseDiscreteAxis
 
 
@@ -13,7 +14,7 @@ class SlotSpec(BaseModel):
     """One slot's wiring: the output pin that selects it, and its label."""
 
     pin: str
-    label: str | None = None
+    label: SlotName | None = None
 
 
 class NiDiscreteAxis(PulseDiscreteAxis):

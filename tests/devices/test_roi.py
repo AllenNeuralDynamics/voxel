@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from vxl.models import AreaROI, IntRange, LineROI, ROIGrid
+from vxl.devices.camera.roi import AreaROI, IntRange, LineROI, ROIGrid
 
 
 def test_snap_aligns_the_size_then_the_offset() -> None:

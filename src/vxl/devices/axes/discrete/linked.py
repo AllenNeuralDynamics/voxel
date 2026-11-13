@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
+from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotName
 
 
 class LinkedSlot(BaseModel):
@@ -13,8 +13,8 @@ class LinkedSlot(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    label: str | None = None
-    positions: dict[str, str] = Field(min_length=1)
+    label: SlotName | None = None
+    positions: dict[str, SlotName] = Field(min_length=1)
 
 
 class LinkedDiscreteAxis(DiscreteAxis):

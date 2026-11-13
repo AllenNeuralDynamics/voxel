@@ -179,8 +179,8 @@ class HAL:
     def _build_violations(self) -> list[Violation]:
         return [
             Violation(
-                code=f"build.{error.error_type}",
-                msg=f"Device '{uid}' failed to build: {error.message}",
+                code=error.code,
+                msg=f"Device '{uid}' failed to build: {error.msg}",
                 loc=("hal", "devices", uid),
             )
             for uid, error in self.rig.build_errors.items()

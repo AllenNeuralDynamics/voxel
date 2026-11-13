@@ -2,8 +2,8 @@
 
 import asyncio
 import logging
-from collections.abc import Coroutine
-from typing import Any
+from collections.abc import Awaitable, Coroutine
+from typing import Any, cast
 
 _log = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -57,3 +57,13 @@ def spawn[T](
 
 
 __all__ = ["spawn"]
+
+
+async def gather_all[T](*calls: Awaitable[T], message: str) -> list[T]:
+    """Wait for every call to end, even when some fail, and give back their results in order. Raise 1
+    ``BaseExceptionGroup`` titled ``message`` with every failure. Unlike ``asyncio.TaskGroup``, a failure does not
+    cancel the other calls, so no call is left half done."""
+    results = await asyncio.gather(*calls, return_exceptions=True)
+    if errors := [result for result in results if isinstance(result, BaseException)]:
+        raise BaseExceptionGroup(message, errors)
+    return cast("list[T]", results)

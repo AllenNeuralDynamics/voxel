@@ -4,9 +4,9 @@ The package exports config, build and device definitions, which open nothing. Th
 over the network is ``rigup.rig.Rig``: import it from there.
 """
 
-from .build import BuildConfig, BuildError, BuildGroupSpec, build_objects, build_objects_async, import_class
+from .build import BuildConfig, BuildGroupSpec, build_objects, build_objects_async, import_class
 from .component import Part, RigComponent
-from .config import ComponentConfig, NodeConfig, RigConfig
+from .config import DeviceConfig, NodeConfig, RigConfig
 from .device import (
     CommandRequest,
     ComponentInterface,
@@ -29,12 +29,11 @@ from .device import (
 
 __all__ = [
     "BuildConfig",
-    "BuildError",
     "BuildGroupSpec",
     "CommandRequest",
-    "ComponentConfig",
     "ComponentInterface",
     "Device",
+    "DeviceConfig",
     "DeviceController",
     "DeviceHandle",
     "DeviceProperties",

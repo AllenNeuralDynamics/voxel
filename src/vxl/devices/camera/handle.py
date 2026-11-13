@@ -11,7 +11,7 @@ from vxlib.vector import Vec2D
 
 from rigup import DeviceHandle
 from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
-from vxl.models import AreaROI
+from vxl.devices.camera.roi import AreaROI
 from vxl.preview import PreviewViewport
 
 _DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)

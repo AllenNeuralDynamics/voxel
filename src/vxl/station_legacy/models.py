@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 from vxl_records import PlannedVolume
 from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
@@ -12,16 +12,8 @@ from vxlib.schema import FrozenModel
 from rigup import ComponentInterface, PropertyModel
 from vxl.instrument import Activity, Bounds, InstrumentConfig, InstrumentState
 from vxl.preview import StreamCursor
+from vxl.station_legacy.config import StationInfo
 from vxl.system import Remote
-
-
-class StationInfo(BaseModel):
-    """Stable public identity of a Voxel control station."""
-
-    model_config = ConfigDict(frozen=True)
-
-    id: UUID
-    name: str
 
 
 class StationStatus(StrEnum):

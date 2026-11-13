@@ -7,7 +7,7 @@ from vxl.cli.check import run_check
 from vxl.instrument import InstrumentStore
 from vxl.instrument.config import InstrumentConfig
 
-TEMPLATE = Path(__file__).parents[2] / "src/vxl/core/templates/builtins/simulated-local.voxel.yaml"
+TEMPLATE = Path(__file__).parents[2] / "src/vxl/station_legacy/templates/builtins/simulated-local.voxel.yaml"
 
 
 def test_check_valid_config() -> None:

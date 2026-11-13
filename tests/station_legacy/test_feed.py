@@ -4,11 +4,18 @@ import pytest
 from vxlib.history import HistoryState
 from vxlib.reactivity import Cell
 
-from vxl.core.errors import StationFeedLaggedError
-from vxl.core.feed import StationFeed
-from vxl.core.models import InstrumentView, SessionInfo, SessionView, StationFeedView, StationState, StationStatus
-from vxl.core.station import StationConfig
 from vxl.instrument import IdleActivity, InstrumentConfig
+from vxl.station_legacy.errors import StationFeedLaggedError
+from vxl.station_legacy.feed import StationFeed
+from vxl.station_legacy.models import (
+    InstrumentView,
+    SessionInfo,
+    SessionView,
+    StationFeedView,
+    StationState,
+    StationStatus,
+)
+from vxl.station_legacy.station import StationConfig
 
 
 @pytest.fixture

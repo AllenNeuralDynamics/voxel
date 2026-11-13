@@ -9,8 +9,6 @@ from vxlib.history import HistoryState
 from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
 from rigup import ComponentInterface, DeviceProps
-from vxl.core.models import StationStatus
-from vxl.core.station import Station, StationConfig
 from vxl.instrument import (
     Activity,
     Bounds,
@@ -21,6 +19,8 @@ from vxl.instrument import (
 )
 from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
 from vxl.preview.protocol import StagePosition
+from vxl.station_legacy.models import StationStatus
+from vxl.station_legacy.station import Station, StationConfig
 
 
 class FakeInstrument:

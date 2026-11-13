@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from vxlib.problems import Problems
+
 from vxl._utils.files import load_yaml
-from vxl.core.instrument.errors import Violations
 from vxl.instruments.spim.config import SPIMConfig, SPIMState
 
 FILES = Path(__file__).parent / "files"
@@ -17,15 +18,15 @@ _CONFIG: dict[str, Any] = {
     "name": "exaSPIM left",
     "model": "exaspim.v2",
     "target": "vxl.instruments.spim.Instrument",
-    "components": {
-        **{uid: {"target": "builtins.object"} for uid in ("ao_main", "camera", "laser", "x_axis", "y_axis", "z_axis")},
-        "fw": {"target": "builtins.object", "init": {"slots": {"0": "GFP", "1": "RFP"}}},
-    },
     "parts": {
         "galvo": {"kind": "galvo"},
-        "objective": {"kind": "objective", "magnification": 5},
-        "GFP": {"kind": "filter", "band": ["500 nm", "550 nm"]},
-        "RFP": {"kind": "filter", "band": ["575 nm", "625 nm"]},
+        "objective": {"target": "vxl.parts.Objective", "magnification": 5},
+        "GFP": {"target": "vxl.parts.Filter", "band": ["500 nm", "550 nm"]},
+        "RFP": {"target": "vxl.parts.Filter", "band": ["575 nm", "625 nm"]},
+    },
+    "devices": {
+        **{uid: {"target": "builtins.object"} for uid in ("ao_main", "camera", "laser", "x_axis", "y_axis", "z_axis")},
+        "fw": {"target": "builtins.object", "init": {"slots": {"0": "GFP", "1": "RFP"}}},
     },
     "wiring": {
         "ao_main": {
@@ -93,10 +94,10 @@ class Example:
     config: SPIMConfig
     default: SPIMState
 
-    def violations(self) -> Violations:
+    def problems(self) -> Problems:
         """The problems of the rig, then those of the defaults under ``default``."""
-        found = self.config.violations()
-        found += self.default.violations(self.config).under("default")
+        found = self.config.problems()
+        found += self.default.problems(self.config).under("default")
         return found
 
 
@@ -124,7 +125,7 @@ def template(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def codes(example: Example) -> list[str]:
-    return example.violations().codes()
+    return example.problems().codes()
 
 
 def profile(data: dict[str, Any]) -> dict[str, Any]:
@@ -155,8 +156,14 @@ def sweep_x(data: dict[str, Any]) -> dict[str, Any]:
 def two_arms(data: dict[str, Any]) -> dict[str, Any]:
     """Add a switch that sends the laser to 1 of 2 arms."""
     hal = data
-    hal["components"]["arm_switch"] = {"target": "builtins.object", "init": {"slots": {"0": "left", "1": "right"}}}
-    hal["parts"].update(left_lens={"kind": "lens"}, right_lens={"kind": "lens"})
+    hal["devices"]["arm_switch"] = {
+        "target": "builtins.object",
+        "init": {"slots": {"0": "left", "1": "right"}},
+    }
+    hal["parts"].update(
+        left_lens={"kind": "lens"},
+        right_lens={"kind": "lens"},
+    )
     hal["optics"].update(
         laser={"to": "arm_switch"},
         arm_switch={"to": {"left": "left_lens", "right": "right_lens"}},

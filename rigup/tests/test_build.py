@@ -98,7 +98,7 @@ class TestDefaultsFailure:
         built, errors = build_objects(configs, _ReadOnlyDevice)
         assert "dev" not in built
         assert "dev" in errors
-        assert errors["dev"].error_type == "defaults"
+        assert errors["dev"].code == "build.defaults"
 
     def test_no_defaults_is_fine(self):
         configs = {
@@ -128,7 +128,7 @@ class TestAsyncBuild:
         built, errors = await build_objects_async(configs, _GoodDevice)
         assert not built
         assert "bad" in errors
-        assert errors["bad"].error_type == "import"
+        assert errors["bad"].code == "build.import"
 
     async def test_async_defaults_failure(self):
         configs = {
@@ -140,7 +140,7 @@ class TestAsyncBuild:
         }
         built, errors = await build_objects_async(configs, _ReadOnlyDevice)
         assert "dev" not in built
-        assert errors["dev"].error_type == "defaults"
+        assert errors["dev"].code == "build.defaults"
 
 
 def _config(cls: str, **init: object) -> BuildConfig:
@@ -186,8 +186,8 @@ class TestParts:
         built, errors = build_objects(configs, (Device, Part))
 
         assert not built
-        assert errors["dev"].error_type == "import"
-        assert "not a subclass of Device or Part" in errors["dev"].message
+        assert errors["dev"].code == "build.import"
+        assert "not a subclass of Device or Part" in errors["dev"].msg
 
     def test_a_part_with_a_wrong_value_is_not_built(self):
         configs = {"glass": BuildConfig(target=f"{__name__}._Filter", init={"band": "wide"})}
@@ -195,18 +195,31 @@ class TestParts:
         built, errors = build_objects(configs, Part)
 
         assert not built
-        assert errors["glass"].error_type == "instantiation"
+        assert errors["glass"].code == "build.instantiation"
 
-    def test_defaults_on_a_part_are_an_error(self):
+    def test_a_ready_object_is_passed_and_not_built_again(self):
+        glass = _Filter(uid="glass", band=(500, 550))
         configs = {
-            "glass": BuildConfig(target=f"{__name__}._Filter", init={"band": [500, 550]}, defaults={"band": [1, 2]})
+            "wheel": _config("_Wheel", slots={"0": "glass", "1": "empty"}),
+            "reader": _config("_Reader", glass="glass"),
         }
 
-        built, errors = build_objects(configs, Part)
+        built, errors = build_objects(configs, Device, ready={"glass": glass})
 
-        assert not built
-        assert errors["glass"].error_type == "defaults"
-        assert "it takes its values in init" in errors["glass"].message
+        assert not errors
+        assert set(built) == {"wheel", "reader"}
+        assert built["wheel"].slots == {"0": glass, "1": "empty"}
+        assert built["reader"].glass is glass
+
+    async def test_async_build_checks_a_ready_object_against_the_hint(self):
+        cube = _Cube(uid="cube", excitation=_Filter(uid="a", band=(1, 2)), emission=_Filter(uid="b", band=(3, 4)))
+        configs = {"reader": _config("_Reader", glass="cube"), "wheel": _config("_Wheel", slots={"0": "cube"})}
+
+        built, errors = await build_objects_async(configs, Device, ready={"cube": cube})
+
+        assert set(built) == {"wheel"}
+        assert built["wheel"].slots == {"0": cube}
+        assert errors["reader"].msg == "'reader.glass' needs a _Filter, and 'cube' is a _Cube"
 
 
 class TestPassedTypes:
@@ -227,8 +240,8 @@ class TestPassedTypes:
         built, errors = build_objects(configs, (Device, Part))
 
         assert "reader" not in built
-        assert errors["reader"].error_type == "dependency"
-        assert errors["reader"].message == "'reader.glass' needs a _Filter, and 'cube' is a _Cube"
+        assert errors["reader"].code == "build.dependency"
+        assert errors["reader"].msg == "'reader.glass' needs a _Filter, and 'cube' is a _Cube"
 
     async def test_each_component_in_a_list_is_checked(self):
         configs = {**_WHEEL_WITH_PARTS, "reader": _config("_Reader", glass="glass", spares=["blue", "wheel"])}
@@ -236,7 +249,7 @@ class TestPassedTypes:
         built, errors = await build_objects_async(configs, (Device, Part))
 
         assert "reader" not in built
-        assert errors["reader"].message == "'reader.spares' needs a _Filter, and 'wheel' is a _Wheel"
+        assert errors["reader"].msg == "'reader.spares' needs a _Filter, and 'wheel' is a _Wheel"
 
     def test_a_hint_that_cannot_be_read_is_not_checked(self, caplog: pytest.LogCaptureFixture):
         configs = {**_WHEEL_WITH_PARTS, "loose": _config("_Loose", glass="cube")}
@@ -266,9 +279,9 @@ class TestDependencyFailures:
         built, errors = await build_objects_async(configs)
 
         assert not built
-        assert errors["root"].error_type == "import"
-        assert errors["middle"].error_type == "dependency"
-        assert errors["leaf"].error_type == "dependency"
+        assert errors["root"].code == "build.import"
+        assert errors["middle"].code == "build.dependency"
+        assert errors["leaf"].code == "build.dependency"
         assert prewarmed == {"root"}
 
     async def test_nested_failed_dependency_is_detected(self):
@@ -283,7 +296,7 @@ class TestDependencyFailures:
         built, errors = await build_objects_async(configs)
 
         assert not built
-        assert errors["dependent"].error_type == "dependency"
+        assert errors["dependent"].code == "build.dependency"
 
     def test_sync_cycles_are_reported_explicitly(self):
         configs = {
@@ -295,9 +308,9 @@ class TestDependencyFailures:
         built, errors = build_objects(configs)
 
         assert not built
-        assert errors["a"].error_type == "circular"
-        assert errors["b"].error_type == "circular"
-        assert errors["downstream"].error_type == "dependency"
+        assert errors["a"].code == "build.circular"
+        assert errors["b"].code == "build.circular"
+        assert errors["downstream"].code == "build.dependency"
 
     async def test_async_cycles_are_reported_explicitly(self):
         configs = {
@@ -309,9 +322,9 @@ class TestDependencyFailures:
         built, errors = await build_objects_async(configs)
 
         assert not built
-        assert errors["a"].error_type == "circular"
-        assert errors["b"].error_type == "circular"
-        assert errors["downstream"].error_type == "dependency"
+        assert errors["a"].code == "build.circular"
+        assert errors["b"].code == "build.circular"
+        assert errors["downstream"].code == "build.dependency"
 
     async def test_async_cycles_are_excluded_from_module_prewarming(self, monkeypatch):
         configs = {
@@ -329,8 +342,8 @@ class TestDependencyFailures:
         built, errors = await build_objects_async(configs)
 
         assert set(built) == {"independent"}
-        assert errors["a"].error_type == "circular"
-        assert errors["b"].error_type == "circular"
+        assert errors["a"].code == "build.circular"
+        assert errors["b"].code == "build.circular"
         assert prewarmed == {"independent"}
 
     async def test_unexpected_group_error_marks_devices_and_dependents(
@@ -353,5 +366,5 @@ class TestDependencyFailures:
         built, errors = await build_objects_async(configs)
 
         assert not built
-        assert errors["root"].error_type == "internal"
-        assert errors["dependent"].error_type == "dependency"
+        assert errors["root"].code == "build.internal"
+        assert errors["dependent"].code == "build.dependency"

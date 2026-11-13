@@ -6,12 +6,12 @@ import traceback
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
+from enum import StrEnum
 from types import UnionType
 from typing import Any, Literal, Union, cast, get_args, get_origin, get_type_hints, is_protocol
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from .component import Part
+from vxlib.problems import Problem
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class BuildConfig(BaseModel):
     init: dict[str, Any] = Field(default_factory=dict)  # Constructor arguments
     # Values set via setattr on the instance after construction. Goes through descriptor
     # setters (so validation/clamping applies there), but a setattr that raises aborts the
-    # device's build with BuildError(error_type="defaults") rather than silently warning.
+    # device's build with a problem of code build.defaults rather than silently warning.
     defaults: dict[str, Any] | None = None
 
     def get_obj_class(self) -> type:
@@ -57,19 +57,24 @@ class BuildConfig(BaseModel):
         return import_class(self.target, object)
 
 
-class BuildError(BaseModel):
-    """Error information for a failed obj build."""
+class BuildErrorCode(StrEnum):
+    IMPORT = "import"
+    INSTANTIATION = "instantiation"
+    DEFAULTS = "defaults"
+    DEPENDENCY = "dependency"
+    CIRCULAR = "circular"
+    INTERNAL = "internal"
 
-    uid: str
-    error_type: Literal["import", "instantiation", "defaults", "dependency", "circular", "internal"]
-    message: str
-    traceback: str | None = None
+
+def _problem(uid: str, kind: BuildErrorCode, msg: str, detail: str | None = None) -> Problem:
+    """The problem of 1 object that did not build: its code is ``build.<kind>``, and its place is its UID."""
+    return Problem(code=f"build.{kind}", msg=msg, loc=(uid,), detail=detail)
 
 
 type BuildGroupSpec = Mapping[str, BuildConfig]
 
 
-type BuildObjectsResult[T] = tuple[Mapping[str, T], Mapping[str, BuildError]]
+type BuildObjectsResult[T] = tuple[Mapping[str, T], Mapping[str, Problem]]
 
 
 def _resolve(value: Any, built: Mapping[str, object]) -> Any:
@@ -132,38 +137,35 @@ def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, ob
     return None
 
 
-def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: _BaseClass) -> T | BuildError:
+def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: _BaseClass) -> T | Problem:
     """Make 1 object: import its class, construct it with its ``init``, in which each name of an object in ``built``
     is that object, and set its defaults."""
     try:
         cls = import_class(cfg.target, base_cls)
     except Exception as e:
-        return BuildError(
-            uid=uid,
-            error_type="import",
-            message=f"Failed to import '{cfg.target}': {e}",
-            traceback=traceback.format_exc(),
+        return _problem(
+            uid,
+            BuildErrorCode.IMPORT,
+            f"Failed to import '{cfg.target}': {e}",
+            traceback.format_exc(),
         )
 
     if misfit := _misfit(uid, cls, cfg.init, built):
-        return BuildError(uid=uid, error_type="dependency", message=misfit)
+        return _problem(uid, BuildErrorCode.DEPENDENCY, misfit)
 
     make = cast("Callable[..., T]", cls)
     try:
         obj = make(**{"uid": uid, **_resolve(cfg.init, built)})
     except Exception as e:
-        return BuildError(
-            uid=uid,
-            error_type="instantiation",
-            message=f"Failed to instantiate {cfg.target.rsplit('.', 1)[-1]}: {e}",
-            traceback=traceback.format_exc(),
+        return _problem(
+            uid,
+            BuildErrorCode.INSTANTIATION,
+            f"Failed to instantiate {cfg.target.rsplit('.', 1)[-1]}: {e}",
+            detail=traceback.format_exc(),
         )
 
     if not cfg.defaults:
         return obj
-    if isinstance(obj, Part):
-        message = f"'{uid}' is a part: it takes its values in init, not in defaults"
-        return BuildError(uid=uid, error_type="defaults", message=message)
 
     # A failing setattr means the device's initial state would diverge from config, so we fail the
     # build for this device rather than continuing with a silently-wrong default.
@@ -171,37 +173,36 @@ def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: 
         try:
             setattr(obj, name, value)
         except Exception as e:
-            return BuildError(
-                uid=uid,
-                error_type="defaults",
-                message=f"Failed to set default {name}={value!r} on {uid}: {e}",
-                traceback=traceback.format_exc(),
+            return _problem(
+                uid,
+                BuildErrorCode.DEFAULTS,
+                f"Failed to set default {name}={value!r} on {uid}: {e}",
+                traceback.format_exc(),
             )
     return obj
 
 
-def build_objects[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> BuildObjectsResult[T]:
+def build_objects[T](
+    cfgs: BuildGroupSpec, base_cls: _BaseClass = object, ready: Mapping[str, object] | None = None
+) -> BuildObjectsResult[T]:
     """Build objects from configuration with error accumulation and dependency resolution.
 
     Args:
         cfgs: Node configuration containing obj specifications
         base_cls: The class, or the classes, that each object must be an instance of (default: object)
+        ready: Objects made already, by name: an ``init`` that names 1 of them gets it
 
     Returns:
         Tuple of (successful_objects, build_errors)
     """
-    built: dict[str, T] = {}
+    built: dict[str, Any] = dict(ready or {})
     errors = {
-        uid: BuildError(
-            uid=uid,
-            error_type="circular",
-            message=f"Circular dependency detected for obj '{uid}'",
-        )
+        uid: _problem(uid, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{uid}'")
         for uid in _find_cyclic_uids(cfgs)
     }
     building: set[str] = set()
 
-    def _build_one(uid: str) -> T | BuildError:
+    def _build_one(uid: str) -> T | Problem:
         """Build a single obj, resolving dependencies first."""
         if uid in built:
             return built[uid]
@@ -210,11 +211,7 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> Bui
             return errors[uid]
 
         if uid in building:
-            error = BuildError(
-                uid=uid,
-                error_type="circular",
-                message=f"Circular dependency detected for obj '{uid}'",
-            )
+            error = _problem(uid, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{uid}'")
             errors[uid] = error
             return error
 
@@ -223,26 +220,18 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> Bui
             # Build dependencies first
             for dep_uid in dependencies(cfgs, uid):
                 if dep_uid in errors:
-                    error = BuildError(
-                        uid=uid,
-                        error_type="dependency",
-                        message=f"Dependency '{dep_uid}' failed to build",
-                    )
+                    error = _problem(uid, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_uid}' failed to build")
                     errors[uid] = error
                     return error
 
                 dep_result = _build_one(dep_uid)
-                if isinstance(dep_result, BuildError):
-                    error = BuildError(
-                        uid=uid,
-                        error_type="dependency",
-                        message=f"Dependency '{dep_uid}' failed: {dep_result.message}",
-                    )
+                if isinstance(dep_result, Problem):
+                    error = _problem(uid, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_uid}' failed: {dep_result.msg}")
                     errors[uid] = error
                     return error
 
             result = _make(uid, cfgs[uid], built, base_cls)
-            if isinstance(result, BuildError):
+            if isinstance(result, Problem):
                 errors[uid] = result
             else:
                 built[uid] = result
@@ -256,7 +245,7 @@ def build_objects[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> Bui
         if uid not in built and uid not in errors:
             _build_one(uid)
 
-    return built, errors
+    return {uid: obj for uid, obj in built.items() if uid in cfgs}, errors
 
 
 # ==================== Async Build ====================
@@ -381,15 +370,15 @@ def _topological_layers(cfgs: BuildGroupSpec) -> list[list[list[str]]]:
 def _build_group_sync[T](
     group: list[str],
     cfgs: BuildGroupSpec,
-    built: dict[str, T],
+    built: Mapping[str, object],
     base_cls: _BaseClass,
-) -> list[tuple[str, T | BuildError]]:
+) -> list[tuple[str, T | Problem]]:
     """Build a group of devices sequentially (same target/driver). Runs in a worker thread.
 
     Does not write to `built` — the caller merges results after all groups complete.
     `built` is read-only here (references from prior layers).
     """
-    results: list[tuple[str, T | BuildError]] = []
+    results: list[tuple[str, T | Problem]] = []
     for uid in group:
         cfg = cfgs[uid]
         logger.info("Building device: %s (%s)", uid, cfg.target.rsplit(".", 1)[-1])
@@ -414,8 +403,11 @@ def _prewarm_parent_modules(cfgs: BuildGroupSpec) -> None:
             importlib.import_module(mod_name)
 
 
-async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = object) -> BuildObjectsResult[T]:
-    """Build devices asynchronously with dependency resolution.
+async def build_objects_async[T](
+    cfgs: BuildGroupSpec, base_cls: _BaseClass = object, ready: Mapping[str, object] | None = None
+) -> BuildObjectsResult[T]:
+    """Build devices asynchronously with dependency resolution. An ``init`` that names an object in ``ready`` gets
+    that object.
 
     Devices are sorted into dependency layers. Within each layer, devices
     sharing the same target class are built sequentially (SDK thread safety),
@@ -426,16 +418,11 @@ async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = ob
 
     cyclic = _find_cyclic_uids(cfgs)
     errors = {
-        uid: BuildError(
-            uid=uid,
-            error_type="circular",
-            message=f"Circular dependency detected for obj '{uid}'",
-        )
-        for uid in cyclic
+        uid: _problem(uid, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{uid}'") for uid in cyclic
     }
     buildable = {uid: cfg for uid, cfg in cfgs.items() if uid not in cyclic}
     layers = _topological_layers(buildable)
-    built: dict[str, T] = {}
+    built: dict[str, Any] = dict(ready or {})
 
     for layer in layers:
         # Skip devices whose dependencies failed
@@ -446,10 +433,10 @@ async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = ob
                 deps = dependencies(cfgs, uid)
                 failed_deps = deps & errors.keys()
                 if failed_deps:
-                    errors[uid] = BuildError(
-                        uid=uid,
-                        error_type="dependency",
-                        message=f"Dependency failed: {', '.join(sorted(failed_deps))}",
+                    errors[uid] = _problem(
+                        uid,
+                        BuildErrorCode.DEPENDENCY,
+                        f"Dependency failed: {', '.join(sorted(failed_deps))}",
                     )
                 else:
                     valid_uids.append(uid)
@@ -475,17 +462,17 @@ async def build_objects_async[T](cfgs: BuildGroupSpec, base_cls: _BaseClass = ob
                     traceback.format_exception(type(group_result), group_result, group_result.__traceback__)
                 )
                 for uid in group:
-                    errors[uid] = BuildError(
-                        uid=uid,
-                        error_type="internal",
-                        message=f"Unexpected error during device build: {group_result}",
-                        traceback=formatted_traceback,
+                    errors[uid] = _problem(
+                        uid,
+                        BuildErrorCode.INTERNAL,
+                        f"Unexpected error during device build: {group_result}",
+                        formatted_traceback,
                     )
                 continue
             for uid, result in group_result:
-                if isinstance(result, BuildError):
+                if isinstance(result, Problem):
                     errors[uid] = result
                 else:
                     built[uid] = result
 
-    return built, errors
+    return {uid: obj for uid, obj in built.items() if uid in cfgs}, errors

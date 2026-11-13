@@ -14,7 +14,7 @@ from pydantic import Field, TypeAdapter, model_validator
 from vxlib.schema import FrozenModel, SparseModel
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.models import AreaROI
+from vxl.devices.camera.roi import AreaROI
 from vxl.preview import ValidBits
 from vxl.system import System
 

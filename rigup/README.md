@@ -24,8 +24,8 @@ topology, and callers interact with every device through a `DeviceHandle`.
 
 ## Define a device
 
-A driver subclasses `Device`. Only methods and properties marked with `@describe` become part of its public
-interface. Constrained property descriptors validate writes and carry their bounds or options across the handle
+A driver subclasses `Device` and says its kind in the class line. Only methods and properties marked with `@describe`
+become part of its public interface. Constrained property descriptors validate writes and carry their bounds or options across the handle
 boundary.
 
 ```python
@@ -39,9 +39,7 @@ class LaserState(StrEnum):
     ON = "on"
 
 
-class Laser(Device[LaserState]):
-    __DEVICE_TYPE__ = "laser"
-
+class Laser(Device[LaserState], kind="laser"):
     def __init__(self, uid: str) -> None:
         super().__init__(uid)
         self._power = 0.0
@@ -70,7 +68,7 @@ and property metadata for clients.
 ## Build and use a rig
 
 `RigConfig` is a Pydantic model; an application may construct it directly or validate configuration loaded from
-YAML or another source. Each target is the import path of a `Device` subclass.
+YAML or another source. Each target is the import path of a `Device` or `Part` subclass.
 
 ```python
 import asyncio
@@ -79,14 +77,7 @@ from rigup import DeviceConfig, Rig, RigConfig
 
 
 async def main() -> None:
-    config = RigConfig(
-        devices={
-            "laser": DeviceConfig(
-                target="my_devices.Laser",
-                defaults={"power": 5.0},
-            )
-        }
-    )
+    config = RigConfig(devices={"laser": DeviceConfig(target="my_devices.Laser", defaults={"power": 5.0})})
     rig = Rig(config, name="example")
 
     await rig.open()
@@ -109,14 +100,23 @@ Successful property reads, writes, and stream observations enter `handle.props.c
 for complete cache snapshots, or use `handle.props.property(name, parser)` in a typed handle subclass for one parsed,
 subscribable property.
 
-## Place devices
+## Place devices and parts
 
-Top-level `devices` run in the application process. Entries under `nodes` run elsewhere:
+A rig file lists the `parts` of the rig, the `devices` of the application process, and each other process under
+`nodes` with its own `devices`. A device has a driver and runs in 1 process. A part has no driver: it is a `Part`
+model that holds facts, such as the band of a filter, and it runs in no process.
 
 ```yaml
+parts:
+  combiner: {kind: combiner}
+  BP525: {target: my_parts.Filter, band: [500, 550]}
+
 devices:
   laser:
     target: my_devices.Laser
+  filter_wheel:
+    target: my_devices.FilterWheel
+    init: {slots: {"0": BP525}}
 
 nodes:
   isolated_camera:
@@ -139,17 +139,20 @@ nodes:
 | Subprocess node | Spawned and terminated by `Rig` | ZeroMQ over a temporary IPC endpoint by default |
 | Remote node | Supervised independently and claimed while the rig is open | ZeroMQ over configured TCP or IPC endpoints |
 
-If `kind` is omitted, no address or a local-only address selects `subprocess`; a non-local TCP address selects
-`remote`. An explicit `kind` always wins.
+If `kind` is omitted, no address or a local-only address selects `subprocess`, and a non-local TCP address selects
+`remote`. An explicit `kind` always wins. `RigConfig.all_devices` gives every device of the rig, in each process.
 
-Device UIDs and node ids use only ASCII letters, digits, `_` and `-`. Device UIDs must be unique across the complete
-rig. A constructor argument may refer to another configured device by UID, but both devices must occupy the same process.
-Independent targets within a dependency layer can initialize in parallel; devices sharing a target class initialize
-sequentially to protect SDKs with shared process state.
+A part entry is the part's own fields. `target` names its class when it is not `rigup.Part`. A part is made when the
+file is read, so a wrong value is reported at its field, such as `parts.BP525.band`. Each process gets every part of
+the rig when it builds its devices.
 
-Each device entry also accepts `autosave: [property_name, ...]` or `autosave: "*"` (default: `[]`).
-This is application-owned persistence policy, carried through local and remote configuration. Rigup does not
-save property edits or pass this field to driver constructors; the application decides how to use it.
+Component UIDs and node ids use only ASCII letters, digits, `_` and `-`. A UID is unique across all devices and parts
+of the rig. An `init` value may name a part, or another device in the same process, by UID: rigup passes the part or
+the built device. Independent targets within a dependency layer can initialize in parallel; devices sharing a target
+class initialize sequentially to protect SDKs with shared process state.
+
+A device entry and a part may also hold `details`, information for people. Rigup does not read it, and a built device
+does not get it.
 
 ### Composition lifecycle and access
 

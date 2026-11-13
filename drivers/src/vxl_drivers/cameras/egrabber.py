@@ -29,7 +29,7 @@ from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.models import AreaROI, IntRange, ROIGrid
+from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 

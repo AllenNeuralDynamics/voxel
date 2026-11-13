@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 from ._daemon import NodeDaemon
-from ._local import LocalAdapter, LocalNode
+from ._local import LOCAL, LocalAdapter, LocalNode
 from ._remote import RemoteNode, _parse_address
 from ._runner import run
 from ._subprocess import SubprocessNode
@@ -44,6 +44,7 @@ def run_node(argv: Sequence[str] | None = None) -> None:
 
 
 __all__ = [
+    "LOCAL",
     "DevicesBuildResult",
     "DevicesConfig",
     "LocalAdapter",

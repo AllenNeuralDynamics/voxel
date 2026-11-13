@@ -160,7 +160,7 @@ class DriverShell(cmd.Cmd):
         if opened:
             self._output.print(f"Opened {', '.join(opened)}")
         for name, error in errors.items():
-            self._output.print(f"Could not open {name}: {error.message}", style="red")
+            self._output.print(f"Could not open {name}: {error.msg}", style="red")
         return uid in self._session.devices
 
     def _activate(self, uid: str) -> None:

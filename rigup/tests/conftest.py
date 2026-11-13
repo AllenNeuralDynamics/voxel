@@ -3,24 +3,26 @@
 import socket
 
 import pytest
-from rigup.config import ComponentConfig, RigConfig
+from rigup.config import DeviceConfig, RigConfig
 from rigup.transport import TCPAddress
 
 MOCK_TARGET = "tests._mock.MockDevice"
 
 
 @pytest.fixture
-def mock_device_config() -> ComponentConfig:
-    return ComponentConfig(target=MOCK_TARGET, init={"initial_value": 1.0})
+def mock_device_config() -> DeviceConfig:
+    return DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0})
 
 
 @pytest.fixture
-def local_rig_config(mock_device_config: ComponentConfig) -> RigConfig:
-    return RigConfig(
-        components={
-            "device_a": mock_device_config,
-            "device_b": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
-        },
+def local_rig_config(mock_device_config: DeviceConfig) -> RigConfig:
+    return RigConfig.model_validate(
+        {
+            "devices": {
+                "device_a": mock_device_config,
+                "device_b": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
+            }
+        }
     )
 
 

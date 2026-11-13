@@ -12,9 +12,9 @@ from itertools import product
 import numpy as np
 from vxlib.vector import Span, Vec3D
 
-from vxl.core.instrument.config import Detector, DeviceUid, SpecimenAxis
+from vxl.core.instrument.config import AxisPosition, Detector, DeviceUid, SpecimenAxis
 from vxl.devices.camera import CameraSensor
-from vxl.models import AreaROI, AxisPosition
+from vxl.devices.camera.roi import AreaROI
 
 from .config import Profile, ProfileId, SPIMConfig, SPIMState, StageFollowRule, Task, TaskId
 from .region import tile_positions, tile_spans

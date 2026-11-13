@@ -5,8 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from vxl._utils.files import load_yaml
+from vxl.core.errors import RejectedError
 from vxl.core.instrument.config import new_instrument_id
-from vxl.core.instrument.store import InstrumentStore, OperationRejectedError
+from vxl.core.instrument.folder import InstrumentFolder
+from vxl.core.instrument.store import ABSENT, InstrumentStore
 from vxl.instruments.spim.config import SPIMConfig, SPIMState, StageFollowRule, Task
 
 from .support import codes, load, template, two_arms
@@ -40,8 +42,7 @@ def test_names_are_labels_of_at_most_32_characters(config_data: dict[str, Any]) 
 
 
 def test_a_template_makes_instruments_with_new_ids(config_data: dict[str, Any], tmp_path: Path) -> None:
-    homes = [InstrumentStore.create(template(config_data), name, tmp_path) for name in ("left", "right")]
-    first, second = (InstrumentStore.check(home, SPIMConfig, SPIMState) for home in homes)
+    first, second = (InstrumentFolder.create(template(config_data), name, tmp_path) for name in ("left", "right"))
     assert first.ok
     assert second.ok
     assert first.config is not None
@@ -53,57 +54,77 @@ def test_a_template_makes_instruments_with_new_ids(config_data: dict[str, Any], 
 def test_a_template_has_no_id(config_data: dict[str, Any], tmp_path: Path) -> None:
     with_identity = template(config_data)
     with_identity["rig"] |= {"id": config_data["id"], "name": config_data["name"]}
-    with pytest.raises(ValueError, match="a template has no id and no name"):
-        InstrumentStore.create(with_identity, "left", tmp_path)
+    with pytest.raises(RejectedError, match="a template has no id and no name"):
+        InstrumentFolder.create(with_identity, "left", tmp_path)
 
 
 def test_a_default_has_no_plan_and_no_metadata(config_data: dict[str, Any], tmp_path: Path) -> None:
-    assert SPIMState.default_fields() == {"metadata_cls", "output", "task", "positions", "profiles"}
+    assert SPIMState.default_fields() == {"metadata_cls", "writer", "task", "positions", "profiles"}
 
     config_data["default"]["metadata"] = {"notes": "left hemisphere"}
-    home = InstrumentStore.create(template(config_data), "left", tmp_path)
-    assert InstrumentStore.check(home, SPIMConfig, SPIMState).violations.codes() == ["default.not_default"]
+    assert InstrumentFolder.create(template(config_data), "left", tmp_path).problems.codes() == ["default.not_default"]
 
 
 async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
     config_data: dict[str, Any], tmp_path: Path
 ) -> None:
-    home = InstrumentStore.create(template(config_data), "left", tmp_path)
-    store = InstrumentStore.from_inspection(InstrumentStore.check(home, SPIMConfig, SPIMState), SPIMState)
-    assert store.value == store.default.value
+    folder = InstrumentFolder.create(template(config_data), "left", tmp_path)
+    home = folder.home
+    assert isinstance(folder.config, SPIMConfig)
+    assert isinstance(folder.default, SPIMState)
+    store = InstrumentStore(home, folder.config, folder.default, folder.default)
+    assert store.value == store.default_state.value
     assert store.last_modified is None
 
     xy = {"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 500, "y": 500}]}
     region = {"xy": xy, "z": {"start": 0, "end": 100}}
     task = Task.complete({"id": "brain", "region": region, "profiles": ["gfp"]}, store.value.task)
-    gfp = store.value.profiles["gfp"]
     await store.update(
-        plan=[task], metadata={"notes": "left hemisphere"}, profiles={"gfp": gfp.model_copy(update={"spacing": 2.0})}
+        {("plan",): [task], ("metadata",): {"notes": "left hemisphere"}, ("profiles", "gfp", "spacing"): 2.0}
     )
     assert store.last_modified is not None
 
-    await store.save_as_default()
-    assert store.default.value.profiles["gfp"].spacing == 2.0
+    await store.save_as_default_state()
+    assert store.default_state.value.profiles["gfp"].spacing == 2.0
     assert set(load_yaml(home / "default.yaml")) <= SPIMState.default_fields()
-    with pytest.raises(OperationRejectedError, match="plan"):
-        await store.save_as_default(["plan"])
+    with pytest.raises(RejectedError, match="plan"):
+        await store.save_as_default_state(["plan"])
 
-    await store.update(profiles={"gfp": gfp.model_copy(update={"spacing": 3.0})})
-    await store.restore_default()
+    await store.update({("profiles", "gfp", "spacing"): 3.0})
+    await store.update(store.default_values())
     assert (store.value.profiles["gfp"].spacing, len(store.value.plan)) == (2.0, 1)
     assert store.value.metadata == {"notes": "left hemisphere"}
 
-    await store.apply_preset(store.value.as_preset().model_copy(update={"plan": []}))
-    assert (store.value.plan, store.value.metadata) == ([], {"notes": "left hemisphere"})
+    with pytest.raises(RejectedError, match="'x_axis' is not a device of 'optics'"):
+        await store.update({("positions", "x_axis"): 10})
+    assert store.value.positions == store.default_state.value.positions
 
-    with pytest.raises(OperationRejectedError, match="'x_axis' is not a device of 'optics'"):
-        await store.update(positions={"x_axis": 10})
-    assert store.value.positions == store.default.value.positions
-
-    again = InstrumentStore.check(home, SPIMConfig, SPIMState)
+    again = InstrumentFolder.read(home)
     assert again.ok
-    assert again.default == store.default.value
+    assert again.default == store.default_state.value
     assert again.state == store.value
+
+
+async def test_the_store_sets_and_removes_values_at_key_paths(config_data: dict[str, Any], tmp_path: Path) -> None:
+    folder = InstrumentFolder.create(template(config_data), "left", tmp_path)
+    assert isinstance(folder.config, SPIMConfig)
+    assert isinstance(folder.default, SPIMState)
+    store = InstrumentStore(folder.home, folder.config, folder.default, folder.default)
+    gfp = store.value.profiles["gfp"].model_dump()
+
+    added = await store.update({("profiles", "rfp"): gfp | {"positions": {"fw": "RFP"}}})
+    assert set(store.value.profiles) == {"gfp", "rfp"}
+    assert added.before == {("profiles", "rfp"): ABSENT}
+
+    removed = await store.update({("profiles", "rfp"): ABSENT})
+    assert set(store.value.profiles) == {"gfp"}
+    assert removed.after == {("profiles", "rfp"): ABSENT}
+
+    with pytest.raises(RejectedError) as caught:
+        await store.update({("profiles", "rfp", "spacing"): 2.0})
+    assert [(problem.code, problem.loc) for problem in caught.value.problems] == [
+        ("state.missing", ("profiles", "rfp", "spacing"))
+    ]
 
 
 def test_the_file_has_no_engine(config_data: dict[str, Any]) -> None:
@@ -143,12 +164,12 @@ def test_a_device_gets_its_position_from_the_instrument_or_from_each_profile(con
     gfp["positions"] = {"fw": "RFP"}
     example = load(config_data)
     assert codes(example) == ["profile.position.two_levels"]
-    assert [violation.loc for violation in example.violations()] == [("default", "profiles", "gfp", "positions", "fw")]
+    assert [problem.loc for problem in example.problems()] == [("default", "profiles", "gfp", "positions", "fw")]
 
 
 def test_a_device_that_1_profile_sets_each_profile_sets(config_data: dict[str, Any]) -> None:
     hal, profiles = config_data, config_data["default"]["profiles"]
-    hal["components"]["focus"] = {"target": "builtins.object"}
+    hal["devices"]["focus"] = {"target": "builtins.object"}
     hal["optics"]["objective"]["to"] = "focus"
     hal["optics"]["focus"] = {"to": "fw"}
     profiles["rfp"] = {**profiles["gfp"], "positions": {"fw": "RFP"}}
@@ -157,9 +178,7 @@ def test_a_device_that_1_profile_sets_each_profile_sets(config_data: dict[str, A
     profiles["gfp"]["positions"]["focus"] = 120.5
     example = load(config_data)
     assert codes(example) == ["profile.position.not_in_all_profiles"]
-    assert [violation.loc for violation in example.violations()] == [
-        ("default", "profiles", "rfp", "positions", "focus")
-    ]
+    assert [problem.loc for problem in example.problems()] == [("default", "profiles", "rfp", "positions", "focus")]
 
     profiles["rfp"]["positions"]["focus"] = 118.0
     assert codes(load(config_data)) == []

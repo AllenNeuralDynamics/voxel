@@ -10,7 +10,7 @@ from vxlib.vector import IVec2D, Vec2D
 
 from rigup import describe
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.models import AreaROI, IntRange, ROIGrid
+from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi
 from .sdk.dcamapi4 import DCAMCAP_TRANSFERINFO

@@ -14,13 +14,13 @@ def _channel(data: dict[str, Any]) -> dict[str, Any]:
 
 def _messages(data: dict[str, Any], code: str) -> list[str]:
     example = load(data)
-    return [v.msg for v in example.violations() if v.code == code]
+    return [v.msg for v in example.problems() if v.code == code]
 
 
 def _second_camera(data: dict[str, Any]) -> None:
     """The filter wheel sends the light to ``camera`` at GFP and to ``camera_2`` at RFP."""
     hal = data
-    hal["components"]["camera_2"] = {"target": "builtins.object"}
+    hal["devices"]["camera_2"] = {"target": "builtins.object"}
     hal["wiring"]["ao_main"]["camera_2_trigger"] = {"pin": "ao4", "to": ["camera_2/trigger_in"], "kind": "digital"}
     hal["optics"]["fw"] = {"to": {"GFP": "camera", "RFP": "camera_2"}}
     hal["optics"]["camera_2"] = {"width": {"y": 1}, "height": {"x": -1}}
@@ -29,8 +29,8 @@ def _second_camera(data: dict[str, Any]) -> None:
 
 def _unlit_laser(data: dict[str, Any]) -> None:
     hal = data
-    hal["components"]["laser_2"] = {"target": "builtins.object"}
-    hal["parts"]["dump"] = {}
+    hal["devices"]["laser_2"] = {"target": "builtins.object"}
+    hal["parts"]["dump"] = {"kind": "beam_dump"}
     hal["optics"].update(laser_2={"to": "dump"}, dump={"to": "camera"})
     _channel(data)["illumination"] = "laser_2"
 
@@ -95,10 +95,13 @@ def test_props_go_to_free_devices_on_the_light_paths(config_data: dict[str, Any]
 
 def test_a_device_can_hold_parts_that_magnify(config_data: dict[str, Any]) -> None:
     hal = config_data
-    hal["components"]["turret"] = {"target": "builtins.object", "init": {"slots": {"0": "10x", "1": "20x"}}}
+    hal["devices"]["turret"] = {
+        "target": "builtins.object",
+        "init": {"slots": {"0": "10x", "1": "20x"}},
+    }
     del hal["parts"]["objective"], hal["optics"]["objective"]
-    hal["parts"]["10x"] = {"kind": "objective", "magnification": 10}
-    hal["parts"]["20x"] = {"kind": "objective", "magnification": 20}
+    hal["parts"]["10x"] = {"target": "vxl.parts.Objective", "magnification": 10}
+    hal["parts"]["20x"] = {"target": "vxl.parts.Objective", "magnification": 20}
     hal["optics"]["sample"]["to"] = "turret"
     hal["optics"]["turret"] = {"to": "fw"}
     assert "profile.channel.magnification" in codes(load(config_data))

@@ -9,12 +9,14 @@ by routing device calls through the shared transport.
 """
 
 import logging
+from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any, overload
 
 from pydantic import BaseModel
 from vxlib.lifecycle import Teardown
 
+from rigup.component import Part
 from rigup.device import (
     Adapter,
     CommandRequest,
@@ -170,7 +172,6 @@ class TransportNode(Node):
         self._log = logging.getLogger(f"rigup.node.{node_id}")
         self._adapters: dict[str, TransportAdapter] = {}
         self._handles: dict[str, DeviceHandle] = {}
-        self._parts: dict[str, ComponentInterface] = {}
         self._log_relay: Teardown | None = None
 
     def _start_log_relay(self) -> None:
@@ -193,17 +194,19 @@ class TransportNode(Node):
     def transport(self) -> TransportClient:
         return self._transport
 
-    async def build_devices(self, configs: DevicesConfig) -> DevicesBuildResult:
+    async def build_devices(
+        self, devices: DevicesConfig, parts: Mapping[str, Part] | None = None
+    ) -> DevicesBuildResult:
         response = await call(
             self._transport,
             Action.BUILD_DEVICES,
-            BuildDevicesRequest(devices=dict(configs)),
+            BuildDevicesRequest(devices=dict(devices), parts=dict(parts or {})),
             BuildDevicesResponse,
             timeout_s=120.0,
         )
 
         for uid, err in response.errors.items():
-            self._log.error("Remote build failed for %s: %s", uid, err.message)
+            self._log.error("Remote build failed for %s: %s", uid, err.msg)
 
         handles: dict[str, DeviceHandle] = {}
         for uid in response.built:
@@ -213,7 +216,6 @@ class TransportNode(Node):
             self._adapters[uid] = adapter
             self._handles[uid] = handle
             handles[uid] = handle
-        self._parts = dict(response.parts)
 
         return handles, response.errors
 
@@ -222,7 +224,6 @@ class TransportNode(Node):
             await call(self._transport, Action.CLOSE_DEVICE, CloseDeviceRequest(uid=uid), Empty)
         adapter = self._adapters.pop(uid, None)
         self._handles.pop(uid, None)
-        self._parts.pop(uid, None)
         if adapter is not None:
             await adapter.close()
 
@@ -233,12 +234,7 @@ class TransportNode(Node):
             await adapter.close()
         self._adapters.clear()
         self._handles.clear()
-        self._parts.clear()
 
     @property
     def devices(self) -> dict[str, DeviceHandle]:
         return dict(self._handles)
-
-    @property
-    def parts(self) -> dict[str, ComponentInterface]:
-        return dict(self._parts)

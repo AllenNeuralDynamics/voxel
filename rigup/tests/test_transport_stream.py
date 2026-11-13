@@ -16,7 +16,7 @@ from rigup.node._transport import TransportAdapter
 from rigup.protocol import Action, BuildDevicesRequest, BuildDevicesResponse, call
 from rigup.transport import TCPAddress, ZMQTransportClient, ZMQTransportServer
 
-from rigup import ComponentConfig
+from rigup import DeviceConfig
 
 pytestmark = pytest.mark.slow
 
@@ -47,7 +47,7 @@ async def remote_handle(free_tcp_address: TCPAddress) -> AsyncGenerator[DeviceHa
     await call(
         client,
         Action.BUILD_DEVICES,
-        BuildDevicesRequest(devices={"mock": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 1.0})}),
+        BuildDevicesRequest(devices={"mock": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0})}),
         BuildDevicesResponse,
         timeout_s=10.0,
     )

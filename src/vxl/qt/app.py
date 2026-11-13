@@ -2,7 +2,7 @@
 
 Two top-level windows, IDE-style:
 
-- :class:`LaunchWindow` — the home: owns the live :class:`vxl.core.station.Station` and template source,
+- :class:`LaunchWindow` — the home: owns the live :class:`vxl.station_legacy.station.Station` and template source,
   lists instruments, and holds one scoped Instrument lease for the control window's lifetime.
 - :class:`MainWindow` — the control workspace for one launched instrument (the app's main window):
   owns the instrument-scoped hardware stores + panels, built per launch and torn down on close.
@@ -30,10 +30,6 @@ from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 
 from vxl._utils.color import Color
 from vxl._utils.logging import configure_logging
-from vxl.core.feed import StationFeedConnection
-from vxl.core.models import SessionInfo, SessionView, StationFeedView
-from vxl.core.station import Station, StationConfig
-from vxl.core.templates import InstrumentTemplates
 from vxl.instrument import Instrument
 from vxl.instrument.store import InstrumentInspection
 from vxl.qt.devices import DevicesStore
@@ -56,6 +52,10 @@ from vxl.qt.ui.kit import (
     app_stylesheet,
     vbox,
 )
+from vxl.station_legacy.feed import StationFeedConnection
+from vxl.station_legacy.models import SessionInfo, SessionView, StationFeedView
+from vxl.station_legacy.station import Station, StationConfig
+from vxl.station_legacy.templates import InstrumentTemplates
 from vxl.system import load_voxel_env
 
 from .channels import ChannelsPanel

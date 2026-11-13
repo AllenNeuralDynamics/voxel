@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from rigup import BuildConfig
+from rigup import BuildConfig, Part
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.mapped import MappedDiscreteAxis, OwnedMappedDiscreteAxis
 from vxl.devices.axes.simulated import SimulatedContinuousAxis
@@ -119,7 +119,7 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
 
 
 def test_owned_mapped_axis_preserves_nested_build_failure() -> None:
-    with pytest.raises(RuntimeError, match=r"\(import\).*does_not_exist"):
+    with pytest.raises(RuntimeError, match=r"\(build\.import\).*does_not_exist"):
         OwnedMappedDiscreteAxis(
             uid="selector",
             axis=BuildConfig(target="does_not_exist.Axis"),
@@ -153,3 +153,16 @@ def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(mo
     with pytest.raises(RuntimeError, match="command rejected"):
         mapped.move_to_slot(0)
     assert mapped.state.target == 1
+
+
+def test_mapped_axis_takes_the_name_of_a_part_in_a_slot() -> None:
+    mirror = Part(uid="side_mirror", kind="mirror")
+
+    axis = MappedDiscreteAxis(
+        uid="side",
+        axis=make_axis(),
+        slots={0: {"label": "left", "position": 0}, 1: {"label": mirror, "position": 100}},
+        tolerance=1,
+    )
+
+    assert axis.labels == {0: "left", 1: "side_mirror"}

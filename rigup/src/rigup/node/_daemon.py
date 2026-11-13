@@ -17,8 +17,7 @@ import logging
 
 from pydantic import BaseModel
 
-from rigup.build import build_objects_async
-from rigup.component import Part
+from rigup.build import BuildObjectsResult, build_objects_async
 from rigup.device import (
     ComponentInterface,
     Device,
@@ -68,7 +67,6 @@ class NodeDaemon:
         self._log = logging.getLogger(f"rigup.daemon.{node_id}")
 
         self._controllers: dict[str, DeviceController] = {}
-        self._parts: dict[str, ComponentInterface] = {}
         self._authority_owner: str | None = None
         self._shutdown_event = asyncio.Event()
         self._log_handler: NodeLogHandler | None = None
@@ -156,32 +154,29 @@ class NodeDaemon:
 
     async def _handle_list_devices(self, _req: Empty) -> ListDevicesResponse:
         devices = {uid: ctrl.interface for uid, ctrl in self._controllers.items()}
-        return ListDevicesResponse(devices=devices, parts=dict(self._parts))
+        return ListDevicesResponse(devices=devices)
 
     # ==================== Device lifecycle ====================
 
     async def _handle_build(self, req: BuildDevicesRequest) -> BuildDevicesResponse:
         await self._close_all_controllers()
-        built, errors = await build_objects_async(req.devices, (Device, Part))
+        result: BuildObjectsResult[Device] = await build_objects_async(req.devices, Device, ready=req.parts)
+        built, errors = result
 
         built_interfaces: dict[str, ComponentInterface] = {}
-        for uid, component in built.items():
-            if isinstance(component, Part):
-                self._parts[uid] = ComponentInterface(uid=uid, kind=component.kind)
-                self._log.info("Built part %s (%s)", uid, component.__class__.__name__)
-                continue
-            controller = component.make_controller()
+        for uid, device in built.items():
+            controller = device.make_controller()
             controller.set_typed_publisher(self._make_typed_publisher(uid))
             controller.set_bytes_publisher(self._make_bytes_publisher(uid))
             controller.start_streaming()
             self._controllers[uid] = controller
             built_interfaces[uid] = controller.interface
-            self._log.info("Built device %s (%s)", uid, component.__class__.__name__)
+            self._log.info("Built device %s (%s)", uid, device.__class__.__name__)
 
         for uid, err in errors.items():
-            self._log.error("Failed to build %s: %s", uid, err.message)
+            self._log.error("Failed to build %s: %s", uid, err.msg)
 
-        return BuildDevicesResponse(built=built_interfaces, parts=dict(self._parts), errors=errors)
+        return BuildDevicesResponse(built=built_interfaces, errors=errors)
 
     def _make_typed_publisher(self, device_uid: str) -> PublishTypedFn:
         """Pack typed events into wire bytes and publish on ZMQ topic ``{uid}.{topic}``."""
@@ -201,7 +196,6 @@ class NodeDaemon:
 
     async def _handle_close_device(self, req: CloseDeviceRequest) -> Empty:
         controller = self._controllers.pop(req.uid, None)
-        self._parts.pop(req.uid, None)
         if controller is not None:
             await controller.close()
             self._log.info("Closed device %s", req.uid)
@@ -216,7 +210,6 @@ class NodeDaemon:
             await controller.close()
             self._log.debug("Closed device %s", uid)
         self._controllers.clear()
-        self._parts.clear()
 
     # ==================== Device RPC ====================
 

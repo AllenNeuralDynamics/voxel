@@ -29,9 +29,9 @@ class DeviceConfig(BuildConfig):
 
     autosave: Literal["*"] | list[str] = Field(default_factory=list)
 
-    def to_rig(self) -> rigup.config.ComponentConfig:
+    def to_rig(self) -> rigup.config.DeviceConfig:
         """The config that rigup builds this device from. It shares ``init`` with this config."""
-        return rigup.config.ComponentConfig.model_construct(target=self.target, init=self.init, defaults=self.defaults)
+        return rigup.config.DeviceConfig.model_construct(target=self.target, init=self.init, defaults=self.defaults)
 
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "*"}
@@ -105,8 +105,8 @@ class NodeConfig(BaseModel):
 
     def to_rig(self) -> rigup.config.NodeConfig:
         """The config that rigup builds this node from."""
-        components = {uid: config.to_rig() for uid, config in self.devices.items()}
-        return rigup.config.NodeConfig.model_construct(kind=self.kind, address=self.address, components=components)
+        devices = {uid: config.to_rig() for uid, config in self.devices.items()}
+        return rigup.config.NodeConfig.model_construct(kind=self.kind, address=self.address, devices=devices)
 
 
 class RigConfig(BaseModel, frozen=True):
@@ -137,9 +137,10 @@ class RigConfig(BaseModel, frozen=True):
 
     def to_rig(self) -> rigup.config.RigConfig:
         """The config that rigup builds from."""
-        components = {uid: config.to_rig() for uid, config in self.devices.items()}
-        nodes = {node_id: node.to_rig() for node_id, node in self.nodes.items()}
-        return rigup.config.RigConfig.model_construct(components=components, nodes=nodes)
+        return rigup.config.RigConfig.model_construct(
+            devices={uid: config.to_rig() for uid, config in self.devices.items()},
+            nodes={node_id: node.to_rig() for node_id, node in self.nodes.items()},
+        )
 
     @model_validator(mode="after")
     def _validate_device_graph(self) -> Self:

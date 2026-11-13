@@ -3,10 +3,10 @@ import asyncio
 import pytest
 from vxlib.history import HistoryState
 
-from vxl.core.instrument.metadata import ExperimentMetadata
 from vxl.instrument import CaptureActivity, IdleActivity, Instrument, InstrumentStore
 from vxl.instrument.config import InstrumentPreset, ProfilePatch
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError
+from vxl.metadata import ExperimentMetadata
 
 
 class _LabMetadata(ExperimentMetadata):

@@ -3,7 +3,7 @@ from collections.abc import Mapping
 
 from vxl.devices.daq.on_demand import OnDemandAO, OnDemandDO
 
-from .base import DiscreteAxis, DiscreteAxisState
+from .base import DiscreteAxis, DiscreteAxisState, SlotContent
 
 _DEFAULT_ACTIVE_VOLTAGE = 5.0
 _DEFAULT_INACTIVE_VOLTAGE = 0.0
@@ -38,7 +38,7 @@ class PulseDiscreteAxis(DiscreteAxis):
         uid: str,
         *,
         generator: OnDemandAO | OnDemandDO,
-        slots: Mapping[int | str, str | None],
+        slots: Mapping[int | str, SlotContent],
         slot_count: int | None = None,
         active: bool | float | None = None,
         inactive: bool | float | None = None,

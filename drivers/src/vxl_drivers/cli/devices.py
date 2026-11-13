@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from vxlib.problems import Problem
 
-from rigup import BuildError, Device, build_objects
+from rigup import Device, build_objects
 from vxl.devices.axes.continuous.base import ContinuousAxis
 from vxl.devices.axes.discrete.base import DiscreteAxis
 from vxl.devices.camera.base import Camera
@@ -34,7 +35,7 @@ class Session:
         self.configs = configs
         self.devices: dict[str, Device] = {}
 
-    def open(self, uid: str) -> tuple[list[str], dict[str, BuildError]]:
+    def open(self, uid: str) -> tuple[list[str], dict[str, Problem]]:
         """Build a device and its unopened dependencies; open dependencies are passed in as objects."""
         pending = {name: self._inject(config) for name, config in self._pending(uid).items()}
         built, errors = build_objects(pending, Device)

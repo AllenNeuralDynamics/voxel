@@ -20,7 +20,7 @@ def test_an_example_file_has_no_problems_and_a_full_chain(
     name: str, starters: tuple[str, ...], waits: dict[str, str]
 ) -> None:
     file = load_file(FILES / name)
-    assert file.violations() == []
+    assert file.problems() == []
 
     for profile in file.default.profiles.values():
         chain = file.config.trigger_chain(profile.channels, profile.timelines)

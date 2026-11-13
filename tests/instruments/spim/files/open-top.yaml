@@ -8,7 +8,14 @@ rig:
   model: open-top light sheet
   target: vxl.instruments.spim.Instrument
 
-  components:
+  parts:                                          # things with no driver: their facts, and their class when it is not rigup.Part
+    combiner:    {kind: combiner}
+    sheet_galvo: {kind: galvo}
+    objective:   {target: vxl.parts.Objective, magnification: 16.7}   # 6.5 µm ÷ 16.7 = 0.39 µm per pixel in the sample
+    BP525:       {target: vxl.parts.Filter, band: [500 nm, 550 nm]}
+    LP650:       {target: vxl.parts.Filter, band: [650 nm, null]}    # a long-pass filter: open at the top
+
+  devices:
     nidaq_1:
       target: vxl.devices.daq.hub_ni.NiDaqmx
       init: {device_name: Dev1, product: PCIe-6738}
@@ -51,13 +58,6 @@ rig:
     laser_488: [source_power_setpoint_mw]
     laser_638: [source_power_setpoint_mw]
 
-  parts:                                          # things with no driver. kind says what each one is. A filter gives its band, an objective its magnification
-    combiner:    {kind: combiner}
-    sheet_galvo: {kind: galvo}
-    objective:   {kind: objective, magnification: 16.7}   # 6.5 µm ÷ 16.7 = 0.39 µm per pixel in the sample
-    BP525:       {kind: filter, band: [500 nm, 550 nm]}
-    LP650:       {kind: filter, band: [650 nm, null]}    # a long-pass filter: open at the top
-
   stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
   # z_axis: this motor counts up as the sample goes up, but +z is deeper: its direction will be set on the device
 
@@ -72,7 +72,7 @@ rig:
 
   optics:                                         # where the light goes: light sources → sample → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
-    # Rule 2: what a part does to the light is in rig.parts, not here.
+    # Rule 2: what a part does to the light is in parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
     # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
 
@@ -142,6 +142,6 @@ default:
             galvo_sheet:    *galvo
       spacing: 0.5
 
-  output:
+  writer:
     max_level: 3
     compression: blosc.lz4

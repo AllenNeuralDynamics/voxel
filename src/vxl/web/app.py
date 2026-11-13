@@ -16,10 +16,10 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
 from vxl._utils.logging import configure_logging, get_uvicorn_log_config
-from vxl.core.station import Station, StationConfig
-from vxl.core.templates import InstrumentTemplates
 from vxl.hal import HALStartupError
 from vxl.instrument.errors import InstrumentBusyError, OperationRejectedError, SettingsPersistenceError, StartupError
+from vxl.station_legacy.station import Station, StationConfig
+from vxl.station_legacy.templates import InstrumentTemplates
 from vxl.system import System, load_voxel_env
 
 from .realtime import Realtime

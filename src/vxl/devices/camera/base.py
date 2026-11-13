@@ -26,7 +26,7 @@ from vxlib.vector import IVec2D, Vec2D
 
 from rigup import Device, DeviceController, describe, enumerated, numeric, numeric_int
 from vxl.devices.base import DeviceType
-from vxl.models import AreaROI, ROIGrid
+from vxl.devices.camera.roi import AreaROI, ROIGrid
 from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
 from vxl.system import System, remote_store_fingerprint
 

@@ -1,8 +1,10 @@
 """Tests for LocalNode + LocalAdapter — full in-process device path."""
 
 import pytest
-from rigup.config import ComponentConfig
+from rigup.config import DeviceConfig
 from rigup.node import LocalNode
+
+from tests._mock import MockHolder, MockPart
 
 MOCK_TARGET = "tests._mock.MockDevice"
 
@@ -13,10 +15,10 @@ def node() -> LocalNode:
 
 
 @pytest.fixture
-def device_configs() -> dict[str, ComponentConfig]:
+def device_configs() -> dict[str, DeviceConfig]:
     return {
-        "dev_a": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 1.0}),
-        "dev_b": ComponentConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
+        "dev_a": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 1.0}),
+        "dev_b": DeviceConfig(target=MOCK_TARGET, init={"initial_value": 2.0}),
     }
 
 
@@ -30,8 +32,8 @@ class TestLocalNodeBuild:
         await node.close()
 
     async def test_build_is_declarative(self, node: LocalNode):
-        configs_1 = {"dev_1": ComponentConfig(target=MOCK_TARGET, init={})}
-        configs_2 = {"dev_2": ComponentConfig(target=MOCK_TARGET, init={})}
+        configs_1 = {"dev_1": DeviceConfig(target=MOCK_TARGET, init={})}
+        configs_2 = {"dev_2": DeviceConfig(target=MOCK_TARGET, init={})}
 
         await node.build_devices(configs_1)
         assert "dev_1" in node.devices
@@ -42,28 +44,32 @@ class TestLocalNodeBuild:
         await node.close()
 
     async def test_build_with_bad_target(self, node: LocalNode):
-        configs = {"bad": ComponentConfig(target="nonexistent.Module", init={})}
+        configs = {"bad": DeviceConfig(target="nonexistent.Module", init={})}
         handles, errors = await node.build_devices(configs)
         assert not handles
         assert "bad" in errors
         await node.close()
 
-    async def test_a_part_is_built_and_gets_no_handle(self, node: LocalNode):
-        configs = {
-            "holder": ComponentConfig(target="tests._mock.MockHolder", init={"held": "glass"}),
-            "glass": ComponentConfig(target="tests._mock.MockPart", init={"value": 1.5}),
-        }
+    async def test_a_device_gets_the_part_itself(self, node: LocalNode):
+        glass = MockPart(uid="glass", value=1.5)
+        devices = {"holder": DeviceConfig(target="tests._mock.MockHolder", init={"held": "glass"})}
 
-        handles, errors = await node.build_devices(configs)
+        handles, errors = await node.build_devices(devices, {"glass": glass})
 
         assert not errors
         assert set(handles) == set(node.devices) == {"holder"}
-        assert set(node.parts) == {"glass"}
-        glass = node.parts["glass"]
-        assert (glass.uid, glass.kind, glass.commands, glass.properties) == ("glass", "mock_part", {}, {})
-
+        holder = node._controllers["holder"].device
+        assert isinstance(holder, MockHolder)
+        assert holder.held is glass
         await node.close()
-        assert not node.parts
+
+    async def test_a_part_in_devices_is_refused(self, node: LocalNode):
+        handles, errors = await node.build_devices({"glass": DeviceConfig(target="tests._mock.MockPart")})
+
+        assert not handles
+        assert errors["glass"].code == "build.import"
+        assert "not a subclass of Device" in errors["glass"].msg
+        await node.close()
 
 
 class TestLocalNodeDeviceOps:

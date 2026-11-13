@@ -11,10 +11,12 @@ Usage::
 
 import logging
 
-from rigup.build import BuildError
+from vxlib.problems import Problem
+
+from rigup.component import Part
 from rigup.config import NodeConfig, RigConfig
-from rigup.device import ComponentInterface, DeviceHandle
-from rigup.node import LocalNode, Node, RemoteNode, SubprocessNode
+from rigup.device import DeviceHandle
+from rigup.node import LOCAL, LocalNode, Node, RemoteNode, SubprocessNode
 
 
 class Rig:
@@ -30,7 +32,7 @@ class Rig:
         self._config = config
         self._log = logging.getLogger(f"rigup.rig.{name}")
         self._nodes: dict[str, Node] = {}
-        self._build_errors: dict[str, BuildError] = {}
+        self._build_errors: dict[str, Problem] = {}
 
     @property
     def name(self) -> str:
@@ -52,15 +54,13 @@ class Rig:
         return result
 
     @property
-    def parts(self) -> dict[str, ComponentInterface]:
-        """The interface of each built part, keyed by uid. A part has no handle."""
-        result: dict[str, ComponentInterface] = {}
-        for node in self._nodes.values():
-            result.update(node.parts)
-        return result
+    def parts(self) -> dict[str, Part]:
+        """The parts of the rig, keyed by uid. Each node gets them all when it builds its devices."""
+        return self._config.parts
 
     @property
-    def build_errors(self) -> dict[str, BuildError]:
+    def build_errors(self) -> dict[str, Problem]:
+        """The problem of each component that did not build, at its place in the rig file."""
         return self._build_errors
 
     async def open(self) -> None:
@@ -97,13 +97,12 @@ class Rig:
         self._log.info("Rig '%s' closed", self.name)
 
     def _create_nodes(self) -> None:
-        if self._config.components:
-            self._nodes["local"] = LocalNode()
-
+        if self._config.devices:
+            self._nodes[LOCAL] = LocalNode()
         for node_id, node_cfg in self._config.nodes.items():
-            self._nodes[node_id] = self._create_transport_node(node_id, node_cfg)
+            self._nodes[node_id] = self._create_node(node_id, node_cfg)
 
-    def _create_transport_node(self, node_id: str, config: NodeConfig) -> Node:
+    def _create_node(self, node_id: str, config: NodeConfig) -> Node:
         match config.kind:
             case "subprocess":
                 return SubprocessNode(node_id, config)
@@ -111,14 +110,14 @@ class Rig:
                 return RemoteNode(node_id, config)
 
     async def _build_all_devices(self) -> None:
-        if self._config.components:
-            local = self._nodes.get("local")
-            if local is not None:
-                _, errors = await local.build_devices(self._config.components)
-                self._build_errors.update(errors)
-
-        for node_id, node_cfg in self._config.nodes.items():
+        devices = {LOCAL: self._config.devices} | {node_id: cfg.devices for node_id, cfg in self._config.nodes.items()}
+        for node_id, node_devices in devices.items():
             node = self._nodes.get(node_id)
-            if node is not None and node_cfg.components:
-                _, errors = await node.build_devices(node_cfg.components)
-                self._build_errors.update(errors)
+            if node is not None and node_devices:
+                _, errors = await node.build_devices(node_devices, self._config.parts)
+                self._build_errors.update(
+                    {
+                        uid: found.model_copy(update={"loc": self._config.component_location(uid)})
+                        for uid, found in errors.items()
+                    }
+                )

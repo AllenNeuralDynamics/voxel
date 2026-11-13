@@ -6,13 +6,16 @@ from dataclasses import dataclass
 from itertools import pairwise, product
 from typing import Annotated, Any, Literal, Self
 
+from ome_zarr_writer import WriterSettings
 from pydantic import Field, PositiveFloat, field_validator, model_validator
 from rigup.device.schema import CommandRequest
+from vxlib.problems import Problem, Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier, repeated
 from vxlib.units import Portion
 from vxlib.vector import Vec2D, Vec3D
 
 from vxl.core.instrument.config import (
+    AxisPosition,
     DeviceUid,
     DigitalWire,
     InstrumentConfig,
@@ -22,10 +25,9 @@ from vxl.core.instrument.config import (
     Stage,
     Wire,
 )
-from vxl.core.instrument.errors import Violation, Violations
 from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
-from vxl.models import AreaROI, AxisPosition
+from vxl.devices.camera.roi import AreaROI
 
 ProfileId = Annotated[str, identifier("Profile id")]
 TaskId = Annotated[str, identifier("Task id")]
@@ -76,11 +78,11 @@ class SPIMConfig(InstrumentConfig, frozen=True):
 
     scan: Scan
 
-    def violations(self) -> Violations:
-        violations = super().violations()
-        violations += self._software_violations()
-        violations += self._scan_violations().under("scan")
-        return violations
+    def problems(self) -> Problems:
+        problems = super().problems()
+        problems += self._software_problems()
+        problems += self._scan_problems().under("scan")
+        return problems
 
     def trigger_chain(self, cameras: Collection[DeviceUid], generators: Collection[DeviceUid]) -> Chain:
         """What starts each device in 1 capture with ``cameras`` and ``generators``, worked out from ``scan`` and the
@@ -107,19 +109,19 @@ class SPIMConfig(InstrumentConfig, frozen=True):
                         pending.append(pin.device)
         return Chain(starters=starters, waits=waits, unstarted=tuple(sorted(waiting - reached)))
 
-    def _software_violations(self) -> Violations:
-        violations = Violations()
-        if SOFTWARE in self.component_uids:
+    def _software_problems(self) -> Problems:
+        problems = Problems()
+        if SOFTWARE in self.all_devices or SOFTWARE in self.parts:
             msg = "'software' names the program as the pacer of a scan, so no device takes it."
-            violations.add("rig.reserved_name", msg, "components", SOFTWARE)
-        return violations
+            problems.add("rig.reserved_name", msg, *self.component_location(SOFTWARE))
+        return problems
 
-    def _scan_violations(self) -> Violations:
-        violations = Violations()
+    def _scan_problems(self) -> Problems:
+        problems = Problems()
         pacer = self.scan.pacer
-        if pacer != SOFTWARE and pacer not in self.component_uids:
-            violations.append(Violation.not_configured("Device", pacer, code="rig.scan.pacer_missing", loc=("pacer",)))
-        return violations
+        if pacer != SOFTWARE and pacer not in self.all_devices:
+            problems.append(Problem.not_configured("Device", pacer, code="rig.scan.pacer_missing", loc=("pacer",)))
+        return problems
 
 
 PropertyName = Annotated[str, Field(min_length=1)]
@@ -148,34 +150,34 @@ class Profile(FrozenModel):
     desc: str = ""
     label: str | None = None
 
-    def violations(self, config: SPIMConfig) -> Violations:
+    def problems(self, config: SPIMConfig) -> Problems:
         """Return the problems of this profile against ``config``."""
-        violations = self._channel_violations(config)
-        if violations:  # the checks below read the light paths, so a wrong channel would repeat as their problems
-            violations += self._timeline_violations(config)
-            return violations
+        problems = self._channel_problems(config)
+        if problems:  # the checks below read the light paths, so a wrong channel would repeat as their problems
+            problems += self._timeline_problems(config)
+            return problems
         nodes = self.path_nodes(config)
 
-        positions = self._position_violations(config, nodes)
-        violations += positions
+        positions = self._position_problems(config, nodes)
+        problems += positions
         if not positions:
-            violations += self._dark_violations(config)
+            problems += self._dark_problems(config)
 
         for device in self.props:
-            if device in nodes and device in config.component_uids:
+            if device in nodes and device in config.all_devices:
                 continue
             if device not in nodes:
                 msg = f"'{device}' is not on the light paths of this profile's channels."
             else:
                 msg = f"'{device}' is a part, so it has no settings."
-            violations.add("profile.props_inactive", msg, "props", device)
+            problems.add("profile.props_inactive", msg, "props", device)
         for device in self.setup:
-            if device not in nodes or device not in config.component_uids:
+            if device not in nodes or device not in config.all_devices:
                 msg = f"'{device}' is not a device on the light paths of this profile's channels."
-                violations.add("profile.setup_inactive", msg, "setup", device)
-        violations += self._timeline_violations(config)
-        violations += self._chain_violations(config)
-        return violations
+                problems.add("profile.setup_inactive", msg, "setup", device)
+        problems += self._timeline_problems(config)
+        problems += self._chain_problems(config)
+        return problems
 
     def path_nodes(self, config: SPIMConfig) -> set[str]:
         """Every node on the light paths of the channels, on both sides of the sample, with each device at any
@@ -186,40 +188,40 @@ class Profile(FrozenModel):
                 nodes.update(path.nodes)
         return nodes
 
-    def _position_violations(self, config: SPIMConfig, nodes: set[str]) -> Violations:
+    def _position_problems(self, config: SPIMConfig, nodes: set[str]) -> Problems:
         """The problems of the positions: each names a device on the light paths."""
         elements = config.optics.elements()
-        violations = Violations()
+        problems = Problems()
         for device in self.positions:
-            if device not in nodes or device not in elements or device not in config.component_uids:
+            if device not in nodes or device not in elements or device not in config.all_devices:
                 msg = f"'{device}' is not a device on the light paths of this profile's channels."
-                violations.add("profile.position.unexpected", msg, "positions", device)
-        return violations
+                problems.add("profile.position.unexpected", msg, "positions", device)
+        return problems
 
-    def _channel_violations(self, config: SPIMConfig) -> Violations:
+    def _channel_problems(self, config: SPIMConfig) -> Problems:
         """The problems of the channels: each names a camera and a light source, and the light can go from the
         source to the sample and from the sample to the camera, with each device at any position."""
         cameras, sources = config.optics.detectors(), config.optics.sources()
-        violations = Violations()
+        problems = Problems()
         for camera, channel in self.channels.items():
             if camera not in cameras:
                 msg = f"'{camera}' is not a detector of 'optics': a detector gives 'width' and 'height'."
-                violations.add("profile.channel.not_detector", msg, "channels", camera)
+                problems.add("profile.channel.not_detector", msg, "channels", camera)
             elif channel.illumination not in sources:
                 msg = f"'{channel.illumination}' is not a light source: a node of 'optics' sends light to it."
-                violations.add("profile.channel.not_source", msg, "channels", camera, "illumination")
+                problems.add("profile.channel.not_source", msg, "channels", camera, "illumination")
             elif not config.illumination_paths(channel.illumination, {}):
                 msg = f"No light path goes from '{channel.illumination}' to the sample."
-                violations.add("profile.channel.no_path", msg, "channels", camera)
+                problems.add("profile.channel.no_path", msg, "channels", camera)
             elif not config.detection_paths(camera, {}):
                 msg = f"No light path goes from the sample to '{camera}'."
-                violations.add("profile.channel.no_path", msg, "channels", camera)
-        return violations
+                problems.add("profile.channel.no_path", msg, "channels", camera)
+        return problems
 
-    def _dark_violations(self, config: SPIMConfig) -> Violations:
+    def _dark_problems(self, config: SPIMConfig) -> Problems:
         """Each camera that gets no light with the positions of this profile. A device that this profile does not
         set can be at any position: the instrument can set it."""
-        violations = Violations()
+        problems = Problems()
         for camera, channel in self.channels.items():
             if not config.illumination_paths(channel.illumination, self.positions):
                 msg = f"No light of '{channel.illumination}' reaches the sample with {self._given()}."
@@ -227,32 +229,32 @@ class Profile(FrozenModel):
                 msg = f"No light goes from the sample to '{camera}' with {self._given()}."
             else:
                 continue
-            violations.add("profile.channel.dark", msg, "channels", camera)
-        return violations
+            problems.add("profile.channel.dark", msg, "channels", camera)
+        return problems
 
-    def _timeline_violations(self, config: SPIMConfig) -> Violations:
-        violations = Violations()
+    def _timeline_problems(self, config: SPIMConfig) -> Problems:
+        problems = Problems()
         for generator, timeline in self.timelines.items():
             if not (wires := config.wiring.outputs(generator)):
                 msg = f"'{generator}' sends no wires in 'wiring', so it has nothing to play."
-                violations.add("profile.timeline.no_wires", msg, "timelines", generator)
+                problems.add("profile.timeline.no_wires", msg, "timelines", generator)
                 continue
-            found = timeline.violations(wires)
+            found = timeline.problems(wires)
             if not found:  # the samples of a wrong timeline would repeat its problems
-                found = render(timeline, wires).violations
-            violations += found.under("timelines", generator)
-        return violations
+                found = render(timeline, wires).problems
+            problems += found.under("timelines", generator)
+        return problems
 
-    def _chain_violations(self, config: SPIMConfig) -> Violations:
+    def _chain_problems(self, config: SPIMConfig) -> Problems:
         """Each device of this profile that nothing starts, and each device that waits on a wire with no pulses. A
         stage axis or a camera makes the pulses of its own wires. The profile must play a signal on any other wire."""
-        violations = Violations()
-        if config.scan.pacer != SOFTWARE and config.scan.pacer not in config.component_uids:
-            return violations
+        problems = Problems()
+        if config.scan.pacer != SOFTWARE and config.scan.pacer not in config.all_devices:
+            return problems
         chain = config.trigger_chain(self.channels, self.timelines)
         for device in chain.unstarted:
             msg = f"Nothing starts '{device}': no wire in the chain from the pacer reaches it."
-            violations.add("profile.unstarted", msg)
+            problems.add("profile.unstarted", msg)
         own_pulses = {*config.stage.devices().values(), *config.optics.detectors()}
         for device, wire in chain.waits.items():
             if wire.sender in own_pulses:
@@ -260,8 +262,8 @@ class Profile(FrozenModel):
             timeline = self.timelines.get(wire.sender)
             if timeline is None or wire.name not in timeline.signals:
                 msg = f"'{device}' waits on {wire.sender}'s {wire.name}, and this profile plays no signal on it."
-                violations.add("profile.trigger_not_played", msg, "timelines", wire.sender)
-        return violations
+                problems.add("profile.trigger_not_played", msg, "timelines", wire.sender)
+        return problems
 
     def _given(self) -> str:
         """The positions that this profile sets, as words."""
@@ -416,24 +418,24 @@ class TaskDefaults(FrozenModel):
     path: TaskPath
     iteration: Iteration
 
-    def violations(self, scan: Scan) -> Violations:
+    def problems(self, scan: Scan) -> Problems:
         """Return each axis here that does not fit the axis that ``scan`` moves and those it tiles."""
         tiled = scan.tiled()
-        violations = Violations.assignments(
+        problems = Problems.assignments(
             expected=tiled, assigned=self.overlap, code="task.overlap", label="tiled-axis overlap"
         ).under("overlap")
-        violations += Violations.assignments(
+        problems += Problems.assignments(
             expected=[scan.axis], assigned=self.path.scan, code="task.path.scan", label="scan-axis path"
         ).under("path", "scan")
         tiles = self.path.tiles
         if isinstance(tiles, Grid):
             if sorted(tiles.axis_order) != sorted(tiled):
                 msg = f"The grid must list each tiled axis once: {tiled}."
-                violations.add("task.path.grid_axes", msg, "path", "tiles", "axes")
+                problems.add("task.path.grid_axes", msg, "path", "tiles", "axes")
             elif tiles.axes[-1][tiles.axis_order[-1]] == "alternate":
                 msg = f"'{tiles.axis_order[-1]}' is the slowest tiled axis, so it never repeats and cannot alternate."
-                violations.add("task.path.slowest_alternate", msg, "path", "tiles", "axes", len(tiles.axes) - 1)
-        return violations
+                problems.add("task.path.slowest_alternate", msg, "path", "tiles", "axes", len(tiles.axes) - 1)
+        return problems
 
 
 class Task(TaskDefaults):
@@ -449,15 +451,15 @@ class Task(TaskDefaults):
         filled = defaults.model_dump(mode="json") | dict(data)
         return cls.model_validate(filled)
 
-    def violations(self, scan: Scan) -> Violations:
-        violations = super().violations(scan)
+    def problems(self, scan: Scan) -> Problems:
+        problems = super().problems(scan)
         if isinstance(self.region.xy, ExplicitPoints) and scan.axis in ("x", "y"):
             msg = "Explicit points place captures in X and Y, so X and Y must both be tiled."
-            violations.add("task.region.explicit_points_untiled", msg, "region", "xy")
+            problems.add("task.region.explicit_points_untiled", msg, "region", "xy")
         if isinstance(self.path.tiles, AsGiven) and not isinstance(self.region.xy, ExplicitPoints):
             msg = "'as_given' keeps the order of explicit points, and this region has none."
-            violations.add("task.path.as_given_needs_points", msg, "path", "tiles")
-        return violations
+            problems.add("task.path.as_given_needs_points", msg, "path", "tiles")
+        return problems
 
 
 class StageFollowRule(FrozenModel):
@@ -497,6 +499,7 @@ class SPIMState(InstrumentState, frozen=True):
     run."""
 
     task: TaskDefaults
+    writer: WriterSettings = Field(default_factory=WriterSettings)
     positions: dict[DeviceUid, StageFollowRule | AxisPosition] = Field(default_factory=dict)
     profiles: dict[ProfileId, Profile] = Field(min_length=1)
     plan: Annotated[list[Task], NotDefault] = Field(default_factory=list)
@@ -508,54 +511,54 @@ class SPIMState(InstrumentState, frozen=True):
             raise ValueError(f"task ids must be unique (repeated: {duplicates})")
         return plan
 
-    def violations(self, config: InstrumentConfig) -> Violations:
+    def problems(self, config: InstrumentConfig) -> Problems:
         if not isinstance(config, SPIMConfig):
             raise TypeError(f"a SPIMState is for a SPIMConfig, not a {type(config).__name__}")
-        violations = self.task.violations(config.scan).under("task")
-        violations += self._position_violations(config).under("positions")
+        problems = self.task.problems(config.scan).under("task")
+        problems += self._position_problems(config).under("positions")
         for profile_id, profile in self.profiles.items():
-            violations += profile.violations(config).under("profiles", profile_id)
-        violations += self._level_violations(config).under("profiles")
-        violations += self._magnification_violations(config).under("profiles")
+            problems += profile.problems(config).under("profiles", profile_id)
+        problems += self._level_problems(config).under("profiles")
+        problems += self._magnification_problems(config).under("profiles")
         for index, task in enumerate(self.plan):
-            found = task.violations(config.scan)
+            found = task.problems(config.scan)
             for profile_index, profile_id in enumerate(task.profiles):
                 if profile_id not in self.profiles:
                     loc = ("profiles", profile_index)
-                    found.append(Violation.not_configured("Profile", profile_id, code="task.profile_missing", loc=loc))
-            violations += found.under("plan", index)
-        return violations
+                    found.append(Problem.not_configured("Profile", profile_id, code="task.profile_missing", loc=loc))
+            problems += found.under("plan", index)
+        return problems
 
-    def _position_violations(self, config: SPIMConfig) -> Violations:
+    def _position_problems(self, config: SPIMConfig) -> Problems:
         """The problems of the instrument's own positions: each names a device of the optical graph, and a device
         does not follow the axis that a capture moves."""
         elements = config.optics.elements()
-        violations = Violations()
+        problems = Problems()
         for device, position in self.positions.items():
-            if device not in elements or device not in config.component_uids:
-                violations.add("positions.unexpected", f"'{device}' is not a device of 'optics'.", device)
+            if device not in elements or device not in config.all_devices:
+                problems.add("positions.unexpected", f"'{device}' is not a device of 'optics'.", device)
             elif isinstance(position, StageFollowRule) and position.axis == config.scan.axis:
                 msg = f"A capture moves '{position.axis}', so '{device}' cannot follow it; follow a tiled axis."
-                violations.add("positions.follows_scan_axis", msg, device, "axis")
-        return violations
+                problems.add("positions.follows_scan_axis", msg, device, "axis")
+        return problems
 
-    def _level_violations(self, config: SPIMConfig) -> Violations:
+    def _level_problems(self, config: SPIMConfig) -> Problems:
         """The problems between the instrument's positions and those of the profiles. A device gets its position
         from 1 level only. A device that sends the light a different way at each position, on a profile's light
         paths, gets a position. A device that 1 profile sets, each profile with it on its light paths sets."""
         elements = config.optics.elements()
         in_a_profile = {device for profile in self.profiles.values() for device in profile.positions}
-        violations = Violations()
+        problems = Problems()
         for profile_id, profile in self.profiles.items():
             nodes = profile.path_nodes(config)
             for device in profile.positions:
                 if device in self.positions:
                     msg = f"'{device}' is set in the instrument's positions and in this profile. Set it in 1 place."
-                    violations.add("profile.position.two_levels", msg, profile_id, "positions", device)
+                    problems.add("profile.position.two_levels", msg, profile_id, "positions", device)
             for device in sorted(nodes):
                 if device in self.positions or device in profile.positions or device not in elements:
                     continue
-                if device in config.component_uids and isinstance(elements[device].to, dict):
+                if device in config.all_devices and isinstance(elements[device].to, dict):
                     msg = (
                         f"'{device}' is on the light paths of this profile, and no position is given. Give it here, "
                         "or in the instrument's positions."
@@ -566,15 +569,15 @@ class SPIMState(InstrumentState, frozen=True):
                     code = "profile.position.not_in_all_profiles"
                 else:
                     continue
-                violations.add(code, msg, profile_id, "positions", device)
-        return violations
+                problems.add(code, msg, profile_id, "positions", device)
+        return problems
 
-    def _magnification_violations(self, config: SPIMConfig) -> Violations:
+    def _magnification_problems(self, config: SPIMConfig) -> Problems:
         """Each camera of a profile gets 1 magnification from the parts between the sample and the camera. A device
         that follows the stage is checked at each position of its rule."""
-        violations = Violations()
+        problems = Problems()
         for profile_id, profile in self.profiles.items():
-            problems: dict[DeviceUid, str] = {}
+            messages: dict[DeviceUid, str] = {}
             for held in self._held_positions():
                 for camera in profile.channels:
                     paths = config.detection_paths(camera, {**held, **profile.positions})
@@ -585,10 +588,10 @@ class SPIMState(InstrumentState, frozen=True):
                         msg = f"The light paths to '{camera}' give more than 1 magnification: {given}."
                     else:
                         continue
-                    problems.setdefault(camera, msg)
-            for camera, msg in problems.items():
-                violations.add("profile.channel.magnification", msg, profile_id, "channels", camera)
-        return violations
+                    messages.setdefault(camera, msg)
+            for camera, msg in messages.items():
+                problems.add("profile.channel.magnification", msg, profile_id, "channels", camera)
+        return problems
 
     def _held_positions(self) -> list[dict[DeviceUid, AxisPosition]]:
         """Each set of positions that the instrument can give its devices. A device that follows the stage takes
