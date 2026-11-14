@@ -4,7 +4,7 @@ from math import isfinite
 from random import gauss
 from time import monotonic, sleep
 
-from rigup import numeric
+from rigup.device import number
 
 from .base import Laser
 from .source import ModulationMode
@@ -76,7 +76,7 @@ class SimulatedLaser(Laser):
     def is_source_enabled(self) -> bool:
         return self._source_enabled
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw)
     def source_power_setpoint_mw(self) -> float:
         return self._power_setpoint_mw
 
@@ -121,7 +121,7 @@ class SimulatedLaser(Laser):
     def is_output_enabled(self) -> bool:
         return self._output_enabled
 
-    @numeric(minimum=0.0, maximum=100.0)
+    @number(minimum=0.0, maximum=100.0)
     def output_level_percent(self) -> float:
         return self._output_level_percent
 
@@ -137,7 +137,7 @@ class SimulatedLaser(Laser):
             return 0.0
         return self.source_power_mw * self._output_level_percent / 100.0
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Clear both permissions and prevent subsequent configuration or enabling."""
         self.source_disable()
         self._closed = True

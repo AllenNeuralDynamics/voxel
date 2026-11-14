@@ -97,7 +97,7 @@ def collect(
         mpds.validate_frequency(frequency)
     for power in powers:
         mpds.validate_power(power)
-    if ModulationMode.SOFTWARE not in source.modulation_mode.options:
+    if ModulationMode.SOFTWARE not in (source.modulation_mode.options or ()):
         raise ValueError("calibration requires a software-controlled source")
     writer = csv.writer(output)
     writer.writerow(("phase", "frequency_mhz", "rf_power_dbm", "sample", "power_mw"))

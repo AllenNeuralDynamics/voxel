@@ -3,10 +3,9 @@
 import threading
 from collections.abc import Iterator
 
+from rigup.device import Device
 from vxl_drivers.axes.mmc._cmds import Cmd, format_number
 from vxl_drivers.serial import SerialTransport
-
-from rigup import Device
 
 DEFAULT_BAUD = 38400
 DEFAULT_TIMEOUT_S = 1.0
@@ -112,7 +111,7 @@ class MMCHub(Device, kind="generic"):
         with self._reservation_lock:
             self._reserved.discard(axis_id)
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         self._transport.close()
 
     @staticmethod

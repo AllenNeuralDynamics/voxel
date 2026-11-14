@@ -170,8 +170,8 @@ def main() -> None:  # noqa: C901, PLR0915 - keep hardware exercise and recovery
             except Exception:
                 log.exception("Failed to issue CER during cleanup")
         if axis is not None:
-            axis.close()
-        hub.close()
+            axis.dispose()
+        hub.dispose()
 
 
 if __name__ == "__main__":

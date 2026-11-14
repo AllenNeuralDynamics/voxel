@@ -4,9 +4,9 @@ from abc import abstractmethod
 from collections.abc import Mapping
 
 import numpy as np
+from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, failsafe, prop
 from vxlib.quantity import VoltageRange
 
-from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.devices.base import DeviceType
 from vxl.devices.daq.clocked.waveform import BaseWaveform
 
@@ -16,7 +16,7 @@ from vxl.devices.daq.clocked.waveform import BaseWaveform
 _DEFAULT_UPDATE_HZ = 100.0
 
 
-class OnDemandAOController(DeviceController["OnDemandAO"]):
+class OnDemandAOController(DeviceController["OnDemandAO"], streaming={"fast": 0.1}):
     """Thin async orchestration for an ``OnDemandAO`` driver.
 
     On-demand output has no running state to track (no clock, no cycle), so unlike
@@ -24,27 +24,27 @@ class OnDemandAOController(DeviceController["OnDemandAO"]):
     dispatches straight to the driver on the thread pool.
     """
 
-    def __init__(self, device: "OnDemandAO", stream_interval: float = 0.1) -> None:
-        super().__init__(device, stream_interval=stream_interval)
+    def __init__(self, device: "OnDemandAO", *, streaming: Mapping[StreamTier, float] | None = None) -> None:
+        super().__init__(device, streaming=streaming)
         self._log = logging.getLogger(f"{device.uid}.OnDemandAOController")
 
-    @describe(label="Set Voltage", desc="Drive a port to a static voltage; it holds until changed")
+    @action(desc="Drive a port to a static voltage; it holds until changed")
     async def set_voltage(self, port: str, volts: float) -> None:
-        await self._run_sync(self.device.set_voltage, port, volts)
+        await self._run(self.device.set_voltage, port, volts)
 
-    @describe(label="Pulse", desc="Drive a port to a voltage for a duration, then to rest")
+    @action(desc="Drive a port to a voltage for a duration, then to rest")
     async def pulse(self, port: str, volts: float, duration_s: float, rest_volts: float = 0.0) -> None:
-        await self._run_sync(self.device.pulse, port, volts, duration_s, rest_volts)
+        await self._run(self.device.pulse, port, volts, duration_s, rest_volts)
 
-    @describe(label="Play Waveform", desc="Play a shaped waveform software-paced (coarse; no clock)")
+    @action(label="Play Waveform", desc="Play a shaped waveform software-paced (coarse; no clock)")
     async def play(
         self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ
     ) -> None:
-        await self._run_sync(self.device.play, port, waveform, duration_s, update_hz)
+        await self._run(self.device.play, port, waveform, duration_s, update_hz)
 
-    @describe(label="Reset", desc="Release all outputs to a safe state")
+    @failsafe(desc="Release all outputs to a safe state")
     async def reset(self) -> None:
-        await self._run_sync(self.device.reset)
+        await self._run(self.device.reset)
 
 
 class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController):
@@ -60,13 +60,13 @@ class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController
         self._ports: dict[str, str] = dict(ports)
 
     @property
-    @describe(label="Ports", desc="Logical name -> physical AO pin")
+    @prop(desc="Logical name -> physical AO pin")
     def ports(self) -> dict[str, str]:
         return dict(self._ports)
 
     @property
+    @prop(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     @abstractmethod
-    @describe(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     def voltage_range(self) -> VoltageRange: ...
 
     # ---- validation helpers (protect the direct-call path, not just the controller) ----
@@ -101,7 +101,7 @@ class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController
     def reset(self) -> None:
         """Release all pins and hardware handles, returning outputs to a safe state."""
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Framework shutdown hook (``DeviceController.close`` → ``Device.close``).
 
         Delegates to ``reset`` so an orderly rig shutdown releases the AO task and its
@@ -174,15 +174,15 @@ class OnDemandAOHandle(DeviceHandle["OnDemandAO"]):
 class OnDemandDOController(DeviceController["OnDemandDO"]):
     """Thin async orchestration for software-timed digital output."""
 
-    @describe(label="Set State", desc="Set one digital output line high or low")
+    @action(desc="Set one digital output line high or low")
     async def set_state(self, line: str, state: bool) -> None:
-        await self._run_sync(self.device.set_state, line, state)
+        await self._run(self.device.set_state, line, state)
 
-    @describe(label="Set States", desc="Set one or more digital output lines")
+    @action(desc="Set one or more digital output lines")
     async def set_states(self, states: Mapping[str, bool]) -> None:
-        await self._run_sync(self.device.set_states, states)
+        await self._run(self.device.set_states, states)
 
-    @describe(label="Pulse", desc="Drive a digital line briefly, then return it to rest")
+    @action(desc="Drive a digital line briefly, then return it to rest")
     async def pulse(
         self,
         line: str,
@@ -190,11 +190,11 @@ class OnDemandDOController(DeviceController["OnDemandDO"]):
         active: bool = True,
         rest: bool = False,
     ) -> None:
-        await self._run_sync(self.device.pulse, line, duration_s, active=active, rest=rest)
+        await self._run(self.device.pulse, line, duration_s, active=active, rest=rest)
 
-    @describe(label="Reset", desc="Release all digital outputs")
+    @failsafe(desc="Release all digital outputs")
     async def reset(self) -> None:
-        await self._run_sync(self.device.reset)
+        await self._run(self.device.reset)
 
 
 class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController):
@@ -211,7 +211,7 @@ class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController
         self._lines: dict[str, str] = dict(lines)
 
     @property
-    @describe(label="Lines", desc="Logical name -> physical digital output line")
+    @prop(desc="Logical name -> physical digital output line")
     def lines(self) -> dict[str, str]:
         return dict(self._lines)
 
@@ -230,7 +230,7 @@ class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController
     def reset(self) -> None:
         """Release the output task and its physical lines."""
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Framework shutdown hook."""
         self.reset()
 

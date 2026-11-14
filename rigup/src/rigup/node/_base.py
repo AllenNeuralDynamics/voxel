@@ -1,31 +1,19 @@
-"""Node ABC — the client-side abstraction the Rig holds for a group of devices.
-
-Three concrete implementations:
-
-- :class:`LocalNode` — in-process devices, no transport.
-- :class:`SubprocessNode` — orchestrator-spawned process, ZMQ transport (future).
-- :class:`RemoteNode` — externally supervised process, ZMQ transport (future).
-"""
-
+import logging
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 
 from vxlib.problems import Problem
 
 from rigup.component import Part
 from rigup.config import DeviceConfig
-from rigup.device import DeviceHandle
+from rigup.device.handle import DeviceHandle
 
 type DevicesBuildResult = tuple[Mapping[str, DeviceHandle], Mapping[str, Problem]]
 type DevicesConfig = Mapping[str, DeviceConfig]
 
 
 class Node(ABC):
-    """A group of devices that can be built, used, and closed as a unit.
-
-    The Rig holds ``Node`` instances and iterates them uniformly regardless of
-    whether the devices are in-process, in a subprocess, or on a remote host.
-    """
+    """A group of devices that are built, used and closed as a unit, wherever they run."""
 
     @property
     @abstractmethod
@@ -33,27 +21,25 @@ class Node(ABC):
 
     @abstractmethod
     async def open(self) -> None:
-        """Initialize the node (connect, spawn, or no-op for local)."""
+        """Make the node ready to build devices."""
 
     @abstractmethod
     async def close(self) -> None:
-        """Tear down all devices and release resources (disconnect, terminate, or cleanup)."""
+        """Close every device and release the node's resources."""
 
     @abstractmethod
     async def build_devices(
         self, devices: DevicesConfig, parts: Mapping[str, Part] | None = None
     ) -> DevicesBuildResult:
-        """Instantiate the devices of this node. ``parts`` are the parts of the rig: a device whose ``init`` names
-        1 of them gets it.
+        """Build the devices of this node, replacing any built before.
 
-        Returns a tuple of ``(successful_handles, build_errors)`` — same
-        accumulation pattern as :func:`rigup.build.build_objects_async`.
-        Callers decide whether partial success is acceptable.
+        A device whose ``init`` names one of ``parts`` gets that part. A device that fails to build is
+        reported in the returned problems; the caller decides whether partial success is acceptable.
         """
 
     @abstractmethod
     async def close_device(self, uid: str) -> None:
-        """Close and remove a single device by uid. No-op if not found."""
+        """Close and remove one device; do nothing if ``uid`` is unknown."""
 
     @abstractmethod
     async def close_all_devices(self) -> None:
@@ -62,4 +48,18 @@ class Node(ABC):
     @property
     @abstractmethod
     def devices(self) -> dict[str, DeviceHandle]:
-        """Currently-built device handles, keyed by uid."""
+        """Return the built device handles by uid."""
+
+
+async def close_each(uids: Iterable[str], close: Callable[[str], Awaitable[None]], log: logging.Logger) -> None:
+    """Close every device in ``uids`` in reverse, so a device closes before those it was given, even when one fails;
+    then raise the first failure."""
+    errors: list[Exception] = []
+    for uid in reversed(list(uids)):
+        try:
+            await close(uid)
+        except Exception as e:
+            log.exception("Closing device %s failed", uid)
+            errors.append(e)
+    if errors:
+        raise errors[0]

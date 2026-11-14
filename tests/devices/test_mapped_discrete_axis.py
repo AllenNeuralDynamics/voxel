@@ -101,18 +101,18 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
         tolerance=0.5,
     )
     close_calls = 0
-    original_close = mapped._owned_axis.close
+    original_close = mapped._owned_axis.dispose
 
     def track_close() -> None:
         nonlocal close_calls
         close_calls += 1
         original_close()
 
-    monkeypatch.setattr(mapped._owned_axis, "close", track_close)
+    monkeypatch.setattr(mapped._owned_axis, "dispose", track_close)
 
     mapped.move_to("right", wait=True)
-    mapped.close()
-    mapped.close()
+    mapped.dispose()
+    mapped.dispose()
 
     assert mapped.state == DiscreteAxisState(position=1, target=1, is_moving=False)
     assert close_calls == 1

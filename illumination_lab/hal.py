@@ -7,12 +7,13 @@ from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
+from rigup.device import DeviceHandle, DeviceInterface
+from rigup.device.handle import DeviceProps
 from rigup.rig import Rig
 from vxlib.asyncio import gather_all
 from vxlib.problems import Problems
 from vxlib.reactivity import Cell, Readable
 
-from rigup import ComponentInterface, DeviceHandle, DeviceProps
 from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.config import (
     DeviceUid,
@@ -64,7 +65,7 @@ class HAL:
         self._config = config
         self._rig = Rig(config, config.name)
         self.devices: dict[DeviceUid, DeviceHandle[Any]] = {}
-        self.interfaces: dict[DeviceUid, ComponentInterface] = {}
+        self.interfaces: dict[DeviceUid, DeviceInterface] = {}
         self.stage: dict[SpecimenAxis, LinearAxisHandle] = {}
         self.cameras: dict[DeviceUid, CameraHandle] = {}
         self.lasers: dict[DeviceUid, DeviceHandle[Any]] = {}

@@ -225,7 +225,7 @@ class NiSignalGenerator(SignalGenerator):
         data = np.vstack(ordered) if len(ordered) > 1 else ordered[0]
         self._ao_task.write(data)
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         self.teardown()
 
     def teardown(self) -> None:

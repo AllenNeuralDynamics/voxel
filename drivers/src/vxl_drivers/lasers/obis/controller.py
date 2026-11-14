@@ -2,7 +2,8 @@
 
 import threading
 
-from rigup import Device, describe
+from rigup.device import Device, prop
+
 from vxl_drivers.lasers.obis.link import ObisError, ObisLink
 
 _ABSENT = ("ERR-100", "ERR-241")
@@ -43,13 +44,13 @@ class ObisController(Device, kind="laser_controller"):
         return self._link
 
     @property
-    @describe(label="Installed Sources")
+    @prop(label="Installed Sources")
     def installed_sources(self) -> dict[int, str]:
         """Channel-to-identity mapping discovered at connection time."""
         return dict(self._lasers)
 
     @property
-    @describe(label="Reserved Sources")
+    @prop(label="Reserved Sources")
     def reserved_sources(self) -> list[int]:
         with self._lock:
             return list(self._owners)
@@ -75,7 +76,7 @@ class ObisController(Device, kind="laser_controller"):
         """Whether controller shutdown confirmed this channel's emission off."""
         return self._link.is_closed and channel in self._confirmed_off
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Try to stop every reserved channel, close the port, and report all failures."""
         with self._lock:
             if self._link.is_closed:

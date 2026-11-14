@@ -3,6 +3,7 @@ import logging
 import shutil
 import time
 from abc import abstractmethod
+from collections.abc import Mapping
 from contextlib import suppress
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
@@ -19,12 +20,12 @@ from ome_zarr_writer import (
 )
 from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
+from rigup.device import Device, DeviceController, StreamTier, action, choice, failsafe, integer, number, prop, query
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
 from vxlib.vector import IVec2D, Vec2D
 
-from rigup import Device, DeviceController, describe, enumerated, numeric, numeric_int
 from vxl.devices.base import DeviceType
 from vxl.devices.camera.roi import AreaROI, ROIGrid
 from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
@@ -104,9 +105,15 @@ class CameraMode(StrEnum):
     ACQUISITION = "ACQUISITION"
 
 
-class CameraController(DeviceController["Camera"]):
-    def __init__(self, device: "Camera", stream_interval: float = 0.5, *, system: System | None = None):
-        super().__init__(device, stream_interval=stream_interval)
+class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
+    def __init__(
+        self,
+        device: "Camera",
+        *,
+        streaming: Mapping[StreamTier, float] | None = None,
+        system: System | None = None,
+    ):
+        super().__init__(device, streaming=streaming)
         self._system = system if system is not None else System()
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
@@ -126,24 +133,24 @@ class CameraController(DeviceController["Camera"]):
             task.cancel()
         self._publish_tasks.clear()
         if self._writer is not None:  # free the reusable ring (its slots' workers + shared memory)
-            await self._run_sync(self._writer.close)
+            await self._run(self._writer.close)
             self._writer = None
         System.Ram.release(self.device.uid)
         await super().close()
 
     @property
-    @describe(label="RAM Budget", units="bytes", stream=True)
+    @prop(label="RAM Budget", units="bytes", stream="slow")
     def ram_budget_bytes(self) -> int:
         """Current RAM share for this camera from the host RAM budget."""
         return System.Ram.reserved(self.device.uid)
 
     @property
-    @describe(label="Camera Mode", stream=True)
+    @prop(label="Camera Mode", stream="slow")
     def mode(self) -> CameraMode:
         return self._mode
 
     @property
-    @describe(label="Writer Metrics", stream=True)
+    @prop(stream="fast")
     def writer_metrics(self) -> list[BatchMetrics]:
         return self._writer.batches if self._writer else []
 
@@ -160,7 +167,7 @@ class CameraController(DeviceController["Camera"]):
         with suppress(RuntimeError):
             await self.publish(topic, frame.pack())
 
-    @describe(label="Update Preview Viewport")
+    @action()
     async def update_preview_viewport(self, viewport: PreviewViewport):
         task = self._previewer.set_viewport(
             viewport,
@@ -168,12 +175,12 @@ class CameraController(DeviceController["Camera"]):
         )
         await task if task is not None else None
 
-    @describe(label="Reset Preview Stream")
+    @action()
     async def reset_preview_stream(self) -> str:
         """Discard pending preview work and return the new source-stream identity."""
         return self._previewer.reset_stream()
 
-    @describe(label="Start Preview")
+    @action()
     async def start_preview(
         self,
         trigger_mode: TriggerMode = TriggerMode.ON,
@@ -184,7 +191,7 @@ class CameraController(DeviceController["Camera"]):
             raise RuntimeError(f"Cannot start preview: camera in {self._mode} mode")
 
         # start() lazily allocates the buffer, configures the trigger, and begins (frame_count=None → infinite).
-        await self._run_sync(
+        await self._run(
             lambda: self.device.start(frame_count=None, trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
         )
 
@@ -195,17 +202,16 @@ class CameraController(DeviceController["Camera"]):
 
         return "preview"
 
+    def _valid_bits(self) -> ValidBits:
+        return PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))]
+
     async def _preview_loop(self):
         try:
             while self._mode == CameraMode.PREVIEW:
-                frame = await self._run_sync(self.device.grab_frame_owned)
+                frame, valid_bits = await self._run(lambda: (self.device.grab_frame_owned(), self._valid_bits()))
                 if self._mode != CameraMode.PREVIEW:
                     break
-                self._previewer.submit_frame(
-                    frame,
-                    idx=self._frame_idx,
-                    valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))],
-                )
+                self._previewer.submit_frame(frame, idx=self._frame_idx, valid_bits=valid_bits)
                 self._frame_idx += 1
         except asyncio.CancelledError:
             pass
@@ -213,7 +219,7 @@ class CameraController(DeviceController["Camera"]):
             self.log.exception("Preview loop error")
             self._mode = CameraMode.IDLE
 
-    @describe(label="Stop Preview")
+    @failsafe()
     async def stop_preview(self):
         if self._mode != CameraMode.PREVIEW:
             return
@@ -223,10 +229,10 @@ class CameraController(DeviceController["Camera"]):
             await self._preview_task
             self._preview_task = None
         self._previewer.cancel_pending()
-        await self._run_sync(self.device.stop)
-        await self._run_sync(self.device.free_buffer)
+        await self._run(self.device.stop)
+        await self._run(self.device.free_buffer)
 
-    @describe(label="Check Writable")
+    @query()
     async def check_writable(self, storage: StorageSpec) -> StorageStatus:
         """Resolve ``storage`` on this node and prove write access with a round-trip marker write.
 
@@ -244,14 +250,14 @@ class CameraController(DeviceController["Camera"]):
             free = shutil.disk_usage(root).free if isinstance(root, Path) else -1
             return StorageStatus(host=self._system.hostname(), root=str(root), free_bytes=free)
 
-        return await self._run_sync(_check)
+        return await self._run(_check)
 
-    @describe(label="Remote Stores")
+    @query()
     def remote_stores(self) -> dict[str, str]:
         """Return configured object-store names and non-secret connection fingerprints for this camera's host."""
         return {name: remote_store_fingerprint(remote.connection) for name, remote in self._system.remotes.items()}
 
-    @describe(label="Open Stack")
+    @action()
     async def open_stack(
         self,
         *,
@@ -283,7 +289,7 @@ class CameraController(DeviceController["Camera"]):
 
         # Allocate buffers eagerly (after ROI is set), so every batch's start() is fast.
         _t = time.perf_counter()
-        await self._run_sync(self.device.allocate_buffer)
+        await self._run(self.device.allocate_buffer)
         log.info("allocate_buffer for %s took %.1fs", self.device.uid, time.perf_counter() - _t)
 
         # Resolve the logical StorageSpec to a concrete omezarr Storage, then build the writer config:
@@ -291,13 +297,18 @@ class CameraController(DeviceController["Camera"]):
         # z_step + magnification) + dtype from the device's pixel format. Where/how to write lives on
         # the Storage; the config is purely the dataset spec.
         dest = self._system.resolve_storage(storage, subpath)
-        frame = self.device.frame_size_px
-        eff_px = self.device.effective_pixel_size_um(magnification)
+        frame, eff_px, dtype = await self._run(
+            lambda: (
+                self.device.frame_size_px,
+                self.device.effective_pixel_size_um(magnification),
+                self.device.pixel_type,
+            )
+        )
         cfg = WriterConfig(
             **settings.model_dump(),
             volume_shape=UIVec3D(z=num_frames, y=frame.y, x=frame.x),
             voxel_size=UVec3D(z=z_step, y=eff_px.y, x=eff_px.x),
-            dtype=self.device.pixel_type,
+            dtype=dtype,
         )
 
         # The coordinator persists across volumes so its ring is reused. Ring sizing happens inside
@@ -351,7 +362,7 @@ class CameraController(DeviceController["Camera"]):
         )
         return slots
 
-    @describe(label="Close Stack")
+    @action()
     async def close_stack(self) -> None:
         """Drain and close the writer in the background, then disarm the camera. Returns immediately;
         poll :meth:`capture_state` until ``CLOSED``. Draining/uploading can take a while, so it runs
@@ -371,9 +382,9 @@ class CameraController(DeviceController["Camera"]):
         self._previewer.cancel_pending()
         try:
             if self._writer is not None:
-                await self._run_sync(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
+                await self._run(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
         finally:
-            await self._run_sync(self.device.free_buffer)
+            await self._run(self.device.free_buffer)
             self._mode = CameraMode.IDLE
         log.info("Stack closed for %s", self.device.uid)
         # Preview health for the stack: how many frames got an overview vs were dropped (best-effort),
@@ -392,7 +403,7 @@ class CameraController(DeviceController["Camera"]):
             pv.publish_busy_drops,
         )
 
-    @describe(label="Release Writer")
+    @action()
     async def release_writer(self) -> None:
         """Free the reusable writer ring (its worker processes + shared memory) while keeping the
         controller alive for preview / the next acquisition, which re-allocates the ring cold.
@@ -406,12 +417,12 @@ class CameraController(DeviceController["Camera"]):
         if self._writer is not None:
             self._previewer.cancel_pending()
             self._previewer.clear_frame()
-            await self._run_sync(self._writer.close)
+            await self._run(self._writer.close)
             self._writer = None
             log.info("Writer ring released for %s", self.device.uid)
 
     @property
-    @describe(label="Ready For Batch", stream=True)
+    @prop(stream="fast")
     def ready_for_batch(self) -> bool:
         """Whether the writer has at least one free slot to accept the next batch.
 
@@ -420,7 +431,7 @@ class CameraController(DeviceController["Camera"]):
         """
         return self._writer is None or self._writer.ready_for_batch
 
-    @describe(label="Begin Batch")
+    @action()
     async def begin_batch(
         self,
         num_frames: int,
@@ -444,7 +455,7 @@ class CameraController(DeviceController["Camera"]):
             if writer.ready_for_batch:
                 break
             await asyncio.sleep(0.005)
-        await self._run_sync(
+        await self._run(
             lambda: self.device.start(
                 frame_count=num_frames, trigger_mode=trigger_mode, trigger_polarity=trigger_polarity
             )
@@ -454,19 +465,20 @@ class CameraController(DeviceController["Camera"]):
 
     async def _collect_batch(self, num_frames: int, writer: OMEZarrWriter) -> None:
         """Grab ``num_frames`` frames into the writer, then stop the camera."""
+        valid_bits = await self._run(self._valid_bits)
         for _ in range(num_frames):
             frame = await self._capture_into_writer(writer)
             try:
                 self._previewer.submit_frame(
                     frame,
                     self._frame_idx,
-                    valid_bits=PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))],
+                    valid_bits=valid_bits,
                 )
             except Exception:
                 frame.close()
                 raise
             self._frame_idx += 1
-        await self._run_sync(self.device.stop)
+        await self._run(self.device.stop)
 
     async def _capture_into_writer(self, writer: OMEZarrWriter) -> FrameLease:
         """Fill and commit one writer frame as one serialized, cancellation-safe device transaction."""
@@ -476,7 +488,7 @@ class CameraController(DeviceController["Camera"]):
                 self.device.grab_frame(out=frame)
             return writer.latest_frame()
 
-        task = asyncio.create_task(self._run_sync(_grab))
+        task = asyncio.create_task(self._run(_grab))
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
@@ -487,7 +499,7 @@ class CameraController(DeviceController["Camera"]):
                 frame.close()
             raise
 
-    @describe(label="Capture State")
+    @query()
     async def capture_state(self) -> CaptureState:
         """Lifecycle of the most recent :meth:`begin_batch`/:meth:`close_stack` task. Non-mutating: the
         terminal state persists until the next task starts. Raises if the task failed."""
@@ -508,14 +520,14 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
     _buffer_allocated = False
 
     @property
+    @prop()
     @abstractmethod
-    @describe(label="Sensor")
     def sensor(self) -> CameraSensor:
         """The size of the sensor, and of 1 pixel on it."""
 
-    @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @choice(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @prop(stream="slow")
     @abstractmethod
-    @describe(label="Pixel Format", stream=True)
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera."""
 
@@ -525,14 +537,14 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """Set the pixel format of the camera."""
 
     @property
-    @describe(label="Pixel Type", stream=True)
+    @prop(stream="slow")
     def pixel_type(self) -> Dtype:
         """Get the pixel type of the camera."""
         return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
 
-    @numeric_int(options=BINNING_OPTIONS)
+    @integer(options=BINNING_OPTIONS)
+    @prop(stream="slow")
     @abstractmethod
-    @describe(label="Binning", stream=True)
     def binning(self) -> int:
         """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
 
@@ -541,9 +553,9 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
     def binning(self, binning: int) -> None:
         """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
 
-    @numeric()
+    @number()
+    @prop(label="Exposure Time", units="ms", stream="slow")
     @abstractmethod
-    @describe(label="Exposure Time", units="ms", stream=True)
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms."""
 
@@ -552,9 +564,9 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
     def exposure_time_ms(self, exposure_time_ms: float) -> None:
         """Set the exposure time of the camera in ms."""
 
-    @numeric()
+    @number()
+    @prop(label="Frame Rate", units="Hz", stream="slow")
     @abstractmethod
-    @describe(label="Frame Rate", units="Hz", stream=True)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
 
@@ -574,8 +586,8 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """Apply ROI to hardware. Values are pre-snapped by update_roi."""
 
     @property
+    @prop(label="ROI Grid", stream="slow")
     @abstractmethod
-    @describe(label="ROI Grid", stream=True)
     def roi_grid(self) -> ROIGrid:
         """Hardware constraints for the sensor ROI.
 
@@ -584,12 +596,12 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """
 
     @property
-    @describe(label="Sensor ROI", stream=True)
+    @prop(label="Sensor ROI", stream="slow")
     def roi(self) -> AreaROI:
         """Current sensor ROI in physical sensor pixels (pre-binning)."""
         return self._get_roi()
 
-    @describe(label="Update ROI")
+    @action(label="Update ROI")
     def update_roi(self, roi: AreaROI, *, snap: bool = True) -> AreaROI:
         """Set sensor ROI. Returns the actual applied ROI.
 
@@ -605,13 +617,13 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         self._set_roi(snapped)
         return self._get_roi()
 
-    @describe(label="Reset ROI")
+    @action(label="Reset ROI")
     def reset_roi(self) -> AreaROI:
         """Reset the sensor ROI to the full sensor."""
         return self.update_roi(AreaROI(x=0, y=0, w=self.sensor.size_px.x, h=self.sensor.size_px.y))
 
     @property
-    @describe(label="Frame Size", units="px", stream=True)
+    @prop(label="Frame Size", units="px", stream="slow")
     def frame_size_px(self) -> IVec2D:
         """Get the image size in pixels (post-binning frame coordinates)."""
         roi = self.roi
@@ -619,21 +631,21 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         return IVec2D(y=roi.h // b, x=roi.w // b)
 
     @property
-    @describe(label="Frame Size", units="MB", stream=True)
+    @prop(label="Frame Size", units="MB", stream="slow")
     def frame_size_mb(self) -> float:
         """Get the size of the camera image in MB."""
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
 
     @property
-    @describe(label="Frame Area", units="µm", stream=True)
+    @prop(label="Frame Area", units="µm", stream="slow")
     def frame_area_um(self) -> Vec2D:
         """Get the physical frame size in micrometers."""
         roi, pixel = self.roi, self.sensor.pixel_um
         return Vec2D(x=roi.w * pixel.x, y=roi.h * pixel.y)
 
     @property
+    @prop(stream="fast")
     @abstractmethod
-    @describe(label="Stream Info", stream=True)
     def stream_info(self) -> StreamInfo | None:
         """Return a dictionary of the acquisition state or None if not acquiring.
 

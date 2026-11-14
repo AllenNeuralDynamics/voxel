@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from rigup import Device, describe, numeric
+from rigup.device import Device, action, failsafe, number, prop
 
 
 class Laser(Device, kind="laser_legacy"):
@@ -11,36 +11,36 @@ class Laser(Device, kind="laser_legacy"):
         super().__init__(uid=uid)
 
     @property
-    @describe(label="Wavelength", units="nm", desc="The wavelength of the laser.")
+    @prop(label="Wavelength", units="nm", desc="The wavelength of the laser.")
     def wavelength(self) -> int:
         """Get the wavelength of the laser in nm."""
         return self._wavelength
 
     @abstractmethod
-    @describe(label="Enable", desc="Turn on the laser.")
+    @action(label="Enable", desc="Turn on the laser.")
     def enable(self) -> None:
         """Turn on the laser."""
 
     @abstractmethod
-    @describe(label="Disable", desc="Turn off the laser.")
+    @failsafe(label="Disable", desc="Turn off the laser.")
     def disable(self) -> None:
         """Turn off the laser."""
 
     @property
     @abstractmethod
-    @describe(label="Enabled", desc="Whether the laser is currently enabled.", stream=True)
+    @prop(label="Enabled", desc="Whether the laser is currently enabled.", stream="slow")
     def is_enabled(self) -> bool:
         """Check if the laser is enabled."""
 
     @property
     @abstractmethod
-    @describe(label="Power", desc="Measured laser output power.", stream=True)
+    @prop(label="Power", units="mW", desc="Measured laser output power.", stream="fast")
     def power(self) -> float:
         """Get the measured laser output power."""
 
-    @numeric()
+    @number()
     @abstractmethod
-    @describe(label="Power Setpoint", desc="Commanded laser power.", stream=True)
+    @prop(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream="fast")
     def power_setpoint(self) -> float:
         """Get the commanded laser power setpoint."""
 
@@ -51,6 +51,6 @@ class Laser(Device, kind="laser_legacy"):
 
     @property
     @abstractmethod
-    @describe(label="Temperature", units="°C", desc="The temperature of the laser.")
+    @prop(label="Temperature", units="°C", desc="The temperature of the laser.")
     def temperature_c(self) -> float | None:
         """Get the temperature of the laser in degrees Celsius."""

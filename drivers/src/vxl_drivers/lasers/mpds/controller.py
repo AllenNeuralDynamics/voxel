@@ -8,9 +8,9 @@ from math import isfinite
 from time import sleep
 
 from pydantic import BaseModel, ConfigDict
+from rigup.device import Device, action, choice, integer, prop, query
 from serial import SerialException
 
-from rigup import Device, describe, enumerated, numeric_int
 from vxl_drivers.serial import SerialTransport
 
 _EOL = b"\n\r"
@@ -150,32 +150,32 @@ class MPDS(Device, kind="aotf"):
             yield
 
     @property
-    @describe(label="RF Lines")
+    @prop(label="RF Lines")
     def num_lines(self) -> int:
         return self._num_lines
 
     @property
-    @describe(label="Minimum RF Frequency", units="MHz")
+    @prop(label="Minimum RF Frequency", units="MHz")
     def min_frequency_mhz(self) -> float:
         return self._min_frequency_mhz
 
     @property
-    @describe(label="Maximum RF Frequency", units="MHz")
+    @prop(label="Maximum RF Frequency", units="MHz")
     def max_frequency_mhz(self) -> float:
         return self._max_frequency_mhz
 
     @property
-    @describe(label="Minimum RF Power", units="dBm")
+    @prop(label="Minimum RF Power", units="dBm")
     def min_power_dbm(self) -> float:
         return self._min_power_dbm
 
     @property
-    @describe(label="Maximum RF Power", units="dBm")
+    @prop(label="Maximum RF Power", units="dBm")
     def max_power_dbm(self) -> float:
         return self._max_power_dbm
 
-    @numeric_int(options=(5, 10))
-    @describe(label="External Voltage Range", units="V")
+    @integer(options=(5, 10))
+    @prop(label="External Voltage Range", units="V")
     def external_voltage_range(self) -> int:
         """Last configured range; unavailable until set because hardware readback is absent."""
         if self._voltage_range is None:
@@ -192,8 +192,8 @@ class MPDS(Device, kind="aotf"):
             self._exchange(f"V{int(volts == 10)}".encode() + _EOL, terminator=None)
             self._voltage_range = volts
 
-    @enumerated(options=list(InputMode))
-    @describe(label="Blanking Mode")
+    @choice(options=list(InputMode))
+    @prop(label="Blanking Mode")
     def blanking_mode(self) -> str:
         """Read the common blanking input mode from the controller."""
         return self.blanking.input_mode.value
@@ -208,7 +208,7 @@ class MPDS(Device, kind="aotf"):
                 raise MPDSCommunicationError("MPDS did not establish requested blanking mode")
 
     @property
-    @describe(label="Blanking Enabled")
+    @prop(label="Blanking Enabled")
     def blanking_enabled(self) -> bool:
         """Read the vendor's common blanking ON/OFF state."""
         return self.blanking.enabled
@@ -224,11 +224,11 @@ class MPDS(Device, kind="aotf"):
                 raise MPDSCommunicationError("MPDS did not establish requested blanking state")
 
     @property
-    @describe(label="Blanking")
+    @prop(label="Blanking")
     def blanking(self) -> BlankingState:
         return self.get_status().blanking
 
-    @describe(label="Controller Status")
+    @query(label="Controller Status")
     def get_status(self) -> ControllerState:
         with self.transaction():
             state = _parse_status(self._exchange(b"S" + _EOL, terminator=b"?"))
@@ -236,12 +236,12 @@ class MPDS(Device, kind="aotf"):
                 raise MPDSCommunicationError("MPDS status omitted or added RF lines")
             return state
 
-    @describe(label="RF Line Status")
+    @query(label="RF Line Status")
     def get_line(self, line: int) -> LineState:
         self._validate_line(line)
         return self.get_status().lines[line]
 
-    @describe(label="Set RF Frequency")
+    @action(label="Set RF Frequency")
     def set_frequency(self, line: int, frequency_mhz: float) -> None:
         self._validate_line(line)
         self.validate_frequency(frequency_mhz)
@@ -252,7 +252,7 @@ class MPDS(Device, kind="aotf"):
             if abs(self.get_line(line).frequency_mhz - target) > 0.0005:
                 raise MPDSCommunicationError("MPDS did not establish requested frequency")
 
-    @describe(label="Set RF Power")
+    @action(label="Set RF Power")
     def set_power(self, line: int, power_dbm: float) -> None:
         self._validate_line(line)
         self.validate_power(power_dbm)
@@ -263,7 +263,7 @@ class MPDS(Device, kind="aotf"):
             if abs(self.get_line(line).power_dbm - target) > 0.05:
                 raise MPDSCommunicationError("MPDS did not establish requested RF power")
 
-    @describe(label="Set RF Line Enabled")
+    @action(label="Set RF Line Enabled")
     def set_enabled(self, line: int, enabled: bool) -> None:
         """Set the internal-mode switch; use inhibit_line() to stop external modulation."""
         self._validate_line(line)
@@ -276,7 +276,7 @@ class MPDS(Device, kind="aotf"):
             if self.get_line(line).enabled != enabled:
                 raise MPDSCommunicationError("MPDS did not establish requested RF enable state")
 
-    @describe(label="Inhibit RF Line")
+    @action(label="Inhibit RF Line")
     def inhibit_line(self, line: int) -> None:
         """Select internal OFF, allowing the manual's typical 100 ms for mode changes."""
         self._validate_line(line)
@@ -291,7 +291,7 @@ class MPDS(Device, kind="aotf"):
             if state.input_mode != InputMode.INTERNAL or state.enabled:
                 raise MPDSCommunicationError("MPDS did not establish internal OFF")
 
-    @describe(label="Set RF Input Mode")
+    @action(label="Set RF Input Mode")
     def set_input_mode(self, line: int, mode: InputMode | str) -> None:
         self._validate_line(line)
         mode = InputMode(mode)
@@ -329,7 +329,7 @@ class MPDS(Device, kind="aotf"):
         if not isfinite(value) or not self.min_power_dbm <= value <= self.max_power_dbm:
             raise ValueError("RF power is outside configured limits")
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Attempt to inhibit every line, release the connection, and report any failures."""
         with self._transport.transaction():
             if self._closed:

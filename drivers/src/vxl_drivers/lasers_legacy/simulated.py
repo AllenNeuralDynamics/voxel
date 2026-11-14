@@ -2,7 +2,8 @@ import math
 import random
 import time
 
-from rigup import describe, numeric
+from rigup.device import number, prop
+
 from vxl_drivers.aotf.base import AOTF
 from vxl_drivers.lasers_legacy.base import Laser
 
@@ -40,8 +41,7 @@ class SimulatedLaser(Laser):
     def is_enabled(self) -> bool:
         return self._is_enabled
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
     def power_setpoint(self) -> float:
         return self._power_setpoint_mw
 
@@ -51,7 +51,6 @@ class SimulatedLaser(Laser):
         self.log.debug("power setpoint changed to %s mW", value)
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         if not self._is_enabled:
             return 0.0
@@ -136,8 +135,7 @@ class SimulatedAOTFShutteredLaser(Laser):
         """Check if the AOTF shutter is open."""
         return self._aotf.get_channel_state(self._aotf_channel)
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW (controlled by laser, not AOTF)."""
         return self._power_setpoint_mw
@@ -149,7 +147,6 @@ class SimulatedAOTFShutteredLaser(Laser):
         self.log.debug(f"Power setpoint changed to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW (zero when AOTF shutter closed)."""
         if not self.is_enabled:
@@ -218,7 +215,7 @@ class SimulatedAOTFModulatedLaser(Laser):
         return self._aotf_channel
 
     @property
-    @describe(label="AOTF Frequency", units="MHz", desc="RF frequency for this wavelength.")
+    @prop(label="AOTF Frequency", units="MHz", desc="RF frequency for this wavelength.")
     def aotf_frequency_mhz(self) -> float:
         """Get the calibrated AOTF frequency."""
         return self._aotf_frequency_mhz
@@ -239,12 +236,11 @@ class SimulatedAOTFModulatedLaser(Laser):
         """Check if the AOTF channel is enabled."""
         return self._aotf.get_channel_state(self._aotf_channel)
 
-    @numeric(
+    @number(
         minimum=lambda self: self._aotf.min_power_dbm,
         maximum=lambda self: self._aotf.max_power_dbm,
         step=lambda self: self._aotf.power_step_dbm,
     )
-    @describe(label="Power Setpoint", units="dBm", desc="Commanded AOTF RF power.", stream=True)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in dBm."""
         return self._power_setpoint_dbm
@@ -258,7 +254,6 @@ class SimulatedAOTFModulatedLaser(Laser):
         self.log.debug(f"Power setpoint changed to {value} dBm")
 
     @property
-    @describe(label="Power", units="dBm", desc="Measured AOTF RF power.", stream=True)
     def power(self) -> float:
         """Get the measured AOTF RF output power in dBm (zero when channel disabled)."""
         if not self.is_enabled:

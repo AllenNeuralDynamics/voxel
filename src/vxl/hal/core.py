@@ -6,9 +6,9 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from pydantic import TypeAdapter
+from rigup.device import DeviceHandle, DeviceInterface
 from rigup.rig import Rig
 
-from rigup import ComponentInterface, DeviceHandle
 from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
@@ -111,7 +111,7 @@ class HAL:
         self.fws: dict[str, DiscreteAxisHandle] = {}
         self.routing: dict[str, RouteDimension] = {}
         self.signal_generators: dict[str, SignalGeneratorHandle] = {}
-        self._device_interfaces: dict[str, ComponentInterface] = {}
+        self._device_interfaces: dict[str, DeviceInterface] = {}
         self._stage: Stage | None = None
 
     @property
@@ -127,7 +127,7 @@ class HAL:
         return self.rig.devices
 
     @property
-    def device_interfaces(self) -> Mapping[str, ComponentInterface]:
+    def device_interfaces(self) -> Mapping[str, DeviceInterface]:
         """Interfaces retained from the successful startup inspection."""
         return dict(self._device_interfaces)
 

@@ -6,9 +6,9 @@ from contextlib import contextmanager
 from math import isfinite
 from time import monotonic, sleep
 
+from rigup.device import Device, action, prop
 from serial import SerialException
 
-from rigup import Device, describe
 from vxl_drivers.serial import SerialTransport
 
 _LINES = range(1, 5)
@@ -113,53 +113,53 @@ class SkyraController(Device, kind="laser_controller"):
                 )
 
     @property
-    @describe(label="Installed Lines")
+    @prop(label="Installed Lines")
     def installed_lines(self) -> dict[int, float]:
         """Line-to-wavelength mapping in nm, discovered at connection time."""
         return dict(self._lines)
 
     @property
-    @describe(label="Reserved Lines")
+    @prop(label="Reserved Lines")
     def reserved_lines(self) -> list[int]:
         with self._lock:
             return list(self._owners)
 
     @property
-    @describe(label="Serial Number")
+    @prop(label="Serial Number")
     def serial_number(self) -> str:
         return self._serial_number
 
     @property
-    @describe(label="Operating State")
+    @prop(label="Operating State")
     def operating_state(self) -> str:
         """Autostart state from gom?."""
         reply = self.query("gom?")
         return _OPERATING_STATES.get(reply, f"unknown ({reply})")
 
     @property
-    @describe(label="Fault")
+    @prop(label="Fault")
     def fault(self) -> str:
         reply = self.query("f?")
         return _FAULTS.get(reply, f"unknown ({reply})")
 
     @property
-    @describe(label="Key Switch On")
+    @prop(label="Key Switch On")
     def key_switch_on(self) -> bool:
         return self.flag("@cobasks?")
 
     @property
-    @describe(label="Interlock")
+    @prop(label="Interlock")
     def interlock(self) -> str:
         """Reply to ilk?, unparsed until its meaning is confirmed."""
         # TODO: verify on real hardware which ilk? value means closed; the manual says both.
         return self.query("ilk?")
 
     @property
-    @describe(label="Operating Hours", units="h")
+    @prop(label="Operating Hours", units="h")
     def operating_hours(self) -> float:
         return self.number("hrs?")
 
-    @describe(label="Clear Fault")
+    @action(label="Clear Fault")
     def clear_fault(self) -> None:
         self.command("cf")
 
@@ -184,7 +184,7 @@ class SkyraController(Device, kind="laser_controller"):
         """Whether controller shutdown confirmed this line off."""
         return self._closed and line in self._confirmed_off
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Try to stop every reserved line, close the port, and report all failures."""
         with self._lock, self._transport.transaction():
             if self._closed:

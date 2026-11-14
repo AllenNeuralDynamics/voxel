@@ -3,7 +3,7 @@
 from math import isfinite
 from typing import override
 
-from rigup import describe, numeric
+from rigup.device import number, prop
 
 from .base import PowerMeter
 
@@ -27,8 +27,8 @@ class SimulatedPowerMeter(PowerMeter):
         self._ensure_open()
         return self._incident_power_mw
 
-    @numeric(minimum=0.0)
-    @describe(label="Simulated Incident Power", units="mW")
+    @number(minimum=0.0)
+    @prop(label="Simulated Incident Power", units="mW")
     def incident_power_mw(self) -> float:
         """Optical input supplied by the caller, independent of any registered laser."""
         self._ensure_open()
@@ -41,7 +41,7 @@ class SimulatedPowerMeter(PowerMeter):
             raise ValueError("incident power must be finite")
         self._incident_power_mw = value
 
-    @numeric(minimum=1.0, maximum=10000.0)
+    @number(minimum=1.0, maximum=10000.0)
     @override
     def wavelength_nm(self) -> float:
         """Simulated correction range of 1-10000 nm."""
@@ -57,7 +57,7 @@ class SimulatedPowerMeter(PowerMeter):
         self._wavelength_nm = value
 
     @override
-    def close(self) -> None:
+    def dispose(self) -> None:
         self._closed = True
 
     def _ensure_open(self) -> None:

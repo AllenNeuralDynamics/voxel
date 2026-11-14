@@ -1,8 +1,8 @@
 """Hardware-free checks for NI signal generator behavior."""
 
 import pytest
+from rigup.device import Device
 
-from rigup import Device
 from vxl.devices.daq.clocked.ni import NiSignalGenerator
 from vxl.devices.daq.clocked.waveform import validate_waveform
 

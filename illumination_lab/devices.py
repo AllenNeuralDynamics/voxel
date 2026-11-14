@@ -12,11 +12,11 @@ from abc import abstractmethod
 from typing import Literal
 
 from pydantic import Field, TypeAdapter
-from rigup.device.props import numeric
+from rigup.device import Device, DeviceHandle, action, failsafe, number, prop
 from vxlib.schema import FrozenModel
 from vxlib.vector import Span
 
-from rigup import Device, DeviceHandle, Part, describe
+from rigup import Part
 from vxl.devices.base import Pin
 from vxl.devices.laser.source import ModulationMode
 
@@ -44,43 +44,43 @@ class LaserHead(Device, kind="laser_head"):
 
     @property
     @abstractmethod
-    @describe(label="Wavelength", units="nm")
+    @prop(units="nm")
     def wavelength(self) -> float: ...
 
-    @numeric(minimum=lambda self: self._get_power_range().low, maximum=lambda self: self._get_power_range().high)
-    @describe(label="Power", units="mW", stream=True)
+    @number(minimum=lambda self: self._get_power_range().low, maximum=lambda self: self._get_power_range().high)
+    @prop(label="Power", units="mW", stream="fast")
     def power_mw(self) -> float:
         return self._get_power()
 
     @property
     @abstractmethod
-    @describe(label="Enabled", stream=True)
+    @prop(label="Enabled", stream="slow")
     def is_enabled(self) -> bool: ...
 
     @property
     @abstractmethod
-    @describe(label="Modulation", stream=True)
+    @prop(stream="slow")
     def modulation(self) -> ModulationMode: ...
 
     @property
     @abstractmethod
-    @describe(label="Pins")
+    @prop()
     def pins(self) -> list[Pin]: ...
 
     @abstractmethod
-    @describe(label="Set power", desc="Set the power, in mW")
+    @action(label="Set power", desc="Set the power, in mW")
     def set_power_mw(self, value: float) -> None: ...
 
     @abstractmethod
-    @describe(label="Enable", desc="Emit; with wait, wait until warm")
+    @action(desc="Emit; with wait, wait until warm")
     def enable(self, *, wait: bool = False) -> None: ...
 
     @abstractmethod
-    @describe(label="Disable", desc="Stop emitting")
+    @failsafe(desc="Stop emitting")
     def disable(self) -> None: ...
 
     @abstractmethod
-    @describe(label="Set modulation", desc="Follow a pin, or only commands")
+    @action(label="Set modulation", desc="Follow a pin, or only commands")
     def set_modulation(self, mode: ModulationMode) -> None: ...
 
     @abstractmethod
@@ -98,22 +98,22 @@ class Modulator(Device, kind="modulator"):
 
     @property
     @abstractmethod
-    @describe(label="Lines")
+    @prop()
     def lines(self) -> list[ModulatorLine]: ...
 
     @property
     @abstractmethod
-    @describe(label="Transmissions", stream=True)
+    @prop(stream="fast")
     def transmissions(self) -> dict[str, float]: ...
 
     @property
     @abstractmethod
-    @describe(label="Enabled lines", stream=True)
+    @prop(stream="slow")
     def enabled_lines(self) -> list[str]: ...
 
     @property
     @abstractmethod
-    @describe(label="Modulations", stream=True)
+    @prop(stream="slow")
     def modulations(self) -> dict[str, ModulationMode]: ...
 
     @property
@@ -126,19 +126,19 @@ class Modulator(Device, kind="modulator"):
         ]
 
     @abstractmethod
-    @describe(label="Set transmission")
+    @action()
     def set_transmission(self, line: str, fraction: float) -> None: ...
 
     @abstractmethod
-    @describe(label="Enable line")
+    @action(label="Enable line")
     def enable(self, line: str) -> None: ...
 
     @abstractmethod
-    @describe(label="Disable line")
+    @action(label="Disable line")
     def disable(self, line: str) -> None: ...
 
     @abstractmethod
-    @describe(label="Set modulation")
+    @action()
     def set_modulation(self, line: str, mode: ModulationMode) -> None: ...
 
 
@@ -147,15 +147,18 @@ class Shutter(Device, kind="shutter"):
 
     @property
     @abstractmethod
-    @describe(label="Open", stream=True)
+    @prop(label="Open", stream="slow")
     def is_open(self) -> bool: ...
 
     @abstractmethod
-    @describe(label="Open")
+    @action()
     def open(self) -> None: ...
 
     @abstractmethod
-    @describe(label="Close")
+    @failsafe()
+    def dispose(self) -> None:
+        self.close()
+
     def close(self) -> None: ...
 
 

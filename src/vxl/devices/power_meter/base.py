@@ -2,7 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from rigup import Device, describe, numeric
+from rigup.device import Device, number, prop
+
 from vxl.devices.base import DeviceType
 
 
@@ -15,8 +16,8 @@ class PowerMeter(Device, ABC, kind=DeviceType.POWER_METER):
     """
 
     @property
+    @prop(label="Measured Power", units="mW", stream="fast")
     @abstractmethod
-    @describe(label="Measured Power", units="mW", stream=True)
     def power_mw(self) -> float:
         """Acquire a finite reading in mW; raise for overload or measurement failure.
 
@@ -24,9 +25,9 @@ class PowerMeter(Device, ABC, kind=DeviceType.POWER_METER):
         is device-specific; this does not wait for the optical source to settle.
         """
 
-    @numeric()
+    @number()
+    @prop(label="Wavelength Correction", units="nm")
     @abstractmethod
-    @describe(label="Wavelength Correction", units="nm")
     def wavelength_nm(self) -> float:
         """Wavelength used for sensor response correction, not a measured wavelength."""
 
@@ -36,5 +37,5 @@ class PowerMeter(Device, ABC, kind=DeviceType.POWER_METER):
         """Set the wavelength correction within the sensor's supported range."""
 
     @abstractmethod
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Release the connection; repeated calls are harmless."""

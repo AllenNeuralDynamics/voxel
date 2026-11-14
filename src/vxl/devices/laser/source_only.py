@@ -3,7 +3,8 @@
 from math import isclose, isfinite
 from typing import Never
 
-from rigup.device.props import NumericFloat
+from rigup.device import number
+from rigup.device.limits import NumberValue
 
 from .base import Laser
 from .source import LaserSource, ModulationMode
@@ -52,11 +53,15 @@ class SourceOnlyLaser(Laser):
     def is_source_enabled(self) -> bool:
         return self._source_enabled
 
-    @property
+    @number(
+        minimum=lambda self: self._power_value(self._reference_mw).minimum,
+        maximum=lambda self: self._power_value(self._reference_mw).maximum,
+        step=lambda self: self._power_value(self._reference_mw).step,
+    )
     def source_power_setpoint_mw(self) -> float:
-        """Reference power at 100% output, with the source's numeric constraints."""
+        """Reference power at 100% output, with the source's range."""
         self._ensure_open()
-        return self._power_value(self._reference_mw)
+        return self._reference_mw
 
     @source_power_setpoint_mw.setter
     def source_power_setpoint_mw(self, value: float) -> None:
@@ -98,11 +103,15 @@ class SourceOnlyLaser(Laser):
     def is_output_enabled(self) -> bool:
         return self._output_enabled
 
-    @property
+    @number(
+        minimum=lambda self: self._level_value(self._level, self._reference_mw).minimum,
+        maximum=lambda self: self._level_value(self._level, self._reference_mw).maximum,
+        step=lambda self: self._level_value(self._level, self._reference_mw).step,
+    )
     def output_level_percent(self) -> float:
         """Supported operating percentage; use output_disable() independently of this level."""
         self._ensure_open()
-        return self._level_value(self._level, self._reference_mw)
+        return self._level
 
     @output_level_percent.setter
     def output_level_percent(self, value: float) -> None:
@@ -115,7 +124,7 @@ class SourceOnlyLaser(Laser):
             self.log.warning("Output level %s%% was adjusted to %s%% for source resolution", value, self._level)
 
     def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
-        return tuple(ModulationMode(mode) for mode in self._source.modulation_mode.options)
+        return tuple(ModulationMode(mode) for mode in self._source.modulation_mode.options or ())
 
     def _read_modulation_mode(self) -> ModulationMode:
         return ModulationMode(self._source.modulation_mode)
@@ -128,31 +137,29 @@ class SourceOnlyLaser(Laser):
             raise RuntimeError("source did not establish the requested modulation mode")
         self._apply_power(self._reference_mw, self._level)
 
-    def _power_value(self, value: float) -> NumericFloat:
+    def _power_value(self, value: float) -> NumberValue:
         """Apply source numeric constraints without temporarily writing the reference to hardware."""
         if not isfinite(value) or value < 0:
             raise ValueError("source power reference must be finite and nonnegative")
         power = self._source.source_power_setpoint_mw
-        if not isinstance(power, NumericFloat):
-            return NumericFloat(value)
-        return NumericFloat(value, power.minimum, power.maximum, power.step, options=power.options)
+        return _number(value, minimum=power.minimum, maximum=power.maximum, step=power.step, options=power.options)
 
-    def _level_value(self, value: float, reference: float) -> NumericFloat:
+    def _level_value(self, value: float, reference: float) -> NumberValue:
         """Map source constraints to percent, rejecting values outside the operating range."""
         if not isfinite(value):
             raise ValueError("output level must be finite")
         power = self._power_value(reference)
         if reference == 0:
-            return NumericFloat(value, options=(100.0,))
+            return _number(value, options=(100.0,))
         if power.options is not None:
             options = tuple(option / reference * 100 for option in power.options if 0 <= option <= reference)
             selected = next((option for option in options if isclose(option, value, abs_tol=1e-9)), value)
-            return NumericFloat(selected, options=options)
+            return _number(selected, options=options)
         minimum = max(0.0, power.minimum or 0.0) / reference * 100
         if not minimum <= value <= 100:
             raise ValueError(f"output level must be in {minimum:g}..100% at a {reference:g} mW source reference")
         step = None if power.step is None else power.step / reference * 100
-        return NumericFloat(value, minimum=minimum, maximum=100.0, step=step)
+        return _number(value, minimum=minimum, maximum=100.0, step=step)
 
     def _should_emit(self, reference: float, level: float) -> bool:
         return reference > 0 and (self._read_modulation_mode() == ModulationMode.ANALOG or level > 0)
@@ -184,7 +191,7 @@ class SourceOnlyLaser(Laser):
             raise ExceptionGroup("Source operation and inhibition both failed", [error, cleanup_error]) from None
         raise error
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Disable output without closing the borrowed source; failures can be retried."""
         if self._closed:
             return
@@ -194,3 +201,21 @@ class SourceOnlyLaser(Laser):
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("laser is closed")
+
+
+def _number(
+    value: float,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+    step: float | None = None,
+    options: tuple[float, ...] | None = None,
+) -> NumberValue:
+    number_value = NumberValue(value)
+    number_value.minimum, number_value.maximum, number_value.step, number_value.options = (
+        minimum,
+        maximum,
+        step,
+        options,
+    )
+    return number_value

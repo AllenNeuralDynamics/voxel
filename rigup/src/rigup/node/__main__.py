@@ -1,9 +1,7 @@
-"""``python -m rigup.node`` — the daemon entry point :class:`SubprocessNode` spawns.
+"""Run a node daemon as a child process of the orchestrator.
 
-Spawned as ``python -m rigup.node <node_id> <address>``. A subprocess node shares the parent's
-terminal, so it configures no logging (the parent owns the console) and calls :func:`_run`
-directly. Using ``__main__`` rather than ``python -m rigup.node._runner`` avoids re-importing a
-module the package ``__init__`` already loaded, which would trigger a RuntimeWarning.
+Configures no logging: the child shares the parent's terminal. Running ``rigup.node._runner`` with
+``-m`` instead would re-import a module the package already loaded and raise a RuntimeWarning.
 """
 
 import asyncio

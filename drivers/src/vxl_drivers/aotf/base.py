@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from enum import StrEnum
 
-from rigup import Device, describe
+from rigup.device import Device, action, prop, query
 
 
 class ChannelCollisionError(Exception):
@@ -86,13 +86,13 @@ class AOTF(Device, kind="aotf"):
 
     @property
     @abstractmethod
-    @describe(label="Channels")
+    @prop(label="Channels")
     def num_channels(self) -> int:
         """Number of available AOTF channels."""
 
     @property
     @abstractmethod
-    @describe(label="Blanking Mode")
+    @prop(label="Blanking Mode")
     def blanking_mode(self) -> BlankingMode:
         """Blanking control mode. External uses TTL input for synchronization."""
 
@@ -102,7 +102,7 @@ class AOTF(Device, kind="aotf"):
         """Set the blanking mode."""
 
     @abstractmethod
-    @describe(label="Enable Channel", desc="Enable output for a specific channel.")
+    @action(label="Enable Channel", desc="Enable output for a specific channel.")
     def enable_channel(self, channel: int) -> None:
         """Enable a channel (1-indexed).
 
@@ -110,7 +110,7 @@ class AOTF(Device, kind="aotf"):
         """
 
     @abstractmethod
-    @describe(label="Disable Channel", desc="Disable output for a specific channel.")
+    @action(label="Disable Channel", desc="Disable output for a specific channel.")
     def disable_channel(self, channel: int) -> None:
         """Disable a channel (1-indexed).
 
@@ -118,7 +118,7 @@ class AOTF(Device, kind="aotf"):
         """
 
     @abstractmethod
-    @describe(label="Set Frequency", desc="Set channel frequency in MHz.")
+    @action(label="Set Frequency", desc="Set channel frequency in MHz.")
     def set_frequency(self, channel: int, frequency_mhz: float) -> None:
         """Set the RF frequency for a channel.
 
@@ -129,7 +129,7 @@ class AOTF(Device, kind="aotf"):
         """
 
     @abstractmethod
-    @describe(label="Get Frequency", desc="Get channel frequency in MHz.")
+    @query(label="Get Frequency", desc="Get channel frequency in MHz.")
     def get_frequency(self, channel: int) -> float:
         """Get the current RF frequency for a channel.
 
@@ -153,7 +153,7 @@ class AOTF(Device, kind="aotf"):
         """Power adjustment step size in dBm."""
 
     @abstractmethod
-    @describe(label="Set Power", desc="Set channel power in dBm.")
+    @action(label="Set Power", desc="Set channel power in dBm.")
     def set_power_dbm(self, channel: int, power_dbm: float) -> None:
         """Set the output power for a channel.
 
@@ -162,7 +162,7 @@ class AOTF(Device, kind="aotf"):
         """
 
     @abstractmethod
-    @describe(label="Get Power", desc="Get channel power in dBm.")
+    @query(label="Get Power", desc="Get channel power in dBm.")
     def get_power_dbm(self, channel: int) -> float:
         """Get the current output power for a channel.
 
@@ -171,7 +171,7 @@ class AOTF(Device, kind="aotf"):
         """
 
     @abstractmethod
-    @describe(label="Get Channel State", desc="Check if a channel is enabled.")
+    @query(label="Get Channel State", desc="Check if a channel is enabled.")
     def get_channel_state(self, channel: int) -> bool:
         """Get the enabled state of a channel.
 
@@ -180,7 +180,7 @@ class AOTF(Device, kind="aotf"):
         """
 
     @abstractmethod
-    @describe(label="Set Input Mode", desc="Set channel input mode (internal/external).")
+    @action(label="Set Input Mode", desc="Set channel input mode (internal/external).")
     def set_channel_input_mode(self, channel: int, mode: str) -> None:
         """Set the input mode for a specific channel.
 
@@ -188,7 +188,7 @@ class AOTF(Device, kind="aotf"):
         :param mode: "internal" for software control, "external" for DAQ analog input.
         """
 
-    @describe(label="Get Channel Status", desc="Get full status for a channel.")
+    @query(label="Get Channel Status", desc="Get full status for a channel.")
     def get_channel_status(self, channel: int) -> dict:
         """Get complete status information for a channel.
 
@@ -201,7 +201,7 @@ class AOTF(Device, kind="aotf"):
             "power_dbm": self.get_power_dbm(channel),
         }
 
-    @describe(label="Get All Status", desc="Get status for all channels.")
+    @query(label="Get All Status", desc="Get status for all channels.")
     def get_all_status(self) -> dict:
         """Get status for all channels.
 

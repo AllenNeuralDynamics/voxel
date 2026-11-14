@@ -1,13 +1,4 @@
-"""Rig — top-level orchestrator for a set of devices across nodes.
-
-Usage::
-
-    rig = Rig(config)
-    await rig.open()  # connect nodes, build all devices
-    handle = rig.devices["camera_1"]
-    await handle.call("start_preview")
-    await rig.close()  # close devices, disconnect nodes
-"""
+"""The rig: devices built across this process and its nodes."""
 
 import logging
 
@@ -15,17 +6,12 @@ from vxlib.problems import Problem
 
 from rigup.component import Part
 from rigup.config import NodeConfig, RigConfig
-from rigup.device import DeviceHandle
+from rigup.device.handle import DeviceHandle
 from rigup.node import LOCAL, LocalNode, Node, RemoteNode, SubprocessNode
 
 
 class Rig:
-    """Orchestrates devices across local, subprocess, and remote nodes.
-
-    ``open`` creates nodes from config, connects/spawns them, and builds
-    all declared devices. ``close`` tears everything down. No partial
-    operations — the rig is either fully open or fully closed.
-    """
+    """Start the nodes of a rig config and build their devices."""
 
     def __init__(self, config: RigConfig, name: str = "Rig") -> None:
         self._name = name
@@ -55,16 +41,17 @@ class Rig:
 
     @property
     def parts(self) -> dict[str, Part]:
-        """The parts of the rig, keyed by uid. Each node gets them all when it builds its devices."""
         return self._config.parts
 
     @property
     def build_errors(self) -> dict[str, Problem]:
-        """The problem of each component that did not build, at its place in the rig file."""
         return self._build_errors
 
     async def open(self) -> None:
-        """Create nodes, connect/spawn them, and build all declared devices."""
+        """Start the nodes and build the devices.
+
+        A device that fails to build does not stop the others; its problem is in ``build_errors``.
+        """
         self._log.info("Opening rig '%s'", self.name)
         self._build_errors.clear()
 
@@ -85,7 +72,7 @@ class Rig:
         )
 
     async def close(self) -> None:
-        """Close all devices and disconnect/terminate all nodes."""
+        """Close the nodes in reverse order, logging a node that fails to close and going on."""
         self._log.info("Closing rig '%s'", self.name)
         for node in reversed(list(self._nodes.values())):
             try:

@@ -2,10 +2,11 @@ from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from rigup.device import DeviceHandle, DeviceInterface, Result
 from rigup.device.handle import Adapter, DeviceProperties
+from rigup.device.results import PropertyModel, PropResults
 from vxlib.problems import Problem
 
-from rigup import ComponentInterface, DeviceHandle, PropertyModel, PropResults, Result
 from vxl.hal.core import HAL
 from vxl.hal.errors import HALStartupError
 from vxl.hal.rig_config import DeviceConfig
@@ -45,7 +46,7 @@ def _handle(uid: str, device_type: str = "camera", *, properties=None, property_
     adapter = Mock(spec=Adapter)
     adapter.uid = uid
     adapter.cached_interface = AsyncMock(
-        return_value=ComponentInterface(uid=uid, kind=device_type), side_effect=interface_error
+        return_value=DeviceInterface(uid=uid, kind=device_type), side_effect=interface_error
     )
     adapter.props = Mock(spec=DeviceProperties)
     adapter.props.get = AsyncMock(return_value=properties, side_effect=property_error)

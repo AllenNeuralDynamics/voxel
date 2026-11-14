@@ -1,9 +1,4 @@
-"""Wire-agnostic transport layer for rigup.
-
-Public surface is the ABCs in :mod:`rigup.transport.base`; ZMQ
-implementations live in :mod:`rigup.transport.zmq` and are imported here for
-ergonomic access.
-"""
+"""The transport between the rig and its nodes, and its ZMQ implementation."""
 
 from ._base import (
     INPROCAddress,

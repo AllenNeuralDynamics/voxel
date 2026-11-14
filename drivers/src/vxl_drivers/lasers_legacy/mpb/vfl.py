@@ -21,9 +21,8 @@ References:
 
 from enum import StrEnum
 
-from rigup.device.props import enumerated, numeric
+from rigup.device import action, choice, number, prop, query
 
-from rigup import describe
 from vxl_drivers.lasers_legacy.base import Laser
 from vxl_drivers.serial import SerialTransport
 
@@ -174,8 +173,7 @@ class MpbVfl(Laser):
         """Check if the laser diode is enabled."""
         return self._query(Query.LD_ENABLE) == "1"
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power (APC mode).", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=1.0)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return float(self._query(Query.POWER_SETPOINT))
@@ -187,13 +185,12 @@ class MpbVfl(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return float(self._query(Query.POWER))
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_current_ma, step=1.0)
-    @describe(label="Current Setpoint", units="mA", desc="Commanded diode current (ACC mode).", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._max_current_ma, step=1.0)
+    @prop(label="Current Setpoint", units="mA", desc="Commanded diode current (ACC mode).", stream="fast")
     def current_setpoint_ma(self) -> float:
         """Get the commanded diode current setpoint in mA."""
         return float(self._query(Query.CURRENT_SETPOINT))
@@ -205,25 +202,24 @@ class MpbVfl(Laser):
         self.log.debug(f"Current setpoint set to {value} mA")
 
     @property
-    @describe(label="Diode Current", units="mA", desc="Measured laser diode current.", stream=True)
+    @prop(label="Diode Current", units="mA", desc="Measured laser diode current.", stream="fast")
     def ld_current_ma(self) -> float:
         """Get the measured laser diode current in mA."""
         return float(self._query(Query.LD_CURRENT))
 
     @property
-    @describe(label="Temperature", units="°C", desc="Laser diode temperature.", stream=True)
     def temperature_c(self) -> float | None:
         """Get the laser diode temperature in °C."""
         return float(self._query(Query.LD_TEMP))
 
     @property
-    @describe(label="TEC Temperature", units="°C", desc="Thermoelectric cooler temperature.", stream=True)
+    @prop(label="TEC Temperature", units="°C", desc="Thermoelectric cooler temperature.", stream="slow")
     def tec_temp_c(self) -> float:
         """Get the TEC temperature in °C."""
         return float(self._query(Query.TEC_TEMP))
 
-    @enumerated(options=list(ControlMode))
-    @describe(label="Control Mode", desc="APC (constant power) or ACC (constant current).")
+    @choice(options=list(ControlMode))
+    @prop(label="Control Mode", desc="APC (constant power) or ACC (constant current).")
     def control_mode(self) -> str:
         """Get the active control mode."""
         wire = self._query(Query.POWER_ENABLE)
@@ -237,13 +233,13 @@ class MpbVfl(Laser):
         self.log.debug(f"Control mode set to {value}")
 
     @property
-    @describe(label="Model", desc="Identification string reported by the device.")
+    @prop(label="Model", desc="Identification string reported by the device.")
     def idn(self) -> str:
         """Get the device identification string."""
         return self._idn
 
-    @numeric(minimum=0.0, maximum=200.0, step=0.01)
-    @describe(label="SHG Temp Setpoint", units="°C", desc="Commanded SHG crystal temperature.", stream=True)
+    @number(minimum=0.0, maximum=200.0, step=0.01)
+    @prop(label="SHG Temp Setpoint", units="°C", desc="Commanded SHG crystal temperature.", stream="slow")
     def shg_temp_setpoint_c(self) -> float:
         """Get the SHG temperature setpoint in °C."""
         return float(self._query(Query.SHG_TEMP_SETPOINT))
@@ -255,12 +251,12 @@ class MpbVfl(Laser):
         self.log.debug(f"SHG temp setpoint set to {value} °C")
 
     @property
-    @describe(label="SHG Temperature", units="°C", desc="Measured SHG crystal temperature.", stream=True)
+    @prop(label="SHG Temperature", units="°C", desc="Measured SHG crystal temperature.", stream="slow")
     def shg_temp_c(self) -> float:
         """Get the measured SHG crystal temperature in °C."""
         return float(self._query(Query.SHG_TEMP))
 
-    @describe(label="SHG Tune Info", desc="Whether the laser is ready for SHG tuning.")
+    @query(label="SHG Tune Info", desc="Whether the laser is ready for SHG tuning.")
     def shg_tune_info(self) -> str:
         """Get a description of the SHG tuning readiness."""
         info = self._query(Query.SHG_TUNE_INFO).split()
@@ -271,24 +267,24 @@ class MpbVfl(Laser):
         warm = f"Warm-up period expires in {info[2]} seconds."
         return ready + schedule + warm
 
-    @describe(label="Tune SHG", desc="Initiate SHG tuning.")
+    @action(label="Tune SHG", desc="Initiate SHG tuning.")
     def tune_shg(self) -> None:
         """Initiate SHG tuning."""
         self._query(f"{Cmd.SHG_TUNE} 1")
         self.log.debug("SHG tuning initiated")
 
-    @describe(label="Stop SHG Tuning", desc="Abort SHG tuning.")
+    @action(label="Stop SHG Tuning", desc="Abort SHG tuning.")
     def tune_shg_stop(self) -> None:
         """Abort SHG tuning."""
         self._query(f"{Cmd.SHG_TUNE} 2")
         self.log.debug("SHG tuning aborted")
 
-    @describe(label="Status", desc="Multi-line status report from `shlaser`.")
+    @query(label="Status", desc="Multi-line status report from `shlaser`.")
     def status(self) -> list[str]:
         """Get the status report as a list of lines."""
         return self._query(Query.STATUS).split("\r")
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing MPB VFL laser")
         try:

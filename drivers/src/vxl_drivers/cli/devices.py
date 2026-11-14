@@ -1,17 +1,15 @@
 """Device configs from a rig or instrument file, opened on demand, plus stopping and closing."""
 
-from collections.abc import Mapping
+import asyncio
+from collections.abc import Coroutine, Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
+from rigup.device import Device, DeviceController
 from vxlib.problems import Problem
 
-from rigup import Device, build_objects
-from vxl.devices.axes.continuous_legacy.base import ContinuousAxis
-from vxl.devices.axes.discrete.base import DiscreteAxis
-from vxl.devices.camera.base import Camera
-from vxl.devices.laser.source import CurrentControlledLaserSource, LaserSource
+from rigup import build_objects
 from vxl.hal.rig_config import DeviceConfig, RigConfig
 
 
@@ -29,27 +27,36 @@ def load_configs(path: Path) -> dict[str, DeviceConfig]:
 
 
 class Session:
-    """All configs from one file and the devices opened from them, in dependency order."""
+    """All configs from one file and the devices opened from them, in dependency order, each with its controller."""
 
     def __init__(self, configs: dict[str, DeviceConfig]) -> None:
         self.configs = configs
         self.devices: dict[str, Device] = {}
+        self.controllers: dict[str, DeviceController[Any]] = {}
+        self._runner = asyncio.Runner()
+
+    def run[R](self, call: Coroutine[Any, Any, R]) -> R:
+        """Wait for a controller call."""
+        return self._runner.run(call)
 
     def open(self, uid: str) -> tuple[list[str], dict[str, Problem]]:
         """Build a device and its unopened dependencies; open dependencies are passed in as objects."""
         pending = {name: self._inject(config) for name, config in self._pending(uid).items()}
         built, errors = build_objects(pending, Device)
         self.devices.update(built)
+        for name, device in built.items():
+            self.controllers[name] = device.make_controller()
         return list(built), dict(errors)
 
     def close(self) -> dict[str, Exception]:
         """Close dependents before their dependencies and return failures by UID."""
         errors: dict[str, Exception] = {}
-        for uid, device in reversed(self.devices.items()):
+        for uid, controller in reversed(self.controllers.items()):
             try:
-                device.close()
+                self.run(controller.close())
             except Exception as error:
                 errors[uid] = error
+        self._runner.close()
         return errors
 
     def _pending(self, uid: str) -> dict[str, DeviceConfig]:
@@ -71,18 +78,13 @@ class Session:
         return config.model_copy(update={"init": _resolve(config.init, self.devices)})
 
 
-def stop(device: Device) -> bool:
-    """Put a device in its safe state; return False when its type has none."""
-    match device:
-        case LaserSource() | CurrentControlledLaserSource():
-            device.source_disable()
-        case ContinuousAxis() | DiscreteAxis():
-            device.halt()
-        case Camera():
-            device.stop()
-        case _:
-            return False
-    return True
+async def stop(controller: DeviceController[Any]) -> bool:
+    """Run every failsafe command of a device; return False when it has none."""
+    names = [name for name, info in controller.interface.commands.items() if info.intent == "failsafe"]
+    errors = [error for name in names if (error := (await controller.execute_command(name)).error) is not None]
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    return bool(names)
 
 
 def _references(value: Any, configs: Mapping[str, DeviceConfig]) -> set[str]:

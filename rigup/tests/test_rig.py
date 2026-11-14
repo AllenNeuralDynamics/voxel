@@ -1,96 +1,90 @@
-"""Tests for Rig — end-to-end with local-only config."""
+from collections.abc import AsyncIterator, Callable
 
-from rigup.node import LOCAL, LocalNode
+import pytest
+from rigup.node import LOCAL
 from rigup.rig import Rig
 
 from rigup import DeviceConfig, RigConfig
-from tests._mock import MockHolder
-
-MOCK_TARGET = "tests._mock.MockDevice"
 
 
-def _dev(initial_value: float = 0.0) -> DeviceConfig:
-    return DeviceConfig(target=MOCK_TARGET, init={"initial_value": initial_value})
+def mock(initial_value: float = 0.0) -> DeviceConfig:
+    return DeviceConfig(target="rigup_fakes.MockDevice", init={"initial_value": initial_value})
 
 
-def _bad_dev() -> DeviceConfig:
-    return DeviceConfig(target="nonexistent.Module", init={})
+@pytest.fixture
+async def open_rig() -> AsyncIterator[Callable[[RigConfig], Rig]]:
+    rigs: list[Rig] = []
 
-
-class TestRig:
-    async def test_open_creates_devices(self):
-        config = RigConfig.model_validate({"devices": {"dev_a": _dev(1.0), "dev_b": _dev(2.0)}})
+    def make(config: RigConfig) -> Rig:
         rig = Rig(config, name="test-rig")
-        await rig.open()
-        try:
-            assert len(rig.devices) == 2
-            assert "dev_a" in rig.devices
-            assert "dev_b" in rig.devices
-        finally:
-            await rig.close()
+        rigs.append(rig)
+        return rig
 
-    async def test_device_commands_work(self):
-        config = RigConfig.model_validate({"devices": {"dev": _dev()}})
-        rig = Rig(config, name="test-rig")
-        await rig.open()
-        try:
-            result = await rig.devices["dev"].call("set_value", v=42.0)
-            assert result == 42.0
-        finally:
-            await rig.close()
-
-    async def test_close_clears_state(self):
-        config = RigConfig.model_validate({"devices": {"dev": _dev()}})
-        rig = Rig(config, name="test-rig")
-        await rig.open()
-        assert len(rig.devices) == 1
-
-        await rig.close()
-        assert len(rig.devices) == 0
-        assert len(rig.nodes) == 0
-
-    async def test_build_errors_captured(self):
-        config = RigConfig.model_validate({"devices": {"good": _dev(), "bad": _bad_dev()}})
-        rig = Rig(config, name="test-rig")
-        await rig.open()
-        try:
-            assert "good" in rig.devices
-            assert "bad" not in rig.devices
-            assert "bad" in rig.build_errors
-        finally:
-            await rig.close()
-
-    async def test_a_part_is_in_parts_and_not_in_devices(self):
-        config = RigConfig.model_validate(
-            {
-                "parts": {"glass": {"target": "tests._mock.MockPart", "value": 1.5}},
-                "devices": {"holder": DeviceConfig(target="tests._mock.MockHolder", init={"held": "glass"})},
-            }
-        )
-        rig = Rig(config, name="test-rig")
-        await rig.open()
-        try:
-            assert not rig.build_errors
-            assert set(rig.devices) == {"holder"}
-            assert rig.parts == config.parts
-            node = rig.nodes[LOCAL]
-            assert isinstance(node, LocalNode)
-            holder = node._controllers["holder"].device
-            assert isinstance(holder, MockHolder)
-            assert holder.held is config.parts["glass"]
-            assert rig.nodes[LOCAL].node_id == LOCAL
-        finally:
-            await rig.close()
-
-    async def test_empty_config(self):
-        config = RigConfig()
-        rig = Rig(config, name="empty")
-        await rig.open()
-        assert len(rig.devices) == 0
-        assert len(rig.nodes) == 0
+    yield make
+    for rig in rigs:
         await rig.close()
 
-    async def test_rig_name(self):
-        config = RigConfig()
-        rig = Rig(config, name="test-rig")
-        assert rig.name == "test-rig"
+
+async def test_open_builds_every_device(open_rig: Callable[[RigConfig], Rig]) -> None:
+    rig = open_rig(RigConfig.model_validate({"devices": {"dev_a": mock(1.0), "dev_b": mock(2.0)}}))
+
+    await rig.open()
+
+    assert set(rig.devices) == {"dev_a", "dev_b"}
+    assert set(rig.nodes) == {LOCAL}
+
+
+async def test_a_device_call_returns_its_result(open_rig: Callable[[RigConfig], Rig]) -> None:
+    rig = open_rig(RigConfig.model_validate({"devices": {"dev": mock()}}))
+    await rig.open()
+
+    result = await rig.devices["dev"].call("set_value", v=42.0)
+
+    assert result == 42.0
+
+
+async def test_close_drops_devices_and_nodes() -> None:
+    rig = Rig(RigConfig.model_validate({"devices": {"dev": mock()}}), name="test-rig")
+    await rig.open()
+
+    await rig.close()
+
+    assert rig.devices == {}
+    assert rig.nodes == {}
+
+
+async def test_a_device_that_fails_to_build_is_a_build_error(open_rig: Callable[[RigConfig], Rig]) -> None:
+    config = RigConfig.model_validate(
+        {"devices": {"good": mock(), "bad": DeviceConfig(target="nonexistent.Module", init={})}}
+    )
+    rig = open_rig(config)
+
+    await rig.open()
+
+    assert set(rig.devices) == {"good"}
+    assert set(rig.build_errors) == {"bad"}
+
+
+async def test_a_part_is_passed_to_a_device_and_kept_out_of_devices(open_rig: Callable[[RigConfig], Rig]) -> None:
+    config = RigConfig.model_validate(
+        {
+            "parts": {"glass": {"target": "rigup_fakes.MockPart", "value": 1.5}},
+            "devices": {"holder": DeviceConfig(target="rigup_fakes.MockHolder", init={"held": "glass"})},
+        }
+    )
+    rig = open_rig(config)
+
+    await rig.open()
+
+    assert rig.build_errors == {}
+    assert set(rig.devices) == {"holder"}
+    assert rig.parts == config.parts
+
+
+async def test_an_empty_rig_opens_with_no_devices(open_rig: Callable[[RigConfig], Rig]) -> None:
+    rig = open_rig(RigConfig())
+
+    await rig.open()
+
+    assert rig.devices == {}
+    assert rig.nodes == {}

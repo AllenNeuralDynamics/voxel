@@ -1,11 +1,3 @@
-"""LocalNode — in-process devices, no transport.
-
-Devices are constructed directly via :func:`build_objects_async`, wrapped in
-:class:`DeviceController` + :class:`LocalAdapter`, and exposed as
-:class:`DeviceHandle` instances. No serialization for typed subscribers — the
-fastest path for dev/simulation and for devices that don't need process isolation.
-"""
-
 import logging
 from collections import defaultdict
 from collections.abc import Mapping
@@ -16,30 +8,18 @@ from vxlib.lifecycle import Teardown
 
 from rigup.build import BuildObjectsResult, build_objects_async
 from rigup.component import Part
-from rigup.device import (
-    Adapter,
-    CommandRequest,
-    ComponentInterface,
-    Device,
-    DeviceController,
-    DeviceHandle,
-    PropResults,
-    Result,
-    Results,
-    StreamCallback,
-)
-from rigup.wire import TopicDispatcher
+from rigup.device.controller import DeviceController, StreamCallback
+from rigup.device.device import Device
+from rigup.device.handle import Adapter, DeviceHandle
+from rigup.device.interface import DeviceInterface
+from rigup.device.results import CommandRequest, PropResults, Result, Results
+from rigup.node._broadcast import TopicDispatcher
 
-from ._base import DevicesBuildResult, DevicesConfig, Node
+from ._base import DevicesBuildResult, DevicesConfig, Node, close_each
 
 
 class LocalAdapter[D: Device](Adapter[D]):
-    """Adapter that wraps a :class:`DeviceController` directly — no transport.
-
-    One :class:`TopicDispatcher` per topic owns all subscribers (typed + bytes)
-    for that topic. Typed subs receive Python objects with zero serialization.
-    Bytes subs receive packed bytes (lazy — pack only when bytes subs exist).
-    """
+    """Call a ``DeviceController`` in the same process; typed subscribers get events without serialization."""
 
     def __init__(self, controller: DeviceController[D]) -> None:
         super().__init__()
@@ -51,13 +31,10 @@ class LocalAdapter[D: Device](Adapter[D]):
         controller.set_bytes_publisher(self._on_bytes)
 
     async def _on_typed(self, topic: str, body: BaseModel) -> None:
-        """Typed event from controller — TopicDispatcher fans to typed subs verbatim, packs on demand for bytes."""
         if (sig := self._signals.get(topic)) is not None:
             await sig.emit(body)
 
     async def _on_bytes(self, topic: str, data: bytes) -> None:
-        """Raw byte stream from controller (e.g. frames)
-        TopicDispatcher fans bytes through;typed decode skipped if no schema."""
         if (sig := self._signals.get(topic)) is not None:
             await sig.emit_bytes(data)
 
@@ -69,7 +46,7 @@ class LocalAdapter[D: Device](Adapter[D]):
     def device(self) -> D | None:
         return self._controller.device
 
-    async def interface(self) -> ComponentInterface:
+    async def interface(self) -> DeviceInterface:
         return self._controller.interface
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
@@ -91,7 +68,7 @@ class LocalAdapter[D: Device](Adapter[D]):
     def subscribe[T: BaseModel](self, topic: str, cb: StreamCallback[T], *, schema: type[T]) -> Teardown: ...
 
     def subscribe(self, topic: str, cb: Any, *, schema: type[BaseModel] | None = None) -> Teardown:
-        sig = self._signals[topic]  # defaultdict creates on first access
+        sig = self._signals[topic]
         if schema is not None:
             return sig.subscribe(cb, schema=schema)
         return sig.subscribe(cb)
@@ -101,16 +78,11 @@ class LocalAdapter[D: Device](Adapter[D]):
 
 
 LOCAL: Final = ""
-"""The id of the local node: the orchestrator's own process. A node id in a rig file is never empty."""
+"""Id of the node in the orchestrator's own process; a node id in a rig file is never empty."""
 
 
 class LocalNode(Node):
-    """In-process node — devices live in the orchestrator's own process.
-
-    ``open`` is a no-op; ``build_devices`` constructs devices via
-    :func:`build_objects_async`, wraps each device in a controller + local adapter,
-    and returns device handles. Closing tears down controllers directly.
-    """
+    """Node whose devices live in the orchestrator's own process."""
 
     def __init__(self, node_id: str = LOCAL) -> None:
         self._node_id = node_id
@@ -140,7 +112,7 @@ class LocalNode(Node):
 
         handles: dict[str, DeviceHandle] = {}
         for uid, device in built.items():
-            controller = device.make_controller()
+            controller = device.make_controller(streaming=devices[uid].streaming)
             controller.start_streaming()
             adapter: LocalAdapter = LocalAdapter(controller)
             handle: DeviceHandle = DeviceHandle(adapter)
@@ -157,8 +129,7 @@ class LocalNode(Node):
             await controller.close()
 
     async def close_all_devices(self) -> None:
-        for uid in list(self._controllers):
-            await self.close_device(uid)
+        await close_each(self._controllers, self.close_device, logging.getLogger(__name__))
 
     @property
     def devices(self) -> dict[str, DeviceHandle]:

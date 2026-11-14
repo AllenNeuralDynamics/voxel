@@ -11,9 +11,10 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-from rigup.device.schema import Command, ParamInfo, PropertyInfo, collect_commands, collect_properties
+from rigup.device import DeviceController
+from rigup.device.interface import CommandInfo, PropertyInfo
+from rigup.device.results import PropertyModel
 
-from rigup import Device, PropertyModel
 from vxl_drivers.cli.devices import Session, stop
 
 _WATCH_INTERVAL_S = 0.5
@@ -44,9 +45,9 @@ class DriverShell(cmd.Cmd):
         self._session = session
         self._output = output
         self._uid: str | None = None
-        self._device: Device | None = None
+        self._controller: DeviceController[Any] | None = None
         self._properties: dict[str, PropertyInfo] = {}
-        self._commands: dict[str, Command] = {}
+        self._commands: dict[str, CommandInfo] = {}
 
     def open(self, uids: Iterable[str]) -> None:
         """Open devices before the loop starts; the first that opens becomes active."""
@@ -81,10 +82,10 @@ class DriverShell(cmd.Cmd):
         return False
 
     def default(self, line: str) -> None:
-        device = self._active()
+        controller = self._active()
         name, *tokens = shlex.split(line)
         if name in self._properties:
-            self._property(device, name, tokens)
+            self._property(controller, name, tokens)
         elif name in self._commands:
             self._command(name, tokens)
         else:
@@ -109,24 +110,24 @@ class DriverShell(cmd.Cmd):
 
     def do_info(self, _arg: str) -> None:
         """info: show the active device's properties and commands."""
-        device = self._active()
+        controller = self._active()
         properties = Table("Property", "Value", "Units", "Access", "Limits", "Step")
+        results = self._session.run(controller.get_props(*self._properties))
         for name, info in self._properties.items():
-            try:
-                model = PropertyModel.from_value(getattr(device, name))
-            except Exception as error:
-                properties.add_row(Text(name), Text(f"{type(error).__name__}: {error}", style="red"))
+            if (error := results[name].error) is not None:
+                properties.add_row(Text(name), Text(error, style="red"))
                 continue
+            model = results[name].unwrap()
             cells = (name, model.value, info.units, info.access, _limits(model), model.step)
             properties.add_row(*(Text(_text(cell)) for cell in cells))
         commands = Table("Command", "Parameters")
         for name, command in self._commands.items():
-            commands.add_row(Text(name), Text(", ".join(_param(*item) for item in command.info.params.items())))
+            commands.add_row(Text(name), Text(", ".join(_params(command))))
         self._output.print(properties, commands)
 
     def do_watch(self, arg: str) -> None:
         """watch <property> [<property> ...]: read every 0.5 s until Ctrl+C."""
-        device = self._active()
+        controller = self._active()
         names = arg.split()
         if not names:
             raise ValueError("watch needs at least one property")
@@ -136,14 +137,14 @@ class DriverShell(cmd.Cmd):
             while True:
                 stamp = f"{datetime.now():%H:%M:%S}"
                 for name in names:
-                    self._output.print(f"{stamp}  {name}  {self._format(device, name)}")
+                    self._output.print(f"{stamp}  {name}  {self._format(controller, name)}")
                 time.sleep(_WATCH_INTERVAL_S)
         except KeyboardInterrupt:
             self._output.print()
 
     def do_stop(self, _arg: str) -> None:
-        """stop: turn lasers off, halt axes, and stop cameras on every open device."""
-        for uid in reversed(self._session.devices):
+        """stop: run the failsafe commands of every open device."""
+        for uid in reversed(self._session.controllers):
             self._stop(uid)
 
     def do_quit(self, _arg: str) -> bool:
@@ -165,15 +166,15 @@ class DriverShell(cmd.Cmd):
 
     def _activate(self, uid: str) -> None:
         self._uid = uid
-        self._device = self._session.devices[uid]
-        self._properties = collect_properties(self._device)
-        self._commands = collect_commands(self._device)
+        self._controller = self._session.controllers[uid]
+        self._properties = dict(self._controller.interface.properties)
+        self._commands = dict(self._controller.interface.commands)
         self.prompt = f"{uid}> "
 
-    def _active(self) -> Device:
-        if self._device is None:
+    def _active(self) -> DeviceController[Any]:
+        if self._controller is None:
             raise ValueError("No active device; use 'use <device>'")
-        return self._device
+        return self._controller
 
     def _list(self) -> None:
         table = Table("Device", "Class", "Open")
@@ -183,14 +184,15 @@ class DriverShell(cmd.Cmd):
             table.add_row(uid, config.target.rsplit(".", 1)[-1], is_open, style=style)
         self._output.print(table)
 
-    def _property(self, device: Device, name: str, tokens: list[str]) -> None:
+    def _property(self, controller: DeviceController[Any], name: str, tokens: list[str]) -> None:
         if tokens:
             if self._properties[name].access == "ro":
                 raise ValueError(f"{name} is read-only")
             if len(tokens) != 1:
                 raise ValueError(f"{name} takes one value")
-            setattr(device, name, yaml.safe_load(tokens[0]))
-        self._output.print(self._format(device, name))
+            if error := self._session.run(controller.set_props(**{name: yaml.safe_load(tokens[0])}))[name].error:
+                raise ValueError(error)
+        self._output.print(self._format(controller, name))
 
     def _command(self, name: str, tokens: list[str]) -> None:
         args: list[Any] = []
@@ -201,21 +203,20 @@ class DriverShell(cmd.Cmd):
                 kwargs[key] = yaml.safe_load(value)
             else:
                 args.append(yaml.safe_load(token))
-        command = self._commands[name]
-        if unknown := kwargs.keys() - command.info.params.keys():
+        if unknown := kwargs.keys() - self._commands[name].params.get("properties", {}).keys():
             raise ValueError(f"{name} has no parameter {', '.join(sorted(unknown))}")
-        result = command(*args, **kwargs)
+        result = self._session.run(self._active().execute_command(name, *args, **kwargs)).unwrap()
         if result is not None:
             self._output.print(result)
 
-    def _format(self, device: Device, name: str) -> str:
-        value = PropertyModel.from_value(getattr(device, name)).value
+    def _format(self, controller: DeviceController[Any], name: str) -> str:
+        value = self._session.run(controller.get_props(name))[name].unwrap().value
         units = self._properties[name].units
         return f"{value} {units}" if value is not None and units else str(value)
 
     def _stop(self, uid: str) -> None:
         try:
-            if stop(self._session.devices[uid]):
+            if self._session.run(stop(self._session.controllers[uid])):
                 self._output.print(f"Stopped {uid}")
         except Exception as error:
             self._report(error)
@@ -237,6 +238,10 @@ def _text(value: object) -> str:
     return "" if value is None else str(value)
 
 
-def _param(name: str, info: ParamInfo) -> str:
-    dtype = " | ".join(part.rsplit(".", 1)[-1] for part in info.types)
-    return f"{name}: {dtype}" if info.required else f"{name}: {dtype} = {info.default}"
+def _params(command: CommandInfo) -> list[str]:
+    required = set(command.params.get("required", []))
+    params: list[str] = []
+    for name, schema in command.params.get("properties", {}).items():
+        dtype = " | ".join(str(option.get("type", "?")) for option in schema.get("anyOf", [schema]))
+        params.append(f"{name}: {dtype}" if name in required else f"{name}: {dtype} = {schema.get('default')}")
+    return params

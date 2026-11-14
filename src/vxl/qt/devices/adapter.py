@@ -10,7 +10,9 @@ from PySide6.QtCore import QObject, QTimer, Signal
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from rigup import ComponentInterface, PropertyModel
+    from rigup.device import DeviceInterface
+    from rigup.device.results import PropertyModel
+
     from vxl.instrument import Instrument
     from vxl.station_legacy.models import SessionView
 
@@ -37,7 +39,7 @@ class DeviceHandleQt(QObject):
     connected = Signal(bool)  # Connection status change
     fault = Signal(str)  # Error message
 
-    def __init__(self, instrument: Instrument, interface: ComponentInterface, parent: QObject | None = None) -> None:
+    def __init__(self, instrument: Instrument, interface: DeviceInterface, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._instrument = instrument
         self._interface = interface
@@ -148,11 +150,11 @@ class DeviceHandleQt(QObject):
         results = await self._instrument.set_device_properties(self._uid, {property_name: value})
         results.unwrap()
 
-    async def interface(self) -> ComponentInterface:
+    async def interface(self) -> DeviceInterface:
         """Get the device interface (introspection).
 
         Returns:
-            ComponentInterface with properties, commands, etc.
+            DeviceInterface with properties, commands, etc.
         """
         return self._interface
 

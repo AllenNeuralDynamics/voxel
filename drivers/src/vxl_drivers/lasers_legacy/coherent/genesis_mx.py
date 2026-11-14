@@ -2,8 +2,7 @@
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
-from rigup.device.props import numeric
-from rigup.device.schema import describe
+from rigup.device import number
 
 from vxl_drivers.lasers_legacy.base import Laser
 
@@ -60,8 +59,7 @@ class GenesisMX(Laser):
         """Check if the laser is enabled."""
         return self._inst.enable_loop.software
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return self._inst.power_setpoint_mw
@@ -73,7 +71,6 @@ class GenesisMX(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return self._inst.power_mw
@@ -83,7 +80,7 @@ class GenesisMX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._inst.temperature_c
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing Genesis MX laser")
         self.disable()

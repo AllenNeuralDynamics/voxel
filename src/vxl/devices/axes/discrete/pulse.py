@@ -143,7 +143,7 @@ class PulseDiscreteAxis(DiscreteAxis):
                 states[str(active_slot)] = bool(self._active)
             self._generator.set_states(states)
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Reset the owned generator and release its resources."""
         try:
             self._generator.reset()

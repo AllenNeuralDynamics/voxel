@@ -1,26 +1,14 @@
-"""RemoteNode — connects to an externally supervised node process."""
-
 from contextlib import suppress
 
 from rigup.config import NodeConfig
-from rigup.protocol import (
-    Action,
-    ClaimRequest,
-    ClaimResponse,
-    ReleaseRequest,
-    ReleaseResponse,
-    call,
-)
+from rigup.node._protocol import Action, ClaimRequest, ClaimResponse, ReleaseRequest, ReleaseResponse, call
 from rigup.transport import IPCAddress, NodeAddress, TCPAddress, ZMQTransportClient
 
 from ._transport import TransportNode
 
 
 def _parse_address(address: str) -> NodeAddress:
-    """Parse a config address string into a typed :class:`NodeAddress`.
-
-    Supports ``tcp://host:port`` and ``ipc://path``.
-    """
+    """Parse a ``tcp://host:port`` or ``ipc://path`` address."""
     if address.startswith("ipc://"):
         path = address[len("ipc://") :]
         if path.endswith((".rpc", ".pub")):
@@ -38,10 +26,9 @@ def _parse_address(address: str) -> NodeAddress:
 
 
 class RemoteNode(TransportNode):
-    """Node backed by an externally supervised process (systemd/launchd/etc.).
+    """Node in a process supervised outside the rig.
 
-    ``open`` connects via ZMQ and claims authority. ``close`` releases
-    authority and disconnects — does NOT terminate the process.
+    ``open`` connects and claims authority over the node; ``close`` releases it but leaves the process running.
     """
 
     def __init__(self, node_id: str, config: NodeConfig, orchestrator_id: str = "") -> None:

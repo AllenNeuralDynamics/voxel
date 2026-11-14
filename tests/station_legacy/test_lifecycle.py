@@ -1,14 +1,14 @@
 import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
+from rigup.device.handle import DeviceProps
 from vxl_records import PlannedVolume, VoxelRecords
 from vxlib.history import HistoryState
 from vxlib.reactivity import Cell, Emitter, ReactiveQuery
 
-from rigup import ComponentInterface, DeviceProps
 from vxl.instrument import (
     Activity,
     Bounds,
@@ -21,6 +21,9 @@ from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
 from vxl.preview.protocol import StagePosition
 from vxl.station_legacy.models import StationStatus
 from vxl.station_legacy.station import Station, StationConfig
+
+if TYPE_CHECKING:
+    from rigup.device import DeviceInterface
 
 
 class FakeInstrument:
@@ -36,7 +39,7 @@ class FakeInstrument:
         self.preview_channels = Cell[tuple[str, ...]](())
         self.active_profile_id = Cell(next(iter(self.state.value.imaging.profiles)))
         self.history = Cell(HistoryState())
-        self.device_interfaces: dict[str, ComponentInterface] = {}
+        self.device_interfaces: dict[str, DeviceInterface] = {}
         self.device_props: dict[str, DeviceProps] = {}
         self.remote_stores = {}
         self.device_props_updates = Emitter[tuple[str, DeviceProps]]()

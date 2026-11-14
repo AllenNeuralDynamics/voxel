@@ -3,7 +3,8 @@
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup import describe, numeric
+from rigup.device import number, prop
+
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.lasers.skyra.controller import SkyraController, SkyraError
 
@@ -120,7 +121,7 @@ class SkyraSource(LaserSource):
         return self._controller.flag(self._cmd("l?"))
 
     # TODO: verify on real hardware the setpoint resolution of #p and whether #p is accepted in modulation mode.
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
     def source_power_setpoint_mw(self) -> float:
         self._ensure_open()
         return self._controller.number(self._cmd("p?")) * 1000
@@ -142,18 +143,18 @@ class SkyraSource(LaserSource):
         return self._controller.number(self._cmd("pa?")) * 1000
 
     @property
-    @describe(label="Line")
+    @prop(label="Line")
     def line(self) -> int:
         return self._line
 
     @property
-    @describe(label="Diode Current", units="mA")
+    @prop(label="Diode Current", units="mA")
     def diode_current_ma(self) -> float:
         self._ensure_open()
         return self._controller.number(self._cmd("i?"))
 
     @property
-    @describe(label="In Autostart")
+    @prop(label="In Autostart")
     def in_autostart(self) -> bool:
         """Whether the autostart sequence includes this line."""
         self._ensure_open()
@@ -185,7 +186,7 @@ class SkyraSource(LaserSource):
             if self._read_modulation_mode() != mode:
                 raise SkyraError(f"Skyra line {self._line} did not establish {mode} modulation")
 
-    def close(self) -> None:
+    def release(self) -> None:
         """Switch the line off and release it; the rig owns controller teardown."""
         if self._closed:
             return

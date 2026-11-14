@@ -3,6 +3,7 @@
 import math
 import time
 
+from rigup.device import action, choice, failsafe, number, prop
 from vxl_drivers.axes.mmc._cmds import (
     ENCODER_TYPE_FROM_WIRE,
     ENCODER_TYPE_TO_WIRE,
@@ -27,7 +28,6 @@ from vxl_drivers.axes.mmc._cmds import (
 )
 from vxl_drivers.axes.mmc._hub import MMCCommunicationError, MMCHub
 
-from rigup import describe, enumerated, numeric
 from vxl.devices.axes.continuous_legacy import ContinuousAxis, TTLStepper
 
 _MM_PER_USER_UNIT = {
@@ -153,8 +153,7 @@ class MMCLinearAxis(ContinuousAxis):
             raise NotImplementedError("MMC supports zeroing the current position, not assigning an arbitrary position")
         self.set_zero_here()
 
-    @property
-    @describe(label="Upper Limit", desc="The upper software position limit.")
+    @ContinuousAxis.upper_limit.getter
     def upper_limit(self) -> float:
         return self._upper_limit
 
@@ -163,8 +162,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.UPPER_LIMIT, self._to_mm(value))
         self._upper_limit = value
 
-    @property
-    @describe(label="Lower Limit", desc="The lower software position limit.")
+    @ContinuousAxis.lower_limit.getter
     def lower_limit(self) -> float:
         return self._lower_limit
 
@@ -174,7 +172,6 @@ class MMCLinearAxis(ContinuousAxis):
         self._lower_limit = value
 
     @property
-    @describe(label="Speed", desc="The configured motion speed.")
     def speed(self) -> float:
         return self._from_mm(self._query_float(Cmd.VELOCITY))
 
@@ -183,7 +180,6 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.VELOCITY, self._to_mm(value))
 
     @property
-    @describe(label="Acceleration", desc="The configured motion acceleration.")
     def acceleration(self) -> float:
         return self._from_mm(self._query_float(Cmd.ACCELERATION))
 
@@ -192,7 +188,6 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.ACCELERATION, self._to_mm(value))
 
     @property
-    @describe(label="Backlash", desc="Not supported by the MMC controller.")
     def backlash(self) -> None:
         return None
 
@@ -202,7 +197,6 @@ class MMCLinearAxis(ContinuousAxis):
         raise NotImplementedError("MMC does not provide backlash compensation")
 
     @property
-    @describe(label="Home Position", desc="The hardware home index, which establishes zero.")
     def home(self) -> float:
         """The MMC hardware home index establishes zero."""
         return 0.0
@@ -215,17 +209,17 @@ class MMCLinearAxis(ContinuousAxis):
     # MMC diagnostics and configuration ----------------------------------------------------------------------------
 
     @property
-    @describe(label="Firmware Version")
+    @prop(label="Firmware Version")
     def firmware_version(self) -> str:
         return self._firmware_version
 
     @property
-    @describe(label="Status", desc="Decoded MMC status register.")
+    @prop(label="Status", desc="Decoded MMC status register.")
     def status(self) -> AxisStatus:
         return parse_status(self.hub.query(self.axis_id, Cmd.STATUS))
 
     @property
-    @describe(label="Position Reading", desc="Theoretical and encoder positions in the configured axis units.")
+    @prop(label="Position Reading", desc="Theoretical and encoder positions in the configured axis units.")
     def position_reading(self) -> PositionReading:
         reading = self._read_position()
         return PositionReading(
@@ -234,22 +228,22 @@ class MMCLinearAxis(ContinuousAxis):
         )
 
     @property
-    @describe(label="Encoder Position", units="axis units")
+    @prop(label="Encoder Position", units="axis units")
     def encoder_position(self) -> float:
         return self._from_mm(self._read_position().encoder)
 
     @property
-    @describe(label="Limit Status")
+    @prop(label="Limit Status")
     def limit_status(self) -> LimitStatus:
         return parse_limit_status(self.hub.query(self.axis_id, Cmd.LIMIT_STATUS))
 
     @property
-    @describe(label="Homed", desc="Whether the controller has homed since startup.")
+    @prop(label="Homed", desc="Whether the controller has homed since startup.")
     def homed(self) -> bool:
         return bool(self._query_int(Cmd.HOME))
 
-    @enumerated(options=[mode.value for mode in FeedbackMode])
-    @describe(label="Feedback Mode", desc="Open-loop or encoder-feedback control mode.")
+    @choice(options=[mode.value for mode in FeedbackMode])
+    @prop(label="Feedback Mode", desc="Open-loop or encoder-feedback control mode.")
     def feedback_mode(self) -> str:
         value = self._query_int(Cmd.FEEDBACK_MODE)
         try:
@@ -263,7 +257,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.FEEDBACK_MODE, FEEDBACK_MODE_TO_WIRE[mode])
 
     @property
-    @describe(
+    @prop(
         label="Motor Enabled",
         desc="Motor current state. Disabling it may allow the piezo stage to shift.",
     )
@@ -274,8 +268,8 @@ class MMCLinearAxis(ContinuousAxis):
     def motor_enabled(self, value: bool) -> None:
         self.hub.command(self.axis_id, Cmd.MOTOR_ENABLED, int(value))
 
-    @enumerated(options=[encoder.value for encoder in EncoderType])
-    @describe(label="Encoder Type")
+    @choice(options=[encoder.value for encoder in EncoderType])
+    @prop(label="Encoder Type")
     def encoder_type(self) -> str:
         value = self._query_int(Cmd.ENCODER_TYPE)
         try:
@@ -288,8 +282,8 @@ class MMCLinearAxis(ContinuousAxis):
         encoder_type = EncoderType(value)
         self.hub.command(self.axis_id, Cmd.ENCODER_TYPE, ENCODER_TYPE_TO_WIRE[encoder_type])
 
-    @numeric(minimum=0.001, maximum=999.999)
-    @describe(label="Encoder Resolution", units="µm/count")
+    @number(minimum=0.001, maximum=999.999)
+    @prop(label="Encoder Resolution", units="µm/count")
     def encoder_resolution_um_per_count(self) -> float:
         return self._query_float(Cmd.ENCODER_RESOLUTION)
 
@@ -298,23 +292,23 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.ENCODER_RESOLUTION, value)
 
     @property
-    @describe(label="Encoder Velocity", desc="Velocity measured by the encoder.")
+    @prop(label="Encoder Velocity", desc="Velocity measured by the encoder.")
     def encoder_velocity(self) -> float:
         return self._from_mm(self._query_float(Cmd.ENCODER_VELOCITY))
 
     @property
-    @describe(label="Deadband", desc="Closed-loop tolerance and seek timeout.")
+    @prop(label="Deadband", desc="Closed-loop tolerance and seek timeout.")
     def deadband(self) -> DeadbandSettings:
         return parse_deadband(self.hub.query(self.axis_id, Cmd.DEADBAND))
 
-    @describe(label="Configure Deadband")
+    @action(label="Configure Deadband")
     def configure_deadband(self, counts: int, timeout_s: float) -> None:
         if counts < 0 or timeout_s < 0:
             raise ValueError("Deadband counts and timeout must be nonnegative")
         self.hub.command(self.axis_id, Cmd.DEADBAND, counts, timeout_s)
 
-    @enumerated(options=[direction.value for direction in HomeDirection])
-    @describe(label="Home Direction")
+    @choice(options=[direction.value for direction in HomeDirection])
+    @prop(label="Home Direction")
     def home_direction(self) -> str:
         value = self._query_int(Cmd.HOME_DIRECTION)
         try:
@@ -327,11 +321,11 @@ class MMCLinearAxis(ContinuousAxis):
         direction = HomeDirection(value)
         self.hub.command(self.axis_id, Cmd.HOME_DIRECTION, HOME_DIRECTION_TO_WIRE[direction])
 
-    @numeric(
+    @number(
         minimum=lambda self: self._from_mm(0.001),
         maximum=lambda self: self.maximum_acceleration,
     )
-    @describe(label="Deceleration", desc="Controlled-motion deceleration in axis units/s².")
+    @prop(label="Deceleration", desc="Controlled-motion deceleration in axis units/s².")
     def deceleration(self) -> float:
         return self._from_mm(self._query_float(Cmd.DECELERATION))
 
@@ -340,15 +334,15 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.DECELERATION, self._to_mm(value))
 
     @property
-    @describe(label="Maximum Velocity", desc="Controller-calculated velocity limit.")
+    @prop(label="Maximum Velocity", desc="Controller-calculated velocity limit.")
     def maximum_velocity(self) -> float:
         return self._from_mm(self._query_float(Cmd.MAXIMUM_VELOCITY))
 
-    @numeric(
+    @number(
         minimum=lambda self: self._from_mm(0.001),
         maximum=lambda self: self._from_mm(500.0),
     )
-    @describe(label="Maximum Acceleration", desc="Controller acceleration limit in axis units/s².")
+    @prop(label="Maximum Acceleration", desc="Controller acceleration limit in axis units/s².")
     def maximum_acceleration(self) -> float:
         return self._from_mm(self._query_float(Cmd.MAXIMUM_ACCELERATION))
 
@@ -358,40 +352,40 @@ class MMCLinearAxis(ContinuousAxis):
 
     # MMC commands ---------------------------------------------------------------------------------------------------
 
-    @describe(label="Controlled Stop", desc="Stop using the configured deceleration.")
+    @failsafe(label="Controlled Stop", desc="Stop using the configured deceleration.")
     def stop(self) -> None:
         self.hub.command(self.axis_id, Cmd.STOP)
 
-    @describe(label="Move to Negative Limit")
+    @action(label="Move to Negative Limit")
     def move_to_negative_limit(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.command(self.axis_id, Cmd.MOVE_NEGATIVE_LIMIT)
         if wait:
             self.await_movement(timeout_s)
 
-    @describe(label="Move to Positive Limit")
+    @action(label="Move to Positive Limit")
     def move_to_positive_limit(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         self.hub.command(self.axis_id, Cmd.MOVE_POSITIVE_LIMIT)
         if wait:
             self.await_movement(timeout_s)
 
-    @describe(label="Read and Clear Errors", desc="Return pending controller errors and clear them.")
+    @action(label="Read and Clear Errors", desc="Return pending controller errors and clear them.")
     def read_and_clear_errors(self) -> list[ControllerError]:
         lines = self.hub.query_lines(self.axis_id, Cmd.READ_ERRORS)
         if len(lines) == 1 and lines[0].strip().lower() in {"0", "no error", "no errors"}:
             return []
         return [parse_controller_error(line) for line in lines]
 
-    @describe(label="Clear Errors", desc="Clear pending controller errors without reading them.")
+    @action(label="Clear Errors", desc="Clear pending controller errors without reading them.")
     def clear_errors(self) -> None:
         self.hub.command(self.axis_id, Cmd.CLEAR_ERRORS)
 
-    @describe(label="Save Settings", desc="Persist current controller settings for use after power-up.")
+    @action(label="Save Settings", desc="Persist current controller settings for use after power-up.")
     def save_settings(self) -> None:
         self.hub.command(self.axis_id, Cmd.SAVE_SETTINGS)
 
     # Lifecycle and helpers ------------------------------------------------------------------------------------------
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         if self._closed:
             return
         self._closed = True

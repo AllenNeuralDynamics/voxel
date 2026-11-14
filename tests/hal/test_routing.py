@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
 import pytest
+from rigup.device import Result
 
-from rigup import Result
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.hal.core import RouteDimension
 from vxl.hal.errors import HALError

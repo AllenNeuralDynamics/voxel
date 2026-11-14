@@ -6,9 +6,8 @@ from collections.abc import Iterable, Sequence
 from nidaqmx.errors import DaqError
 from nidaqmx.system import System as NiSystem
 from nidaqmx.system.device import Device as NiDevice
+from rigup.device import Device
 from vxlib.quantity import VoltageRange
-
-from rigup import Device
 
 from .resources import NiDaqModel, NiTaskLease, _NiResourceManager, capabilities_for_model
 

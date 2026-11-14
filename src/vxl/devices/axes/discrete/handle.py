@@ -2,9 +2,9 @@
 
 import asyncio
 
+from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, DeviceProperty
 
-from rigup import DeviceHandle
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
 
 _POLL_INTERVAL = 0.05

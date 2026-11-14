@@ -534,7 +534,7 @@ def main() -> None:
                 break
             info = _handle(console, hub, info, args.port, cmd.lower(), rest)
     finally:
-        hub.close()
+        hub.dispose()
 
 
 if __name__ == "__main__":

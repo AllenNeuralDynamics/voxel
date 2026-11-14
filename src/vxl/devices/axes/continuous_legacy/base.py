@@ -1,12 +1,13 @@
 """Continuous axis abstraction for linear and rotational motion."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
+from rigup.device import DeviceController, StreamTier, action, failsafe, number, prop, query
 
-from rigup import DeviceController, describe, numeric
 from vxl.devices.axes.base import Axis
 from vxl.devices.base import DeviceType
 
@@ -80,59 +81,67 @@ class ScanMode(StrEnum):
     TTL_STEPPING = "TTL_STEPPING"
 
 
-class ContinuousAxisController(DeviceController["ContinuousAxis"]):
+class ContinuousAxisController(DeviceController["ContinuousAxis"], streaming={"fast": 0.05}):
     """Controller for ContinuousAxis with TTL stepping support."""
 
-    def __init__(self, device: "ContinuousAxis", stream_interval: float = 0.05):
-        super().__init__(device, stream_interval=stream_interval)
+    def __init__(self, device: "ContinuousAxis", *, streaming: Mapping[StreamTier, float] | None = None):
+        super().__init__(device, streaming=streaming)
         self._scan_mode = ScanMode.IDLE
-        self._ttl_stepper = device.get_ttl_stepper()
+        self._ttl_stepper: TTLStepper | None = None
+        self._ttl_stepper_read = False
+
+    def _stepper(self) -> TTLStepper | None:
+        """The device's TTL stepper, asked for once, on the device's thread."""
+        if not self._ttl_stepper_read:
+            self._ttl_stepper = self.device.get_ttl_stepper()
+            self._ttl_stepper_read = True
+        return self._ttl_stepper
 
     @property
-    @describe(label="Scan Mode", stream=True)
+    @prop(stream="slow")
     def scan_mode(self) -> ScanMode:
         return self._scan_mode
 
     @property
-    @describe(label="TTL Stepping Available")
+    @prop(label="TTL Stepping Available")
     def ttl_stepping_available(self) -> bool:
-        return self._ttl_stepper is not None
+        return self._stepper() is not None
 
-    @describe(label="Configure TTL Stepper")
-    async def configure_ttl_stepper(self, cfg: TTLStepperConfig) -> None:
-        if not self._ttl_stepper:
+    @action(label="Configure TTL Stepper")
+    def configure_ttl_stepper(self, cfg: TTLStepperConfig) -> None:
+        if not (stepper := self._stepper()):
             raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
         if self._scan_mode != ScanMode.IDLE:
             raise RuntimeError(f"Cannot configure TTL stepper while in {self._scan_mode} mode")
 
-        await self._run_sync(self._ttl_stepper.configure, cfg)
+        stepper.configure(cfg)
         self._scan_mode = ScanMode.TTL_STEPPING
 
-    @describe(label="Queue Absolute Move")
-    async def queue_absolute_move(self, position: float) -> None:
-        if not self._ttl_stepper:
+    @action()
+    def queue_absolute_move(self, position: float) -> None:
+        if not (stepper := self._stepper()):
             raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
         if self._scan_mode != ScanMode.TTL_STEPPING:
             raise RuntimeError("TTL stepper not configured")
 
-        await self._run_sync(self._ttl_stepper.queue_absolute_move, position)
+        stepper.queue_absolute_move(position)
 
-    @describe(label="Queue Relative Move")
-    async def queue_relative_move(self, delta: float) -> None:
-        if not self._ttl_stepper:
+    @action()
+    def queue_relative_move(self, delta: float) -> None:
+        if not (stepper := self._stepper()):
             raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
         if self._scan_mode != ScanMode.TTL_STEPPING:
             raise RuntimeError("TTL stepper not configured")
 
-        await self._run_sync(self._ttl_stepper.queue_relative_move, delta)
+        stepper.queue_relative_move(delta)
 
-    @describe(label="Reset TTL Stepper")
-    async def reset_ttl_stepper(self) -> None:
-        if not self._ttl_stepper:
+    @action(label="Reset TTL Stepper")
+    def reset_ttl_stepper(self) -> None:
+        if not (stepper := self._stepper()):
             self.log.warning("reset_ttl_stepper called but axis %s has no TTL stepper", self.device.uid)
             return
 
-        await self._run_sync(self._ttl_stepper.reset)
+        stepper.reset()
         self._scan_mode = ScanMode.IDLE
 
 
@@ -161,14 +170,14 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     # Unit specification _____________________________________________________________________________________________
 
     @property
-    @describe(label="Units")
+    @prop()
     def units(self) -> str:
         """Unit string for position values (e.g., 'um', 'mm')."""
         return self._units
 
     # Motion commands ________________________________________________________________________________________________
 
-    @describe(label="Move To", desc="Move to an absolute position.")
+    @action(desc="Move to an absolute position.")
     @abstractmethod
     def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move to an absolute position.
@@ -179,7 +188,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
             timeout_s: Maximum time to wait in seconds (only used if wait=True).
         """
 
-    @describe(label="Move Relative", desc="Move a relative distance.")
+    @action(desc="Move a relative distance.")
     @abstractmethod
     def move_rel(self, delta: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move a relative distance.
@@ -190,7 +199,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
             timeout_s: Maximum time to wait in seconds (only used if wait=True).
         """
 
-    @describe(label="Go Home", desc="Move to the home position.")
+    @action(desc="Move to the home position.")
     @abstractmethod
     def go_home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move to the home position.
@@ -200,13 +209,13 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
             timeout_s: Maximum time to wait in seconds (only used if wait=True).
         """
 
-    @describe(label="Halt", desc="Emergency stop - halt all motion immediately.")
+    @failsafe(desc="Emergency stop - halt all motion immediately.")
     @abstractmethod
     def halt(self) -> None:
         """Emergency stop - halt all motion immediately."""
         ...
 
-    @describe(label="Await Movement", desc="Wait until the axis stops moving.")
+    @query(desc="Wait until the axis stops moving.")
     @abstractmethod
     def await_movement(self, timeout_s: float | None = None) -> None:
         """Wait until the axis stops moving.
@@ -217,8 +226,8 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
 
     # State properties _______________________________________________________________________________________________
 
-    @numeric(minimum=lambda self: self.lower_limit, maximum=lambda self: self.upper_limit)
-    @describe(label="Position", desc="The current position.", stream=True)
+    @number(minimum=lambda self: self.lower_limit, maximum=lambda self: self.upper_limit)
+    @prop(desc="The current position.", stream="fast")
     def position(self) -> float:
         """The current position in axis units."""
         return self._get_position()
@@ -229,21 +238,21 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
         ...
 
     @property
+    @prop(desc="Whether the axis is currently moving.", stream="fast")
     @abstractmethod
-    @describe(label="Is Moving", desc="Whether the axis is currently moving.", stream=True)
     def is_moving(self) -> bool:
         """Whether the axis is currently moving."""
         ...
 
     # Configuration and calibration __________________________________________________________________________________
 
-    @describe(label="Set Zero Here", desc="Set the current position as zero.")
+    @action(desc="Set the current position as zero.")
     @abstractmethod
     def set_zero_here(self) -> None:
         """Set the current position as zero."""
         ...
 
-    @describe(label="Set Logical Position", desc="Set the logical position without moving.")
+    @action(desc="Set the logical position without moving.")
     @abstractmethod
     def set_logical_position(self, position: float) -> None:
         """Set the logical position without moving (for calibration).
@@ -252,9 +261,9 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
             position: The position value to assign to the current physical location.
         """
 
-    @property
+    @number()
+    @prop(desc="The upper position limit.", stream="slow")
     @abstractmethod
-    @describe(label="Upper Limit", desc="The upper position limit.", stream=True)
     def upper_limit(self) -> float:
         """The upper position limit in axis units."""
         ...
@@ -263,9 +272,9 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     @abstractmethod
     def upper_limit(self, value: float) -> None: ...
 
-    @property
+    @number()
+    @prop(desc="The lower position limit.", stream="slow")
     @abstractmethod
-    @describe(label="Lower Limit", desc="The lower position limit.", stream=True)
     def lower_limit(self) -> float:
         """The lower position limit in axis units."""
         ...
@@ -277,8 +286,8 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     # Kinematic parameters ___________________________________________________________________________________________
 
     @property
+    @prop(desc="The current speed.", stream="slow")
     @abstractmethod
-    @describe(label="Speed", desc="The current speed.", stream=True)
     def speed(self) -> float | None:
         """The current speed in axis units per second."""
         ...
@@ -288,8 +297,8 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def speed(self, value: float) -> None: ...
 
     @property
+    @prop(desc="The current acceleration.", stream="slow")
     @abstractmethod
-    @describe(label="Acceleration", desc="The current acceleration.", stream=True)
     def acceleration(self) -> float | None:
         """The current acceleration in axis units per second squared."""
         ...
@@ -299,8 +308,8 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def acceleration(self, value: float) -> None: ...
 
     @property
+    @prop(desc="The backlash compensation value.")
     @abstractmethod
-    @describe(label="Backlash", desc="The backlash compensation value.")
     def backlash(self) -> float | None:
         """The backlash compensation value in axis units."""
         ...
@@ -310,8 +319,8 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def backlash(self, value: float) -> None: ...
 
     @property
+    @prop(label="Home Position", desc="The home position.")
     @abstractmethod
-    @describe(label="Home Position", desc="The home position.")
     def home(self) -> float | None:
         """The home position in axis units."""
         ...

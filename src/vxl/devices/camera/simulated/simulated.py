@@ -5,8 +5,8 @@ from random import randint
 from typing import ClassVar, cast, final
 
 import numpy as np
+from rigup.device import choice, integer, number
 
-from rigup import enumerated, numeric, numeric_int
 from vxl.devices.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
@@ -106,7 +106,7 @@ class SimulatedCamera(Camera):
     def sensor(self) -> CameraSensor:
         return CameraSensor(pixel_um=self._frame_source.pixel_size_um, size_px=self._frame_source.sensor_size_px)
 
-    @enumerated(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @choice(options=list(PIXEL_FMT_TO_DTYPE.keys()))
     def pixel_format(self) -> PixelFormat:
         return self._pixel_format
 
@@ -114,7 +114,7 @@ class SimulatedCamera(Camera):
     def pixel_format(self, pixel_format: str) -> None:
         self._pixel_format = cast("PixelFormat", pixel_format)
 
-    @numeric_int(options=BINNING_OPTIONS)
+    @integer(options=BINNING_OPTIONS)
     def binning(self) -> int:
         return self._binning
 
@@ -122,7 +122,7 @@ class SimulatedCamera(Camera):
     def binning(self, binning: int) -> None:
         self._binning = binning
 
-    @numeric(minimum=_min_exposure_ms, maximum=_max_exposure_ms, step=0.001)
+    @number(minimum=_min_exposure_ms, maximum=_max_exposure_ms, step=0.001)
     def exposure_time_ms(self) -> float:
         return self._exposure_time_ms
 
@@ -132,7 +132,7 @@ class SimulatedCamera(Camera):
         max_frame_rate = 1000.0 / (self._exposure_time_ms + self.readout_time_ms)
         self._frame_rate_hz = min(max_frame_rate, self._frame_rate_hz)
 
-    @numeric(
+    @number(
         minimum=lambda self: round(1000.0 / (self._max_exposure_ms + self.readout_time_ms), 2),
         maximum=lambda self: round(1000.0 / (self._exposure_time_ms + self.readout_time_ms), 2),
         step=0.01,
@@ -280,7 +280,7 @@ class SimulatedCamera(Camera):
         """Release simulated camera resources."""
         self._reference_frame = None
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Release buffer state and the device-lifetime frame source mapping."""
         if self._frame_count >= 0:
             self.stop()

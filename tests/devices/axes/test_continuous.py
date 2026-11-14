@@ -35,6 +35,11 @@ async def test_each_kind_shows_its_unit_and_limits_across_a_rig_node() -> None:
         await node.close()
 
 
+async def _call(axis: ContinuousAxisNewController, command: str, *args: object) -> object:
+    """Run a command on the axis's own thread, as a rig does, and raise its error."""
+    return (await axis.execute_command(command, *args)).unwrap()
+
+
 def _linear() -> LinearAxisController:
     return LinearAxisController(SimulatedLinearAxis("z", lower=0, upper=100, speed=50_000))
 
@@ -50,12 +55,12 @@ def _limited_rotation() -> RotationAxisController:
 @pytest.mark.parametrize(
     ("make", "call", "refused"),
     [
-        (_linear, lambda axis: axis.move_to(150), True),
-        (_linear, lambda axis: axis.move_to(50), False),
-        (_free_rotation, lambda axis: axis.move_to(3_600), False),
-        (_limited_rotation, lambda axis: axis.move_to(270), True),
-        (_limited_rotation, lambda axis: axis.sweep(Sweep(first=-90, last=90, speed=1_440)), True),
-        (_limited_rotation, lambda axis: axis.sweep(Sweep(first=-90, last=90, speed=90)), False),
+        (_linear, lambda axis: _call(axis, "move_to", 150), True),
+        (_linear, lambda axis: _call(axis, "move_to", 50), False),
+        (_free_rotation, lambda axis: _call(axis, "move_to", 3_600), False),
+        (_limited_rotation, lambda axis: _call(axis, "move_to", 270), True),
+        (_limited_rotation, lambda axis: _call(axis, "sweep", Sweep(first=-90, last=90, speed=1_440)), True),
+        (_limited_rotation, lambda axis: _call(axis, "sweep", Sweep(first=-90, last=90, speed=90)), False),
     ],
     ids=[
         "linear past its limits",
@@ -71,7 +76,7 @@ async def test_each_kind_keeps_moves_and_scans_inside_its_limits(
 ) -> None:
     axis = make()
     if refused:
-        with pytest.raises(ValueError, match="cannot reach"):
+        with pytest.raises(RuntimeError, match="cannot reach"):
             await call(axis)
     else:
         await call(axis)
@@ -85,7 +90,7 @@ class _Faulty(SimulatedLinearAxis):
 
 async def _stepping() -> LinearAxisController:
     axis = _linear()
-    await axis.arm_steps(5.0, 3, "ttl_in")
+    await _call(axis, "arm_steps", 5.0, 3, "ttl_in")
     return axis
 
 
@@ -100,10 +105,10 @@ async def _idle() -> LinearAxisController:
 @pytest.mark.parametrize(
     ("make", "call", "error"),
     [
-        (_stepping, lambda axis: axis.move_to(50), "while stepping"),
-        (_faulty, lambda axis: axis.move_to(50), "not homed"),
-        (_idle, lambda axis: axis.sweep(Sweep(first=10, last=20, speed=1e6)), "cannot hold a speed"),
-        (_idle, lambda axis: axis.sweep(Sweep(first=10, last=20, speed=0.5)), "cannot hold a speed"),
+        (_stepping, lambda axis: _call(axis, "move_to", 50), "while stepping"),
+        (_faulty, lambda axis: _call(axis, "move_to", 50), "not homed"),
+        (_idle, lambda axis: _call(axis, "sweep", Sweep(first=10, last=20, speed=1e6)), "cannot hold a speed"),
+        (_idle, lambda axis: _call(axis, "sweep", Sweep(first=10, last=20, speed=0.5)), "cannot hold a speed"),
     ],
     ids=["a move while stepping", "a move with a fault", "a sweep too fast", "a sweep too slow"],
 )

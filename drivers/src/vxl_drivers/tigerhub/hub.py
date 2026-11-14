@@ -1,9 +1,9 @@
 from collections.abc import Iterable
 from threading import RLock
 
+from rigup.device import Device
 from vxlib.poller import Poller
 
-from rigup import Device
 from vxl_drivers.tigerhub.box import TigerBox
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
 from vxl_drivers.tigerhub.ops.params import TigerParam, TigerParams
@@ -115,7 +115,7 @@ class TigerHub(Device, kind="generic"):
     def box(self) -> TigerBox:
         return self._box
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         for cleanup in (self._fast_poller.stop, self._slow_poller.stop, self._box.close):
             try:
                 cleanup()

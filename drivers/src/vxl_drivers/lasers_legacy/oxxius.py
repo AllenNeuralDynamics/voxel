@@ -5,10 +5,9 @@ from enum import IntEnum, StrEnum
 from time import perf_counter
 from typing import Literal
 
-from rigup.device.props import enumerated, numeric
+from rigup.device import Device, choice, number, prop, query
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
-from rigup import Device, describe
 from vxl_drivers.lasers_legacy.base import Laser
 
 # ==================== Protocol Constants ====================
@@ -337,7 +336,7 @@ class OxxiusHub(Device, kind="generic"):
 
     # ==================== Lifecycle ====================
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the hub and serial connection."""
         self.log.info("Closing OxxiusHub")
         with self._lock:
@@ -404,8 +403,7 @@ class OxxiusLBX(Laser):
         """Get the maximum power in mW."""
         return float(self._hub.query(Query.MAX_LASER_POWER, self._prefix))
 
-    @numeric(minimum=0.0, maximum=lambda self: self.max_power_mw, step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self.max_power_mw, step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return float(self._hub.query(Query.LASER_POWER_SETTING, self._prefix))
@@ -420,7 +418,6 @@ class OxxiusLBX(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return float(self._hub.query(Query.LASER_POWER, self._prefix))
@@ -430,8 +427,8 @@ class OxxiusLBX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._hub.baseplate_temperature_c
 
-    @enumerated(options=list(ModulationMode))
-    @describe(label="Modulation Mode", desc="Laser modulation mode.")
+    @choice(options=list(ModulationMode))
+    @prop(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         external = BoolVal(self._hub.query(Query.EXTERNAL_POWER_CONTROL, self._prefix))
@@ -472,12 +469,12 @@ class OxxiusLBX(Laser):
         """Get the constant current mode status."""
         return BoolVal(self._hub.query(Query.LASER_DRIVER_CONTROL_MODE, self._prefix))
 
-    @describe(label="Status", desc="Get laser fault status.")
+    @query(label="Status", desc="Get laser fault status.")
     def status(self) -> dict[str, list[str]]:
         """Get the status of the laser."""
         return {"faults": [f.name for f in self._hub.faults]}
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing Oxxius LBX laser")
         self.disable()
@@ -534,8 +531,7 @@ class OxxiusLCX(Laser):
         """Get the maximum power in mW."""
         return float(self._hub.query(Query.MAX_LASER_POWER, self._prefix))
 
-    @numeric(minimum=0.0, maximum=lambda self: self.max_power_mw, step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self.max_power_mw, step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return float(self._hub.query(Query.LASER_POWER_SETTING, self._prefix))
@@ -550,7 +546,6 @@ class OxxiusLCX(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return float(self._hub.query(Query.LASER_POWER, self._prefix))
@@ -560,8 +555,8 @@ class OxxiusLCX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._hub.baseplate_temperature_c
 
-    @numeric(minimum=0.0, maximum=lambda self: self.max_power_mw * 0.9, step=0.1)
-    @describe(label="AOM Power", units="mW", desc="AOM-linked power setting.")
+    @number(minimum=0.0, maximum=lambda self: self.max_power_mw * 0.9, step=0.1)
+    @prop(label="AOM Power", units="mW", desc="AOM-linked power setting.")
     def aom_power_mw(self) -> float:
         """Get the AOM power in mW."""
         return float(self._hub.query(CombinerQuery.AOM_POWER, self._prefix))
@@ -576,13 +571,13 @@ class OxxiusLCX(Laser):
         self._hub.command(CombinerCmd.AOM_POWER, value, self._prefix)
         self.log.debug(f"AOM power set to {value} mW")
 
-    @describe(label="Status", desc="Get laser status.")
+    @query(label="Status", desc="Get laser status.")
     def status(self) -> dict[str, str | float]:
         """Get the status of the laser."""
         key_status = self._hub.query(Query.EMISSION_KEY_STATUS, self._prefix)
         return {"emission_key_status": key_status}
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing Oxxius LCX laser")
         self.disable()

@@ -7,7 +7,7 @@ from itertools import pairwise
 from typing import Annotated, Any, Literal, Self, TypedDict
 
 from pydantic import Field, PositiveFloat, model_validator
-from rigup.device.schema import CommandRequest
+from rigup.device.results import CommandRequest
 from vxlib.problems import Problem, Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Portion

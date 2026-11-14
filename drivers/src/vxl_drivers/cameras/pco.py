@@ -5,10 +5,9 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from rigup.device.props import enumerated, numeric, numeric_int
+from rigup.device import action, choice, failsafe, integer, number, prop
 from vxlib.vector import IVec2D, Vec2D
 
-from rigup import describe
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
 from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 
@@ -92,7 +91,7 @@ class PCOCamera(Camera):
 
     # ==================== Pixel Format ====================
 
-    @enumerated(options=["MONO16"])
+    @choice(options=["MONO16"])
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera.
 
@@ -108,7 +107,7 @@ class PCOCamera(Camera):
 
     # ==================== Binning ====================
 
-    @numeric_int(options=PCO_BINNING_OPTIONS)
+    @integer(options=PCO_BINNING_OPTIONS)
     def binning(self) -> int:
         """Get the binning mode of the camera."""
         return self._pco.sdk.get_binning()["binning x"]
@@ -123,7 +122,7 @@ class PCOCamera(Camera):
 
     # ==================== Exposure & Frame Rate ====================
 
-    @numeric(minimum=0.001, maximum=10000.0, step=0.001)
+    @number(minimum=0.001, maximum=10000.0, step=0.001)
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms."""
         return self._pco.exposure_time * 1000  # s to ms
@@ -134,7 +133,7 @@ class PCOCamera(Camera):
         self._pco.exposure_time = exposure_time_ms / 1000  # ms to s
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @numeric(minimum=0.1, maximum=1000.0, step=0.1)
+    @number(minimum=0.1, maximum=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         # Estimate from frame time
@@ -192,8 +191,8 @@ class PCOCamera(Camera):
 
     # ==================== Readout Mode ====================
 
-    @enumerated(options=list(ReadoutMode))
-    @describe(label="Readout Mode", desc="sCMOS readout direction mode.")
+    @choice(options=list(ReadoutMode))
+    @prop(label="Readout Mode", desc="sCMOS readout direction mode.")
     def readout_mode(self) -> str:
         """Get the readout mode."""
         return self._get_readout_mode()
@@ -217,7 +216,7 @@ class PCOCamera(Camera):
     # ==================== Stream Info ====================
 
     @property
-    @describe(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream=True)
+    @prop(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream="fast")
     def stream_info(self) -> StreamInfo | None:
         """Return acquisition state or None if not acquiring."""
         try:
@@ -266,7 +265,7 @@ class PCOCamera(Camera):
         self._pco.record(number_of_images=self._buffer_size_frames, mode="fifo")
         self.log.debug(f"Buffer set to {self._buffer_size_frames} frames")
 
-    @describe(label="Start", desc="Start acquiring frames from the camera.")
+    @action(label="Start", desc="Start acquiring frames from the camera.")
     def _start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames.
 
@@ -285,7 +284,7 @@ class PCOCamera(Camera):
             raise RuntimeError("Failed to grab PCO frame") from exc
         np.copyto(out, image, casting="no")
 
-    @describe(label="Stop", desc="Stop the camera acquisition.")
+    @failsafe(label="Stop", desc="Stop the camera acquisition.")
     def stop(self) -> None:
         """Stop the camera."""
         self.log.info("Stopping camera acquisition")
@@ -294,21 +293,21 @@ class PCOCamera(Camera):
     # ==================== Temperature ====================
 
     @property
-    @describe(label="Camera Temperature", units="°C", desc="Temperature of the camera.")
+    @prop(label="Camera Temperature", units="°C", desc="Temperature of the camera.")
     def camera_temperature_c(self) -> float:
         """Get the camera temperature in Celsius."""
         return self._pco.sdk.get_temperature()["camera temperature"]
 
     @property
-    @describe(label="Sensor Temperature", units="°C", desc="Temperature of the sensor.")
+    @prop(label="Sensor Temperature", units="°C", desc="Temperature of the sensor.")
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in Celsius."""
         return self._pco.sdk.get_temperature()["sensor temperature"]
 
     # ==================== Line Timing ====================
 
-    @numeric(minimum=1.0, maximum=1000.0, step=0.1)
-    @describe(label="Line Interval", units="µs", desc="Line interval for rolling shutter.")
+    @number(minimum=1.0, maximum=1000.0, step=0.1)
+    @prop(label="Line Interval", units="µs", desc="Line interval for rolling shutter.")
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds."""
         return self._pco.sdk.get_cmos_line_timing()["line time"] * 1e6
@@ -321,7 +320,7 @@ class PCOCamera(Camera):
 
     # ==================== Lifecycle ====================
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the camera connection."""
         self.log.info("Closing PCO camera")
         self._pco.close()

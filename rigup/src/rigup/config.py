@@ -1,24 +1,4 @@
-"""Rig configuration schema.
-
-A rig file writes the parts of the rig, the devices of the orchestrator's own process, and each other process under
-``nodes``::
-
-    parts: dict[str, Part]
-    devices: dict[str, DeviceConfig]
-    nodes: dict[str, NodeConfig]
-        ├── kind: "subprocess" | "remote"
-        ├── address: str | None
-        └── devices: dict[str, DeviceConfig]
-
-A part is made when the file is read: its entry is its own fields, and ``target`` names its class when it is not
-:class:`~rigup.Part`. A part runs in no process; each process gets the parts, and an ``init`` that names a part gets it.
-
-A node is always a separate process. A *subprocess* node is spawned by the cluster manager on the same host; its
-lifetime is bound to the orchestrator. A *remote* node is externally supervised (systemd/launchd/etc.) and connected
-to by address.
-
-``kind`` is autofilled when not given explicitly; see :meth:`NodeConfig._infer_kind`.
-"""
+"""The schema of a rig file."""
 
 from typing import Annotated, Any, Literal, Self
 
@@ -29,6 +9,7 @@ from pydantic import (
     Field,
     PlainSerializer,
     PlainValidator,
+    PositiveFloat,
     SerializationInfo,
     model_validator,
 )
@@ -37,6 +18,7 @@ from vxlib.schema import identifier
 
 from .build import BuildConfig, dependencies, import_class
 from .component import Part
+from .device.marks import StreamTier
 
 NodeKind = Literal["subprocess", "remote"]
 ComponentUid = Annotated[str, identifier("Component UID")]
@@ -44,14 +26,17 @@ NodeId = Annotated[str, identifier("Node id")]
 
 
 class DeviceConfig(BuildConfig):
-    """How 1 device of the rig is built. ``details`` holds information for people: rigup does not read it, and the
-    built device does not get it."""
+    """How 1 device of the rig is built.
 
+    ``streaming`` overrides the seconds between sends for the stream tiers it names. ``details`` holds information for
+    people; the device does not get it.
+    """
+
+    streaming: dict[StreamTier, PositiveFloat] = Field(default_factory=dict)
     details: dict[str, Any] = Field(default_factory=dict)
 
 
 def _read_part(data: Any) -> Part:
-    """Make a part from its entry: its own fields, and ``target`` when its class is not ``Part``."""
     if isinstance(data, Part):
         return data
     if not isinstance(data, dict):
@@ -63,7 +48,6 @@ def _read_part(data: Any) -> Part:
 
 
 def _write_part(part: Part, info: SerializationInfo) -> dict[str, Any]:
-    """The entry of a part: what :func:`_read_part` reads back."""
     data = part.model_dump(mode=info.mode, exclude={"uid"}, exclude_defaults=True)
     if type(part) is Part:
         return data
@@ -71,7 +55,6 @@ def _write_part(part: Part, info: SerializationInfo) -> dict[str, Any]:
 
 
 def _with_uids(data: Any) -> Any:
-    """Each part takes its UID from its key."""
     if not isinstance(data, dict):
         return data
     entries: dict[Any, Any] = {}
@@ -86,27 +69,18 @@ Parts = Annotated[
     dict[ComponentUid, Annotated[Part, PlainValidator(_read_part), PlainSerializer(_write_part)]],
     BeforeValidator(_with_uids),
 ]
-"""The parts of a rig, by UID. Each is made from its entry when it is read, and written back the same way."""
+"""The parts of a rig by UID; an entry names its class in ``target`` when it is not ``Part``."""
 
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "*"}
 
 
 def _is_local_address(address: str) -> bool:
-    """True if ``address`` names a local-only ZMQ endpoint.
-
-    Local transports:
-      - ``ipc://...`` — filesystem IPC, always local.
-      - ``inproc://...`` — in-process only.
-      - ``tcp://`` with host in ``{localhost, 127.0.0.1, ::1, *}`` (``*`` is the
-        ZMQ bind-any form, e.g. ``tcp://*:5555``).
-    """
     if address.startswith(("ipc://", "inproc://")):
         return True
     if not address.startswith("tcp://"):
         return False
     body = address[len("tcp://") :]
-    # IPv6 bracket form: tcp://[::1]:port
     if body.startswith("["):
         closing = body.find("]")
         host = body[1:closing] if closing != -1 else body
@@ -118,15 +92,10 @@ def _is_local_address(address: str) -> bool:
 
 
 class NodeConfig(BaseModel, frozen=True):
-    """1 process of the rig apart from the orchestrator's own, with the devices that run in it.
+    """A process of the rig apart from the orchestrator's own, with the devices that run in it.
 
-    ``kind`` is autofilled when omitted:
-      - no address or a localhost-shaped address → ``subprocess``
-      - anything else → ``remote``
-
-    Explicit ``kind`` in the source always wins over autofill, so a remote
-    node co-located on localhost is expressible with ``kind: remote`` +
-    ``address: tcp://localhost:5555``.
+    A ``subprocess`` node is started by the rig on this host; a ``remote`` node is started elsewhere and reached at
+    ``address``. When ``kind`` is omitted, a missing or local address means ``subprocess``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -150,7 +119,6 @@ class NodeConfig(BaseModel, frozen=True):
         found = Problems()
         if self.kind == "remote" and self.address is None:
             found.add("remote_node_address", "remote node requires an address", "address")
-        # subprocess: address optional; cluster manager may assign an ephemeral one
         found.raise_if_any(type(self).__name__)
         return self
 
@@ -166,12 +134,10 @@ class RigConfig(BaseModel, frozen=True):
 
     @property
     def all_devices(self) -> dict[ComponentUid, DeviceConfig]:
-        """Every device of the rig, in the orchestrator's own process and on each node, by UID."""
         return {**self.devices, **{uid: config for node in self.nodes.values() for uid, config in node.devices.items()}}
 
     def component_location(self, uid: ComponentUid) -> KeyPath:
-        """Where the device or part ``uid`` is written in the rig file, such as ``("parts", "BP525")``,
-        ``("devices", "laser")`` or ``("nodes", "detection", "devices", "camera")``: the place of a problem about it."""
+        """Return the key path of ``uid`` in the rig file, or raise ``KeyError``."""
         if uid in self.parts:
             return ("parts", uid)
         if uid in self.devices:
@@ -182,7 +148,6 @@ class RigConfig(BaseModel, frozen=True):
         raise KeyError(uid)
 
     def _component_locations(self) -> dict[ComponentUid, list[KeyPath]]:
-        """Each place where each UID is written in the rig file, in file order."""
         found: dict[ComponentUid, list[KeyPath]] = {uid: [("parts", uid)] for uid in self.parts}
         for uid in self.devices:
             found.setdefault(uid, []).append(("devices", uid))
@@ -193,8 +158,7 @@ class RigConfig(BaseModel, frozen=True):
 
     @model_validator(mode="after")
     def _validate_component_graph(self) -> Self:
-        """Require globally unique UIDs, and each device that a device names in its own process. Each problem is at its
-        place in the rig file."""
+        """Require unique UIDs, and each device that a device names to run in the same process."""
         found = Problems()
         places = self._component_locations()
         for uid, (first, *others) in places.items():

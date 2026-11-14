@@ -1,58 +1,22 @@
-"""rigup: devices as plain Python objects, built from config, on this process or on nodes.
+"""Build devices as plain Python objects from config, in this process or on nodes.
 
-The package exports config, build and device definitions, which open nothing. The runtime that starts nodes and talks
-over the network is ``rigup.rig.Rig``: import it from there.
+Importing the package opens nothing. The device API is in ``rigup.device``, and the runtime that starts nodes is
+``rigup.rig.Rig``.
 """
 
 from .build import BuildConfig, BuildGroupSpec, build_objects, build_objects_async, import_class
 from .component import Part, RigComponent
 from .config import DeviceConfig, NodeConfig, RigConfig
-from .device import (
-    CommandRequest,
-    ComponentInterface,
-    Device,
-    DeviceController,
-    DeviceHandle,
-    DeviceProperties,
-    DeviceProperty,
-    DeviceProps,
-    PropertyModel,
-    PropResults,
-    Result,
-    Results,
-    StreamCallback,
-    describe,
-    enumerated,
-    numeric,
-    numeric_int,
-)
 
 __all__ = [
     "BuildConfig",
     "BuildGroupSpec",
-    "CommandRequest",
-    "ComponentInterface",
-    "Device",
     "DeviceConfig",
-    "DeviceController",
-    "DeviceHandle",
-    "DeviceProperties",
-    "DeviceProperty",
-    "DeviceProps",
     "NodeConfig",
     "Part",
-    "PropResults",
-    "PropertyModel",
-    "Result",
-    "Results",
     "RigComponent",
     "RigConfig",
-    "StreamCallback",
     "build_objects",
     "build_objects_async",
-    "describe",
-    "enumerated",
     "import_class",
-    "numeric",
-    "numeric_int",
 ]

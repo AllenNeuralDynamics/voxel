@@ -9,12 +9,11 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Literal, Self
 
 from pydantic import Field, PositiveFloat, TypeAdapter, model_validator
+from rigup.device import Device, DeviceController, DeviceHandle, action, failsafe, number, prop, query
 from rigup.device.handle import Adapter, DeviceProperty
-from rigup.device.props import numeric
 from vxlib.schema import FrozenModel
 from vxlib.vector import Span
 
-from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.devices.base import Pin
 
 type ScanState = Literal["idle", "stepping", "sweeping"]
@@ -78,27 +77,22 @@ class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], A
     a time. A move or a scan stays inside the limits, as each kind of axis checks them. A sweep, with its run-up at
     both ends, must stay inside them too, at a speed the axis can hold steady."""
 
-    @property
-    @describe(label="Scan state", desc="idle, stepping or sweeping, as the driver knows it", stream=True)
-    def scan_state(self) -> ScanState:
-        return self.device.scan_state
-
-    @describe(label="Move to", desc="Start a move to a position")
-    async def move_to(self, position: float) -> None:
+    @action(desc="Start a move to a position")
+    def move_to(self, position: float) -> None:
         self._check_ready("move")
         self._check_inside(position, position)
-        await self._run_sync(self.device.move_to, position)
+        self.device.move_to(position)
 
-    @describe(label="Move by", desc="Start a move by a distance")
-    async def move_by(self, distance: float) -> None:
-        await self.move_to(self.device.position + distance)
+    @action(desc="Start a move by a distance")
+    def move_by(self, distance: float) -> None:
+        self.move_to(self.device.position + distance)
 
-    @describe(label="Halt", desc="Stop this axis at once, and end its scan")
-    async def halt(self) -> None:
-        await self._run_sync(self.device.halt)
+    @failsafe(desc="Stop this axis at once, and end its scan")
+    def halt(self) -> None:
+        self.device.halt()
 
-    @describe(label="Arm steps", desc="Take count steps of spacing, 1 on each pulse at a pin; give the real spacing")
-    async def arm_steps(self, spacing: float, count: int, pin: str) -> float:
+    @action(desc="Take count steps of spacing, 1 on each pulse at a pin; give the real spacing")
+    def arm_steps(self, spacing: float, count: int, pin: str) -> float:
         self._check_ready("arm steps")
         self._check_able("steps")
         self._check_pin(pin, "in")
@@ -106,10 +100,10 @@ class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], A
             raise ValueError(f"steps need a spacing other than 0 and a count of at least 1, got {spacing} and {count}")
         here = self.device.position
         self._check_inside(here, here + spacing * count)
-        return await self._run_sync(self.device.arm_steps, spacing, count, pin)
+        return self.device.arm_steps(spacing, count, pin)
 
-    @describe(label="Sweep", desc="Start a sweep, and give back the sweep the axis will really run")
-    async def sweep(self, sweep: Sweep) -> Sweep:
+    @action(desc="Start a sweep, and give back the sweep the axis will really run")
+    def sweep(self, sweep: Sweep) -> Sweep:
         self._check_ready("sweep")
         self._check_able("sweep")
         if sweep.pulses is not None:
@@ -123,14 +117,14 @@ class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], A
             raise ValueError(f"{self.device.uid} cannot hold a speed of {sweep.speed} steady (it can do {can})")
         run_up = self.device.run_up(sweep.speed)
         self._check_inside(sweep.start(run_up), sweep.last + sweep.direction * run_up)
-        return await self._run_sync(self.device.sweep, sweep)
+        return self.device.sweep(sweep)
 
-    @describe(label="Run-up", desc="The extra travel needed before and after a sweep at a speed")
-    async def run_up(self, speed: float) -> float:
+    @query(label="Run-up", desc="The extra travel needed before and after a sweep at a speed")
+    def run_up(self, speed: float) -> float:
         return self.device.run_up(speed)
 
-    @describe(label="Step time", desc="The time, in s, a step of a spacing takes, settling included")
-    async def step_time(self, spacing: float) -> float:
+    @query(desc="The time, in s, a step of a spacing takes, settling included")
+    def step_time(self, spacing: float) -> float:
         return self.device.step_time(spacing)
 
     @abstractmethod
@@ -179,27 +173,27 @@ class ContinuousAxisNew(Device):
     unit: ClassVar[str]
 
     @property
+    @prop(units=lambda device: device.unit, stream="fast")
     @abstractmethod
-    @describe(label="Position", units=lambda device: device.unit, stream=True)
     def position(self) -> float: ...
 
     @property
+    @prop(label="Moving", stream="fast")
     @abstractmethod
-    @describe(label="Moving", stream=True)
     def is_moving(self) -> bool: ...
 
     @property
+    @prop(desc="idle, stepping or sweeping, as the hardware does it", stream="slow")
     @abstractmethod
-    @describe(label="Scan state", stream=True)
     def scan_state(self) -> ScanState: ...
 
     @property
+    @prop(desc="What is wrong now, or nothing", stream="slow")
     @abstractmethod
-    @describe(label="Fault", desc="What is wrong now, or nothing", stream=True)
     def fault(self) -> str | None: ...
 
-    @numeric(minimum=lambda self: self._get_speed_range().low, maximum=lambda self: self._get_speed_range().high)
-    @describe(label="Speed", units=lambda device: f"{device.unit}/s", desc="The speed of a move")
+    @number(minimum=lambda self: self._get_speed_range().low, maximum=lambda self: self._get_speed_range().high)
+    @prop(units=lambda device: f"{device.unit}/s", desc="The speed of a move")
     def speed(self) -> float:
         return self._get_speed()
 
@@ -207,11 +201,11 @@ class ContinuousAxisNew(Device):
     def speed(self, value: float) -> None:
         self._set_speed(value)
 
-    @numeric(
+    @number(
         minimum=lambda self: self._get_acceleration_range().low,
         maximum=lambda self: self._get_acceleration_range().high,
     )
-    @describe(label="Acceleration", units=lambda device: f"{device.unit}/s²")
+    @prop(units=lambda device: f"{device.unit}/s²")
     def acceleration(self) -> float:
         return self._get_acceleration()
 
@@ -220,13 +214,13 @@ class ContinuousAxisNew(Device):
         self._set_acceleration(value)
 
     @property
+    @prop(label="Scan abilities", desc="steps, sweep and pulses, as far as it can do them")
     @abstractmethod
-    @describe(label="Scan abilities", desc="steps, sweep and pulses, as far as it can do them")
     def abilities(self) -> list[ScanAbility]: ...
 
     @property
+    @prop(desc="The pins that can take pulses to step on, and that can send a sweep's pulses")
     @abstractmethod
-    @describe(label="Pins", desc="The pins that can take pulses to step on, and that can send a sweep's pulses")
     def pins(self) -> list[Pin]: ...
 
     @abstractmethod

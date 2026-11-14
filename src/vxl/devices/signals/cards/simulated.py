@@ -8,9 +8,8 @@ live in ``vxl.devices.daq.clocked`` and ``vxl.devices.daq.on_demand``.
 import re
 from collections.abc import Iterable
 
+from rigup.device import Device
 from vxlib.quantity import Voltage, VoltageRange
-
-from rigup import Device
 
 
 class SimulatedDaqmx(Device, kind="generic"):

@@ -2,7 +2,8 @@
 
 from abc import abstractmethod
 
-from rigup import describe, numeric
+from rigup.device import action, failsafe, number, prop
+
 from vxl.devices.base import DeviceType
 
 from .source import LaserSource, ModulationMode
@@ -15,8 +16,8 @@ class Laser(LaserSource, kind=DeviceType.LASER):
     optical readiness; enable commands offer optional, bounded startup waits.
     """
 
+    @action(label="Enable Source")
     @abstractmethod
-    @describe(label="Enable Source")
     def source_enable(self, *, wait: bool = False) -> None:
         """Permit source operation without enabling output; idempotent.
 
@@ -25,13 +26,13 @@ class Laser(LaserSource, kind=DeviceType.LASER):
         to output_enable. Completion does not guarantee optical stability.
         """
 
+    @failsafe(label="Disable Source")
     @abstractmethod
-    @describe(label="Disable Source")
     def source_disable(self) -> None:
         """Block output and clear both permissions; retain power, level, and modulation mode."""
 
+    @action(label="Enable Output")
     @abstractmethod
-    @describe(label="Enable Output")
     def output_enable(self, *, wait: bool = False) -> None:
         """Require source permission; permit the established configuration; idempotent.
 
@@ -40,20 +41,20 @@ class Laser(LaserSource, kind=DeviceType.LASER):
         or nonzero output. Completion does not guarantee optical stability.
         """
 
+    @failsafe(label="Disable Output")
     @abstractmethod
-    @describe(label="Disable Output")
     def output_disable(self) -> None:
         """Block light regardless of external inputs; retain source permission and settings."""
 
     @property
+    @prop(label="Output Enabled", stream="slow")
     @abstractmethod
-    @describe(label="Output Enabled", stream=True)
     def is_output_enabled(self) -> bool:
         """Whether output is permitted, independently of modulation inputs or level."""
 
-    @numeric()
+    @number()
+    @prop(label="Output Level", units="%", stream="fast")
     @abstractmethod
-    @describe(label="Output Level", units="%", stream=True)
     def output_level_percent(self) -> float:
         """Saved software/digital level; inactive in analog mode.
 
@@ -74,7 +75,7 @@ class Laser(LaserSource, kind=DeviceType.LASER):
         """
 
     @property
-    @describe(label="Output Power", units="mW", stream=True)
+    @prop(label="Output Power", units="mW", stream="fast")
     def output_power_mw(self) -> float | None:
         """Measured optical power at the laser output, or None when unavailable."""
         return None

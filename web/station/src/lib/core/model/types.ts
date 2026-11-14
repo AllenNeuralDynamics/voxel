@@ -640,27 +640,44 @@ export interface ActiveAcquisition {
   frames_captured: number;
 }
 
-/** A command parameter's introspected signature. */
-export interface ParamInfo {
-  dtype: string;
-  required: boolean;
-  default?: unknown | null;
-  kind: 'regular' | 'var_positional' | 'var_keyword';
-  options?: (string | number)[] | null;
+/** The part of a command's argument or return JSON Schema the UI reads. */
+export interface ArgSchema {
+  type?: string | string[];
+  title?: string;
+  description?: string;
+  default?: unknown;
+  enum?: (string | number | boolean | null)[];
+  const?: unknown;
+  minimum?: number;
+  maximum?: number;
+  anyOf?: ArgSchema[];
+  $ref?: string;
+  properties?: Record<string, ArgSchema>;
+  required?: string[];
+  $defs?: Record<string, ArgSchema>;
 }
 
-/** A `@describe`d command: its name, label, and parameters. */
+/** Whether a command reads state, changes it, or makes the device safe. */
+export type CommandIntent = 'query' | 'action' | 'failsafe';
+
+/** A property's streaming tier. */
+export type StreamTier = 'fast' | 'slow';
+
+/** A command: its name, label, intent, and JSON Schemas of its arguments and return value. */
 export interface CommandInfo {
   name: string;
   label: string;
   desc?: string | null;
-  params: Record<string, ParamInfo>;
+  intent: CommandIntent;
+  params: ArgSchema;
+  returns: ArgSchema;
 }
 
-/** A device's introspected surface: identity, commands, and properties. */
-export interface ComponentInterface {
+/** A device's introspected surface: identity, streaming periods, commands, and properties. */
+export interface DeviceInterface {
   uid: string;
   kind: string;
+  streaming: Record<StreamTier, number>;
   commands: Record<string, CommandInfo>;
   properties: Record<string, PropertyInfo>;
 }
@@ -669,7 +686,7 @@ export interface ComponentInterface {
 export interface DeviceSnapshot {
   id: string;
   connected: boolean;
-  interface?: ComponentInterface | null;
+  interface?: DeviceInterface | null;
   error?: string | null;
 }
 
@@ -710,7 +727,7 @@ export interface InstrumentView extends InstrumentState {
 }
 
 export interface DeviceState {
-  interface: ComponentInterface;
+  interface: DeviceInterface;
   props: Record<string, PropSnapshot<unknown>>;
 }
 

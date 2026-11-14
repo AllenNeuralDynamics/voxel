@@ -1,13 +1,3 @@
-"""TransportNode — shared base for SubprocessNode and RemoteNode.
-
-Holds a :class:`TransportClient` and implements device operations (build,
-close, RPC) via the protocol layer. Subclasses provide :meth:`open` and
-:meth:`close` for their specific lifecycle (spawn vs connect).
-
-Also contains :class:`TransportAdapter`, which implements :class:`Adapter`
-by routing device calls through the shared transport.
-"""
-
 import logging
 from collections.abc import Mapping
 from contextlib import suppress
@@ -17,18 +7,13 @@ from pydantic import BaseModel
 from vxlib.lifecycle import Teardown
 
 from rigup.component import Part
-from rigup.device import (
-    Adapter,
-    CommandRequest,
-    ComponentInterface,
-    Device,
-    DeviceHandle,
-    PropResults,
-    Result,
-    Results,
-    StreamCallback,
-)
-from rigup.protocol import (
+from rigup.device.controller import StreamCallback
+from rigup.device.device import Device
+from rigup.device.handle import Adapter, DeviceHandle
+from rigup.device.interface import DeviceInterface
+from rigup.device.results import CommandRequest, PropResults, Result, Results
+from rigup.node._broadcast import TopicDispatcher
+from rigup.node._protocol import (
     Action,
     BuildDevicesRequest,
     BuildDevicesResponse,
@@ -41,20 +26,15 @@ from rigup.protocol import (
     call,
 )
 from rigup.transport import TransportClient
-from rigup.wire import TopicDispatcher
 
 from ._base import DevicesBuildResult, DevicesConfig, Node
 from ._logs import relay_logs
 
 
 class TransportAdapter[D: Device](Adapter[D]):
-    """Routes device RPC through a shared :class:`TransportClient`.
+    """Call a device on a node through a transport shared by all devices of that node.
 
-    One adapter per device, all sharing one transport. Subscriptions are lazy:
-    the adapter creates a :class:`TopicDispatcher` and a wire ZMQ subscription
-    on first app-level subscribe for a topic; both go away when the last
-    subscriber leaves. Decode happens once per wire message regardless of
-    subscriber count; bytes pass through verbatim for byte subs.
+    A topic is subscribed on the transport while it has at least one subscriber.
     """
 
     def __init__(self, uid: str, transport: TransportClient) -> None:
@@ -66,7 +46,7 @@ class TransportAdapter[D: Device](Adapter[D]):
         self._zmq_unsubs: dict[str, Teardown] = {}
 
     async def start(self) -> None:
-        """No-op — wire subscriptions are lazy, established on first subscribe()."""
+        """Do nothing; topics are subscribed on the transport on first ``subscribe``."""
 
     @property
     def uid(self) -> str:
@@ -76,14 +56,13 @@ class TransportAdapter[D: Device](Adapter[D]):
     def device(self) -> D | None:
         return None
 
-    async def interface(self) -> ComponentInterface:
-        return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), ComponentInterface)
+    async def interface(self) -> DeviceInterface:
+        return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), DeviceInterface)
 
     async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
         results = await self.run_commands([CommandRequest(attr=command, args=list(args), kwargs=kwargs)])
-        # Rebuild a standalone Result: the member extracted from the batch carries the generic
-        # `Results` type parameter, which mis-serializes when a downstream serializer (e.g. FastAPI's
-        # response model) dumps it against a plain `Result` schema.
+        # Rebuild a plain Result: the batch member carries the generic `Results` type parameter and
+        # mis-serializes against a plain `Result` schema.
         return Result.model_validate(results[f"0:{command}"].model_dump())
 
     async def run_commands(self, commands: list[CommandRequest]) -> Results:
@@ -129,7 +108,6 @@ class TransportAdapter[D: Device](Adapter[D]):
         return unsub
 
     def _ensure_signal(self, full_topic: str) -> TopicDispatcher:
-        """Create the TopicDispatcher and ZMQ subscription for ``full_topic`` if absent."""
         if (sig := self._signals.get(full_topic)) is not None:
             return sig
         sig = TopicDispatcher()
@@ -142,7 +120,6 @@ class TransportAdapter[D: Device](Adapter[D]):
         return sig
 
     def _maybe_release(self, full_topic: str) -> None:
-        """Drop the wire subscription and dispatcher when no app-level subscribers remain."""
         sig = self._signals.get(full_topic)
         if sig is None or sig.subs > 0:
             return
@@ -160,11 +137,7 @@ class TransportAdapter[D: Device](Adapter[D]):
 
 
 class TransportNode(Node):
-    """Base for nodes that communicate over a :class:`TransportClient`.
-
-    Implements device build/close via protocol calls. Subclasses provide
-    ``open`` and ``close`` for their specific lifecycle.
-    """
+    """Base for nodes whose devices are reached over a ``TransportClient``."""
 
     def __init__(self, node_id: str, transport: TransportClient) -> None:
         self._node_id = node_id
@@ -175,13 +148,12 @@ class TransportNode(Node):
         self._log_relay: Teardown | None = None
 
     def _start_log_relay(self) -> None:
-        """Relay this node's forwarded logs into the local logging system. Call once, after the
-        transport connects."""
+        """Relay this node's logs into local logging; call after the transport connects."""
         if self._log_relay is None:
             self._log_relay = relay_logs(self._transport)
 
     def _stop_log_relay(self) -> None:
-        """Drop the log subscription. Call before closing the transport."""
+        """Stop relaying logs; call before closing the transport."""
         if self._log_relay is not None:
             self._log_relay()
             self._log_relay = None
@@ -197,6 +169,7 @@ class TransportNode(Node):
     async def build_devices(
         self, devices: DevicesConfig, parts: Mapping[str, Part] | None = None
     ) -> DevicesBuildResult:
+        await self._drop_devices()  # the daemon closes its own side as part of the build
         response = await call(
             self._transport,
             Action.BUILD_DEVICES,
@@ -230,6 +203,9 @@ class TransportNode(Node):
     async def close_all_devices(self) -> None:
         with suppress(Exception):
             await call(self._transport, Action.CLOSE_ALL_DEVICES, Empty(), Empty)
+        await self._drop_devices()
+
+    async def _drop_devices(self) -> None:
         for adapter in self._adapters.values():
             await adapter.close()
         self._adapters.clear()

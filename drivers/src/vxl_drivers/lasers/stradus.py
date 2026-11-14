@@ -4,9 +4,9 @@ from enum import IntFlag
 from math import isfinite
 from time import monotonic, sleep
 
+from rigup.device import number, prop, query
 from serial import Serial, SerialException
 
-from rigup import describe, numeric
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.serial import SerialTransport
 
@@ -235,7 +235,7 @@ class StradusSource(LaserSource):
     def is_source_enabled(self) -> bool:
         return not self._closed and self._flag("LE")
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
     def source_power_setpoint_mw(self) -> float:
         """Saved power; the hardware holds it only while emitting."""
         self._ensure_open()
@@ -272,48 +272,48 @@ class StradusSource(LaserSource):
         return self._number("BPT")
 
     @property
-    @describe(label="Identification")
+    @prop(label="Identification")
     def identification(self) -> str:
         """Serial number, part number, nominal wavelength, nominal power, and beam shape."""
         return self._identification
 
     @property
-    @describe(label="Firmware Version")
+    @prop(label="Firmware Version")
     def firmware_version(self) -> str:
         return self._firmware_version
 
     @property
-    @describe(label="Operating Hours", units="h")
+    @prop(label="Operating Hours", units="h")
     def operating_hours(self) -> float:
         self._ensure_open()
         return self._number("LH")
 
     @property
-    @describe(label="Diode Current", units="mA")
+    @prop(label="Diode Current", units="mA")
     def diode_current_ma(self) -> float:
         self._ensure_open()
         return self._number("LC")
 
     @property
-    @describe(label="Optical Block Temperature", units="°C")
+    @prop(label="Optical Block Temperature", units="°C")
     def optical_block_temperature_c(self) -> float:
         self._ensure_open()
         return self._number("OBT")
 
     @property
-    @describe(label="Interlock Closed")
+    @prop(label="Interlock Closed")
     def interlock_closed(self) -> bool:
         self._ensure_open()
         return self._flag("IL")
 
     @property
-    @describe(label="CDRH Delay")
+    @prop(label="CDRH Delay")
     def cdrh_delay(self) -> bool:
         """Whether emission starts 5 s after enable."""
         self._ensure_open()
         return self._flag("DELAY")
 
-    @describe(label="Status")
+    @query(label="Status")
     def status(self) -> list[str]:
         """Active states and faults, including faults cleared since the last read; empty means emitting."""
         self._ensure_open()
@@ -346,7 +346,7 @@ class StradusSource(LaserSource):
             if self._read_modulation_mode() != mode:
                 raise StradusError(f"Stradus did not establish {mode} modulation")
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Disable emission, then release the serial port; failures can be retried."""
         if self._closed:
             return

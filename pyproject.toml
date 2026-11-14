@@ -65,7 +65,6 @@ build-backend = "uv_build"
 [tool.uv.workspace]
 members = [
     "rigup",
-    "rigur",
     "drivers",
     "vxlib",
     "omezarr",
@@ -77,7 +76,6 @@ members = [
 [tool.uv.sources]
 ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
-rigur = { workspace = true }
 vxlib = { workspace = true }
 vxl-records = { workspace = true }
 
@@ -90,6 +88,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+pythonpath = ["rigup/tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "--strict-markers"

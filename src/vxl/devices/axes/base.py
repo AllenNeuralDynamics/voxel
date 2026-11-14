@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from rigup import Device
+from rigup.device import Device
 
 
 class Axis[P](Device):

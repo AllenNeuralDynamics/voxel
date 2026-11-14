@@ -4,7 +4,8 @@ from enum import StrEnum
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup import describe, numeric
+from rigup.device import action, number, prop, query
+
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.serial import SerialTransport
 
@@ -192,7 +193,7 @@ class MpbVflSource(LaserSource):
         return not self._closed and self._flag(Query.LD_ENABLE)
 
     # TODO: verify on real hardware whether SETPOWER 0 accepts decimals; if so, lower step and the write format.
-    @numeric(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=1.0)
+    @number(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=1.0)
     def source_power_setpoint_mw(self) -> float:
         self._ensure_open()
         return float(self._query(Query.POWER_SETPOINT))
@@ -219,46 +220,46 @@ class MpbVflSource(LaserSource):
         return float(self._query(Query.LD_TEMP))
 
     @property
-    @describe(label="Model")
+    @prop(label="Model")
     def model(self) -> str:
         """Identification string reported by the device at connection time."""
         return self._model
 
     @property
-    @describe(label="Fault", stream=True)
+    @prop(label="Fault", stream="slow")
     def is_faulted(self) -> bool:
         """Whether the most recent reply carried the fault prompt."""
         return self._faulted
 
     @property
-    @describe(label="Diode Current", units="mA")
+    @prop(label="Diode Current", units="mA")
     def diode_current_ma(self) -> float:
         """Measured laser diode current."""
         self._ensure_open()
         return float(self._query(Query.LD_CURRENT))
 
     @property
-    @describe(label="TEC Temperature", units="°C")
+    @prop(label="TEC Temperature", units="°C")
     def tec_temperature_c(self) -> float:
         """Thermoelectric cooler temperature."""
         self._ensure_open()
         return float(self._query(Query.TEC_TEMP))
 
     @property
-    @describe(label="SHG Temperature", units="°C")
+    @prop(label="SHG Temperature", units="°C")
     def shg_temperature_c(self) -> float:
         """Measured SHG crystal temperature."""
         self._ensure_open()
         return float(self._query(Query.SHG_TEMP))
 
     @property
-    @describe(label="SHG Temperature Setpoint", units="°C")
+    @prop(label="SHG Temperature Setpoint", units="°C")
     def shg_temperature_setpoint_c(self) -> float:
         """Commanded SHG crystal temperature; SHG tuning owns this value."""
         self._ensure_open()
         return float(self._query(Query.SHG_TEMP_SETPOINT))
 
-    @describe(label="SHG Tune Info")
+    @query(label="SHG Tune Info")
     def shg_tune_info(self) -> dict[str, float | bool]:
         """Tuning readiness, hours of operation until the next tuning, and warm-up seconds left."""
         self._ensure_open()
@@ -268,17 +269,17 @@ class MpbVflSource(LaserSource):
             raise MpbCommandError(f"Unexpected SHG tune info reply: {reply!r}")
         return {"ready": parts[0] == "1", "next_tuning_h": float(parts[1]), "warm_up_s": float(parts[2])}
 
-    @describe(label="Start SHG Tuning")
+    @action(label="Start SHG Tuning")
     def shg_tune_start(self) -> None:
         self._ensure_open()
         self._query(f"{Cmd.SHG_TUNE} 1")
 
-    @describe(label="Stop SHG Tuning")
+    @action(label="Stop SHG Tuning")
     def shg_tune_stop(self) -> None:
         self._ensure_open()
         self._query(f"{Cmd.SHG_TUNE} 2")
 
-    @describe(label="Status")
+    @query(label="Status")
     def status(self) -> list[str]:
         """Status report from `shlaser`, one entry per line."""
         self._ensure_open()
@@ -299,7 +300,7 @@ class MpbVflSource(LaserSource):
             raise ValueError("MpbVflSource currently supports software modulation only")
         self._query(f"{Cmd.POWER_ENABLE} 1")
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Disable emission, then release the serial port; failures can be retried."""
         if self._closed:
             return

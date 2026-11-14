@@ -5,9 +5,9 @@ from enum import StrEnum
 from math import isclose, isfinite
 from typing import Any, Never
 
-from rigup.device.props import NumericFloat
+from rigup.device import number, prop
+from rigup.device.limits import NumberValue
 
-from rigup import describe
 from vxl.devices.laser.base import Laser
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.lasers.mpds.controller import MPDS, InputMode
@@ -42,7 +42,7 @@ class MPDSLaser(Laser):
         mpds.validate_frequency(self._settings.frequency_mhz)
         mpds.validate_power(self._settings.min_rf_power_dbm)
         mpds.validate_power(self._settings.max_rf_power_dbm)
-        if ModulationMode.SOFTWARE not in source.modulation_mode.options:
+        if ModulationMode.SOFTWARE not in (source.modulation_mode.options or ()):
             raise ValueError("MPDSLaser requires a source with software modulation")
         self._source = source
         self._mpds = mpds
@@ -73,13 +73,13 @@ class MPDSLaser(Laser):
                 raise
 
     @property
-    @describe(label="Level Control")
+    @prop(label="Level Control")
     def level_control(self) -> ControlTarget:
         """Component selected at construction to implement software/digital levels."""
         return self._level_control
 
     @property
-    @describe(label="Output Switch")
+    @prop(label="Output Switch")
     def output_switch(self) -> ControlTarget:
         """Component selected at construction to block output."""
         return self._output_switch
@@ -121,12 +121,16 @@ class MPDSLaser(Laser):
         with self._lock:
             return self._source_enabled
 
-    @property
+    @number(
+        minimum=lambda self: self._power_value(self._reference_mw).minimum,
+        maximum=lambda self: self._power_value(self._reference_mw).maximum,
+        step=lambda self: self._power_value(self._reference_mw).step,
+    )
     def source_power_setpoint_mw(self) -> float:
         """Saved operating reference, with the source's numeric constraints."""
         with self._lock:
             self._ensure_open()
-            return self._power_value(self._reference_mw)
+            return self._reference_mw
 
     @source_power_setpoint_mw.setter
     def source_power_setpoint_mw(self, value: float) -> None:
@@ -189,12 +193,16 @@ class MPDSLaser(Laser):
         with self._lock:
             return self._output_enabled
 
-    @property
+    @number(
+        minimum=lambda self: self._level_value(self._level, self._reference_mw).minimum,
+        maximum=lambda self: self._level_value(self._level, self._reference_mw).maximum,
+        step=lambda self: self._level_value(self._level, self._reference_mw).step,
+    )
     def output_level_percent(self) -> float:
         """Saved AOTF or source operating percentage; inactive in analog mode."""
         with self._lock:
             self._ensure_open()
-            return self._level_value(self._level, self._reference_mw)
+            return self._level
 
     @output_level_percent.setter
     def output_level_percent(self, value: float) -> None:
@@ -258,35 +266,33 @@ class MPDSLaser(Laser):
                     self._source.source_enable(wait=wait)
                     self._check_source_enabled()
 
-    def _power_value(self, value: float) -> NumericFloat:
+    def _power_value(self, value: float) -> NumberValue:
         """Validate a saved reference using the borrowed source's numeric constraints."""
         if not isfinite(value) or value < 0:
             raise ValueError("Source power reference must be finite and nonnegative")
         power = self._source.source_power_setpoint_mw
-        if not isinstance(power, NumericFloat):
-            return NumericFloat(value)
-        return NumericFloat(value, power.minimum, power.maximum, power.step, options=power.options)
+        return _number(value, minimum=power.minimum, maximum=power.maximum, step=power.step, options=power.options)
 
-    def _level_value(self, value: float, reference: float) -> NumericFloat:
+    def _level_value(self, value: float, reference: float) -> NumberValue:
         """Expose RF calibration limits or the source's attainable range/options."""
         if not isfinite(value):
             raise ValueError("Output level must be finite")
         if self._level_control == ControlTarget.AOTF:
             if not self._settings.minimum_level_percent <= value <= 100:
                 raise ValueError("Output level is outside the calibrated operating range")
-            return NumericFloat(value, minimum=self._settings.minimum_level_percent, maximum=100.0)
+            return _number(value, minimum=self._settings.minimum_level_percent, maximum=100.0)
         power = self._power_value(reference)
         if reference == 0:
-            return NumericFloat(value, options=(100.0,))
+            return _number(value, options=(100.0,))
         if power.options is not None:
             options = tuple(option / reference * 100 for option in power.options if 0 <= option <= reference)
             selected = next((option for option in options if isclose(option, value, abs_tol=1e-9)), value)
-            return NumericFloat(selected, options=options)
+            return _number(selected, options=options)
         minimum = max(0.0, power.minimum or 0.0) / reference * 100
         if not minimum <= value <= 100:
             raise ValueError(f"Output level must be in {minimum:g}..100% at a {reference:g} mW source reference")
         step = None if power.step is None else power.step / reference * 100
-        return NumericFloat(value, minimum=minimum, maximum=100.0, step=step)
+        return _number(value, minimum=minimum, maximum=100.0, step=step)
 
     def _inhibit_all(self, cause: Exception | None = None) -> None:
         """Attempt both independent stops and retain every failure for the caller."""
@@ -337,7 +343,7 @@ class MPDSLaser(Laser):
         if not self._source.is_source_enabled:
             raise RuntimeError("Source did not enable or lost enable during startup wait")
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Inhibit this laser and release its line; leave borrowed connections open."""
         with self._lock:
             if self._closed:
@@ -349,3 +355,21 @@ class MPDSLaser(Laser):
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("Laser is closed")
+
+
+def _number(
+    value: float,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+    step: float | None = None,
+    options: tuple[float, ...] | None = None,
+) -> NumberValue:
+    number_value = NumberValue(value)
+    number_value.minimum, number_value.maximum, number_value.step, number_value.options = (
+        minimum,
+        maximum,
+        step,
+        options,
+    )
+    return number_value

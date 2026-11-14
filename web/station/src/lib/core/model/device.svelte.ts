@@ -15,7 +15,15 @@ import {
 
 import { Client } from './client.svelte';
 import type { DeviceRoleAssignment } from './device-rules';
-import type { ComponentInterface, DeviceSnapshot, DiscreteAxisState, PropResults, AreaROI, Signals } from './types';
+import type {
+  DeviceInterface,
+  DeviceSnapshot,
+  StreamTier,
+  DiscreteAxisState,
+  PropResults,
+  AreaROI,
+  Signals
+} from './types';
 
 export interface PropertyInfo {
   name: string;
@@ -24,6 +32,7 @@ export interface PropertyInfo {
   dtype: string;
   access: 'ro' | 'rw';
   units: string;
+  stream: StreamTier | null;
 }
 
 /** A PropModel paired with its interface metadata. Profile saved-state lives on `Instrument.divergence`. */
@@ -61,7 +70,7 @@ export class DeviceHandle {
   readonly roleIndex: number;
   connected = $state(false);
   error = $state<string | undefined>(undefined);
-  interface = $state<ComponentInterface | undefined>(undefined);
+  interface = $state<DeviceInterface | undefined>(undefined);
   props = new SvelteMap<string, Prop>();
 
   #client: Client;

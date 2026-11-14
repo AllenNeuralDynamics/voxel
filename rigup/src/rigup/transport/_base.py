@@ -1,20 +1,6 @@
-"""Transport abstractions for rigup.
+"""A connection has a reliable channel where either side sends requests and notifies, and a lossy stream channel.
 
-Wire-agnostic API used by the Rig and Node layers. Every rig↔node connection
-uses two logical channels (two socket pairs in the ZMQ impl, equivalent in
-others):
-
-- A **reliable bidirectional** channel for RPC and notifications. Either side
-  can send ``request``\\ s (await a response) or ``notify``\\ s (fire-and-
-  forget); both sides can register handlers to react to what the other sends.
-- An **unreliable broadcast** channel for streams (pub/sub). Node publishes
-  topics; rig subscribes. Lossy by design so high-volume data (frames,
-  property changes) does not back-pressure the reliable channel.
-
-Every reliable message is one of three kinds — ``request``, ``response``,
-``notify`` — encoded in a leading byte of the payload frames. Transport owns
-request-ID correlation; higher layers just await ``request`` and get response
-bytes back (or a :class:`TransportError`).
+The stream channel may drop messages so that high-volume data never holds up requests.
 """
 
 from abc import ABC, abstractmethod
@@ -27,51 +13,44 @@ from vxlib.lifecycle import Teardown
 
 
 class MessageKind(IntEnum):
-    """First-byte discriminator for reliable-channel frames."""
-
     REQUEST = 0
     RESPONSE = 1
     NOTIFY = 2
 
 
 type RequestHandler = Callable[[str, bytes], Awaitable[bytes]]
-"""Handles an incoming ``request``. Receives ``(action, payload)``, returns response bytes.
-
-Raising inside a handler produces a :class:`TransportError` on the caller's side.
-"""
+"""Answer a request with ``(action, payload)``; an exception reaches the caller as ``TransportError``."""
 
 type NotifyHandler = Callable[[str, bytes], Awaitable[None]]
-"""Handles an incoming ``notify``. Fire-and-forget; return value ignored."""
 
 type TopicCallback = Callable[[bytes], Awaitable[None]]
-"""Callback for pub/sub topic messages. Receives raw bytes."""
 
 
 class TransportError(RuntimeError):
-    """Raised when a remote handler raised, is missing, or reports an error."""
+    """A remote handler raised or is missing."""
 
 
 class NodeAddress(BaseModel, ABC):
-    """Address pair for a node's reliable + stream endpoints."""
+    """The endpoints of a node's reliable and stream channels."""
 
     model_config = {"frozen": True}
 
     @property
     @abstractmethod
     def rpc_addr(self) -> str:
-        """Endpoint for the reliable bidirectional channel (DEALER/ROUTER)."""
+        """Return the endpoint of the reliable channel."""
 
     @property
     @abstractmethod
     def pub_addr(self) -> str:
-        """Endpoint for the broadcast channel (PUB/SUB)."""
+        """Return the endpoint of the stream channel."""
 
     def __str__(self) -> str:
         return f"rpc={self.rpc_addr} pub={self.pub_addr}"
 
 
 class TCPAddress(NodeAddress):
-    """TCP endpoints. ``pub_port`` defaults to ``rpc_port + 1`` when omitted."""
+    """TCP endpoints; the stream channel uses the port after ``rpc_port`` when ``pub_port`` is omitted."""
 
     host: str = Field(default="127.0.0.1", min_length=1)
     rpc_port: int = Field(..., ge=1, le=65535)
@@ -88,17 +67,17 @@ class TCPAddress(NodeAddress):
 
     def _fmt(self, port: int) -> str:
         h = self.host
-        if ":" in h and not h.startswith("["):  # naked IPv6 → bracketed
+        if ":" in h and not h.startswith("["):  # IPv6 hosts need brackets in a URL
             h = f"[{h}]"
         return f"tcp://{h}:{port}"
 
     def as_bind(self) -> Self:
-        """Return a copy with ``host='0.0.0.0'`` for server-side bind."""
-        return type(self)(host="0.0.0.0", rpc_port=self.rpc_port, pub_port=self.pub_port)  # noqa: S104
+        """Return a copy that binds on every interface."""
+        return type(self)(host="*", rpc_port=self.rpc_port, pub_port=self.pub_port)
 
 
 class IPCAddress(NodeAddress):
-    """Filesystem IPC endpoints. ``rpc_addr = ipc://{path}.rpc`` and similar for pub."""
+    """IPC endpoints on files next to ``path``."""
 
     path: str = Field(..., min_length=1)
 
@@ -112,7 +91,7 @@ class IPCAddress(NodeAddress):
 
 
 class INPROCAddress(NodeAddress):
-    """In-process endpoints. Only works within a single ZMQ context."""
+    """In-process endpoints, reachable only within the same ZMQ context."""
 
     name: str = Field(..., min_length=1)
 
@@ -126,13 +105,7 @@ class INPROCAddress(NodeAddress):
 
 
 class TransportClient(ABC):
-    """Client side of a transport — connects to a single node endpoint.
-
-    Holds one reliable connection (DEALER in ZMQ) and one subscriber (SUB).
-    Both ends of the reliable channel can initiate ``request`` or ``notify``;
-    the client exposes outgoing methods and registers handlers for inbound
-    server-initiated messages symmetrically.
-    """
+    """The rig side of a connection to 1 node."""
 
     @abstractmethod
     async def connect(self, address: NodeAddress) -> None: ...
@@ -142,35 +115,32 @@ class TransportClient(ABC):
 
     @abstractmethod
     async def request(self, action: str, payload: bytes, *, timeout_s: float | None = None) -> bytes:
-        """Send a request, await the matching response.
+        """Send a request and await its response.
 
-        Raises :class:`TransportError` if the remote handler raised or is
-        missing. Raises :class:`asyncio.TimeoutError` if ``timeout_s`` elapses.
+        Raise ``TransportError`` when the remote handler fails, and ``TimeoutError`` when ``timeout_s`` passes.
         """
 
     @abstractmethod
     async def notify(self, action: str, payload: bytes) -> None:
-        """Send a notify. Fire-and-forget — no response awaited."""
+        """Send a message that gets no response."""
 
     @abstractmethod
     def on_request(self, handler: RequestHandler) -> None:
-        """Register the handler for server-initiated requests (one at a time)."""
+        """Set the handler for requests from the server, replacing any earlier one."""
 
     @abstractmethod
     def on_notify(self, handler: NotifyHandler) -> None:
-        """Register the handler for server-initiated notifies (one at a time)."""
+        """Set the handler for notifies from the server, replacing any earlier one."""
 
     @abstractmethod
     def subscribe(self, topic: str, cb: TopicCallback) -> Teardown:
-        """Subscribe to a pub/sub topic. Returns a ``Teardown`` to remove the callback."""
+        """Call ``cb`` with each message on ``topic`` until the teardown runs."""
 
 
 class TransportServer(ABC):
-    """Server side of a transport — binds one address pair for one peer.
+    """The node side of a connection, serving 1 client.
 
-    Single-orchestrator model: server tracks a single connected client's
-    identity (updated on any received frame). ``push_request`` / ``push_notify``
-    target that peer; they raise if no client has been seen yet.
+    Pushed messages go to the client that sent the latest frame, and raise when no client has sent one yet.
     """
 
     @abstractmethod
@@ -181,20 +151,20 @@ class TransportServer(ABC):
 
     @abstractmethod
     def on_request(self, handler: RequestHandler) -> None:
-        """Register the handler for client-initiated requests (one at a time)."""
+        """Set the handler for requests from the client, replacing any earlier one."""
 
     @abstractmethod
     def on_notify(self, handler: NotifyHandler) -> None:
-        """Register the handler for client-initiated notifies (one at a time)."""
+        """Set the handler for notifies from the client, replacing any earlier one."""
 
     @abstractmethod
     async def push_request(self, action: str, payload: bytes, *, timeout_s: float | None = None) -> bytes:
-        """Send a request *to* the connected client, await the response."""
+        """Send a request to the client and await its response."""
 
     @abstractmethod
     async def push_notify(self, action: str, payload: bytes) -> None:
-        """Send a notify *to* the connected client. Fire-and-forget."""
+        """Send a message to the client that gets no response."""
 
     @abstractmethod
     async def publish(self, topic: str, data: bytes) -> None:
-        """Broadcast ``data`` on ``topic`` over the stream channel (PUB)."""
+        """Send ``data`` on ``topic`` over the stream channel."""

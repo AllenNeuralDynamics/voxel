@@ -30,10 +30,10 @@ import yaml
 from pydantic import model_validator
 from rich.console import Console
 from rich.progress import Progress, TaskID
-from rigup.build import BuildConfig
+from rigup.device import Device
 from vxlib.schema import FrozenModel
 
-from rigup import Device
+from rigup import BuildConfig
 from vxl.devices.laser.source import LaserSource
 from vxl.devices.power_meter import PowerMeter
 from vxl_drivers.lasers.mpds.calibration import SweepConfig, SweepResult, collect, fit_settings, save_plot
@@ -62,7 +62,7 @@ def _open_device[D: Device](uid: str, config: BuildConfig, expected: type[D], st
     if not issubclass(driver, expected):
         raise TypeError(f"{uid} must implement {expected.__name__}")
     device = driver(uid=uid, **config.init)
-    stack.callback(device.close)
+    stack.callback(device.dispose)
     for name, value in (config.defaults or {}).items():
         setattr(device, name, value)
     return device

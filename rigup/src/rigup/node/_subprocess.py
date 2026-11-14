@@ -1,5 +1,3 @@
-"""SubprocessNode — orchestrator-spawned child process, ZMQ transport."""
-
 import asyncio
 import shutil
 import sys
@@ -8,7 +6,8 @@ from contextlib import suppress
 from pathlib import Path
 
 from rigup.config import NodeConfig
-from rigup.protocol import Action, Notify, PingPayload, ShutdownPayload, call, send_notify
+from rigup.device._loop import CLOSE_GRACE
+from rigup.node._protocol import Action, Notify, PingPayload, ShutdownPayload, call, send_notify
 from rigup.transport import IPCAddress, TCPAddress, ZMQTransportClient
 
 from ._remote import _parse_address
@@ -16,30 +15,24 @@ from ._transport import TransportNode
 
 
 class SubprocessNode(TransportNode):
-    """Node backed by a child process spawned by the orchestrator.
+    """Node in a child process that the rig spawns and ends.
 
-    ``open`` spawns a subprocess running a :class:`NodeDaemon`, connects via
-    ZMQ, and waits for readiness. ``close`` shuts down devices, notifies the
-    daemon, then terminates the process (graceful → SIGTERM → SIGKILL).
-
-    When no address is configured, defaults to IPC (Unix domain sockets) —
-    faster than TCP loopback, no port allocation, no conflicts between
-    concurrent rigs.
+    Without a configured address it uses IPC in a temporary directory, so concurrent rigs never share a port.
     """
 
     def __init__(self, node_id: str, config: NodeConfig) -> None:
         self._config = config
         super().__init__(node_id, ZMQTransportClient())
         self._process: asyncio.subprocess.Process | None = None
+        self._watcher: asyncio.Task[None] | None = None
         self._ipc_dir: str | None = None
 
     async def open(self) -> None:
         address = self._resolve_address()
 
-        # Runner receives the bind-side address as a single ZMQ string.
-        # For TCP, as_bind() swaps the host to 0.0.0.0; for IPC, rpc_addr is the same for both sides.
+        # The daemon binds on every interface for TCP; an IPC path is the same on both sides.
         bind_addr = address.as_bind().rpc_addr if isinstance(address, TCPAddress) else address.rpc_addr
-        # Strip the .rpc suffix for IPC so the runner gets the base path
+        # The daemon expects the IPC base path, without the .rpc suffix.
         if isinstance(address, IPCAddress):
             bind_addr = f"ipc://{address.path}"
             self._ipc_dir = str(Path(address.path).parent)
@@ -51,20 +44,31 @@ class SubprocessNode(TransportNode):
             self.node_id,
             bind_addr,
         )
+        self._watcher = asyncio.create_task(self._watch(self._process))
 
         await self._transport.connect(address)
-        self._start_log_relay()  # subscribe before the child binds so its startup logs aren't missed
+        # Pub/sub drops records until the subscription reaches the daemon, so logs from the node's
+        # first moments can be lost.
+        self._start_log_relay()
 
-        # DEALER queues messages until the peer binds, so this PING will
-        # be delivered once the daemon's ROUTER is up. Generous timeout
-        # covers cold Python startup + import time.
+        # DEALER queues this ping until the daemon binds, so its reply means the daemon is ready.
+        # The timeout must cover a cold Python start.
         await call(self._transport, Action.PING, PingPayload(), PingPayload, timeout_s=30.0)
         self._log.info("SubprocessNode %s ready at %s (pid=%d)", self.node_id, address, self._process.pid)
 
+    async def _watch(self, process: asyncio.subprocess.Process) -> None:
+        """Close the transport when the process dies, so every pending call fails at once."""
+        code = await process.wait()
+        self._log.error("Node %s exited unexpectedly with code %s", self.node_id, code)
+        await self._transport.close()
+
     async def close(self) -> None:
+        if self._watcher is not None:
+            self._watcher.cancel()  # The process exit that follows is expected.
+            self._watcher = None
         if self._process is not None and self._process.returncode is None:
             with suppress(Exception):
-                await asyncio.wait_for(self.close_all_devices(), timeout=5.0)
+                await asyncio.wait_for(self.close_all_devices(), timeout=2 * CLOSE_GRACE + 1)
             with suppress(Exception):
                 await asyncio.wait_for(
                     send_notify(self._transport, Notify.SHUTDOWN, ShutdownPayload(reason="orchestrator close")),

@@ -143,7 +143,7 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
         if not isinstance(child, ContinuousAxis):
             if child is not None:
                 with suppress(Exception):
-                    child.close()
+                    child.dispose()
             actual = type(child).__name__ if child is not None else "None"
             raise TypeError(f"Owned axis for '{uid}' must be a ContinuousAxis, got {actual}")
 
@@ -156,14 +156,14 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
             )
         except Exception:
             with suppress(Exception):
-                child.close()
+                child.dispose()
             raise
 
         self._owned_axis = child
         self._owned_axis_closed = False
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         if self._owned_axis_closed:
             return
         self._owned_axis_closed = True
-        self._owned_axis.close()
+        self._owned_axis.dispose()

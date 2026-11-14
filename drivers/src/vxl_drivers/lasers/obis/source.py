@@ -5,7 +5,8 @@ from math import isfinite
 from time import monotonic, sleep
 from typing import TypedDict
 
-from rigup import describe, numeric
+from rigup.device import number, prop
+
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.lasers.obis.controller import ObisController
 from vxl_drivers.lasers.obis.link import ObisError, ObisLink
@@ -150,7 +151,7 @@ class ObisSource(LaserSource):
         return self._link.flag(self._sour("AM:STAT?"))
 
     # TODO: verify on real hardware the setpoint resolution; the wire format allows 0.01 mW (5 decimals in W).
-    @numeric(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=0.01)
+    @number(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=0.01)
     def source_power_setpoint_mw(self) -> float:
         self._ensure_open()
         return self._link.number(self._sour("POW:LEV:IMM:AMPL?")) * 1000
@@ -178,38 +179,38 @@ class ObisSource(LaserSource):
         return self._link.number(self._sour("TEMP:BAS?"), suffix="C")
 
     @property
-    @describe(label="Model")
+    @prop(label="Model")
     def model(self) -> str:
         return self._model
 
     @property
-    @describe(label="Serial Number")
+    @prop(label="Serial Number")
     def serial_number(self) -> str:
         return self._serial_number
 
     @property
-    @describe(label="Operating Hours")
+    @prop(label="Operating Hours")
     def operating_hours(self) -> str:
         """Reply to SYST:HOUR?, unparsed until its format is confirmed."""
         self._ensure_open()
         return self._link.query(self._syst("HOUR?"))
 
     @property
-    @describe(label="CDRH Delay")
+    @prop(label="CDRH Delay")
     def cdrh_delay(self) -> bool:
         """Whether emission starts 5 s after enable."""
         self._ensure_open()
         return self._link.flag(self._syst("CDRH?"))
 
     @property
-    @describe(label="Autostart")
+    @prop(label="Autostart")
     def autostart(self) -> bool:
         """Whether the laser emits at power-up."""
         self._ensure_open()
         return self._link.flag(self._syst("AUT?"))
 
     @property
-    @describe(label="Interlock")
+    @prop(label="Interlock")
     def interlock(self) -> str:
         """Reply to SYST:LOCK?, unparsed until its meaning is confirmed."""
         # TODO: verify on real hardware what SYST:LOCK? replies with the interlock open and closed.
@@ -217,14 +218,14 @@ class ObisSource(LaserSource):
         return self._link.query(self._syst("LOCK?"))
 
     @property
-    @describe(label="Status Code")
+    @prop(label="Status Code")
     def status_code(self) -> str:
         """Hex status bits from SYST:STAT?."""
         self._ensure_open()
         return self._link.query(self._syst("STAT?"))
 
     @property
-    @describe(label="Fault Code")
+    @prop(label="Fault Code")
     def fault_code(self) -> str:
         """Hex fault bits from SYST:FAUL?; 00000000 means no fault."""
         # TODO: verify on real hardware what bit 31 (80000000) means; one lab saw it with no fault.
@@ -249,7 +250,7 @@ class ObisSource(LaserSource):
             if self._read_modulation_mode() != mode:
                 raise ObisError(f"OBIS did not establish {mode} modulation")
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Disable emission, then close the port or release the channel; failures can be retried."""
         if self._closed:
             return

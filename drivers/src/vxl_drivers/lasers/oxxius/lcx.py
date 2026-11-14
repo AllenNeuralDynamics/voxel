@@ -4,9 +4,9 @@ from math import isclose, isfinite
 from time import monotonic, sleep
 from typing import Never
 
-from rigup.device.props import NumericFloat
+from rigup.device import number, prop
+from rigup.device.limits import NumberValue
 
-from rigup import describe
 from vxl.devices.laser.base import Laser
 from vxl.devices.laser.source import ModulationMode
 from vxl_drivers.lasers.oxxius.controller import Cmd, OxxiusCommunicationError, OxxiusController, Query
@@ -78,10 +78,14 @@ class OxxiusLCXLaser(Laser):
     def wavelength(self) -> float:
         return self._wavelength
 
-    @property
+    @number(
+        minimum=lambda self: self._power_value(self._reference_mw).minimum,
+        maximum=lambda self: self._power_value(self._reference_mw).maximum,
+        step=lambda self: self._power_value(self._reference_mw).step,
+    )
     def source_power_setpoint_mw(self) -> float:
         self._ensure_open()
-        return self._power_value(self._reference_mw)
+        return self._reference_mw
 
     @source_power_setpoint_mw.setter
     def source_power_setpoint_mw(self, value: float) -> None:
@@ -105,7 +109,7 @@ class OxxiusLCXLaser(Laser):
         return self._controller.number(Query.TEMPERATURE, self._prefix)
 
     @property
-    @describe(label="Physical Source Enabled", stream=True)
+    @prop(label="Physical Source Enabled", stream="slow")
     def physical_source_enabled(self) -> bool:
         """Hardware temperature-regulation permission; not instantaneous optical output."""
         return not self._closed and self._controller.is_enabled(self._prefix)
@@ -159,10 +163,10 @@ class OxxiusLCXLaser(Laser):
     def is_output_enabled(self) -> bool:
         return self._output_enabled
 
-    @property
+    @number(minimum=0.0, maximum=100.0)
     def output_level_percent(self) -> float:
         self._ensure_open()
-        return NumericFloat(self._level, minimum=0.0, maximum=100.0)
+        return self._level
 
     @output_level_percent.setter
     def output_level_percent(self, value: float) -> None:
@@ -206,12 +210,12 @@ class OxxiusLCXLaser(Laser):
             except Exception as error:
                 self._stop_after_failure(error)
 
-    def _power_value(self, value: float) -> NumericFloat:
+    def _power_value(self, value: float) -> NumberValue:
         if not isfinite(value):
             raise ValueError("Source reference must be finite")
         if self._fixed is not None:
-            return NumericFloat(value, options=(self._fixed,))
-        return NumericFloat(value, minimum=self._minimum, maximum=self._maximum, step=0.1)
+            return _number(value, options=(self._fixed,))
+        return _number(value, minimum=self._minimum, maximum=self._maximum, step=0.1)
 
     def _apply_power(self, reference: float, level: float, mode: ModulationMode) -> None:
         """Set the source reference and vendor-linearized AOM target, preserving permissions."""
@@ -254,7 +258,7 @@ class OxxiusLCXLaser(Laser):
             raise ExceptionGroup("LCX operation and inhibition failed", [error, cleanup_error]) from None
         raise error
 
-    def close(self) -> None:
+    def release(self) -> None:
         if not self._closed:
             self.source_disable()
             self._controller.release(self._prefix, self.uid)
@@ -263,3 +267,21 @@ class OxxiusLCXLaser(Laser):
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("LCX laser is closed")
+
+
+def _number(
+    value: float,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+    step: float | None = None,
+    options: tuple[float, ...] | None = None,
+) -> NumberValue:
+    number_value = NumberValue(value)
+    number_value.minimum, number_value.maximum, number_value.step, number_value.options = (
+        minimum,
+        maximum,
+        step,
+        options,
+    )
+    return number_value

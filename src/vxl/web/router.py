@@ -7,6 +7,8 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from pydantic import AnyWebsocketUrl, BaseModel, Field, ValidationError
+from rigup.device import Result
+from rigup.device.results import PropResults
 from vxl_records import (
     AcquisitionManifest,
     LogEntry,
@@ -17,7 +19,6 @@ from vxl_records import (
 )
 from vxlib.history import Change
 
-from rigup import PropResults, Result
 from vxl._utils.color import ColormapGroup, get_colormap_catalog
 from vxl.devices.daq.clocked import Signals
 from vxl.instrument import (

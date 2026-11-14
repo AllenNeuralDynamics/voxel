@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from threading import Event, Thread
 from typing import Any
 
+from rigup.device import number
+
 from vxl.devices.axes.continuous_legacy import (
     ContinuousAxis,
     StepMode,
@@ -187,7 +189,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
         self._home -= offset
         self.log.info(f"Logical position set to {position} {self._units}")
 
-    @property
+    @number()
     def upper_limit(self) -> float:
         """Get the upper position limit."""
         return self._upper_limit
@@ -198,7 +200,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
         self._upper_limit = value
         self.log.debug("upper limit set to %s %s", value, self._units)
 
-    @property
+    @number()
     def lower_limit(self) -> float:
         """Get the lower position limit."""
         return self._lower_limit

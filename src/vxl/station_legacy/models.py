@@ -5,11 +5,12 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
+from rigup.device import DeviceInterface
+from rigup.device.results import PropertyModel
 from vxl_records import PlannedVolume
 from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
 
-from rigup import ComponentInterface, PropertyModel
 from vxl.instrument import Activity, Bounds, InstrumentConfig, InstrumentState
 from vxl.preview import StreamCursor
 from vxl.station_legacy.config import StationInfo
@@ -37,7 +38,7 @@ class SessionInfo(FrozenModel):
 class DeviceState(FrozenModel):
     """Serializable interface and latest-successful properties for one open device."""
 
-    interface: ComponentInterface
+    interface: DeviceInterface
     props: dict[str, PropertyModel]
 
 

@@ -5,10 +5,9 @@ from enum import StrEnum
 from obis_laser import LSModulationType, LXModulationType
 from obis_laser import ObisLS as ObisLSDriver
 from obis_laser import ObisLX as ObisLXDriver
-from rigup.device.props import enumerated, numeric
+from rigup.device import choice, number, prop, query
 from serial import Serial
 
-from rigup import describe
 from vxl_drivers.lasers_legacy.base import Laser
 
 
@@ -81,8 +80,7 @@ class ObisLX(Laser):
         # OBIS doesn't have a direct enabled query - infer from power
         return self._inst.power_setpoint > 0
 
-    @numeric(minimum=0.0, maximum=lambda self: self._inst.max_power, step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._inst.max_power, step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return self._inst.power_setpoint
@@ -94,7 +92,6 @@ class ObisLX(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return self._inst.power_setpoint
@@ -104,8 +101,8 @@ class ObisLX(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._inst.temperature
 
-    @enumerated(options=list(ModulationMode))
-    @describe(label="Modulation Mode", desc="Laser modulation mode.")
+    @choice(options=list(ModulationMode))
+    @prop(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         mode = self._inst.modulation_mode
@@ -123,12 +120,12 @@ class ObisLX(Laser):
         self._inst.modulation_mode = _LX_MODULATION_MAP[value]  # pyright: ignore[reportAttributeAccessIssue]
         self.log.debug(f"Modulation mode set to {value}")
 
-    @describe(label="Status", desc="Get laser system status.")
+    @query(label="Status", desc="Get laser system status.")
     def status(self) -> dict[str, str | float]:
         """Get the status of the laser."""
         return self._inst.get_system_status()
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing OBIS LX laser")
         self._inst.disable()
@@ -177,8 +174,7 @@ class ObisLS(Laser):
         """Check if the laser is enabled."""
         return self._inst.power_setpoint > 0
 
-    @numeric(minimum=0.0, maximum=lambda self: self._inst.max_power, step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._inst.max_power, step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return self._inst.power_setpoint
@@ -190,7 +186,6 @@ class ObisLS(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return self._inst.power_setpoint
@@ -200,8 +195,8 @@ class ObisLS(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return self._inst.temperature
 
-    @enumerated(options=list(ModulationMode))
-    @describe(label="Modulation Mode", desc="Laser modulation mode.")
+    @choice(options=list(ModulationMode))
+    @prop(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         mode = self._inst.modulation_mode
@@ -219,12 +214,12 @@ class ObisLS(Laser):
         self._inst.modulation_mode = _LS_MODULATION_MAP[value]  # pyright: ignore[reportAttributeAccessIssue]
         self.log.debug(f"Modulation mode set to {value}")
 
-    @describe(label="Status", desc="Get laser system status.")
+    @query(label="Status", desc="Get laser system status.")
     def status(self) -> dict[str, str | float]:
         """Get the status of the laser."""
         return self._inst.get_system_status()
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing OBIS LS laser")
         self._inst.disable()

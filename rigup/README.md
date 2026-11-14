@@ -15,8 +15,8 @@ topology, and callers interact with every device through a `DeviceHandle`.
 - **Location-transparent handles** — the same calls control in-process, subprocess, and remote devices.
 - **Discoverable interfaces** — commands, properties, constraints, and presentation metadata are derived from the
   driver and represented by validated models.
-- **Hardware-safe execution** — synchronous calls for each device run on a dedicated single-worker executor, while
-  separate devices remain independent.
+- **Hardware-safe execution** — each device runs on its own thread and event loop, so 2 calls into 1 device never
+  overlap, while separate devices remain independent. Calls from any other thread are refused.
 - **Reactive properties** — streamed observations update one latest-successful cache shared by typed handle views and
   subscribers.
 - **Explicit lifecycle** — `Rig` builds devices, reports partial build failures, and closes devices and managed
@@ -24,29 +24,22 @@ topology, and callers interact with every device through a `DeviceHandle`.
 
 ## Define a device
 
-A driver subclasses `Device` and says its kind in the class line. Only methods and properties marked with `@describe`
-become part of its public interface. Constrained property descriptors validate writes and carry their bounds or options across the handle
-boundary.
+A driver subclasses `Device` and says its kind in the class line. Only properties marked with `@prop` and methods
+marked with `@query`, `@action` or `@failsafe` become part of its public interface. `@number`, `@integer` and `@choice`
+add limits: every write is fitted to them, and every read carries them, such as `laser.power.maximum`.
 
 ```python
-from enum import StrEnum
-
-from rigup import Device, describe, numeric
+from rigup.device import Device, action, number, prop
 
 
-class LaserState(StrEnum):
-    OFF = "off"
-    ON = "on"
-
-
-class Laser(Device[LaserState], kind="laser"):
+class Laser(Device, kind="laser"):
     def __init__(self, uid: str) -> None:
         super().__init__(uid)
         self._power = 0.0
         self._enabled = False
 
-    @numeric(minimum=0.0, maximum=100.0, step=0.1)
-    @describe(label="Power", units="mW", stream=True)
+    @number(minimum=0.0, maximum=100.0, step=0.1)
+    @prop(label="Power", units="mW", stream="fast")
     def power(self) -> float:
         return self._power
 
@@ -54,38 +47,45 @@ class Laser(Device[LaserState], kind="laser"):
     def power(self, value: float) -> None:
         self._power = value
 
-    @describe(label="Enable")
+    @action(label="Enable")
     def enable(self) -> None:
         self._enabled = True
 ```
 
-`stream=True` asks the controller to poll the property and publish changed observations. It is appropriate for live
-telemetry, not for events that require lossless delivery.
+`stream="fast"` or `stream="slow"` asks the controller to poll the property at that tier's rate and publish changed
+observations. The rates are the controller's: its class line can set them for a device kind, and a rig config's
+`streaming:` can set them for 1 device. Streams suit live telemetry, not events that need lossless delivery.
 
-See the [device properties guide](src/rigup/device/props/README.md) for decorators, validation,
-and property metadata for clients.
+An async command gives up its device at each `await`, so other calls, such as a failsafe `stop` during a move, can run
+in between. Guard a read-modify-write that spans an `await` with an `asyncio.Lock` on the device.
+
+A class is checked when it is defined, and all of its problems are reported at once: a driver keeps its base's command
+arguments and intents, does not describe a base's property again or hide it, and every command must describe itself
+as JSON Schema. [`examples/simulated_rig.py`](examples/simulated_rig.py) runs every feature on simulated devices.
 
 ## Build and use a rig
 
 `RigConfig` is a Pydantic model; an application may construct it directly or validate configuration loaded from
-YAML or another source. Each target is the import path of a `Device` or `Part` subclass.
+YAML or another source. Each target is the import path of a `Device` or `Part` subclass; this one is in
+[`examples/devices.py`](examples/devices.py), so run it from `examples/`.
 
 ```python
 import asyncio
 
-from rigup import DeviceConfig, Rig, RigConfig
+from rigup import DeviceConfig, RigConfig
+from rigup.rig import Rig
 
 
 async def main() -> None:
-    config = RigConfig(devices={"laser": DeviceConfig(target="my_devices.Laser", defaults={"power": 5.0})})
-    rig = Rig(config, name="example")
+    laser_config = DeviceConfig(target="devices.SimulatedLaser", init={"max_power": 300.0}, defaults={"power": 5.0})
+    rig = Rig(RigConfig(devices={"laser": laser_config}), name="example")
 
     await rig.open()
     try:
         laser = rig.devices["laser"]
-        await laser.call("enable")
-        await laser.props.set(power=12.5)
+        await laser.props.set(enabled=True, power=12.5)
         print(await laser.props.get_value("power"))
+        await laser.call("output_off")
     finally:
         await rig.close()
 
@@ -156,18 +156,13 @@ does not get it.
 
 ### Composition lifecycle and access
 
-Injected devices are borrowed: rigup owns their lifecycle. Each registered device has its own worker; calls made
-directly to an injected object bypass that object's controller. Shared hardware locks can serialize transactions,
+Injected devices are borrowed: rigup owns their lifecycle. Each registered device has its own thread. A device that
+calls a device it was given runs that call on the given device's thread and waits for it; calls from any thread that
+is not a device's are refused. Shared hardware locks can serialize transactions,
 but do not coordinate a composition's saved settings with direct component writes.
 
-Two follow-ups remain:
-
-- Close dependents before their dependencies. Local nodes currently close devices in construction order, which
-  closes borrowed components first. Dependency-aware teardown should be addressed separately from device API
-  migrations; until then, composition cleanup must tolerate components that have already shut down.
-- Define how direct component writes are coordinated while a composition is operating, including whether to
-  restrict them or reconcile the composition's state afterward. Constructor injection does not establish ownership
-  of those writes.
+A node closes devices in the reverse of the order it built them, so a composition closes before the components it
+was given.
 
 ## Run a remote node
 
@@ -207,6 +202,14 @@ flowchart TD
 The protocol uses Pydantic payload models and MessagePack serialization. Request/response and notification traffic
 travels over a reliable DEALER/ROUTER channel; high-rate streams travel separately over PUB/SUB. Application code
 should use handles rather than construct protocol frames directly.
+
+## Known limitations
+
+- Node log records sent in the moments right after a node opens can be lost: the broadcast channel drops messages
+  until the subscription reaches the node.
+- A remote node that dies is noticed only when a call times out. A subprocess node is noticed at once.
+- After a write such as `laser.power = 5.0`, a type checker treats `laser.power` as the written value, so
+  `laser.power.maximum` needs a fresh read to type check.
 
 ## Develop rigup
 

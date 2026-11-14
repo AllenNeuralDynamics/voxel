@@ -49,7 +49,8 @@ async def test_loading_arms_the_cycle_and_reserves_its_pins() -> None:
     hub, generator, controller = _controller()
     cycle = _cycle(start=InputEdges(pin="pfi0"))
     await controller.load(cycle)
-    assert (controller.state, controller.loaded, generator.armed) == ("loaded", cycle, cycle)
+    armed = await controller._run(lambda: generator.armed)
+    assert (controller.state, controller.loaded, armed) == ("loaded", cycle, cycle)
     assert set(hub.assigned_pins) == {"ao0", "ao1", "pfi0"}
 
 
@@ -58,7 +59,7 @@ async def test_a_new_cycle_while_running_keeps_running_with_only_its_own_pins() 
     await controller.load(_cycle())
     await controller.start()
     await controller.load(_cycle({"ao2": [0.0, 1.0]}))
-    assert (controller.state, generator.running) == ("running", True)
+    assert (controller.state, await controller._run(lambda: generator.running)) == ("running", True)
     assert set(hub.assigned_pins) == {"ao2"}
 
 
@@ -67,7 +68,7 @@ async def test_a_counted_run_ends_by_itself() -> None:
     await controller.load(_cycle())
     await controller.start(count=3)  # 3 cycles of 4 samples at 1 kHz: 12 ms
     await controller.wait_until_done(timeout_s=1.0)
-    assert (controller.state, generator.running) == ("loaded", False)
+    assert (controller.state, await controller._run(lambda: generator.running)) == ("loaded", False)
 
 
 async def test_what_a_generator_cannot_do_is_refused() -> None:

@@ -221,7 +221,7 @@ class TigerLinearAxis(ContinuousAxis):
         self.hub.box.set_param(TigerParams.HOME_POS, {self._axis_label: float(position / self._MM_TO_UM)})
         self.log.debug("Home position set to %s um", position)
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         # Cleanly give back the axis to the hub
         self.hub.release_axis(self._axis_label)
 
@@ -235,7 +235,7 @@ class TigerLinearAxis(ContinuousAxis):
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        self.close()
+        self.dispose()
 
     # -- Capabilities --
     def get_ttl_stepper(self) -> TTLStepper | None:
@@ -275,4 +275,4 @@ if __name__ == "__main__":
     log_axis_info(x_axis)
     log_axis_info(y_axis)
 
-    hub.close()
+    hub.dispose()

@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Unpack
 
 from pydantic import PositiveFloat
+from rigup.device.results import PropResults
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.problems import Problems
 from vxlib.reactivity import Cell, Readable
 
-from rigup import PropResults
 from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import AxisPosition, DeviceUid

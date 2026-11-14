@@ -4,9 +4,9 @@ reads 370°, and a move goes to the angle it is given, the long way round if nee
 from abc import abstractmethod
 from typing import ClassVar
 
+from rigup.device import prop
 from vxlib.vector import Span
 
-from rigup import describe
 from vxl.devices.base import DeviceType
 
 from .base import ContinuousAxisNew, ContinuousAxisNewController, ContinuousAxisNewHandle
@@ -28,8 +28,8 @@ class RotationAxis(ContinuousAxisNew, kind=DeviceType.ROTATION_AXIS, controller=
     unit: ClassVar[str] = "deg"
 
     @property
+    @prop(units="deg", desc="The lowest and highest angle it may turn to, or none")
     @abstractmethod
-    @describe(label="Limits", units="deg", desc="The lowest and highest angle it may turn to, or none")
     def limits(self) -> Span | None: ...
 
 

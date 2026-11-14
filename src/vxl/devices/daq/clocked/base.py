@@ -5,10 +5,10 @@ from typing import Literal
 
 import numpy as np
 from pydantic import TypeAdapter
+from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, failsafe, prop, query
 from rigup.device.handle import Adapter, DeviceProperty
 from vxlib.quantity import QuantityRange, VoltageRange
 
-from rigup import Device, DeviceController, DeviceHandle, describe
 from vxl.devices.base import DeviceType
 
 from .waveform import Signals
@@ -17,20 +17,20 @@ GeneratorState = Literal["fresh", "ready", "running"]
 _PORTS_ADAPTER = TypeAdapter(dict[str, str])
 
 
-class SignalGeneratorController(DeviceController["SignalGenerator"]):
-    def __init__(self, device: "SignalGenerator", stream_interval: float = 0.1) -> None:
-        super().__init__(device, stream_interval=stream_interval)
+class SignalGeneratorController(DeviceController["SignalGenerator"], streaming={"fast": 0.1}):
+    def __init__(self, device: "SignalGenerator", *, streaming: Mapping[StreamTier, float] | None = None) -> None:
+        super().__init__(device, streaming=streaming)
         self._state: GeneratorState = "fresh"
         self._loaded: Signals | None = None
         self._log = logging.getLogger(f"{device.uid}.SignalGeneratorController")
 
     @property
-    @describe(label="State", desc="Signal generator state", stream=True)
+    @prop(desc="Signal generator state", stream="slow")
     def state(self) -> GeneratorState:
         return self._state
 
     @property
-    @describe(label="Loaded Signals", desc="Currently loaded signal configuration", stream=True)
+    @prop(label="Loaded Signals", desc="Currently loaded signal configuration", stream="slow")
     def loaded(self) -> Signals | None:
         """Last-applied ``Signals`` — authoritative view of what's on hardware.
 
@@ -39,7 +39,7 @@ class SignalGeneratorController(DeviceController["SignalGenerator"]):
         """
         return self._loaded
 
-    @describe(label="Load Signals", desc="Apply a signal configuration to the output hardware")
+    @action(label="Load Signals", desc="Apply a signal configuration to the output hardware")
     async def load(self, signals: Signals) -> None:
         """Bring the signal generator to the given configuration.
 
@@ -48,7 +48,7 @@ class SignalGeneratorController(DeviceController["SignalGenerator"]):
         to ``fresh``; the next ``load`` forces a clean rebuild.
         """
 
-        arrays: dict[str, np.ndarray] = await self._run_sync(self.device.resolve_signals, signals)
+        arrays: dict[str, np.ndarray] = await self._run(self.device.resolve_signals, signals)
 
         old = self._loaded
         if old is not None and old == signals:
@@ -57,19 +57,19 @@ class SignalGeneratorController(DeviceController["SignalGenerator"]):
         was_running = self._state == "running"
 
         try:
-            if await self._run_sync(self.device.can_hotswap, old, signals):
+            if await self._run(self.device.can_hotswap, old, signals):
                 self._log.debug("load: hot-swap path")
-                await self._run_sync(self.device.write, arrays)
+                await self._run(self.device.write, arrays)
             else:
                 self._log.debug("load: rebuild path (was_running=%s)", was_running)
                 if was_running:
-                    await self._run_sync(self.device.stop)
+                    await self._run(self.device.stop)
                 if self._state != "fresh":
-                    await self._run_sync(self.device.teardown)
-                await self._run_sync(self.device.setup, signals)
-                await self._run_sync(self.device.write, arrays)
+                    await self._run(self.device.teardown)
+                await self._run(self.device.setup, signals)
+                await self._run(self.device.write, arrays)
                 if was_running:
-                    await self._run_sync(self.device.start)
+                    await self._run(self.device.start)
                     self._state = "running"
                 else:
                     self._state = "ready"
@@ -78,34 +78,34 @@ class SignalGeneratorController(DeviceController["SignalGenerator"]):
             # Best-effort recovery: clear driver's loaded state so the next load()
             # takes the full rebuild path from a known-clean slate.
             try:
-                await self._run_sync(self.device.teardown)
+                await self._run(self.device.teardown)
             except Exception:
                 self._log.warning("teardown during error recovery failed", exc_info=True)
             self._state = "fresh"
             self._loaded = None
             raise
 
-    @describe(label="Start Output", desc="Begin signal generation")
+    @action(label="Start Output", desc="Begin signal generation")
     async def start(self, repeat: int | None = None) -> None:
         if self._state == "fresh":
             raise RuntimeError("Cannot start: no signals loaded (call load() first)")
         if self._state == "running":
             return
-        await self._run_sync(self.device.start, repeat)
+        await self._run(self.device.start, repeat)
         self._state = "running"
 
-    @describe(label="Stop Output", desc="Halt signal generation; outputs settle to rest voltages")
+    @failsafe(label="Stop Output", desc="Halt signal generation; outputs settle to rest voltages")
     async def stop(self) -> None:
         if self._state != "running":
             return
-        await self._run_sync(self.device.stop)
+        await self._run(self.device.stop)
         self._state = "ready"
 
-    @describe(label="Wait Until Done", desc="Block until the current finite generation completes")
+    @query(desc="Block until the current finite generation completes")
     async def wait_until_done(self, timeout_s: float) -> None:
         if self._state != "running":
             raise RuntimeError(f"wait_until_done requires running state, got {self._state}")
-        await self._run_sync(self.device.wait_until_done, timeout_s)
+        await self._run(self.device.wait_until_done, timeout_s)
 
 
 class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=SignalGeneratorController):
@@ -120,13 +120,13 @@ class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=Signa
         self._ports: dict[str, str] = dict(ports)
 
     @property
-    @describe(label="Ports", desc="Logical name -> physical analog output terminal")
+    @prop(desc="Logical name -> physical analog output terminal")
     def ports(self) -> dict[str, str]:
         return dict(self._ports)
 
     @property
+    @prop(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     @abstractmethod
-    @describe(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     def voltage_range(self) -> VoltageRange: ...
 
     @abstractmethod
@@ -151,7 +151,7 @@ class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=Signa
     def teardown(self) -> None:
         """Release all hardware resources. After this, the next ``setup`` rebuilds."""
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Framework shutdown hook: stop configured output and release its resources."""
         self.teardown()
 

@@ -6,9 +6,9 @@ from enum import StrEnum
 from math import isclose, isfinite
 from typing import Literal
 
+from rigup.device import Device, prop
 from serial import SerialException
 
-from rigup import Device, describe
 from vxl_drivers.serial import SerialTransport
 
 
@@ -91,13 +91,13 @@ class OxxiusController(Device, kind="laser_controller"):
         return self._closed
 
     @property
-    @describe(label="Installed Sources")
+    @prop(label="Installed Sources")
     def installed_sources(self) -> dict[str, str]:
         """Slot-to-model mapping discovered at connection time."""
         return dict(self._models)
 
     @property
-    @describe(label="Reserved Sources")
+    @prop(label="Reserved Sources")
     def reserved_sources(self) -> list[str]:
         with self._transport.transaction():
             return list(self._owners)
@@ -220,7 +220,7 @@ class OxxiusController(Device, kind="laser_controller"):
             raise OxxiusCommunicationError("Oxxius returned a nonfinite number")
         return value
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Try every reserved source stop, close the port, and report all failures."""
         with self._transport.transaction():
             if self._closed:

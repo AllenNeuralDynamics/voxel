@@ -6,10 +6,9 @@ from time import monotonic, sleep
 from typing import Any, Never
 
 from numpy.polynomial import Polynomial
-from rigup.device.props import NumericFloat
+from rigup.device import number, prop
 from vxlib.calibration import CalibrationModel, PiecewiseLinearCalibration, calibration_adapter
 
-from rigup import describe
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.lasers.oxxius.controller import Cmd, OxxiusCommunicationError, OxxiusController, Query
 
@@ -58,9 +57,7 @@ class OxxiusLBXSource(LaserSource):
             self._maximum = min(self._maximum, self._controller.number(Query.MAX_POWER, self._prefix))
             if not self._minimum < self._maximum:
                 raise ValueError("Calibration and source power limits do not overlap")
-            self._setpoint_mw = float(
-                NumericFloat(self._controller.number(Query.POWER_SETPOINT, self._prefix), self._minimum, self._maximum)
-            )
+            self._setpoint_mw = self._controller.number(Query.POWER_SETPOINT, self._prefix)
             self._configure_modulation_mode(ModulationMode.SOFTWARE)
 
     @property
@@ -68,22 +65,22 @@ class OxxiusLBXSource(LaserSource):
         return self._wavelength
 
     @property
-    @describe(label="Nominal Current", units="mA")
+    @prop(label="Nominal Current", units="mA")
     def nominal_current_ma(self) -> float:
         return self._nominal_current_ma
 
     @property
-    @describe(label="Current Setpoint", units="%")
+    @prop(label="Current Setpoint", units="%")
     def current_setpoint_percent(self) -> float:
         """Convert the hardware's mA setpoint readback to nominal-current percent."""
         self._ensure_open()
         return self._controller.number(Query.CURRENT_SETPOINT, self._prefix) / self._nominal_current_ma * 100
 
-    @property
+    @number(minimum=lambda self: self._minimum, maximum=lambda self: self._maximum)
     def source_power_setpoint_mw(self) -> float:
         """Saved mW request, including in ACC mode where the command is quantized."""
         self._ensure_open()
-        return NumericFloat(self._setpoint_mw, minimum=self._minimum, maximum=self._maximum)
+        return self._setpoint_mw
 
     @source_power_setpoint_mw.setter
     def source_power_setpoint_mw(self, value: float) -> None:
@@ -192,7 +189,7 @@ class OxxiusLBXSource(LaserSource):
             raise ExceptionGroup("LBX operation and inhibition failed", [error, cleanup_error]) from None
         raise error
 
-    def close(self) -> None:
+    def release(self) -> None:
         """Stop and release this source; the rig owns controller teardown."""
         if not self._closed:
             self.source_disable()

@@ -35,8 +35,8 @@ from typing import override
 
 import pyvisa
 from pyvisa.resources import MessageBasedResource
+from rigup.device import integer, number, prop
 
-from rigup import describe, numeric, numeric_int
 from vxl.devices.power_meter import PowerMeter
 
 
@@ -63,7 +63,7 @@ class ThorlabsPowerMeter(PowerMeter):
             self._initialize()
         except Exception as error:
             try:
-                self.close()
+                self.dispose()
             except Exception as cleanup_error:
                 raise ExceptionGroup("Power meter initialization and cleanup failed", [error, cleanup_error]) from None
             raise
@@ -91,7 +91,7 @@ class ThorlabsPowerMeter(PowerMeter):
                 raise RuntimeError(f"meter reports questionable measurement status: 0x{questionable:04x}")
             return watts * 1000.0
 
-    @numeric(minimum=lambda self: self._min_wavelength_nm, maximum=lambda self: self._max_wavelength_nm)
+    @number(minimum=lambda self: self._min_wavelength_nm, maximum=lambda self: self._max_wavelength_nm)
     @override
     def wavelength_nm(self) -> float:
         return self._number("SENS:CORR:WAV?")
@@ -104,19 +104,19 @@ class ThorlabsPowerMeter(PowerMeter):
         self._write(f"SENS:CORR:WAV {value}")
 
     @property
-    @describe(label="Meter Identification")
+    @prop(label="Meter Identification")
     def identification(self) -> str:
         """Manufacturer, model, serial number, and firmware returned by the meter."""
         return self._identity
 
     @property
-    @describe(label="Sensor Identification")
+    @prop(label="Sensor Identification")
     def sensor_identification(self) -> str:
         """Identification of the attached sensor, as reported by the meter."""
         return self._query("SYST:SENS:IDN?")
 
-    @numeric_int(minimum=1)
-    @describe(label="Averaging Count")
+    @integer(minimum=1)
+    @prop(label="Averaging Count")
     def averaging_count(self) -> int:
         """Number of samples averaged per reading; hardware enforces its upper limit."""
         return int(self._query("SENS:AVER:COUN?"))
@@ -126,7 +126,7 @@ class ThorlabsPowerMeter(PowerMeter):
         self._write(f"SENS:AVER:COUN {value}")
 
     @property
-    @describe(label="Autorange")
+    @prop(label="Autorange")
     def autorange(self) -> bool:
         """Whether the meter selects its power range automatically."""
         return bool(int(self._query("SENS:POW:RANG:AUTO?")))
@@ -137,11 +137,11 @@ class ThorlabsPowerMeter(PowerMeter):
             raise TypeError("autorange must be a boolean")
         self._write(f"SENS:POW:RANG:AUTO {int(value)}")
 
-    @numeric(
+    @number(
         minimum=lambda self: self._number("SENS:POW:RANG:UPP? MIN") * 1000,
         maximum=lambda self: self._number("SENS:POW:RANG:UPP? MAX") * 1000,
     )
-    @describe(label="Power Range", units="mW")
+    @prop(label="Power Range", units="mW")
     def range_mw(self) -> float:
         """Current range upper bound; turn off autorange before selecting a manual range."""
         return self._number("SENS:POW:RANG:UPP?") * 1000
@@ -190,7 +190,7 @@ class ThorlabsPowerMeter(PowerMeter):
         return self._inst
 
     @override
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close this instrument; leave PyVISA's shared resource manager available."""
         with self._lock:
             if self._inst is not None:

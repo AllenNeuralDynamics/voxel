@@ -1,32 +1,27 @@
-"""Node log forwarding over the transport's broadcast channel.
-
-A daemon publishes every log record it emits on the reserved :data:`LOG_TOPIC`, riding the same
-PUB socket used for device streams. The orchestrator subscribes per node and re-emits those records
-into its own logging system, so whatever consumes the local root logger (console, the web log feed)
-sees node logs as if they were local. A subprocess node writes nothing to its own console (see
-``rigup.node.__main__``); forwarding is its only log sink.
-"""
-
 import asyncio
 import logging
 import sys
 from contextlib import suppress
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from vxlib.lifecycle import Teardown
 
+from rigup.node._broadcast import pack, unpack
 from rigup.transport import TransportClient, TransportServer
-from rigup.wire import pack, unpack
 
 LOG_TOPIC = "__log__"
-"""Reserved broadcast topic for forwarded records. Device streams use ``{uid}.{topic}``, so it
-cannot collide with a device."""
+"""Broadcast topic for forwarded log records; it cannot collide with a device topic ``{uid}.{topic}``."""
 
 _QUEUE_MAX = 4096
+_FORMATTER = logging.Formatter()
+
+EXTRA_FIELDS = ("action", "target", "tags")
+"""``extra`` fields a forwarded record keeps, so handlers see the same fields on node and local records."""
 
 
 class NodeLogEvent(BaseModel):
-    """One forwarded log record — the fields needed to reconstruct it on the orchestrator."""
+    """A log record forwarded from a node, with the fields needed to rebuild it on the orchestrator."""
 
     node_id: str
     name: str
@@ -34,14 +29,36 @@ class NodeLogEvent(BaseModel):
     levelname: str
     message: str
     created: float
+    exc_text: str | None = None
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def from_record(cls, node_id: str, record: logging.LogRecord) -> "NodeLogEvent":
+        return cls(
+            node_id=node_id,
+            name=record.name,
+            levelno=record.levelno,
+            levelname=record.levelname,
+            message=record.getMessage(),
+            created=record.created,
+            exc_text=_FORMATTER.formatException(record.exc_info) if record.exc_info else record.exc_text,
+            extra={k: v for k in EXTRA_FIELDS if (v := getattr(record, k, None)) is not None},
+        )
+
+    def to_record(self) -> logging.LogRecord:
+        record = logging.LogRecord(self.name, self.levelno, "", 0, self.message, (), None)
+        record.created = self.created
+        record.exc_text = self.exc_text
+        record.__dict__.update(self.extra)
+        record.node_id = self.node_id  # VxlRichHandler renders this inline
+        return record
 
 
 class NodeLogHandler(logging.Handler):
-    """Root-logger handler on a daemon that publishes each record over the transport.
+    """Publish each log record of a daemon over the transport.
 
-    ``emit`` runs on whatever thread logged, so it only captures fields and hands off to the event
-    loop; a drain task owns the async ``publish``. The queue is bounded and drops oldest on overflow,
-    so a log storm can never back-pressure device work.
+    ``emit`` may run on any thread, so it hands records to the event loop. The queue drops the oldest
+    record when full, so a log storm never slows device work.
     """
 
     def __init__(self, transport: TransportServer, node_id: str, loop: asyncio.AbstractEventLoop) -> None:
@@ -53,12 +70,11 @@ class NodeLogHandler(logging.Handler):
         self._drain: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        """Start the drain task that publishes queued records."""
         if self._drain is None:
             self._drain = self._loop.create_task(self._drain_loop(), name=f"node-log-drain-{self._node_id}")
 
     async def aclose(self) -> None:
-        """Cancel the drain task; queued-but-unpublished records are dropped."""
+        """Stop publishing and drop any queued records."""
         if self._drain is not None:
             self._drain.cancel()
             with suppress(asyncio.CancelledError):
@@ -67,14 +83,7 @@ class NodeLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            event = NodeLogEvent(
-                node_id=self._node_id,
-                name=record.name,
-                levelno=record.levelno,
-                levelname=record.levelname,
-                message=record.getMessage(),
-                created=record.created,
-            )
+            event = NodeLogEvent.from_record(self._node_id, record)
         except Exception:
             self.handleError(record)
             return
@@ -82,7 +91,6 @@ class NodeLogHandler(logging.Handler):
             self._loop.call_soon_threadsafe(self._enqueue, event)
 
     def _enqueue(self, event: NodeLogEvent) -> None:
-        """On the loop: enqueue, dropping the oldest if full (logging must never block device work)."""
         if self._queue.full():
             with suppress(asyncio.QueueEmpty):
                 self._queue.get_nowait()
@@ -96,16 +104,14 @@ class NodeLogHandler(logging.Handler):
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                # Never re-log here: routing failures back through logging would re-enqueue and amplify.
+                # Logging this failure would enqueue another record and amplify the problem.
                 sys.stderr.write(f"node-log publish failed: {e}\n")
 
 
 def relay_logs(transport: TransportClient) -> Teardown:
-    """Subscribe to forwarded node logs and re-emit them into the local logging system.
+    """Re-emit forwarded node logs into the local logging system.
 
-    Re-emitted records reach the local root handlers (console, web feed) via ``Logger.handle``, which
-    bypasses logger-level gating so the handlers' own levels alone decide visibility. Returns a
-    ``Teardown`` that removes the subscription.
+    Logger levels are bypassed, so only the local handlers' levels decide what is shown.
     """
 
     async def on_wire(data: bytes) -> None:
@@ -113,17 +119,7 @@ def relay_logs(transport: TransportClient) -> Teardown:
             event = NodeLogEvent.model_validate(unpack(data))
         except Exception:
             return
-        record = logging.LogRecord(
-            name=event.name,
-            level=event.levelno,
-            pathname="",
-            lineno=0,
-            msg=event.message,
-            args=(),
-            exc_info=None,
-        )
-        record.created = event.created
-        record.node_id = event.node_id  # VxlRichHandler renders this inline
+        record = event.to_record()
         logging.getLogger(event.name).handle(record)
 
     return transport.subscribe(LOG_TOPIC, on_wire)

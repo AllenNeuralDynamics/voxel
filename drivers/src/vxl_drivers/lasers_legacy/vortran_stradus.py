@@ -2,11 +2,10 @@
 
 from enum import StrEnum
 
-from rigup.device.props import enumerated, numeric
+from rigup.device import choice, number, prop, query
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusDriver
 
-from rigup import describe
 from vxl_drivers.lasers_legacy.base import Laser
 
 
@@ -65,8 +64,7 @@ class VortranStradus(Laser):
         """Check if the laser is enabled."""
         return self._inst.laser_is_emitting
 
-    @numeric(minimum=0.0, maximum=lambda self: float(self._inst.max_power), step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: float(self._inst.max_power), step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         return float(self._inst.power_setpoint)
@@ -78,7 +76,6 @@ class VortranStradus(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return float(self._inst.power)
@@ -88,8 +85,8 @@ class VortranStradus(Laser):
         """Get the temperature of the laser in degrees Celsius."""
         return float(self._inst.temperature)
 
-    @enumerated(options=list(ModulationMode))
-    @describe(label="Modulation Mode", desc="Laser modulation mode.")
+    @choice(options=list(ModulationMode))
+    @prop(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         # external_control returns raw string, digital_modulation returns BoolVal
@@ -109,12 +106,12 @@ class VortranStradus(Laser):
             setattr(self._inst, attr, state)
         self.log.debug(f"Modulation mode set to {value}")
 
-    @describe(label="Status", desc="Get laser fault status.")
+    @query(label="Status", desc="Get laser fault status.")
     def status(self) -> list[str] | None:
         """Get the status of the laser."""
         return self._inst.faults
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing Vortran Stradus laser")
         self._inst.ser.close()

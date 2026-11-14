@@ -1,3 +1,5 @@
+"""Build objects from config in dependency order."""
+
 import asyncio
 import importlib
 import inspect
@@ -19,10 +21,9 @@ type _BaseClass[T] = type[T] | tuple[type[T], ...]
 
 
 def import_class[T](target: str, base: _BaseClass[T]) -> type[T]:
-    """Import the class that a dotted path such as ``vxl.engines.spim.ClockedStep`` names.
+    """Import the class that a dotted path names.
 
-    The class must extend ``base``, or 1 of the classes in it, and must not be abstract, because every target names a
-    class to build.
+    Raise ``ValueError`` when the class does not extend ``base`` or is abstract.
     """
     module_name, _, name = target.rpartition(".")
     if not module_name:
@@ -43,17 +44,19 @@ def import_class[T](target: str, base: _BaseClass[T]) -> type[T]:
 
 
 class BuildConfig(BaseModel):
+    """How to build 1 object.
+
+    ``target`` is the dotted path of its class and ``init`` its constructor arguments; a string in ``init`` that names
+    another object is replaced by that object. ``defaults`` are set as attributes after construction.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    target: str  # Fully qualified class name, e.g., "rigup.objs.camera.Camera"
-    init: dict[str, Any] = Field(default_factory=dict)  # Constructor arguments
-    # Values set via setattr on the instance after construction. Goes through descriptor
-    # setters (so validation/clamping applies there), but a setattr that raises aborts the
-    # device's build with a problem of code build.defaults rather than silently warning.
+    target: str
+    init: dict[str, Any] = Field(default_factory=dict)
     defaults: dict[str, Any] | None = None
 
     def get_obj_class(self) -> type:
-        """Import and return the obj class."""
         return import_class(self.target, object)
 
 
@@ -67,7 +70,6 @@ class BuildErrorCode(StrEnum):
 
 
 def _problem(uid: str, kind: BuildErrorCode, msg: str, detail: str | None = None) -> Problem:
-    """The problem of 1 object that did not build: its code is ``build.<kind>``, and its place is its UID."""
     return Problem(code=f"build.{kind}", msg=msg, loc=(uid,), detail=detail)
 
 
@@ -78,7 +80,6 @@ type BuildObjectsResult[T] = tuple[Mapping[str, T], Mapping[str, Problem]]
 
 
 def _resolve(value: Any, built: Mapping[str, object]) -> Any:
-    """``value`` with each name of a built object replaced by that object, at any depth."""
     if isinstance(value, str) and value in built:
         return built[value]
     if isinstance(value, list):
@@ -89,7 +90,6 @@ def _resolve(value: Any, built: Mapping[str, object]) -> Any:
 
 
 def _allowed(hint: Any) -> tuple[type, ...] | None:
-    """The classes that ``hint`` allows, or ``None`` when ``hint`` is not a class or a union of classes."""
     if isinstance(hint, type):
         return None if is_protocol(hint) else (hint,)
     if get_origin(hint) in (Union, UnionType):
@@ -100,7 +100,6 @@ def _allowed(hint: Any) -> tuple[type, ...] | None:
 
 
 def _item_hint(hint: Any) -> Any:
-    """The hint of 1 item of a hint such as ``Sequence[X]``, or ``None`` when ``hint`` is not of that form."""
     origin, items = get_origin(hint), get_args(hint)
     if isinstance(origin, type) and issubclass(origin, Sequence) and items:
         return items[0]
@@ -108,9 +107,7 @@ def _item_hint(hint: Any) -> Any:
 
 
 def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, object]) -> str | None:
-    """Why a built object that ``init`` names does not fit the type hint of the input of ``cls`` that gets it, or
-    ``None``. An input is checked when it names 1 object or a list of objects, and its hint is a class or a union of
-    classes."""
+    """Return why an object named in ``init`` does not fit the type hint of its ``cls`` argument, or ``None``."""
     given = {
         name: [
             item for item in (value if isinstance(value, list) else [value]) if isinstance(item, str) and item in built
@@ -138,8 +135,6 @@ def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, ob
 
 
 def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: _BaseClass) -> T | Problem:
-    """Make 1 object: import its class, construct it with its ``init``, in which each name of an object in ``built``
-    is that object, and set its defaults."""
     try:
         cls = import_class(cfg.target, base_cls)
     except Exception as e:
@@ -167,8 +162,7 @@ def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: 
     if not cfg.defaults:
         return obj
 
-    # A failing setattr means the device's initial state would diverge from config, so we fail the
-    # build for this device rather than continuing with a silently-wrong default.
+    # A default that cannot be set fails the build so the object never starts in a state the config does not say.
     for name, value in cfg.defaults.items():
         try:
             setattr(obj, name, value)
@@ -185,15 +179,10 @@ def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: 
 def build_objects[T](
     cfgs: BuildGroupSpec, base_cls: _BaseClass = object, ready: Mapping[str, object] | None = None
 ) -> BuildObjectsResult[T]:
-    """Build objects from configuration with error accumulation and dependency resolution.
+    """Build the objects in dependency order, and return those built and a problem for each that did not.
 
-    Args:
-        cfgs: Node configuration containing obj specifications
-        base_cls: The class, or the classes, that each object must be an instance of (default: object)
-        ready: Objects made already, by name: an ``init`` that names 1 of them gets it
-
-    Returns:
-        Tuple of (successful_objects, build_errors)
+    An object whose dependency fails, or that is part of a cycle, is not built. An ``init`` may name an object in
+    ``ready``.
     """
     built: dict[str, Any] = dict(ready or {})
     errors = {
@@ -203,7 +192,6 @@ def build_objects[T](
     building: set[str] = set()
 
     def _build_one(uid: str) -> T | Problem:
-        """Build a single obj, resolving dependencies first."""
         if uid in built:
             return built[uid]
 
@@ -217,7 +205,6 @@ def build_objects[T](
 
         building.add(uid)
         try:
-            # Build dependencies first
             for dep_uid in dependencies(cfgs, uid):
                 if dep_uid in errors:
                     error = _problem(uid, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_uid}' failed to build")
@@ -240,7 +227,6 @@ def build_objects[T](
         finally:
             building.discard(uid)
 
-    # Build all objects
     for uid in cfgs:
         if uid not in built and uid not in errors:
             _build_one(uid)
@@ -248,37 +234,8 @@ def build_objects[T](
     return {uid: obj for uid, obj in built.items() if uid in cfgs}, errors
 
 
-# ==================== Async Build ====================
-#
-# Async device building solves the problem of blocking the event loop during
-# device construction (serial ports, SDK init). The approach:
-#
-# 1. Topological sort: devices are sorted into dependency layers. A device
-#    only appears in a layer after all its dependencies are in earlier layers.
-#
-# 2. Target grouping: within each layer, devices sharing the same `target`
-#    class (i.e. same driver) are grouped together. This ensures that devices
-#    using the same SDK or hardware interface are constructed sequentially,
-#    avoiding thread-safety issues with shared driver state/singletons.
-#
-# 3. Concurrent execution: groups with different targets within a layer run
-#    concurrently via asyncio.gather + to_thread. This means independent
-#    hardware (e.g. a camera SDK and a serial stage controller) initializes
-#    in parallel.
-#
-# 4. Event loop yields: between layers, control returns to the event loop,
-#    allowing log messages and status updates to stream to connected clients
-#    in real time during startup.
-#
-# Example for an ExASPIM rig:
-#   Layer 0: [daq_1] [camera] [aotf_1] [fw_emission] [tiger_controller]
-#            (5 groups, all independent, built concurrently)
-#   Layer 1: [laser_488, laser_561, laser_640] [x_axis, y_axis, z_axis, ...]
-#            (2 groups: lasers share a target, axes share a target)
-
-
 def dependencies(cfgs: BuildGroupSpec, uid: str) -> set[str]:
-    """The entries of ``cfgs`` that the ``init`` of ``uid`` names, at any depth."""
+    """Return the entries of ``cfgs`` that the ``init`` of ``uid`` names, at any depth."""
     found: set[str] = set()
     pending: list[Any] = [cfgs[uid].init]
     while pending:
@@ -294,11 +251,7 @@ def dependencies(cfgs: BuildGroupSpec, uid: str) -> set[str]:
 
 
 def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
-    """Return exactly the UIDs participating in dependency cycles.
-
-    Devices merely downstream of a cycle are excluded; the builders report
-    those as dependency failures instead.
-    """
+    """Return the UIDs that are part of a dependency cycle, not those that only depend on one."""
     state: dict[str, Literal["visiting", "visited"]] = {}
     stack: list[str] = []
     stack_index: dict[str, int] = {}
@@ -327,13 +280,7 @@ def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
 
 
 def _topological_layers(cfgs: BuildGroupSpec) -> list[list[list[str]]]:
-    """Sort devices into dependency layers, grouped by target within each layer.
-
-    Returns a list of layers. Each layer is a list of groups. Each group is a
-    list of UIDs sharing the same target class (built sequentially for SDK safety).
-    Groups within a layer can be built concurrently.
-    """
-    # Build adjacency and in-degree
+    """Sort the UIDs into dependency layers, and each layer into groups that share a target."""
     deps_map: dict[str, set[str]] = {uid: dependencies(cfgs, uid) for uid in cfgs}
     in_degree: dict[str, int] = dict.fromkeys(cfgs, 0)
     for uid, deps in deps_map.items():
@@ -343,22 +290,18 @@ def _topological_layers(cfgs: BuildGroupSpec) -> list[list[list[str]]]:
     layers: list[list[list[str]]] = []
 
     while remaining:
-        # Find all devices with no unresolved dependencies
         ready = [uid for uid in remaining if in_degree[uid] == 0]
         if not ready:
-            # Circular dependency — dump remaining as a single layer
             logger.warning("Circular dependency detected among: %s", remaining)
             layers.append([list(remaining)])
             break
 
-        # Group ready devices by target
         by_target: dict[str, list[str]] = defaultdict(list)
         for uid in ready:
             by_target[cfgs[uid].target].append(uid)
 
         layers.append(list(by_target.values()))
 
-        # Remove built devices and update in-degrees
         for uid in ready:
             remaining.discard(uid)
         for uid in remaining:
@@ -373,11 +316,7 @@ def _build_group_sync[T](
     built: Mapping[str, object],
     base_cls: _BaseClass,
 ) -> list[tuple[str, T | Problem]]:
-    """Build a group of devices sequentially (same target/driver). Runs in a worker thread.
-
-    Does not write to `built` — the caller merges results after all groups complete.
-    `built` is read-only here (references from prior layers).
-    """
+    # Runs in a worker thread beside other groups, so it only reads ``built``.
     results: list[tuple[str, T | Problem]] = []
     for uid in group:
         cfg = cfgs[uid]
@@ -387,16 +326,7 @@ def _build_group_sync[T](
 
 
 def _prewarm_parent_modules(cfgs: BuildGroupSpec) -> None:
-    """Import parent modules of all targets before worker threads launch.
-
-    Worker threads import device classes concurrently via ``to_thread``.
-    If two threads race on importing the same parent package whose
-    ``__init__`` has a deep import chain (common in application packages
-    like ``vxl``), one thread can see a partially-initialized module in
-    ``sys.modules``. Pre-importing parent modules here — on the main
-    thread, sequentially — guarantees every ``__init__`` is fully executed
-    before any worker touches it.
-    """
+    # Two worker threads importing the same package at once can see it half initialized, so import it here first.
     parents = {cfg.target.rsplit(".", 1)[0] for cfg in cfgs.values()}
     for mod_name in sorted(parents):
         with suppress(Exception):
@@ -406,12 +336,10 @@ def _prewarm_parent_modules(cfgs: BuildGroupSpec) -> None:
 async def build_objects_async[T](
     cfgs: BuildGroupSpec, base_cls: _BaseClass = object, ready: Mapping[str, object] | None = None
 ) -> BuildObjectsResult[T]:
-    """Build devices asynchronously with dependency resolution. An ``init`` that names an object in ``ready`` gets
-    that object.
+    """Build the objects like ``build_objects``, in worker threads so the event loop keeps running.
 
-    Devices are sorted into dependency layers. Within each layer, devices
-    sharing the same target class are built sequentially (SDK thread safety),
-    while groups with different targets are built concurrently.
+    Objects with the same target are built one after another, because drivers often share state that is not thread
+    safe. Objects with different targets in the same dependency layer are built at the same time.
     """
     if not cfgs:
         return {}, {}
@@ -425,7 +353,6 @@ async def build_objects_async[T](
     built: dict[str, Any] = dict(ready or {})
 
     for layer in layers:
-        # Skip devices whose dependencies failed
         valid_groups: list[list[str]] = []
         for group in layer:
             valid_uids: list[str] = []
@@ -449,7 +376,6 @@ async def build_objects_async[T](
         valid_configs = {uid: cfgs[uid] for group in valid_groups for uid in group}
         _prewarm_parent_modules(valid_configs)
 
-        # Build groups concurrently, each group sequential in its own thread
         group_results = await asyncio.gather(
             *(asyncio.to_thread(_build_group_sync, group, cfgs, built, base_cls) for group in valid_groups),
             return_exceptions=True,

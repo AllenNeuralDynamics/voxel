@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from uuid import UUID
 
 from fastapi import WebSocket, WebSocketDisconnect
-from rigup.wire import pack, unpack
+from rigup.node._broadcast import pack, unpack
 from vxl_records import LogEntry
 from vxlib.schema import FrozenModel
 

@@ -1,9 +1,10 @@
 import pytest
-from rigup.device.props import PropertyModel
+from rigup.device import number, prop
+from rigup.device.results import PropertyModel
 from rigup.node import LOCAL
 from rigup.rig import Rig
 
-from rigup import DeviceConfig, RigConfig, describe, numeric
+from rigup import DeviceConfig, RigConfig
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl.devices.laser.source_only import SourceOnlyLaser
 
@@ -39,11 +40,11 @@ class RecordingSource(LaserSource):
         return self.enabled
 
     @property
-    @describe(label="Head Type")
+    @prop()
     def head_type(self) -> str:
         return "test head"
 
-    @numeric(minimum=200.0, maximum=1000.0, step=0.5)
+    @number(minimum=200.0, maximum=1000.0, step=0.5)
     def source_power_setpoint_mw(self) -> float:
         return self.power
 
@@ -62,7 +63,7 @@ class RecordingSource(LaserSource):
         self.events.append(("mode", mode))
         self.mode = mode
 
-    def close(self):
+    def dispose(self):
         self.source_disable()
         self.events.append(("close",))
 
@@ -88,8 +89,10 @@ def test_scaled_output_defers_startup_and_preserves_operating_settings():
     assert source.power == 400
     assert laser.output_level_percent == 50
     assert PropertyModel.from_value(laser.output_level_percent).minimum == 25
-    with pytest.raises(ValueError, match="output level"):
-        laser.output_level_percent = 0
+    laser.output_level_percent = 0  # Fitted up to the lowest level the source can give.
+    assert laser.output_level_percent == 25
+    assert source.power == 200
+    laser.output_level_percent = 50
     with pytest.raises(ValueError, match="output level"):
         laser.source_power_setpoint_mw = 300
     assert laser.source_power_setpoint_mw == 800
@@ -167,12 +170,12 @@ def test_close_retries_failed_inhibition_and_leaves_source_with_owner():
     laser.output_enable()
     source.fail_disable = True
     with pytest.raises(RuntimeError, match="inhibition"):
-        laser.close()
+        laser.dispose()
     assert laser.is_output_enabled
     assert ("close",) not in source.events
 
     source.fail_disable = False
-    laser.close()
+    laser.dispose()
     assert not source.enabled
     assert not laser.is_output_enabled
     assert ("close",) not in source.events

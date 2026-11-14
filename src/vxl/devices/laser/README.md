@@ -155,7 +155,7 @@ try:
     laser.output_enable()
     assert laser.output_power_mw == 10
 finally:
-    laser.close()
+    laser.dispose()
 ```
 
 ## Microscope integration and pending work

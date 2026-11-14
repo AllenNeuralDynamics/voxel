@@ -1,22 +1,12 @@
-"""ZMQ implementation of the transport ABCs.
-
-DEALER/ROUTER for the reliable bidirectional channel; PUB/SUB for streams.
-Request/response correlation via 32-bit request IDs carried in the envelope.
-
-Wire format on the reliable channel (frame counts):
-
-- ``REQUEST``   → ``[kind=0, req_id, action, payload]``          (4 frames)
-- ``RESPONSE``  → ``[kind=1, req_id, status, payload]``          (4 frames)
-- ``NOTIFY``    → ``[kind=2, action, payload]``                  (3 frames)
-
-``status`` is ``b"ok"`` (payload is the handler's return value) or ``b"err"``
-(payload is a UTF-8 error message). When received over ROUTER, identity is
-auto-prepended; when sent from ROUTER, identity must be the first frame.
+"""Reliable frames are ``[kind, req_id, action, payload]``, ``[kind, req_id, status, payload]`` or ``[kind, action,
+payload]``; an error response carries its message as UTF-8.
 """
 
 import asyncio
 import logging
 import struct
+import sys
+import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -38,15 +28,18 @@ from ._base import (
     TransportServer,
 )
 
+if sys.platform == "win32":
+    # pyzmq runs a selector thread on the Windows Proactor loop, as intended; its warning says only that.
+    warnings.filterwarnings("ignore", category=zmq.asyncio.ProactorSelectorThreadWarning)
+
 _STATUS_OK = b"ok"
 _STATUS_ERR = b"err"
 
 type _SendResponse = Callable[[bytes, bytes, bytes], Awaitable[None]]
-"""``(req_id_bytes, status, payload) -> None`` — how a receiver replies to a request."""
 
 
 def _apply_tcp_keepalive(sock: zmq.asyncio.Socket) -> zmq.asyncio.Socket:
-    """Fail-fast TCP keepalive — peer drops are visible within ~3 seconds."""
+    """Set a short TCP keepalive so a lost peer shows within seconds."""
     sock.setsockopt(zmq.TCP_KEEPALIVE, 1)
     sock.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 1)
     sock.setsockopt(zmq.TCP_KEEPALIVE_INTVL, 1)
@@ -71,13 +64,7 @@ def _decode_kind(b: bytes) -> MessageKind:
 
 
 class _Reliable:
-    """Shared request/response + notify machinery for Client and Server.
-
-    Owns the pending-futures dict, request-ID counter, and the registered
-    handlers. Subclasses implement how bytes actually flow (DEALER direct send
-    vs. ROUTER identity-prefixed send) by supplying a ``_SendResponse``
-    callable to :meth:`_dispatch_request`.
-    """
+    """Request correlation and handler dispatch shared by the client and the server."""
 
     def __init__(self) -> None:
         self._pending: dict[int, asyncio.Future[bytes]] = {}
@@ -121,7 +108,6 @@ class _Reliable:
         send_response: _SendResponse,
         log: logging.Logger,
     ) -> None:
-        """Run the registered handler and route the outcome back via ``send_response``."""
         req_id_bytes = _pack_req_id(req_id)
         if self._request_handler is None:
             log.warning("request received but no handler registered (action=%s)", action)
@@ -137,7 +123,7 @@ class _Reliable:
 
     async def _dispatch_notify(self, action: str, payload: bytes, log: logging.Logger) -> None:
         if self._notify_handler is None:
-            return  # notifies are lossy by contract; no handler = drop
+            return
         try:
             await self._notify_handler(action, payload)
         except Exception:
@@ -145,8 +131,6 @@ class _Reliable:
 
 
 class ZMQTransportClient(_Reliable, TransportClient):
-    """DEALER + SUB client. One peer, bidirectional on the DEALER/ROUTER channel."""
-
     def __init__(self, ctx: zmq.asyncio.Context | None = None) -> None:
         _Reliable.__init__(self)
         self._ctx = ctx or zmq.asyncio.Context.instance()
@@ -156,11 +140,9 @@ class ZMQTransportClient(_Reliable, TransportClient):
         self._subs: dict[str, list[TopicCallback]] = defaultdict(list)
         self._recv_task: asyncio.Task | None = None
         self._sub_task: asyncio.Task | None = None
-        # Tracks fire-and-forget dispatch tasks (server-initiated requests/notifies we
-        # handle locally). Holding references prevents GC from reaping them mid-flight.
+        # The event loop holds tasks weakly, so dispatch tasks are kept here until they finish.
         self._inflight: set[asyncio.Task] = set()
-        # send_multipart can yield between frames on async sockets; guard with a lock
-        # so concurrent callers' multipart sends don't interleave frames on the wire.
+        # An async multipart send can yield between frames, and concurrent sends would interleave them.
         self._send_lock = asyncio.Lock()
 
     async def connect(self, address: NodeAddress) -> None:
@@ -336,8 +318,6 @@ class ZMQTransportClient(_Reliable, TransportClient):
 
 
 class ZMQTransportServer(_Reliable, TransportServer):
-    """ROUTER + PUB server. Tracks a single connected peer (single-orchestrator model)."""
-
     def __init__(self, ctx: zmq.asyncio.Context | None = None) -> None:
         _Reliable.__init__(self)
         self._ctx = ctx or zmq.asyncio.Context.instance()
@@ -439,7 +419,7 @@ class ZMQTransportServer(_Reliable, TransportServer):
             if not frames:
                 continue
             identity, payload_frames = frames[0], frames[1:]
-            self._peer_identity = identity  # remember latest active peer
+            self._peer_identity = identity
             try:
                 await self._handle_frames(identity, payload_frames)
             except Exception:

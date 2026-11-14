@@ -3,15 +3,16 @@ clock. Each cycle starts on the generator's own clock, or on a rising edge at 1 
 
 import logging
 from abc import abstractmethod
+from collections.abc import Mapping
 from contextlib import suppress
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
+from rigup.device import Device, DeviceController, StreamTier, action, failsafe, prop
 from vxlib.schema import FrozenModel
 from vxlib.units import Frequency
 from vxlib.vector import Span
 
-from rigup import Device, DeviceController, describe
 from vxl.devices.base import DeviceType, Pin
 
 type GeneratorState = Literal["empty", "loaded", "running"]
@@ -52,31 +53,31 @@ class Cycle(FrozenModel):
         return len(next(iter(self.volts.values())))
 
 
-class GeneratorController(DeviceController["Generator"]):
+class GeneratorController(DeviceController["Generator"], streaming={"fast": 0.1}):
     """The rules around a generator: 1 cycle at a time, and a new cycle rebuilds it. A generator that ran before a
     new cycle plays the new one until it is stopped."""
 
-    def __init__(self, device: "Generator", stream_interval: float = 0.1) -> None:
-        super().__init__(device, stream_interval=stream_interval)
+    def __init__(self, device: "Generator", *, streaming: Mapping[StreamTier, float] | None = None) -> None:
+        super().__init__(device, streaming=streaming)
         self._state: GeneratorState = "empty"
         self._loaded: Cycle | None = None
         self._log = logging.getLogger(f"{device.uid}.GeneratorController")
 
     @property
-    @describe(label="State", desc="empty, loaded or running", stream=True)
+    @prop(desc="empty, loaded or running", stream="slow")
     def state(self) -> GeneratorState:
         return self._state
 
     @property
-    @describe(label="Loaded cycle", desc="The cycle that the generator plays", stream=True)
+    @prop(label="Loaded cycle", desc="The cycle that the generator plays", stream="slow")
     def loaded(self) -> Cycle | None:
         return self._loaded
 
-    @describe(label="Load", desc="Arm a cycle to play")
+    @action(desc="Arm a cycle to play")
     async def load(self, cycle: Cycle) -> None:
         if cycle == self._loaded:
             return
-        pins = self.device.pins
+        pins = await self._run(lambda: self.device.pins)
         if unknown := sorted(set(cycle.volts) - {pin.name for pin in pins if pin.sends}):
             raise ValueError(f"{self.device.uid} has no output pins {unknown}")
         if isinstance(cycle.start, InputEdges) and cycle.start.pin not in {pin.name for pin in pins if pin.receives}:
@@ -84,20 +85,20 @@ class GeneratorController(DeviceController["Generator"]):
         running = self._state == "running"
         try:
             if running:
-                await self._run_sync(self.device.stop)
-            await self._run_sync(self.device.release)
-            await self._run_sync(self.device.arm, cycle)
+                await self._run(self.device.stop)
+            await self._run(self.device.release)
+            await self._run(self.device.arm, cycle)
             self._loaded, self._state = cycle, "loaded"
             if running:
-                await self._run_sync(self.device.start, None)
+                await self._run(self.device.start, None)
                 self._state = "running"
         except Exception:
             with suppress(Exception):
-                await self._run_sync(self.device.release)
+                await self._run(self.device.release)
             self._loaded, self._state = None, "empty"
             raise
 
-    @describe(label="Start", desc="Play the loaded cycle a number of times, or until stopped")
+    @action(desc="Play the loaded cycle a number of times, or until stopped")
     async def start(self, count: int | None = None) -> None:
         if self._state == "empty":
             raise RuntimeError(f"{self.device.uid} has no cycle to start: load one first")
@@ -105,21 +106,21 @@ class GeneratorController(DeviceController["Generator"]):
             raise ValueError(f"a count of cycles must be at least 1, got {count}")
         if self._state == "running":
             return
-        await self._run_sync(self.device.start, count)
+        await self._run(self.device.start, count)
         self._state = "running"
 
-    @describe(label="Stop", desc="Stop playing; the cycle stays loaded")
+    @failsafe(desc="Stop playing; the cycle stays loaded")
     async def stop(self) -> None:
         if self._state != "running":
             return
-        await self._run_sync(self.device.stop)
+        await self._run(self.device.stop)
         self._state = "loaded"
 
-    @describe(label="Wait until done", desc="Wait until a counted run ends")
+    @action(label="Wait until done", desc="Wait until a counted run ends")
     async def wait_until_done(self, timeout_s: float) -> None:
         if self._state != "running":
             raise RuntimeError(f"{self.device.uid} is not running")
-        await self._run_sync(self.device.wait_until_done, timeout_s)
+        await self._run(self.device.wait_until_done, timeout_s)
         await self.stop()
 
 
@@ -128,13 +129,13 @@ class Generator(Device, kind=DeviceType.GENERATOR, controller=GeneratorControlle
     it), plays it, stops it, and releases what it reserved."""
 
     @property
+    @prop(desc="The pins a cycle can play on, and the pins whose edges can start it")
     @abstractmethod
-    @describe(label="Pins", desc="The pins a cycle can play on, and the pins whose edges can start it")
     def pins(self) -> list[Pin]: ...
 
     @property
+    @prop(label="Voltage range", units="V", desc="The lowest and highest volts a pin can put out")
     @abstractmethod
-    @describe(label="Voltage range", units="V", desc="The lowest and highest volts a pin can put out")
     def voltage_range(self) -> Span: ...
 
     @abstractmethod
@@ -157,7 +158,7 @@ class Generator(Device, kind=DeviceType.GENERATOR, controller=GeneratorControlle
     def wait_until_done(self, timeout_s: float) -> None:
         """Wait until a run of a counted number of cycles ends. Raise when the run is not counted."""
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         self.release()
 
 

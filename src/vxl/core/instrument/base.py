@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_args, get_origin
 
 from pydantic import ValidationError
 from rigup.build import dependencies
+from rigup.device import Result
+from rigup.device.results import PropResults
 from vxl_records import VoxelRecords
 from vxlib.history import HistoryState, UndoHistory
 from vxlib.reactivity import Readable
 
-from rigup import PropResults, Result
 from vxl.core.errors import StartupError
 from vxl.core.instrument.config import DeviceUid, InstrumentConfig, InstrumentState, SpecimenAxis
 from vxl.core.instrument.gate import Activity, Gate, Resource

@@ -7,8 +7,8 @@ from time import monotonic, sleep
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX
+from rigup.device import number
 
-from rigup import numeric
 from vxl.devices.laser.source import LaserSource, ModulationMode
 
 
@@ -54,7 +54,7 @@ class GenesisMXSource(LaserSource):
             self._initialize(serial)
         except Exception as error:
             try:
-                self.close()
+                self.dispose()
             except Exception as cleanup_error:
                 raise ExceptionGroup("Genesis initialization and cleanup failed", [error, cleanup_error]) from None
             raise
@@ -115,7 +115,7 @@ class GenesisMXSource(LaserSource):
     def is_source_enabled(self) -> bool:
         return not self._closed and self._inst.enable_loop.software
 
-    @numeric(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=0.1)
+    @number(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=0.1)
     def source_power_setpoint_mw(self) -> float:
         self._ensure_open()
         return self._inst.power_setpoint_mw
@@ -155,7 +155,7 @@ class GenesisMXSource(LaserSource):
             raise ValueError("GenesisMXSource currently supports software modulation only")
         self._inst.analog_input_enable = False
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Disable before releasing HOPS; bypass the pinned SDK's broken close()."""
         if self._closed:
             return

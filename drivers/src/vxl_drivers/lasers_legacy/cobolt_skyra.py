@@ -3,9 +3,8 @@
 from enum import StrEnum
 
 from pycobolt import CoboltLaser
-from rigup.device.props import enumerated, numeric
+from rigup.device import choice, number, prop
 
-from rigup import describe
 from vxl_drivers.lasers_legacy.base import Laser
 
 
@@ -118,8 +117,7 @@ class CoboltSkyra(Laser):
         """Get the maximum power in mW."""
         return self._max_power_mw
 
-    @numeric(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
-    @describe(label="Power Setpoint", units="mW", desc="Commanded laser power.", stream=True)
+    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
     def power_setpoint(self) -> float:
         """Get the commanded power setpoint in mW."""
         if self._is_constant_current():
@@ -143,7 +141,6 @@ class CoboltSkyra(Laser):
         self.log.debug(f"Power setpoint set to {value} mW")
 
     @property
-    @describe(label="Power", units="mW", desc="Measured laser output power.", stream=True)
     def power(self) -> float:
         """Get the measured output power in mW."""
         return self._inst.get_power()
@@ -154,8 +151,8 @@ class CoboltSkyra(Laser):
         # Skyra doesn't expose temperature via serial
         return None
 
-    @enumerated(options=list(ModulationMode))
-    @describe(label="Modulation Mode", desc="Laser modulation mode.")
+    @choice(options=list(ModulationMode))
+    @prop(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         result = self._inst.send_cmd(f"{self._prefix}{Query.MODULATION_MODE}")
@@ -186,7 +183,7 @@ class CoboltSkyra(Laser):
         mode = self._inst.get_mode()
         return mode == "0" or "Constant Current" in mode
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the laser connection."""
         self.log.info("Closing Cobolt Skyra laser")
         self.disable()

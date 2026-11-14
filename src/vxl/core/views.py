@@ -5,9 +5,10 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
+from rigup.device import DeviceInterface
+from rigup.device.results import PropertyModel
 from vxlib.schema import FrozenModel
 
-from rigup import ComponentInterface, PropertyModel
 from vxl.core.instrument.config import DeviceUid, InstrumentConfig, InstrumentState
 from vxl.core.instrument.gate import Activity
 from vxl.preview import StreamCursor
@@ -17,7 +18,7 @@ from vxl.system import Remote
 class DeviceView(FrozenModel):
     """1 open device as a screen sees it: what it said it is when it opened, and its last properties read."""
 
-    interface: ComponentInterface
+    interface: DeviceInterface
     props: dict[str, PropertyModel]
 
 

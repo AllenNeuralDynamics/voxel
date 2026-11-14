@@ -5,9 +5,9 @@ from typing import Annotated, Any, Literal, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
 from pydantic import Field, ValidationInfo, field_validator, model_validator
+from rigup.device.results import CommandRequest
 from vxlib.schema import FrozenModel, identifier
 
-from rigup import CommandRequest
 from vxl._utils.color import Color
 from vxl.devices.camera.roi import AreaROI
 from vxl.devices.daq.clocked import Signals

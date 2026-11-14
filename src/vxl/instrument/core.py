@@ -13,6 +13,9 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, ValidationError
+from rigup.device import DeviceHandle, DeviceInterface, Result
+from rigup.device.handle import DeviceProps
+from rigup.device.results import PropResults
 from vxl_records import (
     AcquisitionManifest,
     AcquisitionOrigin,
@@ -28,7 +31,6 @@ from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Readable, Subscribable
 from vxlib.schema import FrozenModel
 
-from rigup import ComponentInterface, DeviceHandle, DeviceProps, PropResults, Result
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.camera.roi import AreaROI
@@ -289,7 +291,7 @@ class Instrument:
         return {device_id: handle.props.cache for device_id, handle in self._hal.devices.items()}
 
     @property
-    def device_interfaces(self) -> Mapping[str, ComponentInterface]:
+    def device_interfaces(self) -> Mapping[str, DeviceInterface]:
         """Device interfaces discovered during startup."""
         return self._hal.device_interfaces
 
@@ -812,7 +814,7 @@ class Instrument:
                 )
         return violations
 
-    def _autosave_policy_violations(self, interfaces: Mapping[str, ComponentInterface]) -> list[Violation]:
+    def _autosave_policy_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
         """Reject explicit autosave names that cannot be persisted as writable properties."""
         topology = self._hal.topology
         groups = [(None, topology.devices), *((uid, node.devices) for uid, node in topology.nodes.items())]
@@ -837,7 +839,7 @@ class Instrument:
                         )
         return violations
 
-    def _profile_interface_violations(self, interfaces: Mapping[str, ComponentInterface]) -> list[Violation]:
+    def _profile_interface_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
         violations = []
         for profile_id, profile in self._store.value.imaging.profiles.items():
             profile_loc = ("state", "imaging", "profiles", profile_id)

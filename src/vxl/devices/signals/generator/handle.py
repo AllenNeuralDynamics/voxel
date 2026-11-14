@@ -1,10 +1,10 @@
 """What the HAL and the instrument call to use a signal generator."""
 
 from pydantic import TypeAdapter
+from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, DeviceProperty
 from vxlib.vector import Span
 
-from rigup import DeviceHandle
 from vxl.devices.base import Pin
 
 from .base import Cycle, Generator, GeneratorState

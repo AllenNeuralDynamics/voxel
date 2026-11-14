@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { CommandInfo, DeviceHandle, ParamInfo } from '$lib/core/model';
+  import type { CommandInfo, DeviceHandle } from '$lib/core/model';
+  import type { ArgSchema } from '$lib/core/model/types';
   import { Button, Dialog, NumberBox, Select, TextBox } from '@voxel/kit';
   import { reportFailure } from '@voxel/kit/failures';
   import { errorMessage } from '@voxel/kit/failures';
@@ -12,12 +13,18 @@
   }
 
   const { device, commandName, disabled = false }: Props = $props();
-  const NUMERIC_TYPES = ['int', 'float', 'number'];
+
+  /** A parameter as the form uses it, read from the command's JSON Schema. */
+  interface Param {
+    name: string;
+    required: boolean;
+    type: string;
+    default?: unknown;
+    options?: (string | number)[];
+  }
 
   const commandInfo = $derived(device.interface?.commands?.[commandName] as CommandInfo | undefined);
-  const params = $derived(
-    Object.entries(commandInfo?.params ?? {}).filter(([, param]) => param.kind === 'regular') as [string, ParamInfo][]
-  );
+  const params = $derived(commandInfo ? readParams(commandInfo.params) : []);
   const label = $derived(commandInfo?.label || displayName(commandName));
   let values = $state<Record<string, unknown>>({});
   let open = $state(false);
@@ -25,27 +32,61 @@
   /** Why the last run failed. The dialog stays open to show it. */
   let failure = $state<string | null>(null);
 
-  function isNumeric(dtype: string): boolean {
-    const types = dtype.split(' | ');
-    return (
-      types.some((type) => NUMERIC_TYPES.includes(type)) &&
-      types.every((type) => NUMERIC_TYPES.includes(type) || type === 'none')
-    );
+  function resolveRef(schema: ArgSchema, root: ArgSchema): ArgSchema {
+    const name = schema.$ref?.split('/').pop();
+    return name && root.$defs?.[name] ? { ...root.$defs[name], ...schema, $ref: undefined } : schema;
   }
 
-  function fallback(param: ParamInfo): unknown {
+  /** The schema without its `null` branch, so `int | None` reads as `int`. */
+  function nonNull(schema: ArgSchema, root: ArgSchema): ArgSchema {
+    const resolved = resolveRef(schema, root);
+    const branch = resolved.anyOf?.map((option) => resolveRef(option, root)).find((option) => option.type !== 'null');
+    return branch ? { ...branch, default: resolved.default } : resolved;
+  }
+
+  function readParams(schema: ArgSchema): Param[] {
+    const required = new Set(schema.required ?? []);
+    return Object.entries(schema.properties ?? {}).map(([name, raw]) => {
+      const field = nonNull(raw, schema);
+      const type = Array.isArray(field.type)
+        ? (field.type.find((t) => t !== 'null') ?? 'string')
+        : (field.type ?? 'string');
+      const options = field.enum?.filter(
+        (option): option is string | number => typeof option !== 'boolean' && option !== null
+      );
+      return {
+        name,
+        required: required.has(name),
+        type,
+        default: field.default,
+        options: options?.length ? options : undefined
+      };
+    });
+  }
+
+  function isNumeric(param: Param): boolean {
+    return param.type === 'integer' || param.type === 'number';
+  }
+
+  function fallback(param: Param): unknown {
     if (param.default != null) return param.default;
-    if (isNumeric(param.dtype)) return 0;
-    if (param.dtype === 'bool') return false;
+    if (param.options?.length) return param.options[0];
+    if (isNumeric(param)) return 0;
+    if (param.type === 'boolean') return false;
     return '';
   }
 
   async function run(): Promise<void> {
     if (!commandInfo || running) return;
     running = true;
-    const kwargs = Object.fromEntries(params.map(([name, param]) => [name, values[name] ?? fallback(param)]));
+    // Optional arguments the user left alone keep the device's own default.
+    const kwargs = Object.fromEntries(
+      params
+        .filter((param) => param.required || values[param.name] !== undefined)
+        .map((param) => [param.name, values[param.name] ?? fallback(param)])
+    );
     try {
-      await (params.length ? device.runCommand(commandName, [], kwargs) : device.runCommand(commandName));
+      await (Object.keys(kwargs).length ? device.runCommand(commandName, [], kwargs) : device.runCommand(commandName));
       open = false;
       failure = null;
     } catch (error) {
@@ -72,7 +113,8 @@
       </Dialog.Header>
       {#if params.length}
         <div class="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-          {#each params as [name, param] (name)}
+          {#each params as param (param.name)}
+            {@const name = param.name}
             <span class="text-sm text-fg-muted">{displayName(name)}</span>
             {#if param.options?.length}
               <Select
@@ -81,11 +123,11 @@
                 onChange={(option) => (values[name] = option)}
                 aria-label={displayName(name)}
               />
-            {:else if isNumeric(param.dtype)}
+            {:else if isNumeric(param)}
               <NumberBox
                 value={typeof values[name] === 'number' ? values[name] : (fallback(param) as number)}
                 onChange={(value) => (values[name] = value)}
-                step={param.dtype.includes('int') ? 1 : 0.1}
+                step={param.type === 'integer' ? 1 : 0.1}
                 aria-label={displayName(name)}
               />
             {:else}

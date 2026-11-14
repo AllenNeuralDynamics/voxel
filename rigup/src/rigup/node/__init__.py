@@ -1,4 +1,4 @@
-"""Node layer — client-side abstractions and server-side daemon."""
+"""Nodes that host devices in process, in a subprocess, or on a remote host."""
 
 import argparse
 import asyncio
@@ -25,15 +25,9 @@ def serve_node(node_id: str, address: str, *, debug: bool = False) -> None:
 
 
 def run_node(argv: Sequence[str] | None = None) -> None:
-    """Public entry point for manually-run remote daemons.
+    """Parse the command line and run one remote node daemon.
 
-    Configures logging: this is a standalone process that owns its terminal. (The subprocess
-    entry in ``__main__`` deliberately does not, leaving the console to the parent it shares.)
-
-    Usage::
-
-        vxl node <node_id> --address tcp://0.0.0.0:5555
-        rigup-node cameras --address tcp://0.0.0.0:5555 --debug
+    Configures logging, since a manually run daemon owns its terminal.
     """
     parser = argparse.ArgumentParser(description="Start a rigup node daemon for remote device hosting.")
     parser.add_argument("node_id", help="Node identifier (must match the rig config)")

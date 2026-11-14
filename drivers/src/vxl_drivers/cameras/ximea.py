@@ -6,12 +6,11 @@ from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from rigup.device.props import enumerated, numeric, numeric_int
+from rigup.device import action, choice, failsafe, integer, number, prop
 from vxlib.vector import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
 
-from rigup import describe
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
 from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 
@@ -99,7 +98,7 @@ class XimeaCamera(Camera):
 
     # ==================== Pixel Format ====================
 
-    @enumerated(options=list(_PIXEL_FMT_TO_XIMEA.keys()))
+    @choice(options=list(_PIXEL_FMT_TO_XIMEA.keys()))
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera."""
         ximea_fmt: str = _to_str(self._camera.get_output_bit_depth())
@@ -125,7 +124,7 @@ class XimeaCamera(Camera):
 
     # ==================== Binning ====================
 
-    @numeric_int(options=lambda self: self._binning_options)
+    @integer(options=lambda self: self._binning_options)
     def binning(self) -> int:
         """Get the binning mode of the camera."""
         raw: str = _to_str(self._camera.get_downsampling())
@@ -143,7 +142,7 @@ class XimeaCamera(Camera):
 
     # ==================== Exposure & Frame Rate ====================
 
-    @numeric(
+    @number(
         minimum=lambda self: _to_float(self._camera.get_exposure_minimum()) / 1000,
         maximum=lambda self: _to_float(self._camera.get_exposure_maximum()) / 1000,
         step=0.001,
@@ -158,7 +157,7 @@ class XimeaCamera(Camera):
         self._camera.set_exposure(round(exposure_time_ms * 1000, 1))  # ms to us
         self.log.debug(f"Exposure time set to {exposure_time_ms} ms")
 
-    @numeric(minimum=0.1, maximum=1000.0, step=0.1)
+    @number(minimum=0.1, maximum=1000.0, step=0.1)
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
         return _to_float(self._camera.get_framerate())
@@ -211,7 +210,7 @@ class XimeaCamera(Camera):
     # ==================== Stream Info ====================
 
     @property
-    @describe(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream=True)
+    @prop(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream="fast")
     def stream_info(self) -> StreamInfo | None:
         """Return acquisition state or None if not acquiring."""
         try:
@@ -262,7 +261,7 @@ class XimeaCamera(Camera):
         self._camera.set_acq_buffer_size(int(self._buffer_size_frames * self.frame_size_mb))
         self.log.debug(f"Buffer set to {self._buffer_size_frames} frames")
 
-    @describe(label="Start", desc="Start acquiring frames from the camera.")
+    @action(label="Start", desc="Start acquiring frames from the camera.")
     def _start(self, frame_count: int | None = None) -> None:
         """Start the camera to acquire frames."""
         del frame_count  # unused - continuous acquisition
@@ -278,7 +277,7 @@ class XimeaCamera(Camera):
             raise RuntimeError("Failed to grab Ximea frame") from exc
         np.copyto(out, image, casting="no")
 
-    @describe(label="Stop", desc="Stop the camera acquisition.")
+    @failsafe(label="Stop", desc="Stop the camera acquisition.")
     def stop(self) -> None:
         """Stop the camera."""
         self.log.info("Stopping camera acquisition")
@@ -287,14 +286,14 @@ class XimeaCamera(Camera):
     # ==================== Temperature ====================
 
     @property
-    @describe(label="Sensor Temperature", units="°C", desc="Temperature of the sensor board.")
+    @prop(label="Sensor Temperature", units="°C", desc="Temperature of the sensor board.")
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in Celsius."""
         self._camera.set_temp_selector("XI_TEMP_SENSOR_BOARD")
         return _to_float(self._camera.get_temp())
 
     @property
-    @describe(label="Interface Temperature", units="°C", desc="Temperature of the interface board.")
+    @prop(label="Interface Temperature", units="°C", desc="Temperature of the interface board.")
     def interface_temperature_c(self) -> float:
         """Get the interface board temperature in Celsius."""
         self._camera.set_temp_selector("XI_TEMP_INTERFACE_BOARD")
@@ -302,7 +301,7 @@ class XimeaCamera(Camera):
 
     # ==================== Lifecycle ====================
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         """Close the camera connection."""
         self.log.info("Closing Ximea camera")
         self._camera.close_device()

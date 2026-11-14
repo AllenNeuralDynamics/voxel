@@ -24,7 +24,7 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from rigup.device.props import enumerated, numeric, numeric_int
+from rigup.device import choice, integer, number
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
@@ -156,7 +156,7 @@ class VieworksCamera(Camera):
     def sensor(self) -> CameraSensor:
         return CameraSensor(pixel_um=self._pixel_size_um, size_px=self._sensor_size_px)
 
-    @enumerated(options=lambda self: self._pixel_format_options)
+    @choice(options=lambda self: self._pixel_format_options)
     def pixel_format(self) -> PixelFormat:
         fmt = self._dev.fetch_remote(feature="PixelFormat", dtype=str)
         return cast("PixelFormat", fmt.upper())
@@ -173,7 +173,7 @@ class VieworksCamera(Camera):
             self._refresh_binning_info()
             self._refresh_exposure_ms()
 
-    @numeric_int(options=lambda self: list(self._binning.options))
+    @integer(options=lambda self: list(self._binning.options))
     def binning(self) -> int:
         return self._binning.value
 
@@ -189,7 +189,7 @@ class VieworksCamera(Camera):
             self._refresh_binning_info()
             self._refresh_exposure_ms()
 
-    @numeric(
+    @number(
         minimum=lambda self: self._exposure_ms.min,
         maximum=lambda self: self._exposure_ms.max,
         step=0.001,
@@ -206,7 +206,7 @@ class VieworksCamera(Camera):
         self.log.info("Set exposure time to %s ms", self._exposure_ms.val)
         self._refresh_exposure_ms()
 
-    @numeric(
+    @number(
         minimum=lambda self: self._frame_rate_hz.min,
         maximum=lambda self: self._frame_rate_hz.max,
     )
@@ -460,5 +460,5 @@ class VieworksCamera(Camera):
             self.log.debug("Completed querying pixel format options: %s", options)
         return options
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         del self._dev

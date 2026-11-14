@@ -3,9 +3,10 @@ from collections.abc import Mapping
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator
+from rigup.device import action, failsafe, prop, query
 from vxlib.schema import check_identifier
 
-from rigup import RigComponent, describe
+from rigup import RigComponent
 from vxl.devices.axes.base import Axis
 from vxl.devices.base import DeviceType
 
@@ -75,27 +76,27 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
     # State properties _______________________________________________________________________________________________
 
     @property
-    @describe(label="Slot Count", desc="Total number of physical slots.")
+    @prop(desc="Total number of physical slots.")
     def slot_count(self) -> int:
         """Physical slot count."""
         return self._slot_count
 
     @property
-    @describe(label="Labels", desc="Map of slot index to human-readable label.")
+    @prop(desc="Map of slot index to human-readable label.")
     def labels(self) -> Mapping[int, str | None]:
         """Slot labels; ``None`` denotes an unlabeled slot."""
         return self._labels
 
     @property
+    @prop(desc="Current slot, last commanded slot, and movement status.", stream="fast")
     @abstractmethod
-    @describe(label="State", desc="Current slot, last commanded slot, and movement status.", stream=True)
     def state(self) -> DiscreteAxisState:
         """Read a coherent snapshot; propagate communication errors."""
 
     # Motion commands ________________________________________________________________________________________________
 
+    @action(desc="Move to a slot by index.")
     @abstractmethod
-    @describe(label="Move To Slot", desc="Move to a slot by index.", stream=True)
     def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Command a slot, optionally waiting for completion.
 
@@ -103,7 +104,7 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
         an expired wait raises ``TimeoutError``.
         """
 
-    @describe(label="Move To", desc="Move to a slot by its label.", stream=True)
+    @action(desc="Move to a slot by its label.")
     def move_to(self, position: str, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Command the first slot whose label is ``position``.
 
@@ -116,18 +117,18 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
             raise KeyError(f"Label not found: {position!r}") from None
         self.move_to_slot(slot, wait=wait, timeout_s=timeout_s)
 
+    @action(desc="Home/calibrate the device.")
     @abstractmethod
-    @describe(label="Home", desc="Home/calibrate the device.", stream=True)
     def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Home the axis using the wait and timeout semantics of ``move_to_slot``."""
 
+    @failsafe(desc="Emergency stop - halt all motion immediately.")
     @abstractmethod
-    @describe(label="Halt", desc="Emergency stop - halt all motion immediately.", stream=True)
     def halt(self) -> None:
         """Halt motion immediately."""
 
+    @query(desc="Wait until the device stops moving.")
     @abstractmethod
-    @describe(label="Await Movement", desc="Wait until the device stops moving.", stream=True)
     def await_movement(self, timeout_s: float | None = None) -> None:
         """Wait for idle; ``timeout_s`` is in seconds, with ``None`` unbounded.
 

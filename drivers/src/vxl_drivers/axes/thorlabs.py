@@ -4,9 +4,8 @@ from collections.abc import Mapping
 from time import monotonic, sleep
 
 from pylablib.devices.Thorlabs import MFF
-from rigup.device.props import numeric_int
+from rigup.device import integer, prop
 
-from rigup import describe
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotContent
 
 
@@ -69,8 +68,8 @@ class MFF101(DiscreteAxis):
                 raise TimeoutError(f"MFF101 {self.uid} movement timed out")
             sleep(0.05)
 
-    @numeric_int(minimum=500, maximum=2800, step=100)
-    @describe(label="Flip Time", units="ms", desc="Time to travel between slots.")
+    @integer(minimum=500, maximum=2800, step=100)
+    @prop(label="Flip Time", units="ms", desc="Time to travel between slots.")
     def flip_time_ms(self) -> int:
         return round(self._inst.get_flipper_parameters().transit_time * 1000)
 
@@ -78,5 +77,5 @@ class MFF101(DiscreteAxis):
     def flip_time_ms(self, value: int) -> None:
         self._inst.setup_flipper(transit_time=value / 1000)
 
-    def close(self) -> None:
+    def dispose(self) -> None:
         self._inst.close()

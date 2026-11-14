@@ -98,28 +98,26 @@ class MpdsAotf(AOTF):
         self._mpds.disable_channel(channel)
         self.log.debug(f"Channel {channel} disabled")
 
-    def set_frequency(self, channel: int, frequency_mhz: float, validate: bool = True) -> None:
+    def set_frequency(self, channel: int, frequency_mhz: float) -> None:
         """Set the RF frequency for a channel.
 
         :param channel: Channel number (1-indexed).
         :param frequency_mhz: Frequency in MHz.
-        :param validate: If True, read back and verify the set value.
         """
-        self._mpds.set_frequency(channel, frequency_mhz, validate=validate)
+        self._mpds.set_frequency(channel, frequency_mhz, validate=True)
         self.log.debug(f"Channel {channel} frequency set to {frequency_mhz} MHz")
 
     def get_frequency(self, channel: int) -> float:
         """Get the current RF frequency for a channel."""
         return self._mpds.get_frequency(channel)
 
-    def set_power_dbm(self, channel: int, power_dbm: float, validate: bool = True) -> None:
+    def set_power_dbm(self, channel: int, power_dbm: float) -> None:
         """Set the output power for a channel.
 
         :param channel: Channel number (1-indexed).
         :param power_dbm: Power in dBm (0-22).
-        :param validate: If True, read back and verify the set value.
         """
-        self._mpds.set_power_dbm(channel, power_dbm, validate=validate)
+        self._mpds.set_power_dbm(channel, power_dbm, validate=True)
         self.log.debug(f"Channel {channel} power set to {power_dbm} dBm")
 
     def get_power_dbm(self, channel: int) -> float:

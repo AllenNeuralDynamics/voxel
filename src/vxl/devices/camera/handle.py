@@ -4,12 +4,12 @@ from pathlib import PurePosixPath
 
 from ome_zarr_writer import WriterSettings
 from pydantic import TypeAdapter
+from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, DeviceProperty
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.coalescer import Coalescer
 from vxlib.vector import Vec2D
 
-from rigup import DeviceHandle
 from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
 from vxl.devices.camera.roi import AreaROI
 from vxl.preview import PreviewViewport
