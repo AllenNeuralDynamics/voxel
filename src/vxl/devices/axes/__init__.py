@@ -1,5 +1,5 @@
 from .base import Axis
-from .continuous.base import (
+from .continuous_legacy.base import (
     SUPPORTED_UNITS,
     ContinuousAxis,
     ContinuousAxisController,
@@ -9,7 +9,7 @@ from .continuous.base import (
     TTLStepper,
     TTLStepperConfig,
 )
-from .continuous.handle import ContinuousAxisHandle
+from .continuous_legacy.handle import ContinuousAxisHandle
 from .discrete.base import DiscreteAxis
 
 __all__ = [

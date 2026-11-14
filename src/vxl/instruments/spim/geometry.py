@@ -19,12 +19,14 @@ from vxl.devices.camera.roi import AreaROI
 
 @dataclass(frozen=True)
 class AxisRun:
-    """How the scan axis runs during a scan: ``count`` frames, ``spacing`` µm apart, from ``first`` µm."""
+    """How the scan axis runs during a scan: ``count`` frames, ``spacing`` µm apart, from ``first`` µm. A sweep
+    runs at ``speed`` µm/s; a step has none."""
 
     axis: SpecimenAxis
     first: float
     spacing: float
     count: int
+    speed: float | None = None
 
 
 _ZERO = Vec3D(z=0.0, y=0.0, x=0.0)

@@ -5,6 +5,7 @@ import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from pydantic import TypeAdapter
 from vxlib.asyncio import gather_all
 from vxlib.problems import Problems
 from vxlib.reactivity import Cell, Readable
@@ -14,21 +15,28 @@ from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.config import DeviceUid, InstrumentConfig, SpecimenAxis
 from vxl.core.views import DeviceView
 from vxl.devices.axes import ContinuousAxisHandle
+from vxl.devices.axes.continuous.linear import LinearAxisHandle
+from vxl.devices.axes.continuous.rotation import RotationAxisHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
+from vxl.devices.base import Pin
 from vxl.devices.camera import CameraHandle
-from vxl.devices.daq.clocked import SignalGeneratorHandle
+from vxl.devices.signals.generator.handle import GeneratorHandle
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown
 
 logger = logging.getLogger(__name__)
 
+_PINS = TypeAdapter(list[Pin])
+
 
 _HANDLES: dict[str, type[DeviceHandle[Any]]] = {
     "camera": CameraHandle,
     "continuous_axis": ContinuousAxisHandle,
     "discrete_axis": DiscreteAxisHandle,
-    "signal_generator": SignalGeneratorHandle,
+    "generator": GeneratorHandle,
+    "linear_axis": LinearAxisHandle,
+    "rotation_axis": RotationAxisHandle,
 }
 
 
@@ -45,10 +53,10 @@ class HAL:
         self._rig = Rig(config, config.name)
         self.devices: dict[DeviceUid, DeviceHandle[Any]] = {}
         self.interfaces: dict[DeviceUid, ComponentInterface] = {}
-        self.stage: dict[SpecimenAxis, ContinuousAxisHandle] = {}
+        self.stage: dict[SpecimenAxis, LinearAxisHandle] = {}
         self.cameras: dict[DeviceUid, CameraHandle] = {}
         self.lasers: dict[DeviceUid, DeviceHandle[Any]] = {}
-        self.signal_generators: dict[DeviceUid, SignalGeneratorHandle] = {}
+        self.signal_generators: dict[DeviceUid, GeneratorHandle] = {}
         self._device_views = Cell[dict[DeviceUid, DeviceView]]({})
         self._props_unsubs: list[Teardown] = []
 
@@ -78,7 +86,7 @@ class HAL:
             for found in await asyncio.gather(
                 self._camera_geometry_problems(),
                 self._stage_limit_problems(),
-                self._signal_port_problems(),
+                self._pin_problems(),
             ):
                 problems += found
         except BaseException:
@@ -170,24 +178,24 @@ class HAL:
         self.stage = {
             axis: handle
             for axis, uid in self._config.stage.devices().items()
-            if isinstance(handle := handles.get(uid), ContinuousAxisHandle)
+            if isinstance(handle := handles.get(uid), LinearAxisHandle)
         }
         self.cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, CameraHandle)}
         self.lasers = {uid: handles[uid] for uid, found in self.interfaces.items() if found.kind == "laser"}
         self.signal_generators = {
-            uid: handle for uid, handle in sorted(handles.items()) if isinstance(handle, SignalGeneratorHandle)
+            uid: handle for uid, handle in sorted(handles.items()) if isinstance(handle, GeneratorHandle)
         }
         return problems
 
     def _role_problems(self) -> Problems:
-        """Each device whose role needs another kind of device: each stage axis is a continuous axis, each camera a
+        """Each device whose role needs another kind of device: each stage axis is a linear axis, each camera a
         camera, each light source a laser, and each device that sends the light a different way at each position a
         discrete axis. A device with 2 roles is checked for each. A device that did not build or answer has its own
         problem already."""
         config = self._config
         by_position = [name for name, node in config.optics.elements().items() if isinstance(node.to, dict)]
         needs = [
-            *((uid, "continuous_axis") for uid in config.stage.devices().values()),
+            *((uid, "linear_axis") for uid in config.stage.devices().values()),
             *((uid, "camera") for uid in config.optics.detectors()),
             *((uid, "laser") for uid in config.optics.sources() if uid in config.all_devices),
             *((uid, "discrete_axis") for uid in by_position if uid in config.all_devices),
@@ -226,7 +234,7 @@ class HAL:
         return problems
 
     async def _stage_limit_problems(self) -> Problems:
-        """Read each stage axis's limits, and check that the lower limit is not above the upper limit."""
+        """Read each stage axis's limits: an axis whose limits cannot be read is a problem."""
         axes = list(self.stage.items())
         results = await asyncio.gather(*(handle.get_limits() for _, handle in axes), return_exceptions=True)
         problems = Problems()
@@ -236,30 +244,27 @@ class HAL:
                 problems.add(
                     "rig.stage.limit_unavailable", f"Unable to read the {axis}-axis limits: {error}", "stage", axis
                 )
-                continue
-            lower, upper = result
-            if lower > upper:
-                msg = f"The {axis}-axis lower limit ({lower}) exceeds its upper limit ({upper})."
-                problems.add("rig.stage.limits_invalid", msg, "stage", axis)
         return problems
 
-    async def _signal_port_problems(self) -> Problems:
-        """Read each signal generator's ports into its handle's cache, and check that each of its wires leaves from 1
-        of them."""
-        generators = list(self.signal_generators.items())
-        results = await asyncio.gather(*(generator.ports.get() for _, generator in generators), return_exceptions=True)
+    async def _pin_problems(self) -> Problems:
+        """Read the pins of each device that has them, then check the wiring against them. Parts, and devices that
+        list no pins, are not checked."""
+
+        async def read(uid: str) -> dict[str, Pin]:
+            listed = _PINS.validate_python(await self.devices[uid].props.get_value("pins"))
+            return {pin.name: pin for pin in listed}
+
+        uids = [uid for uid, interface in self.interfaces.items() if "pins" in interface.properties]
+        results = await asyncio.gather(*(read(uid) for uid in uids), return_exceptions=True)
         problems = Problems()
-        for (uid, _), result in zip(generators, results, strict=True):
+        pins: dict[str, dict[str, Pin]] = {}
+        for uid, result in zip(uids, results, strict=True):
             if isinstance(result, BaseException):
-                error = _error(result)
-                msg = f"Unable to read ports for signal generator '{uid}': {error}"
-                problems.add("rig.signal_generator.ports", msg, *self._config.component_location(uid), "ports")
-                continue
-            for name, wire in self._config.wiring.outputs(uid).items():
-                if wire.pin not in result:
-                    ports = ", ".join(sorted(result))
-                    msg = f"Wire '{name}' leaves '{uid}' from pin '{wire.pin}', which is not 1 of its ports ({ports})."
-                    problems.add("rig.signal_generator.unknown_pin", msg, "wiring", uid, name, "pin")
+                msg = f"Unable to read the pins of '{uid}': {_error(result)}"
+                problems.add("rig.device.pins", msg, *self._config.component_location(uid))
+            else:
+                pins[uid] = result
+        problems += self._config.wiring.pin_problems(pins).under("wiring")
         return problems
 
     async def _refresh_props(self) -> None:

@@ -206,26 +206,6 @@ def test_waveform_voltage_rejects_unknown_fields() -> None:
         validate_waveform(waveform)
 
 
-def test_a_sampled_waveform_plays_its_samples_as_they_are() -> None:
-    samples = [0.0, 5.0, 5.0, 0.0]
-    signals = Signals(
-        sample_rate=Frequency(4.0),
-        duration=Time(1.0),
-        waveforms={"ao0": validate_waveform({"type": "sampled", "samples": samples})},
-    )
-    assert signals.arrays()["ao0"].tolist() == samples
-
-
-def test_a_sampled_waveform_must_fill_the_cycle() -> None:
-    signals = Signals(
-        sample_rate=Frequency(4.0),
-        duration=Time(1.0),
-        waveforms={"ao0": validate_waveform({"type": "sampled", "samples": [0.0, 5.0]})},
-    )
-    with pytest.raises(WaveformResolutionError, match="2 samples for a cycle of 4"):
-        signals.arrays()
-
-
 @pytest.mark.parametrize(("rate", "duration", "samples"), [(5000.0, 0.043, 215), (10000.0, 0.10005, 1000)])
 def test_a_cycle_has_the_nearest_whole_number_of_samples_unless_it_is_really_fractional(
     rate: float, duration: float, samples: int

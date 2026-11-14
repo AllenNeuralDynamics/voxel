@@ -8,7 +8,7 @@ import yaml
 from vxlib.problems import Problem
 
 from rigup import Device, build_objects
-from vxl.devices.axes.continuous.base import ContinuousAxis
+from vxl.devices.axes.continuous_legacy.base import ContinuousAxis
 from vxl.devices.axes.discrete.base import DiscreteAxis
 from vxl.devices.camera.base import Camera
 from vxl.devices.laser.source import CurrentControlledLaserSource, LaserSource

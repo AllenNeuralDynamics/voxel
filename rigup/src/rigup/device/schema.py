@@ -19,13 +19,16 @@ STREAM_ATTR = "__attr_stream__"
 logger = logging.getLogger("rigup")
 
 
-def describe(label: str, desc: str | None = None, units: str | None = None, stream: bool = False) -> Callable:
+def describe(
+    label: str, desc: str | None = None, units: str | Callable[[Any], str] | None = None, stream: bool = False
+) -> Callable:
     """A decorator factory to add metadata to a function.
 
     Args:
         label: Human-readable label for the attribute
         desc: Optional description
-        units: Optional units string
+        units: Optional units string, or a function of the object that has the property, for a base class whose
+            subclasses differ in units
         stream: If True, property changes will be published to subscribers (default: False)
     """
 
@@ -109,17 +112,19 @@ class PropertyInfo(AttributeInfo):
     stream: bool = False
 
     @classmethod
-    def from_attr(cls, attr: property) -> Self:
+    def from_attr(cls, attr: property, owner: object) -> Self:
+        """Describe ``attr``, a property of ``owner``."""
         if not isinstance(attr, property) or not callable(attr.fget):
             raise TypeError(f"Expected property with getter, got {type(attr)} (fget: {attr.fget})")
         name, label, desc = cls._get_name_label_desc_from_func(attr.fget)
+        units = getattr(attr.fget, UNITS_ATTR, "")
         return cls(
             name=name,
             label=label,
             desc=desc,
             dtype=cls._parse_type_annotation(attr.fget.__annotations__["return"]),
             access="rw" if attr.fset else "ro",
-            units=str(getattr(attr.fget, UNITS_ATTR)) if hasattr(attr.fget, UNITS_ATTR) else "",
+            units=str(units(owner) if callable(units) else units),
             stream=bool(getattr(attr.fget, STREAM_ATTR, False)),
         )
 
@@ -407,7 +412,7 @@ def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
             for cls in type(obj).__mro__:
                 attr = cls.__dict__.get(attr_name)
                 if isinstance(attr, property) and attr.fget is not None and hasattr(attr.fget, LABEL_ATTR):
-                    properties[attr_name] = PropertyInfo.from_attr(attr)
+                    properties[attr_name] = PropertyInfo.from_attr(attr, obj)
                     break
 
     return properties

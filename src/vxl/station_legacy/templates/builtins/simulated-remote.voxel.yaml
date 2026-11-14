@@ -41,7 +41,7 @@ hal:
       autosave: [source_power_setpoint_mw, output_level_percent]
       init: { wavelength: 730, source_enable_delay_s: 1 }
     nidaq_1:
-      target: vxl.devices.daq.SimulatedDaqmx
+      target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init:
         device_name: "MockDev1"
 

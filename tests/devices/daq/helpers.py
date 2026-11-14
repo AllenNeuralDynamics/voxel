@@ -1,7 +1,7 @@
-from vxl.devices.daq import SimulatedDaqmx
 from vxl.devices.daq.clocked import Signals
 from vxl.devices.daq.clocked.simulated import SimulatedSignalGenerator
 from vxl.devices.daq.clocked.waveform import validate_waveform
+from vxl.devices.signals.cards.simulated import SimulatedDaqmx
 
 
 def _triangle(vmin: float = -2, vmax: float = 2, rest: float = 0.0) -> dict:

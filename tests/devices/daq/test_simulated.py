@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from vxl.devices.daq import SimulatedDaqmx
 from vxl.devices.daq.clocked.waveform import validate_waveform
+from vxl.devices.signals.cards.simulated import SimulatedDaqmx
 
 from .helpers import _make_generator, _signals, _triangle
 

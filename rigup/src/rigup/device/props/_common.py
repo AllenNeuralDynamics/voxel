@@ -60,6 +60,8 @@ class PropertyModel[T: str | int | float | bool](BaseModel):
             return PropertyModel(kind="float", value=value)
         if isinstance(value, str):
             return PropertyModel(kind="string", value=value)
+        if isinstance(value, tuple):  # a tuple, or a named tuple such as a span
+            return PropertyModel(value=list(value))
         if not isinstance(value, list | dict | type(None)):
             logger.warning("Unserializable property value of type %s coerced to str", type(value).__name__)
             return PropertyModel(kind="string", value=str(value))

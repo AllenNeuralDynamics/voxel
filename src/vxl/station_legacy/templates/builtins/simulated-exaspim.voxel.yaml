@@ -72,7 +72,7 @@ hal:
       target: *linear_axis_target
       init: {lower_limit: 0, upper_limit: 10000}
     nidaq_1:
-      target: vxl.devices.daq.SimulatedDaqmx
+      target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init:
         device_name: "MockDev1"
 

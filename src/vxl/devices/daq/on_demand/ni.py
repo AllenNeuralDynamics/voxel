@@ -7,8 +7,8 @@ from nidaqmx.constants import LineGrouping
 from nidaqmx.task import Task as NiTask
 from vxlib.quantity import VoltageRange
 
-from vxl.devices.daq.hub_ni import NiDaqmx
-from vxl.devices.daq.hub_ni.resources import NiTaskLease  # noqa: TC001 - annotations are evaluated at runtime
+from vxl.devices.signals.cards.ni import NiDaqmx
+from vxl.devices.signals.cards.ni.resources import NiTaskLease  # noqa: TC001 - annotations are evaluated at runtime
 
 from .base import OnDemandAO, OnDemandDO
 

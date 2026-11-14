@@ -14,7 +14,7 @@ from vxl_drivers.tigerhub.ops.step_shoot import (
 )
 from vxl_drivers.tigerhub.protocol.errors import ASIProtocolError
 
-from vxl.devices.axes.continuous.base import (
+from vxl.devices.axes.continuous_legacy.base import (
     ContinuousAxis,
     StepMode,
     TriggerMode,

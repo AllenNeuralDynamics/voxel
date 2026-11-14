@@ -248,37 +248,38 @@ class DeviceController[D: "Device"]:
 class Device[T: StrEnum]:
     """A component with a driver. A device class says its kind in its class line, ``class Camera(Device,
     kind="camera")``, and a class below it has the same kind or says a new one. A device class that needs its own
-    controller says it in the same place, ``controller=CameraController``."""
+    controller says it in the same place, ``controller=CameraController``. The kind, the controller class and the uid
+    are kept in names private to :class:`Device`, so a driver's own attributes never hide them."""
 
-    _kind: ClassVar[str] = ""
-    _controller: ClassVar[type[DeviceController[Any]]] = DeviceController
+    __kind: ClassVar[str] = ""
+    __controller_class: ClassVar[type[DeviceController[Any]]] = DeviceController
 
     def __init_subclass__(
         cls, *, kind: str = "", controller: type[DeviceController[Any]] | None = None, **kwargs: Any
     ) -> None:
         super().__init_subclass__(**kwargs)
         if kind:
-            cls._kind = kind
+            cls.__kind = kind
         if controller is not None:
-            cls._controller = controller
+            cls.__controller_class = controller
 
     def __init__(self, uid: str):
-        if not self._kind:
+        if not self.__kind:
             raise TypeError(f"{type(self).__name__} does not say its kind")
-        self._uid = uid
+        self.__uid = uid
         self.log = logging.getLogger(uid)
 
     @property
     def uid(self) -> str:
-        return self._uid
+        return self.__uid
 
     @property
     def kind(self) -> str:
-        return self._kind
+        return self.__kind
 
     def make_controller(self) -> DeviceController[Any]:
         """Make a new controller of this device's class around this device."""
-        return self._controller(self)
+        return self.__controller_class(self)
 
     def close(self) -> None:
         pass

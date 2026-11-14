@@ -7,7 +7,7 @@ from contextlib import suppress
 from pydantic import BaseModel, ConfigDict
 
 from rigup import BuildConfig, build_objects
-from vxl.devices.axes.continuous import ContinuousAxis
+from vxl.devices.axes.continuous_legacy import ContinuousAxis
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotName
 
 

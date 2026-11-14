@@ -1,0 +1,110 @@
+"""The rig: devices built across this process and its nodes."""
+
+import logging
+
+from vxlib.problems import Problem
+
+from rigur.component import Part
+from rigur.config import NodeConfig, RigConfig
+from rigur.device.handle import DeviceHandle
+from rigur.node import LOCAL, LocalNode, Node, RemoteNode, SubprocessNode
+
+
+class Rig:
+    """Start the nodes of a rig config and build their devices."""
+
+    def __init__(self, config: RigConfig, name: str = "Rig") -> None:
+        self._name = name
+        self._config = config
+        self._log = logging.getLogger(f"rigur.rig.{name}")
+        self._nodes: dict[str, Node] = {}
+        self._build_errors: dict[str, Problem] = {}
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def config(self) -> RigConfig:
+        return self._config
+
+    @property
+    def nodes(self) -> dict[str, Node]:
+        return self._nodes
+
+    @property
+    def devices(self) -> dict[str, DeviceHandle]:
+        result: dict[str, DeviceHandle] = {}
+        for node in self._nodes.values():
+            result.update(node.devices)
+        return result
+
+    @property
+    def parts(self) -> dict[str, Part]:
+        return self._config.parts
+
+    @property
+    def build_errors(self) -> dict[str, Problem]:
+        return self._build_errors
+
+    async def open(self) -> None:
+        """Start the nodes and build the devices.
+
+        A device that fails to build does not stop the others; its problem is in ``build_errors``.
+        """
+        self._log.info("Opening rig '%s'", self.name)
+        self._build_errors.clear()
+
+        self._create_nodes()
+
+        for node in self._nodes.values():
+            await node.open()
+
+        await self._build_all_devices()
+
+        device_count = sum(len(n.devices) for n in self._nodes.values())
+        self._log.info(
+            "Rig '%s' open: %d devices across %d nodes (%d build errors)",
+            self.name,
+            device_count,
+            len(self._nodes),
+            len(self._build_errors),
+        )
+
+    async def close(self) -> None:
+        """Close the nodes in reverse order, logging a node that fails to close and going on."""
+        self._log.info("Closing rig '%s'", self.name)
+        for node in reversed(list(self._nodes.values())):
+            try:
+                await node.close()
+            except Exception:
+                self._log.exception("Error closing node %s", node.node_id)
+        self._nodes.clear()
+        self._build_errors.clear()
+        self._log.info("Rig '%s' closed", self.name)
+
+    def _create_nodes(self) -> None:
+        if self._config.devices:
+            self._nodes[LOCAL] = LocalNode()
+        for node_id, node_cfg in self._config.nodes.items():
+            self._nodes[node_id] = self._create_node(node_id, node_cfg)
+
+    def _create_node(self, node_id: str, config: NodeConfig) -> Node:
+        match config.kind:
+            case "subprocess":
+                return SubprocessNode(node_id, config)
+            case "remote":
+                return RemoteNode(node_id, config)
+
+    async def _build_all_devices(self) -> None:
+        devices = {LOCAL: self._config.devices} | {node_id: cfg.devices for node_id, cfg in self._config.nodes.items()}
+        for node_id, node_devices in devices.items():
+            node = self._nodes.get(node_id)
+            if node is not None and node_devices:
+                _, errors = await node.build_devices(node_devices, self._config.parts)
+                self._build_errors.update(
+                    {
+                        uid: found.model_copy(update={"loc": self._config.component_location(uid)})
+                        for uid, found in errors.items()
+                    }
+                )

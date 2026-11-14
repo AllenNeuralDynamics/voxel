@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from threading import Event, Thread
 from typing import Any
 
-from vxl.devices.axes.continuous import (
+from vxl.devices.axes.continuous_legacy import (
     ContinuousAxis,
     StepMode,
     TriggerMode,

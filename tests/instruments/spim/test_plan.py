@@ -52,6 +52,7 @@ def test_open_top_sweeps_x_one_slanted_frame_past_each_end() -> None:
     run = volume.scan
     last = run.first + run.spacing * (run.count - 1)
     assert (run.axis, run.spacing) == ("x", 0.5)
+    assert run.speed == pytest.approx(0.5 / 0.010 * 0.95)
     assert run.first == pytest.approx(-SLANT, abs=0.01)
     assert last == pytest.approx(1000 + SLANT, abs=run.spacing)
     assert volume.transforms["camera"].shape == (run.count, 2048, 2048)

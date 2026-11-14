@@ -21,14 +21,17 @@ if TYPE_CHECKING:
 
     from vxl.core.views import DeviceView
 
-_AXIS = "vxl.devices.axes.simulated.SimulatedContinuousAxis"
+_AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
 _RIG: dict[str, Any] = {
     "devices": {
-        "daq_hub": {"target": "vxl.devices.daq.SimulatedDaqmx", "init": {"device_name": "MockDev1"}},
+        "daq_hub": {
+            "target": "vxl.devices.signals.cards.simulated.SimulatedDaqmx",
+            "init": {"device_name": "MockDev1"},
+        },
         "daq": {
-            "target": "vxl.devices.daq.SimulatedSignalGenerator",
-            "init": {"hub": "daq_hub", "ports": {"laser_488": "ao0", "camera": "ao1"}},
+            "target": "vxl.devices.signals.generator.simulated.SimulatedGenerator",
+            "init": {"hub": "daq_hub"},
         },
         "camera": {
             "target": "vxl.devices.camera.simulated.SimulatedCamera",
@@ -38,9 +41,9 @@ _RIG: dict[str, Any] = {
             "target": "vxl.devices.laser.simulated.SimulatedLaser",
             "init": {"wavelength": 488, "source_enable_delay_s": 0},
         },
-        "x_axis": {"target": _AXIS, "init": {"lower_limit": 0, "upper_limit": 1000}},
-        "y_axis": {"target": _AXIS, "init": {"lower_limit": 0, "upper_limit": 1000}},
-        "z_axis": {"target": _AXIS, "init": {"lower_limit": 0, "upper_limit": 1000}},
+        "x_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
+        "y_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
+        "z_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
     },
     "stage": {"x": "x_axis", "y": "y_axis", "z": "z_axis"},
     "optics": {
@@ -89,7 +92,7 @@ async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
     kinds = {uid: view.interface.kind for uid, view in views.items()}
 
     assert set(kinds) == set(_RIG["devices"])
-    assert (kinds["camera"], kinds["laser_488"], kinds["x_axis"]) == ("camera", "laser", "continuous_axis")
+    assert (kinds["camera"], kinds["laser_488"], kinds["x_axis"]) == ("camera", "laser", "linear_axis")
     assert views["laser_488"].props
 
 
@@ -120,7 +123,7 @@ async def test_move_stage_moves_only_the_given_axes(instrument: _Bench) -> None:
     await instrument.move_stage(x=100, z=250, wait=True)
 
     stage = instrument._hal.stage
-    positions = {axis: await stage[axis].get_position() for axis in ("x", "y", "z")}
+    positions = {axis: await stage[axis].position.get() for axis in ("x", "y", "z")}
     assert positions == {"x": 100, "y": 0, "z": 250}
 
 
@@ -143,7 +146,7 @@ async def test_a_device_of_the_wrong_kind_stops_the_start(tmp_path: Path) -> Non
     with pytest.raises(StartupError) as caught:
         await instrument.open()
 
-    assert caught.value.problems.codes() == ["rig.device.not_continuous_axis"]
+    assert caught.value.problems.codes() == ["rig.device.not_linear_axis"]
 
 
 async def test_a_device_with_2_roles_is_checked_for_each(tmp_path: Path) -> None:
@@ -153,7 +156,7 @@ async def test_a_device_with_2_roles_is_checked_for_each(tmp_path: Path) -> None
     with pytest.raises(StartupError) as caught:
         await instrument.open()
 
-    assert caught.value.problems.codes() == ["rig.device.not_continuous_axis"]
+    assert caught.value.problems.codes() == ["rig.device.not_linear_axis"]
 
 
 def test_a_kind_names_its_config_and_state_classes_in_its_class_line() -> None:

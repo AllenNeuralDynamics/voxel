@@ -1,7 +1,7 @@
 """Tests for rigup.device.props.numeric — value classes, descriptors, decorators."""
 
 import math
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from rigup.device.props import (
     numeric,
     numeric_int,
 )
+from rigup.device.props._numeric import _fit
 
 
 class TestNumericFloat:
@@ -20,27 +21,32 @@ class TestNumericFloat:
         assert isinstance(n, float)
         assert n == 5.0
 
+    def test_keeps_a_value_outside_its_constraints(self):
+        n = NumericFloat(10.37, minimum=0.0, maximum=10.0, step=0.5)
+        assert n == 10.37
+        assert (n.minimum, n.maximum, n.step) == (0.0, 10.0, 0.5)
+
     def test_clamps_below_min(self):
-        assert NumericFloat(-5.0, minimum=0.0) == 0.0
+        assert _fit(NumericFloat, -5.0, minimum=0.0) == 0.0
 
     def test_clamps_above_max(self):
-        assert NumericFloat(15.0, maximum=10.0) == 10.0
+        assert _fit(NumericFloat, 15.0, maximum=10.0) == 10.0
 
     def test_snaps_step_round_down(self):
         # 0.42 % 0.1 ≈ 0.02, < step/2, round down to 0.4
-        assert math.isclose(NumericFloat(0.42, step=0.1), 0.4, abs_tol=1e-9)
+        assert math.isclose(_fit(NumericFloat, 0.42, step=0.1), 0.4, abs_tol=1e-9)
 
     def test_snaps_step_round_up(self):
         # 0.58 % 0.1 ≈ 0.08, > step/2, round up to 0.6
-        assert math.isclose(NumericFloat(0.58, step=0.1), 0.6, abs_tol=1e-9)
+        assert math.isclose(_fit(NumericFloat, 0.58, step=0.1), 0.6, abs_tol=1e-9)
 
     def test_snap_uses_min_as_grid_base(self):
         # min=1, step=0.5 → grid 1.0, 1.5, 2.0...; 1.7 snaps to 1.5 (not 1.5 from 0-base)
-        assert math.isclose(NumericFloat(1.7, minimum=1.0, step=0.5), 1.5, abs_tol=1e-9)
+        assert math.isclose(_fit(NumericFloat, 1.7, minimum=1.0, step=0.5), 1.5, abs_tol=1e-9)
 
     def test_clamp_after_snap_keeps_in_bounds(self):
         # 10.5 with step=3 snaps to 12; max=10 then clamps back to 10
-        assert NumericFloat(10.5, maximum=10.0, step=3.0) == 10.0
+        assert _fit(NumericFloat, 10.5, maximum=10.0, step=3.0) == 10.0
 
     def test_native_returns_plain_float_not_subclass(self):
         # Critical for pydantic serialization — passing a NumericFloat where a plain
@@ -68,11 +74,11 @@ class TestNumericInt:
     def test_snaps_step_round_up_at_boundary(self):
         # 7 with step=2 → modulus=1, NOT < step/2=1.0 (equal, not less), round up to 8.
         # Locks down the int-specific `modulus == 0` check (vs float's isclose).
-        assert NumericInt(7, step=2) == 8
+        assert _fit(NumericInt, 7, step=2) == 8
 
     def test_snap_uses_min_as_grid_base(self):
         # min=1, step=3 → grid 1, 4, 7. value=5 → modulus=1, < 1.5, round down to 4.
-        assert NumericInt(5, minimum=1, step=3) == 4
+        assert _fit(NumericInt, 5, minimum=1, step=3) == 4
 
     def test_native_returns_plain_int_not_subclass(self):
         native = NumericInt(42)._native()
@@ -171,6 +177,17 @@ class TestNumericPropertyDecorator:
         d.value = 3.3  # snaps
         assert math.isclose(d._v, 3.5, abs_tol=1e-9)
 
+    def test_getter_reports_a_value_outside_its_bounds_as_it_is(self):
+        class Device:
+            @numeric(minimum=0.0, maximum=10.0, step=0.5)
+            def value(self) -> float:
+                return 10.37
+
+        value = Device().value
+        assert value == 10.37
+        assert PropertyModel.from_value(value).value == 10.37
+        assert value.maximum == 10.0
+
     def test_callable_constraints_resolve_at_read_time(self):
         class Device:
             def __init__(self):
@@ -207,7 +224,7 @@ class TestNumericIntPropertyDecorator:
 
 
 @pytest.mark.parametrize(("decorate", "initial", "selected"), [(numeric, 0.0, 25.5), (numeric_int, 0, 25)])
-def test_options_validate_reads_and_writes_with_dynamic_metadata(decorate: Any, initial, selected):
+def test_options_validate_writes_and_reads_keep_the_value(decorate: Any, initial, selected):
     class Device:
         def __init__(self):
             self.choices = [initial, selected]
@@ -239,8 +256,7 @@ def test_options_validate_reads_and_writes_with_dynamic_metadata(decorate: Any, 
 
     device.choices[:] = [initial]
     assert snapshot.options == (initial, selected)
-    with pytest.raises(ValueError, match="not in allowed options"):
-        _ = device.value
+    assert device.value == selected
     with pytest.raises(ValueError, match="not in allowed options"):
         device.value = selected
     assert device.writes == [selected]
@@ -265,9 +281,10 @@ def test_mixed_constraint_forms_fail_when_creating_decorator(decorate, constrain
 @pytest.mark.parametrize("value_type", [NumericFloat, NumericInt])
 def test_options_are_strict_and_empty_options_allow_no_values(value_type):
     with pytest.raises(ValueError, match="not in allowed options"):
-        value_type(1.5, options=[0, 1, 2])
+        _fit(value_type, 1.5, options=[0, 1, 2])
     with pytest.raises(ValueError, match="not in allowed options"):
-        value_type(0, options=[])
+        _fit(value_type, 0, options=[])
+    assert value_type(1, options=[0, 2]) == 1
     with pytest.raises(TypeError, match="either options or minimum/maximum/step"):
         value_type(0, minimum=0, options=[0, 100])
 
@@ -292,3 +309,12 @@ def test_options_survive_pydantic_json_roundtrip():
     assert restored.i.options == (1, 2, 4)
     assert restored.f.to_property_model().options == [0.0, 0.25, 1.0]
     assert restored.i.to_property_model().options == [1, 2, 4]
+
+
+def test_a_tuple_value_crosses_as_a_list() -> None:
+    class Range(NamedTuple):
+        low: float
+        high: float
+
+    assert PropertyModel.from_value(Range(-5.0, 5.0)).value == [-5.0, 5.0]
+    assert PropertyModel.from_value((1, 2)).value == [1, 2]

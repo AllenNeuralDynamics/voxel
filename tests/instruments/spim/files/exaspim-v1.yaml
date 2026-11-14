@@ -31,11 +31,11 @@ rig:
 
   devices:
     nidaq_1:
-      target: vxl.devices.daq.hub_ni.NiDaqmx
+      target: vxl.devices.signals.cards.ni.NiDaqmx
       init: {device_name: Dev3, product: PCIe-6738}
 
     ao_main:
-      target: vxl.devices.daq.clocked.ni.NiSignalGenerator
+      target: vxl.devices.signals.generator.ni.NiGenerator
       init: {hub: nidaq_1}
 
     camera:

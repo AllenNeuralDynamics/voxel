@@ -141,7 +141,7 @@ def signals(data: dict[str, Any]) -> dict[str, Any]:
 def sweep_x(data: dict[str, Any]) -> dict[str, Any]:
     """Change ``data`` to an open-top-like rig: stage X sweeps and its pulses start each frame; Y and Z are tiled."""
     hal = data
-    hal["wiring"]["x_axis"] = {"x_pulse": {"pin": "ttl_out", "to": ["ao_main/PFI0"], "kind": "digital"}}
+    hal["wiring"]["x_axis"] = {"x_pulse": {"pin": "ttl_out", "to": ["ao_main/pfi0"], "kind": "digital"}}
     hal["scan"] = {"axis": "x", "motion": "sweep", "pacer": "x_axis", "margin": "5 %"}
     hal["parts"]["objective"]["magnification"] = 16.7
     hal["optics"]["camera"] = {"width": {"y": 1}, "height": {"x": 1, "z": 1}}
@@ -174,7 +174,23 @@ def two_arms(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def two_cameras(data: dict[str, Any]) -> dict[str, Any]:
+    """Add to simulated ``data`` a second camera that sees what the first sees, with its own trigger, as a second
+    channel of profile ``gfp``; and a profile ``rfp`` like ``gfp``."""
+    data["devices"]["camera_2"] = copy.deepcopy(data["devices"]["camera"])
+    data["optics"]["fw"]["to"] = ["camera", "camera_2"]
+    data["optics"]["camera_2"] = copy.deepcopy(data["optics"]["camera"])
+    data["wiring"]["ao_main"]["camera_2_trigger"] = {"pin": "ao4", "to": ["camera_2/trigger_in"], **_DIGITAL}
+    gfp = profile(data)
+    gfp["channels"]["camera_2"] = copy.deepcopy(gfp["channels"]["camera"])
+    signals = gfp["timelines"]["ao_main"]["signals"]
+    signals["camera_2_trigger"] = copy.deepcopy(signals["camera_trigger"])
+    data["default"]["profiles"]["rfp"] = copy.deepcopy(gfp)
+    return data
+
+
 _SIMULATED_AXIS = "vxl.devices.axes.simulated.SimulatedContinuousAxis"
+_STAGE_AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
 
 def simulated(data: dict[str, Any]) -> dict[str, Any]:
@@ -183,10 +199,13 @@ def simulated(data: dict[str, Any]) -> dict[str, Any]:
     the X axis are saved into the active profile when edited."""
     data["autosave"] = {"camera": ["exposure_time_ms"], "x_axis": "*"}
     devices = data["devices"]
-    devices["ao_hub"] = {"target": "vxl.devices.daq.SimulatedDaqmx", "init": {"device_name": "MockDev1"}}
+    devices["ao_hub"] = {
+        "target": "vxl.devices.signals.cards.simulated.SimulatedDaqmx",
+        "init": {"device_name": "MockDev1"},
+    }
     devices["ao_main"] = {
-        "target": "vxl.devices.daq.SimulatedSignalGenerator",
-        "init": {"hub": "ao_hub", "ports": {f"ao{i}": f"ao{i}" for i in range(4)}},
+        "target": "vxl.devices.signals.generator.simulated.SimulatedGenerator",
+        "init": {"hub": "ao_hub"},
     }
     sensor = {"sensor_size_px": {"x": 2048, "y": 2048}, "pixel_size_um": {"x": 6.5, "y": 6.5}}
     devices["camera"] = {
@@ -198,7 +217,7 @@ def simulated(data: dict[str, Any]) -> dict[str, Any]:
         "init": {"wavelength": 488, "source_enable_delay_s": 0},
     }
     for axis in ("x_axis", "y_axis", "z_axis"):
-        devices[axis] = {"target": _SIMULATED_AXIS, "init": {"lower_limit": -50000, "upper_limit": 50000}}
+        devices[axis] = {"target": _STAGE_AXIS, "init": {"lower": -50000, "upper": 50000, "speed": 100_000}}
     devices["fw"] = {
         "target": "vxl.devices.axes.discrete.mapped.OwnedMappedDiscreteAxis",
         "init": {

@@ -3,7 +3,7 @@ from collections.abc import Mapping
 
 from vxlib.quantity import VoltageRange
 
-from vxl.devices.daq.hub_sim import SimulatedDaqmx
+from vxl.devices.signals.cards.simulated import SimulatedDaqmx
 
 from .base import OnDemandAO, OnDemandDO
 

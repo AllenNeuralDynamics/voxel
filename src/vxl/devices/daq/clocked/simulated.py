@@ -10,7 +10,7 @@ from collections.abc import Mapping
 import numpy as np
 from vxlib.quantity import VoltageRange
 
-from vxl.devices.daq.hub_sim import SimulatedDaqmx
+from vxl.devices.signals.cards.simulated import SimulatedDaqmx
 
 from .base import GeneratorState, SignalGenerator, Signals
 

@@ -75,3 +75,32 @@ async def test_handle_publishes_changed_options_without_a_value_change():
         assert observed[0]["level"].options == [0.0, 100.0]
     finally:
         await handle.close()
+
+
+class _Travel(Device):
+    unit = ""
+
+    @property
+    @describe(label="Position", units=lambda device: device.unit)
+    def position(self) -> float:
+        return 0.0
+
+    @property
+    @describe(label="Speed", units=lambda device: f"{device.unit}/s")
+    def speed(self) -> float:
+        return 0.0
+
+
+class _Slide(_Travel, kind="mock"):
+    unit = "µm"
+
+
+class _Turntable(_Travel, kind="mock"):
+    unit = "deg"
+
+
+def test_units_from_a_function_follow_the_subclass() -> None:
+    slide = DeviceController(_Slide("slide")).interface.properties
+    turntable = DeviceController(_Turntable("turntable")).interface.properties
+    assert (slide["position"].units, slide["speed"].units) == ("µm", "µm/s")
+    assert (turntable["position"].units, turntable["speed"].units) == ("deg", "deg/s")

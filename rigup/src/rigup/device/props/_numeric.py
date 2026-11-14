@@ -31,13 +31,9 @@ class _Numeric[N: _Number](ABC):
     (``NumericFloat`` gets ``minimum: float | None``; ``NumericInt`` gets
     ``minimum: int | None``) without needing to redeclare them.
 
-    Concrete subclasses declare two small pieces:
-
-    - ``base_type`` — the leaf numeric type (``float`` or ``int``); used by
-      the shared ``__new__`` to delegate construction and by ``_native`` to
-      strip the wrapper for serialization.
-    - ``_is_on_grid(modulus, step)`` — whether the value is already at a step
-      grid position (no snap needed). Float uses ``isclose``; int uses ``== 0``.
+    Concrete subclasses declare ``base_type`` — the leaf numeric type (``float``
+    or ``int``); used by the shared ``__new__`` to delegate construction and by
+    ``_native`` to strip the wrapper for serialization.
     """
 
     # Subclass sets to the leaf numeric type (float or int). The shared __new__
@@ -53,11 +49,6 @@ class _Numeric[N: _Number](ABC):
     maximum: N | None
     step: N | None
     options: tuple[N, ...] | None
-
-    @classmethod
-    @abstractmethod
-    def _is_on_grid(cls, modulus: N, step: N) -> bool:
-        """Return True if ``modulus`` indicates the value is at a grid position."""
 
     def _native(self) -> N:
         """Return the underlying numeric value as its native Python type.
@@ -94,31 +85,17 @@ class _Numeric[N: _Number](ABC):
         *,
         options: Sequence[N] | None = None,
     ) -> Self:
+        """Carry ``value`` as it is, with its constraints. A value read from a device is never changed."""
         _check_constraint_forms(minimum, maximum, step, options)
-        choices = tuple(options) if options is not None else None
-        if choices is not None and value not in choices:
-            raise ValueError(f"Value {value!r} is not in allowed options: {choices}")
-
         # ``base`` is float or int. Typed as Any so the call to ``base.__new__(cls, v)``
         # accepts cls — the type checker can't see that subclasses inherit from
         # float/int (the leaf type isn't visible from this generic mixin).
         base: Any = cls.base_type
-        v: Any = value if isinstance(value, base) else base(value)
-
-        if minimum is not None:
-            v = max(minimum, v)
-        if step is not None:
-            modulus = (v - (minimum or 0)) % step
-            if not cls._is_on_grid(modulus, step):
-                v = v - modulus if modulus < step / 2 else v + (step - modulus)
-        if maximum is not None:
-            v = min(maximum, v)
-
-        obj = base.__new__(cls, v)
+        obj = base.__new__(cls, value if isinstance(value, base) else base(value))
         obj.minimum = minimum
         obj.maximum = maximum
         obj.step = step
-        obj.options = choices
+        obj.options = tuple(options) if options is not None else None
         return obj
 
     def __str__(self) -> str:
@@ -168,19 +145,40 @@ class NumericFloat(_Numeric[float], float):
     base_type = float
     kind = "float"
 
-    @classmethod
-    def _is_on_grid(cls, modulus: float, step: float) -> bool:
-        return math.isclose(modulus, 0, abs_tol=1e-9) and not math.isclose(modulus, step, abs_tol=1e-9)
-
 
 class NumericInt(_Numeric[int], int):
     base_type = int
     kind = "integer"
 
-    @classmethod
-    def _is_on_grid(cls, modulus: int, step: int) -> bool:
-        del step
-        return modulus == 0
+
+def _fit[T: _Numeric[Any]](
+    numeric_type: type[T],
+    value: Any,
+    minimum: Any = None,
+    maximum: Any = None,
+    step: Any = None,
+    *,
+    options: Sequence[Any] | None = None,
+) -> T:
+    """Fit a value to be written: refuse one that is not in ``options``, or clamp it to ``minimum``, snap it to the
+    ``step`` grid, then clamp it to ``maximum``."""
+    if options is not None and value not in options:
+        raise ValueError(f"Value {value!r} is not in allowed options: {tuple(options)}")
+    base: Any = numeric_type.base_type
+    v: Any = value if isinstance(value, base) else base(value)
+    if minimum is not None:
+        v = max(minimum, v)
+    if step is not None:
+        modulus = (v - (minimum or 0)) % step
+        if base is int:
+            on_grid = modulus == 0
+        else:
+            on_grid = math.isclose(modulus, 0, abs_tol=1e-9) and not math.isclose(modulus, step, abs_tol=1e-9)
+        if not on_grid:
+            v = v - modulus if modulus < step / 2 else v + (step - modulus)
+    if maximum is not None:
+        v = min(maximum, v)
+    return numeric_type(v, minimum, maximum, step, options=options)
 
 
 class NumericProtocol[N: _Number](Protocol):
@@ -275,8 +273,13 @@ class NumericFloatProperty(NumericProperty[float]):
     def __set__(self, obj: object, value: float) -> None:
         if self._fset is None:
             raise AttributeError("can't set attribute")
-        adjusted_value = NumericFloat(
-            value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj), options=self.get_options(obj)
+        adjusted_value = _fit(
+            NumericFloat,
+            value,
+            self.get_minimum(obj),
+            self.get_maximum(obj),
+            self.get_step(obj),
+            options=self.get_options(obj),
         )
         if value != adjusted_value:
             self.log.warning("Value %s was adjusted to %s to match constraints", value, adjusted_value)
@@ -304,8 +307,13 @@ class NumericIntProperty(NumericProperty[int]):
     def __set__(self, obj: object, value: int) -> None:
         if self._fset is None:
             raise AttributeError("can't set attribute")
-        adjusted_value = NumericInt(
-            value, self.get_minimum(obj), self.get_maximum(obj), self.get_step(obj), options=self.get_options(obj)
+        adjusted_value = _fit(
+            NumericInt,
+            value,
+            self.get_minimum(obj),
+            self.get_maximum(obj),
+            self.get_step(obj),
+            options=self.get_options(obj),
         )
         if value != adjusted_value:
             self.log.warning("Value %s was adjusted to %s to match constraints", value, adjusted_value)

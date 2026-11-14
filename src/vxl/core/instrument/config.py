@@ -23,11 +23,12 @@ from pydantic import (
 )
 from rigup.config import RigConfig
 from vxlib.problems import KeyPath, Problem, Problems
-from vxlib.schema import FrozenModel, UniqueList, check_identifier, identifier
+from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Quantity, Time, Voltage
 from vxlib.vector import Span, Vec3D
 
 from rigup import Part
+from vxl.devices.base import Pin, PinName
 from vxl.metadata import ExperimentMetadata, MetadataCls
 from vxl.parts import Filter, Objective
 
@@ -101,31 +102,29 @@ class Stage(FrozenModel):
 
 WireName = Annotated[str, identifier("Wire name")]
 
-_Connector = Annotated[str, identifier("Connector")]
-"""A connector, named as it is on the hardware."""
 
+class PinRef(NamedTuple):
+    """A pin of a device or a part, written ``camera/trigger_in``. Everything after the first ``/`` is the pin, so
+    ``card/port0/line1`` is pin ``port0/line1`` of ``card``."""
 
-class Pin(NamedTuple):
-    """A connector of a device or a part, written ``camera/trigger_in``."""
-
-    device: str
-    connector: str
+    device: DeviceUid
+    pin: PinName
 
     def __str__(self) -> str:
-        return f"{self.device}/{self.connector}"
+        return f"{self.device}/{self.pin}"
 
     @staticmethod
     def parse(value: Any) -> Any:
         """Read a pin from its written form. A value that is not text is returned as it is."""
         if not isinstance(value, str):
             return value
-        device, sep, connector = value.partition("/")
-        if not sep or "/" in connector:
-            raise ValueError(f"a pin is written 'device/connector', got {value!r}")
-        return Pin(check_identifier(device, "Device UID"), check_identifier(connector, "Connector"))
+        device, sep, pin = value.partition("/")
+        if not sep:
+            raise ValueError(f"a pin is written 'device/pin', got {value!r}")
+        return PinRef(device, pin)
 
 
-_Pins = UniqueList[Annotated[Pin, BeforeValidator(Pin.parse), PlainSerializer(str, return_type=str)]]
+_PinRefs = UniqueList[Annotated[PinRef, BeforeValidator(PinRef.parse), PlainSerializer(str, return_type=str)]]
 """The pins a wire reaches, each once."""
 
 
@@ -137,8 +136,8 @@ class DigitalWire(FrozenModel):
     """A wire that is on or off. ``off`` and ``on`` are given only when the sending pin is analog; the times are the
     shortest pulse, gap and period the receiver accepts."""
 
-    pin: _Connector
-    to: _Pins
+    pin: PinName
+    to: _PinRefs
     kind: Literal["digital"]
     off: Voltage | None = None
     on: Voltage | None = None
@@ -164,8 +163,8 @@ class AnalogWire(FrozenModel):
     per step, such as ``{mm: {mm: [...], deg: [...]}, deg: {deg: [...], V: [...]}}``. ``limits`` may use any unit on
     that path. ``park`` is where the wire stays when no signal plays on it."""
 
-    pin: _Connector
-    to: _Pins
+    pin: PinName
+    to: _PinRefs
     kind: Literal["analog"]
     unit: _UnitName = "V"
     scales: dict[_UnitName, dict[_UnitName, list[float]]] = Field(default_factory=dict)
@@ -246,14 +245,51 @@ class Wire:
     config: DigitalWire | AnalogWire
 
     def inputs_on(self, device: str) -> list[str]:
-        """The connectors of ``device`` that this wire reaches, such as ``PFI0``."""
-        return [pin.connector for pin in self.config.to if pin.device == device]
+        """The pins of ``device`` that this wire reaches, such as ``PFI0``."""
+        return [ref.pin for ref in self.config.to if ref.device == device]
+
+    def problems(self, pins: Mapping[str, Mapping[str, Pin]]) -> Problems:
+        """The problems of this wire against the pins its devices have, by device and name: each end is a pin of its
+        device, it leaves from a pin that sends and reaches pins that receive, an analog wire joins only analog pins,
+        and a digital wire gives ``off`` and ``on`` volts only when it leaves an analog pin. A device not in ``pins``
+        is not checked."""
+        problems = Problems()
+        wire = self.config
+        ends = [(self.sender, wire.pin, ("pin",)), *((ref.device, ref.pin, ("to", i)) for i, ref in enumerate(wire.to))]
+        for device, name, loc in ends:
+            if device not in pins:
+                continue
+            written = f"{device}/{name}"
+            if (pin := pins[device].get(name)) is None:
+                problems.add("rig.wiring.unknown_pin", f"'{device}' has no pin '{name}'.", *loc)
+                continue
+            sending = loc == ("pin",)
+            if not (pin.sends if sending else pin.receives):
+                problems.add(
+                    "rig.wiring.pin_direction", f"Pin '{written}' cannot {'send' if sending else 'receive'}.", *loc
+                )
+            if isinstance(wire, AnalogWire) and pin.kind != "analog":
+                problems.add("rig.wiring.pin_kind", f"An analog wire cannot join {pin.kind} pin '{written}'.", *loc)
+            if isinstance(wire, DigitalWire) and sending and (pin.kind == "analog") != (wire.off is not None):
+                need = "needs" if pin.kind == "analog" else "cannot have"
+                msg = f"A digital wire from {pin.kind} pin '{written}' {need} 'off' and 'on'."
+                problems.add("rig.wiring.pin_kind", msg, *loc)
+        return problems
 
 
 class Wiring(RootModel[dict[DeviceUid, dict[WireName, WireConfig]]]):
     """``wiring``: each sending device's wires, by name."""
 
     model_config = ConfigDict(frozen=True)
+
+    def pin_problems(self, pins: Mapping[str, Mapping[str, Pin]]) -> Problems:
+        """The problems of every wire against the pins its devices have, by device and name. A device not in
+        ``pins`` is not checked."""
+        problems = Problems()
+        for sender, wires in self.root.items():
+            for name, wire in wires.items():
+                problems += Wire(sender, name, wire).problems(pins).under(sender, name)
+        return problems
 
     def outputs(self, device: str) -> dict[WireName, DigitalWire | AnalogWire]:
         """Every wire that ``device`` sends, by name."""

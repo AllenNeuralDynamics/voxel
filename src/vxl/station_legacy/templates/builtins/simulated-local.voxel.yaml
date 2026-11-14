@@ -5,7 +5,7 @@
 hal:
   devices:
     daq_hub:
-      target: vxl.devices.daq.SimulatedDaqmx
+      target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init: { device_name: "MockDev1" }
     daq:
       target: vxl.devices.daq.SimulatedSignalGenerator

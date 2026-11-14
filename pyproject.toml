@@ -65,16 +65,19 @@ build-backend = "uv_build"
 [tool.uv.workspace]
 members = [
     "rigup",
+    "rigur",
     "drivers",
     "vxlib",
     "omezarr",
     "bench",
     "records",
+    "illumination_lab",
 ]
 
 [tool.uv.sources]
 ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
+rigur = { workspace = true }
 vxlib = { workspace = true }
 vxl-records = { workspace = true }
 

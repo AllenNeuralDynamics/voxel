@@ -56,7 +56,7 @@ hal:
       target: *tiger_axis
       init: {hub: tiger_controller, axis_label: m, units: um}
     nidaq_1:
-      target: vxl.devices.daq.hub_ni.NiDaqmx
+      target: vxl.devices.signals.cards.ni.NiDaqmx
       init:
         device_name: Dev3
 

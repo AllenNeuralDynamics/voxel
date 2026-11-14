@@ -12,7 +12,7 @@ from vxl.core.instrument.config import InstrumentConfig, InstrumentState
 from vxl.core.station import Station, StationConfig
 from vxl.core.views import StationStatus
 
-_AXIS = "vxl.devices.axes.simulated.SimulatedContinuousAxis"
+_AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
 
 class _State(InstrumentState, frozen=True):
@@ -39,7 +39,10 @@ _TEMPLATE: dict[str, Any] = {
                 "target": "vxl.devices.laser.simulated.SimulatedLaser",
                 "init": {"wavelength": 488, "source_enable_delay_s": 0},
             },
-            **{f"{axis}_axis": {"target": _AXIS, "init": {"lower_limit": 0, "upper_limit": 1000}} for axis in "xyz"},
+            **{
+                f"{axis}_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}}
+                for axis in "xyz"
+            },
         },
         "stage": {"x": "x_axis", "y": "y_axis", "z": "z_axis"},
         "optics": {
@@ -108,7 +111,7 @@ async def test_a_session_that_fails_to_open_leaves_the_station_idle(station: Sta
     rig = {**_TEMPLATE["rig"], "stage": {"x": "camera", "y": "y_axis", "z": "z_axis"}}
     await station.create_instrument("bench", {"rig": rig, "default": {}})
 
-    with pytest.raises(Exception, match="not a continuous_axis device"):
+    with pytest.raises(Exception, match="not a linear_axis device"):
         await station.open_session("bench")
 
     state = station.view.value

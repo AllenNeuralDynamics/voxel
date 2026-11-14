@@ -3,7 +3,7 @@ hal:
     primary:
       devices:
         nidaq_1:
-          target: vxl.devices.daq.SimulatedDaqmx
+          target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
           init:
             device_name: "MockDev1"
         ao_main:

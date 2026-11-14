@@ -20,11 +20,11 @@ rig:
 
   devices:
     nidaq_1:
-      target: vxl.devices.daq.hub_ni.NiDaqmx
+      target: vxl.devices.signals.cards.ni.NiDaqmx
       init: {device_name: Dev3, product: PCIe-6738}
 
     ao_main:
-      target: vxl.devices.daq.clocked.ni.NiSignalGenerator
+      target: vxl.devices.signals.generator.ni.NiGenerator
       init: {hub: nidaq_1}
 
     camera:
@@ -100,7 +100,7 @@ rig:
       galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
       z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
     z_axis:
-      z_pulse:        {pin: ttl_out, to: [ao_main/PFI0], kind: digital}   # 1 pulse every spacing while Z sweeps
+      z_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while Z sweeps
 
   optics:                                         # where the light goes: light sources → sample → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.

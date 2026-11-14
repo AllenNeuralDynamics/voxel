@@ -2,6 +2,7 @@
 
 import pytest
 
+from rigup import Device
 from vxl.devices.daq.clocked.ni import NiSignalGenerator
 from vxl.devices.daq.clocked.waveform import validate_waveform
 
@@ -30,7 +31,7 @@ class TestNiSignalGeneratorHelpers:
         # isn't implemented yet — start() must raise cleanly rather than silently
         # ignore the bound. No CO task = input-triggered operation.
         generator = NiSignalGenerator.__new__(NiSignalGenerator)
-        generator._uid = "ao_test"  # type: ignore[attr-defined]
+        Device.__init__(generator, "ao_test")
         generator._ao_task = object()  # type: ignore[attr-defined]  # truthy: passes "is not None" check
         generator._co_task = None  # type: ignore[attr-defined]
         with pytest.raises(NotImplementedError, match="input-trigger repeat"):
@@ -38,7 +39,7 @@ class TestNiSignalGeneratorHelpers:
 
     def test_wait_until_done_raises_without_finite_repeat(self):
         generator = NiSignalGenerator.__new__(NiSignalGenerator)
-        generator._uid = "ao_test"  # type: ignore[attr-defined]
+        Device.__init__(generator, "ao_test")
         generator._finite_repeat = None  # type: ignore[attr-defined]
         with pytest.raises(RuntimeError, match="finite acquisition"):
             generator.wait_until_done(timeout_s=1.0)

@@ -49,7 +49,7 @@ numeric(options=[0.0, 25.5, 100.0])
 numeric_int(options=[1, 2, 4, 8])
 ```
 
-Range constraints are individually optional. Values are clamped to the minimum, snapped to the step grid, then
+Range constraints are individually optional. Written values are clamped to the minimum, snapped to the step grid, then
 clamped to the maximum. The grid starts at the minimum, or zero when omitted; ties round upward. The maximum
 can therefore be accepted even when it falls off the grid.
 
@@ -58,8 +58,9 @@ setter runs. An empty sequence permits no values. Combining `options` with any r
 static checking and raises `TypeError` when the decorator is created.
 
 Bounds, step, and options can also be callbacks taking the device instance, such as
-`numeric_int(options=lambda self: self.available_binnings)`. They are resolved on each read or write. Reads
-apply constraints too: numeric ranges normalize the returned value, while choices validate it.
+`numeric_int(options=lambda self: self.available_binnings)`. They are resolved on each read or write. Only
+writes apply them: a read gives the value as the device reports it, with its current constraints, even when it lies
+outside them.
 
 For string choices, `enumerated` logs a warning and leaves the value unchanged on unsupported writes with
 nonempty options. Unsupported reads raise `ValueError`.

@@ -61,7 +61,7 @@ def plan_task(
         profile = state.profiles[profile_id]
         positions, frames = _light(config, profile, picks, sensors)
         count = math.floor(span.length / profile.spacing + _COUNT_TOLERANCE) + 1
-        run = AxisRun(scan.axis, span.low, profile.spacing, count)
+        run = AxisRun(scan.axis, span.low, profile.spacing, count, _sweep_speed(scan, profile, profile_id))
         at = {**stage, scan.axis: span.low}
         start = Vec3D(z=at["z"], y=at["y"], x=at["x"])
         transforms = {camera: frame.scanned(start, run) for camera, frame in frames.items()}
@@ -104,6 +104,17 @@ def _light(
             magnification=magnification,
         )
     return positions, frames
+
+
+def _sweep_speed(scan: Scan, profile: Profile, profile_id: ProfileId) -> float | None:
+    """The stage speed of a sweep, in µm/s: 1 spacing in each frame, slower by the scan's margin. The longest timeline
+    of the profile sets the frame time, since each frame plays 1 cycle of every generator. A step has no speed."""
+    if scan.motion == "step":
+        return None
+    if not profile.timelines:
+        raise ValueError(f"Profile '{profile_id}' has no timeline, so a sweep has no frame time.")
+    frame_time = max(float(timeline.duration) for timeline in profile.timelines.values())
+    return profile.spacing / frame_time * (1 - float(scan.margin or 0))
 
 
 def _binning(props: Mapping[str, object]) -> int:

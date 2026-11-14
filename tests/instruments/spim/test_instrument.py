@@ -18,13 +18,14 @@ from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
 from vxl.core.instrument.store import ABSENT, InstrumentStore, Merge
 from vxl.devices.camera.roi import AreaROI
+from vxl.devices.signals.generator.base import OwnClock
 from vxl.instruments.spim.config import SPIMConfig, StageFollowRule
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMState, WriterFields
 from vxl.instruments.spim.task import Task, TaskFields
 from vxl.system import System
 
-from .support import codes, load, simulated, template, two_arms
+from .support import codes, load, simulated, sweep_x, template, two_arms, two_cameras
 
 
 def test_new_ids_are_26_safe_characters_and_differ() -> None:
@@ -532,9 +533,9 @@ async def test_a_region_on_a_camera_outside_the_active_profile_is_set_but_not_sa
 
 async def _loaded(microscope: Microscope) -> dict[str, list[float]]:
     """The volts on each pin that ``ao_main`` has loaded."""
-    signals = await microscope._hal.signal_generators["ao_main"].get_loaded()
-    assert signals is not None
-    return {pin: array.tolist() for pin, array in signals.arrays().items()}
+    cycle = await microscope._hal.signal_generators["ao_main"].get_loaded()
+    assert cycle is not None
+    return cycle.volts
 
 
 def _rendered(microscope: Microscope, timeline: Timeline) -> dict[str, list[float]]:
@@ -595,10 +596,88 @@ async def test_a_timeline_edit_restarts_a_preview_and_is_refused_during_a_captur
 async def test_a_wire_on_a_pin_the_generator_does_not_have_stops_the_opening(
     config_data: dict[str, Any], tmp_path: Path
 ) -> None:
-    config_data["wiring"]["ao_main"]["galvo"]["pin"] = "ao9"
+    config_data["wiring"]["ao_main"]["galvo"]["pin"] = "ao99"
     microscope = _microscope(simulated(config_data), tmp_path)
     with pytest.raises(StartupError) as caught:
         await microscope.open()
     assert [(p.code, p.loc) for p in caught.value.problems] == [
-        ("rig.signal_generator.unknown_pin", ("wiring", "ao_main", "galvo", "pin"))
+        ("rig.wiring.unknown_pin", ("wiring", "ao_main", "galvo", "pin"))
     ]
+
+
+@pytest.mark.parametrize("rig", [lambda data: data, sweep_x], ids=["the generator paces", "the stage paces"])
+async def test_a_profile_loads_cycles_on_the_generators_own_clock(
+    config_data: dict[str, Any], tmp_path: Path, rig: Any
+) -> None:
+    microscope = _microscope(simulated(rig(config_data)), tmp_path)
+    await microscope.open()
+    try:
+        cycle = await microscope._hal.signal_generators["ao_main"].get_loaded()
+        assert cycle is not None
+        assert cycle.start == OwnClock()
+    finally:
+        await microscope.close()
+
+
+async def _live(microscope: Microscope) -> dict[str, object]:
+    """What a preview has started: each camera's mode, the laser's output, the generator's state, the activities."""
+    hal = microscope._hal
+    return {
+        "cameras": {uid: (await camera.props.get_value("mode")) for uid, camera in hal.cameras.items()},
+        "laser": await hal.lasers["laser"].props.get_value("is_output_enabled"),
+        "generator": await hal.signal_generators["ao_main"].state.get(),
+        "activities": [activity.kind for activity in microscope.activities.value],
+    }
+
+
+async def test_a_preview_starts_and_stops_its_devices(opened: Microscope) -> None:
+    await opened.start_preview()
+    assert await _live(opened) == {
+        "cameras": {"camera": "PREVIEW"},
+        "laser": True,
+        "generator": "running",
+        "activities": ["preview"],
+    }
+    await opened.stop_preview()
+    assert await _live(opened) == {
+        "cameras": {"camera": "IDLE"},
+        "laser": False,
+        "generator": "loaded",
+        "activities": [],
+    }
+
+
+async def test_a_preview_disarms_the_scan_axis(opened: Microscope) -> None:
+    z = opened._hal.stage["z"]
+    await z.arm_steps(1.0, 5, "ttl_in")
+    await opened.start_preview()
+    assert await z.scan_state.get() == "idle"
+    await opened.stop_preview()
+
+
+async def test_a_preview_restarts_around_a_profile_change(opened: Microscope) -> None:
+    await opened.start_preview()
+    await opened.select_profile("slow")
+    assert (await _live(opened))["activities"] == ["preview"]
+    assert await _exposure(opened) == pytest.approx(30.0)
+    assert (await _live(opened))["cameras"] == {"camera": "PREVIEW"}
+    await opened.stop_preview()
+
+
+async def test_each_profile_keeps_its_preview_channels(config_data: dict[str, Any], tmp_path: Path) -> None:
+    microscope = _microscope(two_cameras(simulated(config_data)), tmp_path)
+    await microscope.open()
+    try:
+        await microscope.start_preview()
+        assert microscope.preview_channels.value == ("camera",)
+        await microscope.set_preview_channels(["camera_2"])
+        assert (await _live(microscope))["cameras"] == {"camera": "IDLE", "camera_2": "PREVIEW"}
+        await microscope.select_profile("rfp")
+        assert microscope.preview_channels.value == ("camera",)
+        await microscope.select_profile("gfp")
+        assert microscope.preview_channels.value == ("camera_2",)
+        assert (await _live(microscope))["cameras"] == {"camera": "IDLE", "camera_2": "PREVIEW"}
+        with pytest.raises(RejectedError, match="no channel"):
+            await microscope.set_preview_channels(["laser"])
+    finally:
+        await microscope.close()

@@ -197,21 +197,6 @@ class CSVWaveform(BaseWaveform):
         return generate_multi_point_waveform(n=n, points=self._points, voltage_range=self.voltage)
 
 
-class SampledWaveform(BaseModel):
-    """Volts to play as they are, 1 for each sample of the cycle, such as a timeline that the instrument rendered."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["sampled"]
-    samples: list[float] = Field(min_length=1)
-
-    def get_array(self, total_samples: int) -> np.ndarray:
-        """The samples, which must be exactly 1 for each sample of the cycle."""
-        if len(self.samples) != total_samples:
-            raise WaveformResolutionError(f"{len(self.samples)} samples for a cycle of {total_samples}")
-        return np.asarray(self.samples, dtype=float)
-
-
 # ==================== Derived Waveforms ====================
 
 
@@ -310,7 +295,6 @@ Waveform = Annotated[
     | Annotated[MultiPointWaveform, Tag("multi_point")]
     | Annotated[PulseWaveform, Tag("pulse")]
     | Annotated[CSVWaveform, Tag("csv")]
-    | Annotated[SampledWaveform, Tag("sampled")]
     | Annotated[DerivedMirror, Tag("derived:mirror")]
     | Annotated[DerivedScale, Tag("derived:scale")]
     | Annotated[DerivedOffset, Tag("derived:offset")]
@@ -416,7 +400,7 @@ class Signals(BaseModel):
         arrays: dict[str, np.ndarray] = {}
         for name in _topo_order(self.waveforms):
             waveform = self.waveforms[name]
-            if isinstance(waveform, BaseWaveform | SampledWaveform):
+            if isinstance(waveform, BaseWaveform):
                 arrays[name] = waveform.get_array(self.num_samples)
             elif isinstance(waveform, _DerivedBase):
                 arrays[name] = waveform.apply(arrays[waveform.source])

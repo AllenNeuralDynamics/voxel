@@ -4,7 +4,7 @@
 counter-output task whose pulses retrigger finite AO cycles; an ``InputTrigger``
 restarts a cycle for each edge received from a configured PFI.
 
-Both take a ``NiDaqmx`` hub (``vxl.devices.daq.hub_ni``) at construction; the card and pins
+Both take a ``NiDaqmx`` hub (``vxl.devices.signals.cards.ni``) at construction; the card and pins
 live there.
 """
 
@@ -19,8 +19,8 @@ from nidaqmx.task import Task as NiTask
 from pydantic import BaseModel, ConfigDict, Discriminator, TypeAdapter
 from vxlib.quantity import VoltageRange
 
-from vxl.devices.daq.hub_ni import NiDaqmx
-from vxl.devices.daq.hub_ni.resources import NiTaskLease  # noqa: TC001 - annotations are evaluated at runtime
+from vxl.devices.signals.cards.ni import NiDaqmx
+from vxl.devices.signals.cards.ni.resources import NiTaskLease  # noqa: TC001 - annotations are evaluated at runtime
 
 from .base import SignalGenerator, Signals
 
