@@ -1,6 +1,6 @@
 import pytest
-from rigup.device import number, prop
-from rigup.device.results import PropertyModel
+from rigup.device import fact, number
+from rigup.device.results import PropModel
 from rigup.node import LOCAL
 from rigup.rig import Rig
 
@@ -40,7 +40,7 @@ class RecordingSource(LaserSource):
         return self.enabled
 
     @property
-    @prop()
+    @fact()
     def head_type(self) -> str:
         return "test head"
 
@@ -79,7 +79,7 @@ def test_scaled_output_defers_startup_and_preserves_operating_settings():
     laser.output_level_percent = 50
     assert source.power == 200
     assert laser.source_power_setpoint_mw == 400
-    level_model = PropertyModel.from_value(laser.output_level_percent)
+    level_model = PropModel.from_value(laser.output_level_percent)
     assert level_model.minimum == 50
     assert level_model.maximum == 100
     assert level_model.step == 0.125
@@ -88,7 +88,7 @@ def test_scaled_output_defers_startup_and_preserves_operating_settings():
     laser.source_power_setpoint_mw = 800
     assert source.power == 400
     assert laser.output_level_percent == 50
-    assert PropertyModel.from_value(laser.output_level_percent).minimum == 25
+    assert PropModel.from_value(laser.output_level_percent).minimum == 25
     laser.output_level_percent = 0  # Fitted up to the lowest level the source can give.
     assert laser.output_level_percent == 25
     assert source.power == 200
@@ -206,10 +206,10 @@ async def test_rig_registers_source_and_adapter_with_separate_discovery():
         laser = rig.devices["laser"]
         source_interface = await source.interface()
         laser_interface = await laser.interface()
-        assert "head_type" in source_interface.properties
-        assert "head_type" not in laser_interface.properties
-        assert source_interface.properties["modulation_mode"].access == "ro"
-        assert laser_interface.properties["modulation_mode"].access == "ro"
+        assert "head_type" in source_interface.props
+        assert "head_type" not in laser_interface.props
+        assert source_interface.props["modulation_mode"].access == "ro"
+        assert laser_interface.props["modulation_mode"].access == "ro"
         (await laser.run_command("set_modulation_mode", "digital")).unwrap()
         mode = (await laser.props.get("modulation_mode"))["modulation_mode"].unwrap()
         assert mode.value == "digital"

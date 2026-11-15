@@ -81,6 +81,28 @@ def test_a_wire_with_no_signal_stays_at_rest(config_data: dict[str, Any]) -> Non
     assert codes(load(config_data)) == []
 
 
+def test_a_pin_is_live_when_its_wire_has_a_signal_or_comes_from_a_camera(config_data: dict[str, Any]) -> None:
+    def live(data: dict[str, Any]) -> dict[str, str]:
+        example = load(data)
+        inputs = example.default.profiles["gfp"].live_inputs(example.config)
+        return {str(pin): f"{wire.sender}.{wire.name}" for pin, wire in inputs.items()}
+
+    assert live(config_data) == {
+        "camera/trigger_in": "ao_main.camera_trigger",
+        "laser/enable_in": "ao_main.laser",
+        "galvo/in": "ao_main.galvo",
+        "z_axis/ttl_in": "ao_main.z_step",
+    }
+    del signals(config_data)["laser"]
+    config_data["wiring"]["camera"] = {"frame": {"pin": "out", "to": ["x_axis/ttl_in"], "kind": "digital"}}
+    assert live(config_data) == {
+        "camera/trigger_in": "ao_main.camera_trigger",
+        "galvo/in": "ao_main.galvo",
+        "z_axis/ttl_in": "ao_main.z_step",
+        "x_axis/ttl_in": "camera.frame",
+    }
+
+
 @pytest.mark.parametrize(
     ("device", "message"),
     [
@@ -109,5 +131,6 @@ def test_a_device_can_hold_parts_that_magnify(config_data: dict[str, Any]) -> No
     profile(config_data)["positions"]["turret"] = "20x"
     example = load(config_data)
     assert codes(example) == []
-    (seen,) = example.config.detection_paths("camera", example.default.profiles["gfp"].positions)
-    assert (seen.magnification, seen.band) == (20, (500, 550))
+    config, positions = example.config, example.default.profiles["gfp"].positions
+    (seen,) = config.optics.paths_to("camera", positions)
+    assert (config.magnification(seen, positions), config.band(seen, positions)) == (20, (500, 550))

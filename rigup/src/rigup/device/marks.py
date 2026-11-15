@@ -1,4 +1,10 @@
-"""Decorators that expose device properties and commands; a missing description falls back to the docstring."""
+"""Decorators that declare a device's public interface.
+
+A property is exposed by marking its getter with ``@fact`` or ``@stream``, and a method is exposed as a command by
+marking it with ``@query``, ``@action`` or ``@failsafe``. Unmarked members are not part of the interface.
+
+Each decorator records presentation metadata: a label, a description and, for properties, units. An omitted
+description is taken from the docstring."""
 
 import inspect
 from collections.abc import Callable
@@ -8,8 +14,8 @@ from typing import Any, Literal
 type Units = str | Callable[[Any], str]
 """Units as text, or a function of the device read once when its interface is built."""
 
-type StreamTier = Literal["fast", "slow"]
-"""How often a streamed property is sent. The controller sets the seconds behind each tier."""
+type StreamTier = Literal["fast", "normal", "slow"]
+"""The rate at which a streamed property is polled and published. The controller sets the interval of each tier."""
 
 type Intent = Literal["query", "action", "failsafe"]
 """What a command is for."""
@@ -19,6 +25,8 @@ _MARK = "__rigup_mark"
 
 @dataclass(frozen=True)
 class PropMark:
+    """The metadata a property decorator records. ``stream`` is the polling tier, or ``None`` for a fact."""
+
     label: str | None
     desc: str | None
     units: Units | None
@@ -32,21 +40,33 @@ class CommandMark:
     desc: str | None
 
 
-def prop[F: Callable[..., Any]](
-    *, label: str | None = None, desc: str | None = None, units: Units | None = None, stream: StreamTier | None = None
-) -> Callable[[F], F]:
-    """Expose a property. Apply it below ``@property``, ``@number``, ``@integer`` or ``@choice``."""
-
+def _property[F: Callable[..., Any]](name: str, mark: PropMark) -> Callable[[F], F]:
     def decorator(getter: F) -> F:
         if isinstance(getter, property):
             made = type(getter).__name__
             raise TypeError(
-                f"@prop got a {made}, not a function: put @prop under @number, @integer, @choice or @property"
+                f"@{name} got a {made}, not a function: put @{name} under @number, @integer, @choice or @property"
             )
-        getter.__dict__[_MARK] = PropMark(label, desc, units, stream)
+        getter.__dict__[_MARK] = mark
         return getter
 
     return decorator
+
+
+def fact[F: Callable[..., Any]](
+    *, label: str | None = None, desc: str | None = None, units: Units | None = None
+) -> Callable[[F], F]:
+    """Expose a property whose value is constant while the device is open. It is read once and cannot have a setter.
+    Apply it below ``@property``."""
+    return _property("fact", PropMark(label, desc, units, None))
+
+
+def stream[F: Callable[..., Any]](
+    tier: StreamTier = "normal", *, label: str | None = None, desc: str | None = None, units: Units | None = None
+) -> Callable[[F], F]:
+    """Expose a property whose value can change. The controller polls it at ``tier`` and publishes it when it changes.
+    Apply it below ``@property``, ``@number``, ``@integer`` or ``@choice``."""
+    return _property("stream", PropMark(label, desc, units, tier))
 
 
 def _command[F: Callable[..., Any]](intent: Intent, label: str | None, desc: str | None) -> Callable[[F], F]:
@@ -58,19 +78,19 @@ def _command[F: Callable[..., Any]](intent: Intent, label: str | None, desc: str
 
 
 def query[F: Callable[..., Any]](*, label: str | None = None, desc: str | None = None) -> Callable[[F], F]:
-    """Expose a command that only looks: it can run at any time."""
+    """Expose a read-only command. It has no side effects, so it is safe to run at any time."""
     return _command("query", label, desc)
 
 
 def action[F: Callable[..., Any]](*, label: str | None = None, desc: str | None = None) -> Callable[[F], F]:
-    """Expose a command that changes the hardware: it waits its turn behind a running activity."""
+    """Expose a command that changes hardware state. The intent is advisory: rigup does not gate the call. The
+    orchestrating code decides when an action may run, for example with ``rigup.activity``."""
     return _command("action", label, desc)
 
 
 def failsafe[F: Callable[..., Any]](*, label: str | None = None, desc: str | None = None) -> Callable[[F], F]:
-    """Expose a command that puts the device in a safe state: it can always run and takes no required arguments.
-
-    The system calls it on "stop all", on a failure and on close."""
+    """Expose a command that puts the device in a safe state. It must be callable with no arguments, so the
+    orchestrating code can run every failsafe on stop, on failure and on close."""
 
     def decorator(method: F) -> F:
         needed = [
@@ -99,8 +119,9 @@ __all__ = [
     "StreamTier",
     "Units",
     "action",
+    "fact",
     "failsafe",
     "mark_of",
-    "prop",
     "query",
+    "stream",
 ]

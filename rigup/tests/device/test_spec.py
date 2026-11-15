@@ -3,13 +3,13 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pytest
 from forward_refs import FD
-from rigup.device import Device, DeviceController, DeviceInterface, action, failsafe, number, prop, query
+from rigup.device import Device, DeviceController, DeviceInterface, action, failsafe, number, query, stream
 from rigup_fakes import subclass
 
 
 class Base(Device, ABC, kind="base"):
     @number()
-    @prop(units="mW")
+    @stream(units="mW")
     @abstractmethod
     def power(self) -> float: ...
 
@@ -18,7 +18,7 @@ class Base(Device, ABC, kind="base"):
     def power(self, value: float) -> None: ...
 
     @property
-    @prop()
+    @stream()
     def temperature(self) -> float:
         return 1.0
 
@@ -52,7 +52,7 @@ class Mixin:
         return "hi"
 
     @property
-    @prop()
+    @stream()
     def mix(self) -> int:
         return 1
 
@@ -63,14 +63,14 @@ class Mixed(Mixin, Device, kind="mixed"):
 
 class Collide(Device, kind="collide"):
     @property
-    @prop(label="Device power")
+    @stream(label="Device power")
     def power(self) -> float:
         return 1.0
 
 
 class CollideController(DeviceController):
     @property
-    @prop(label="Controller power", units="W")
+    @stream(label="Controller power", units="W")
     def power(self) -> str:
         return "controller"
 
@@ -87,7 +87,7 @@ def test_a_driver_cannot_describe_a_base_property_again() -> None:
 
         class Redescribed(Done):
             @property
-            @prop(units="K")
+            @stream(units="K")
             def temperature(self) -> float:
                 return 297.0
 
@@ -225,14 +225,14 @@ def test_every_problem_in_a_class_is_reported_at_once() -> None:
 def test_mixin_members_are_described() -> None:
     interface = DeviceController(Mixed("mixed")).interface
 
-    assert ("hello" in interface.commands, "mix" in interface.properties) == (True, True)
+    assert ("hello" in interface.commands, "mix" in interface.props) == (True, True)
 
 
 def test_forward_referenced_types_resolve_in_the_interface() -> None:
     interface = DeviceController(FD()).interface
 
-    assert (interface.properties["count"].dtype, interface.properties["count"].units) == ("int", "fd-u")
-    assert interface.properties["later"].dtype == "later"
+    assert (interface.props["count"].dtype, interface.props["count"].units) == ("int", "fd-u")
+    assert interface.props["later"].dtype == "later"
     assert "$defs" in interface.commands["get_later"].params
 
 

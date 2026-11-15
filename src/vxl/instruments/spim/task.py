@@ -16,8 +16,9 @@ from vxl.core.instrument.config import (
     SpecimenAxis,
     Stage,
 )
+from vxl.core.instrument.state import ProfileId
 
-from .config import ProfileId, Scan
+from .config import Scan
 
 TaskId = Annotated[str, identifier("Task id")]
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from rigup.device.handle import DeviceProps
+from rigup.device.handle import PropModels
 from vxl_records import PlannedVolume, VoxelRecords
 from vxlib.history import HistoryState
 from vxlib.reactivity import Cell, Emitter, ReactiveQuery
@@ -40,9 +40,9 @@ class FakeInstrument:
         self.active_profile_id = Cell(next(iter(self.state.value.imaging.profiles)))
         self.history = Cell(HistoryState())
         self.device_interfaces: dict[str, DeviceInterface] = {}
-        self.device_props: dict[str, DeviceProps] = {}
+        self.device_props: dict[str, PropModels] = {}
         self.remote_stores = {}
-        self.device_props_updates = Emitter[tuple[str, DeviceProps]]()
+        self.device_props_updates = Emitter[tuple[str, PropModels]]()
         self.preview = Emitter[PreviewSourceEmission]()
         self.stream_revision = Cell(0)
         self.config = config

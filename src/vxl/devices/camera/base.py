@@ -20,7 +20,19 @@ from ome_zarr_writer import (
 )
 from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
-from rigup.device import Device, DeviceController, StreamTier, action, choice, failsafe, integer, number, prop, query
+from rigup.device import (
+    Device,
+    DeviceController,
+    StreamTier,
+    action,
+    choice,
+    fact,
+    failsafe,
+    integer,
+    number,
+    query,
+    stream,
+)
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
@@ -139,18 +151,18 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         await super().close()
 
     @property
-    @prop(label="RAM Budget", units="bytes", stream="slow")
+    @stream(label="RAM Budget", units="bytes")
     def ram_budget_bytes(self) -> int:
         """Current RAM share for this camera from the host RAM budget."""
         return System.Ram.reserved(self.device.uid)
 
     @property
-    @prop(label="Camera Mode", stream="slow")
+    @stream(label="Camera Mode")
     def mode(self) -> CameraMode:
         return self._mode
 
     @property
-    @prop(stream="fast")
+    @stream("fast")
     def writer_metrics(self) -> list[BatchMetrics]:
         return self._writer.batches if self._writer else []
 
@@ -422,7 +434,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
             log.info("Writer ring released for %s", self.device.uid)
 
     @property
-    @prop(stream="fast")
+    @stream("fast")
     def ready_for_batch(self) -> bool:
         """Whether the writer has at least one free slot to accept the next batch.
 
@@ -520,13 +532,13 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
     _buffer_allocated = False
 
     @property
-    @prop()
+    @fact()
     @abstractmethod
     def sensor(self) -> CameraSensor:
         """The size of the sensor, and of 1 pixel on it."""
 
     @choice(options=list(PIXEL_FMT_TO_DTYPE.keys()))
-    @prop(stream="slow")
+    @stream()
     @abstractmethod
     def pixel_format(self) -> PixelFormat:
         """Get the pixel format of the camera."""
@@ -537,13 +549,13 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """Set the pixel format of the camera."""
 
     @property
-    @prop(stream="slow")
+    @stream()
     def pixel_type(self) -> Dtype:
         """Get the pixel type of the camera."""
         return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
 
     @integer(options=BINNING_OPTIONS)
-    @prop(stream="slow")
+    @stream()
     @abstractmethod
     def binning(self) -> int:
         """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
@@ -554,7 +566,7 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
 
     @number()
-    @prop(label="Exposure Time", units="ms", stream="slow")
+    @stream(label="Exposure Time", units="ms")
     @abstractmethod
     def exposure_time_ms(self) -> float:
         """Get the exposure time of the camera in ms."""
@@ -565,7 +577,7 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """Set the exposure time of the camera in ms."""
 
     @number()
-    @prop(label="Frame Rate", units="Hz", stream="slow")
+    @stream(label="Frame Rate", units="Hz")
     @abstractmethod
     def frame_rate_hz(self) -> float:
         """Get the frame rate of the camera in Hz."""
@@ -586,7 +598,7 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """Apply ROI to hardware. Values are pre-snapped by update_roi."""
 
     @property
-    @prop(label="ROI Grid", stream="slow")
+    @stream(label="ROI Grid")
     @abstractmethod
     def roi_grid(self) -> ROIGrid:
         """Hardware constraints for the sensor ROI.
@@ -596,7 +608,7 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         """
 
     @property
-    @prop(label="Sensor ROI", stream="slow")
+    @stream(label="Sensor ROI")
     def roi(self) -> AreaROI:
         """Current sensor ROI in physical sensor pixels (pre-binning)."""
         return self._get_roi()
@@ -623,7 +635,7 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         return self.update_roi(AreaROI(x=0, y=0, w=self.sensor.size_px.x, h=self.sensor.size_px.y))
 
     @property
-    @prop(label="Frame Size", units="px", stream="slow")
+    @stream(label="Frame Size", units="px")
     def frame_size_px(self) -> IVec2D:
         """Get the image size in pixels (post-binning frame coordinates)."""
         roi = self.roi
@@ -631,20 +643,20 @@ class Camera(Device, kind=DeviceType.CAMERA, controller=CameraController):
         return IVec2D(y=roi.h // b, x=roi.w // b)
 
     @property
-    @prop(label="Frame Size", units="MB", stream="slow")
+    @stream(label="Frame Size", units="MB")
     def frame_size_mb(self) -> float:
         """Get the size of the camera image in MB."""
         return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
 
     @property
-    @prop(label="Frame Area", units="µm", stream="slow")
+    @stream(label="Frame Area", units="µm")
     def frame_area_um(self) -> Vec2D:
         """Get the physical frame size in micrometers."""
         roi, pixel = self.roi, self.sensor.pixel_um
         return Vec2D(x=roi.w * pixel.x, y=roi.h * pixel.y)
 
     @property
-    @prop(stream="fast")
+    @stream("fast")
     @abstractmethod
     def stream_info(self) -> StreamInfo | None:
         """Return a dictionary of the acquisition state or None if not acquiring.

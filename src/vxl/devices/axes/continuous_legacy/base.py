@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-from rigup.device import DeviceController, StreamTier, action, failsafe, number, prop, query
+from rigup.device import DeviceController, StreamTier, action, fact, failsafe, number, query, stream
 
 from vxl.devices.axes.base import Axis
 from vxl.devices.base import DeviceType
@@ -98,12 +98,12 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"], streaming={"f
         return self._ttl_stepper
 
     @property
-    @prop(stream="slow")
+    @stream()
     def scan_mode(self) -> ScanMode:
         return self._scan_mode
 
     @property
-    @prop(label="TTL Stepping Available")
+    @fact(label="TTL Stepping Available")
     def ttl_stepping_available(self) -> bool:
         return self._stepper() is not None
 
@@ -170,7 +170,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     # Unit specification _____________________________________________________________________________________________
 
     @property
-    @prop()
+    @fact()
     def units(self) -> str:
         """Unit string for position values (e.g., 'um', 'mm')."""
         return self._units
@@ -227,7 +227,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     # State properties _______________________________________________________________________________________________
 
     @number(minimum=lambda self: self.lower_limit, maximum=lambda self: self.upper_limit)
-    @prop(desc="The current position.", stream="fast")
+    @stream("fast", desc="The current position.")
     def position(self) -> float:
         """The current position in axis units."""
         return self._get_position()
@@ -238,7 +238,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
         ...
 
     @property
-    @prop(desc="Whether the axis is currently moving.", stream="fast")
+    @stream("fast", desc="Whether the axis is currently moving.")
     @abstractmethod
     def is_moving(self) -> bool:
         """Whether the axis is currently moving."""
@@ -262,7 +262,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
         """
 
     @number()
-    @prop(desc="The upper position limit.", stream="slow")
+    @stream(desc="The upper position limit.")
     @abstractmethod
     def upper_limit(self) -> float:
         """The upper position limit in axis units."""
@@ -273,7 +273,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def upper_limit(self, value: float) -> None: ...
 
     @number()
-    @prop(desc="The lower position limit.", stream="slow")
+    @stream(desc="The lower position limit.")
     @abstractmethod
     def lower_limit(self) -> float:
         """The lower position limit in axis units."""
@@ -286,7 +286,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     # Kinematic parameters ___________________________________________________________________________________________
 
     @property
-    @prop(desc="The current speed.", stream="slow")
+    @stream(desc="The current speed.")
     @abstractmethod
     def speed(self) -> float | None:
         """The current speed in axis units per second."""
@@ -297,7 +297,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def speed(self, value: float) -> None: ...
 
     @property
-    @prop(desc="The current acceleration.", stream="slow")
+    @stream(desc="The current acceleration.")
     @abstractmethod
     def acceleration(self) -> float | None:
         """The current acceleration in axis units per second squared."""
@@ -308,7 +308,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def acceleration(self, value: float) -> None: ...
 
     @property
-    @prop(desc="The backlash compensation value.")
+    @stream(desc="The backlash compensation value.")
     @abstractmethod
     def backlash(self) -> float | None:
         """The backlash compensation value in axis units."""
@@ -319,7 +319,7 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
     def backlash(self, value: float) -> None: ...
 
     @property
-    @prop(label="Home Position", desc="The home position.")
+    @stream(label="Home Position", desc="The home position.")
     @abstractmethod
     def home(self) -> float | None:
         """The home position in axis units."""

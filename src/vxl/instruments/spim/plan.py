@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from vxlib.vector import Span, Vec3D
 
 from vxl.core.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
+from vxl.core.instrument.state import ProfileId
 from vxl.devices.camera import CameraSensor
 
-from .config import Profile, ProfileId, Scan, SPIMConfig
+from .config import Scan, SPIMConfig, SPIMProfile
 from .geometry import AxisRun, Transform, footprint, frame_transform
 from .state import SPIMState
 from .task import ExplicitPoints, Grid, Region, Task, TaskDefaults, TaskId
@@ -50,8 +51,8 @@ def plan_task(
     }
 
     span = _scan_span(region, scan, tile)
-    stops: list[tuple[dict[SpecimenAxis, float], dict[DeviceUid, AxisPosition]]] = []
-    previous: dict[DeviceUid, AxisPosition] = {}
+    stops: list[tuple[dict[SpecimenAxis, float], Mapping[DeviceUid, AxisPosition]]] = []
+    previous: Mapping[DeviceUid, AxisPosition] = {}
     for stage in _tile_positions(region, scan, task, tile):
         previous = state.positions_at({**stage, scan.axis: span.middle}, previous)
         stops.append((stage, previous))
@@ -74,7 +75,7 @@ def plan_task(
 
 def _light(
     config: SPIMConfig,
-    profile: Profile,
+    profile: SPIMProfile,
     picks: Mapping[str, AxisPosition],
     sensors: Mapping[DeviceUid, CameraSensor],
 ) -> tuple[dict[DeviceUid, AxisPosition], dict[DeviceUid, Transform]]:
@@ -86,11 +87,11 @@ def _light(
     positions: dict[DeviceUid, AxisPosition] = {}
     frames: dict[DeviceUid, Transform] = {}
     for camera, channel in profile.channels.items():
-        lit = config.illumination_paths(channel.illumination, chosen)
-        seen = config.detection_paths(camera, chosen)
+        lit = config.optics.paths_from(channel.illumination, chosen)
+        seen = config.optics.paths_to(camera, chosen)
         if not lit or not seen:
             raise ValueError(f"No light reaches '{camera}' with {chosen}.")
-        found = {path.magnification for path in seen}
+        found = {config.magnification(path, chosen) for path in seen}
         magnification = found.pop() if len(found) == 1 else None
         if magnification is None:
             raise ValueError(f"The light paths from the sample to '{camera}' do not give 1 magnification.")
@@ -106,7 +107,7 @@ def _light(
     return positions, frames
 
 
-def _sweep_speed(scan: Scan, profile: Profile, profile_id: ProfileId) -> float | None:
+def _sweep_speed(scan: Scan, profile: SPIMProfile, profile_id: ProfileId) -> float | None:
     """The stage speed of a sweep, in µm/s: 1 spacing in each frame, slower by the scan's margin. The longest timeline
     of the profile sets the frame time, since each frame plays 1 cycle of every generator. A step has no speed."""
     if scan.motion == "step":

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from rigup.device import DeviceInterface
-from rigup.device.handle import DeviceProps
+from rigup.device.handle import PropModels
 from rigup.device.results import CommandRequest
 from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
@@ -152,7 +152,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             "uid": "camera_1",
             "kind": "camera",
             "commands": {},
-            "properties": {
+            "props": {
                 "temperature": {
                     "name": "temperature",
                     "label": "Temperature",
@@ -162,7 +162,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             },
         }
     )
-    daq_interface = DeviceInterface(uid="daq", kind="signal_generator", commands={}, properties={})
+    daq_interface = DeviceInterface(uid="daq", kind="signal_generator", commands={}, props={})
 
     def axis():
         return SimpleNamespace(lower_limit=Cell(0), upper_limit=Cell(100))
@@ -204,7 +204,7 @@ async def test_startup_exposes_device_properties_and_stage_updates(opened_instru
     positions: list[float] = []
     arrived = asyncio.Event()
 
-    def observe_position(update: tuple[str, DeviceProps]) -> None:
+    def observe_position(update: tuple[str, PropModels]) -> None:
         device_id, props = update
         position = props.get("position")
         if device_id == "x_axis" and position is not None:

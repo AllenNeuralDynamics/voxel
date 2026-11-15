@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from rigup.device import choice, number, prop, query
+from rigup.device import choice, number, query, stream
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusDriver
 
@@ -86,7 +86,7 @@ class VortranStradus(Laser):
         return float(self._inst.temperature)
 
     @choice(options=list(ModulationMode))
-    @prop(label="Modulation Mode", desc="Laser modulation mode.")
+    @stream(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         # external_control returns raw string, digital_modulation returns BoolVal

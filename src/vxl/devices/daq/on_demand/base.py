@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 
 import numpy as np
-from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, failsafe, prop
+from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, fact, failsafe
 from vxlib.quantity import VoltageRange
 
 from vxl.devices.base import DeviceType
@@ -60,12 +60,12 @@ class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController
         self._ports: dict[str, str] = dict(ports)
 
     @property
-    @prop(desc="Logical name -> physical AO pin")
+    @fact(desc="Logical name -> physical AO pin")
     def ports(self) -> dict[str, str]:
         return dict(self._ports)
 
     @property
-    @prop(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
+    @fact(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     @abstractmethod
     def voltage_range(self) -> VoltageRange: ...
 
@@ -211,7 +211,7 @@ class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController
         self._lines: dict[str, str] = dict(lines)
 
     @property
-    @prop(desc="Logical name -> physical digital output line")
+    @fact(desc="Logical name -> physical digital output line")
     def lines(self) -> dict[str, str]:
         return dict(self._lines)
 

@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from rigup.device import DeviceHandle, DeviceInterface, Result
-from rigup.device.handle import Adapter, DeviceProperties
-from rigup.device.results import PropertyModel, PropResults
+from rigup.device.handle import Adapter, DeviceProps
+from rigup.device.results import PropModel, PropResults
 from vxlib.problems import Problem
 
 from vxl.hal.core import HAL
@@ -48,7 +48,7 @@ def _handle(uid: str, device_type: str = "camera", *, properties=None, property_
     adapter.cached_interface = AsyncMock(
         return_value=DeviceInterface(uid=uid, kind=device_type), side_effect=interface_error
     )
-    adapter.props = Mock(spec=DeviceProperties)
+    adapter.props = Mock(spec=DeviceProps)
     adapter.props.get = AsyncMock(return_value=properties, side_effect=property_error)
     return DeviceHandle(adapter)
 
@@ -216,7 +216,7 @@ async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch
         "camera",
         properties=PropResults(
             results={
-                "sensor": Result[PropertyModel].err("sensor unavailable"),
+                "sensor": Result[PropModel].err("sensor unavailable"),
             }
         ),
     )

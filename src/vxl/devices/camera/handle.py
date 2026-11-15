@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 from ome_zarr_writer import WriterSettings
 from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
-from rigup.device.handle import Adapter, DeviceProperty
+from rigup.device.handle import Adapter, PropView
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.coalescer import Coalescer
 from vxlib.vector import Vec2D
@@ -31,10 +31,10 @@ class CameraHandle(DeviceHandle[Camera]):
     def __init__(self, adapter: Adapter[Camera]) -> None:
         super().__init__(adapter)
         self.preview_viewport: Coalescer[PreviewViewport] = Coalescer(drain=self._set_preview_viewport)
-        self.roi: DeviceProperty[AreaROI] = self.props.property("roi", AreaROI.model_validate)
-        self.frame_area_um: DeviceProperty[Vec2D] = self.props.property("frame_area_um", Vec2D.parse)
-        self.sensor: DeviceProperty[CameraSensor] = self.props.property("sensor", CameraSensor.model_validate)
-        self.ready_for_batch: DeviceProperty[bool] = self.props.property("ready_for_batch", bool)
+        self.roi: PropView[AreaROI] = self.props.view("roi", AreaROI.model_validate)
+        self.frame_area_um: PropView[Vec2D] = self.props.view("frame_area_um", Vec2D.parse)
+        self.sensor: PropView[CameraSensor] = self.props.view("sensor", CameraSensor.model_validate)
+        self.ready_for_batch: PropView[bool] = self.props.view("ready_for_batch", bool)
 
     async def start_preview(
         self,

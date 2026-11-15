@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from rigup.device import Device, number, prop
+from rigup.device import Device, number, stream
 
 from vxl.devices.base import DeviceType
 
@@ -16,7 +16,7 @@ class PowerMeter(Device, ABC, kind=DeviceType.POWER_METER):
     """
 
     @property
-    @prop(label="Measured Power", units="mW", stream="fast")
+    @stream("fast", label="Measured Power", units="mW")
     @abstractmethod
     def power_mw(self) -> float:
         """Acquire a finite reading in mW; raise for overload or measurement failure.
@@ -26,7 +26,7 @@ class PowerMeter(Device, ABC, kind=DeviceType.POWER_METER):
         """
 
     @number()
-    @prop(label="Wavelength Correction", units="nm")
+    @stream(label="Wavelength Correction", units="nm")
     @abstractmethod
     def wavelength_nm(self) -> float:
         """Wavelength used for sensor response correction, not a measured wavelength."""

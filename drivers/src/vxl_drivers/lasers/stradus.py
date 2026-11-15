@@ -4,7 +4,7 @@ from enum import IntFlag
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup.device import number, prop, query
+from rigup.device import fact, number, query, stream
 from serial import Serial, SerialException
 
 from vxl.devices.laser.source import LaserSource, ModulationMode
@@ -272,42 +272,42 @@ class StradusSource(LaserSource):
         return self._number("BPT")
 
     @property
-    @prop(label="Identification")
+    @fact(label="Identification")
     def identification(self) -> str:
         """Serial number, part number, nominal wavelength, nominal power, and beam shape."""
         return self._identification
 
     @property
-    @prop(label="Firmware Version")
+    @fact(label="Firmware Version")
     def firmware_version(self) -> str:
         return self._firmware_version
 
     @property
-    @prop(label="Operating Hours", units="h")
+    @stream("slow", label="Operating Hours", units="h")
     def operating_hours(self) -> float:
         self._ensure_open()
         return self._number("LH")
 
     @property
-    @prop(label="Diode Current", units="mA")
+    @stream("slow", label="Diode Current", units="mA")
     def diode_current_ma(self) -> float:
         self._ensure_open()
         return self._number("LC")
 
     @property
-    @prop(label="Optical Block Temperature", units="°C")
+    @stream("slow", label="Optical Block Temperature", units="°C")
     def optical_block_temperature_c(self) -> float:
         self._ensure_open()
         return self._number("OBT")
 
     @property
-    @prop(label="Interlock Closed")
+    @stream(label="Interlock Closed")
     def interlock_closed(self) -> bool:
         self._ensure_open()
         return self._flag("IL")
 
     @property
-    @prop(label="CDRH Delay")
+    @stream("slow", label="CDRH Delay")
     def cdrh_delay(self) -> bool:
         """Whether emission starts 5 s after enable."""
         self._ensure_open()

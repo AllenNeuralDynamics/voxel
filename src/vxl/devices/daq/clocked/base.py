@@ -5,8 +5,8 @@ from typing import Literal
 
 import numpy as np
 from pydantic import TypeAdapter
-from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, failsafe, prop, query
-from rigup.device.handle import Adapter, DeviceProperty
+from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, fact, failsafe, query, stream
+from rigup.device.handle import Adapter, PropView
 from vxlib.quantity import QuantityRange, VoltageRange
 
 from vxl.devices.base import DeviceType
@@ -25,12 +25,12 @@ class SignalGeneratorController(DeviceController["SignalGenerator"], streaming={
         self._log = logging.getLogger(f"{device.uid}.SignalGeneratorController")
 
     @property
-    @prop(desc="Signal generator state", stream="slow")
+    @stream(desc="Signal generator state")
     def state(self) -> GeneratorState:
         return self._state
 
     @property
-    @prop(label="Loaded Signals", desc="Currently loaded signal configuration", stream="slow")
+    @stream(label="Loaded Signals", desc="Currently loaded signal configuration")
     def loaded(self) -> Signals | None:
         """Last-applied ``Signals`` — authoritative view of what's on hardware.
 
@@ -120,12 +120,12 @@ class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=Signa
         self._ports: dict[str, str] = dict(ports)
 
     @property
-    @prop(desc="Logical name -> physical analog output terminal")
+    @fact(desc="Logical name -> physical analog output terminal")
     def ports(self) -> dict[str, str]:
         return dict(self._ports)
 
     @property
-    @prop(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
+    @fact(label="AO Voltage Range", units="V", desc="Hardware AO voltage range")
     @abstractmethod
     def voltage_range(self) -> VoltageRange: ...
 
@@ -229,7 +229,7 @@ class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=Signa
 class SignalGeneratorHandle(DeviceHandle["SignalGenerator"]):
     def __init__(self, adapter: Adapter[SignalGenerator]) -> None:
         super().__init__(adapter)
-        self.ports: DeviceProperty[dict[str, str]] = self.props.property("ports", _PORTS_ADAPTER.validate_python)
+        self.ports: PropView[dict[str, str]] = self.props.view("ports", _PORTS_ADAPTER.validate_python)
 
     async def load(self, signals: Signals) -> None:
         """Bring the signal generator to ``signals``. On success both hardware and the

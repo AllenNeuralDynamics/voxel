@@ -3,8 +3,8 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from rigup.device import Device, DeviceController, DeviceHandle, number, prop
-from rigup.device.handle import Adapter, DeviceProps
+from rigup.device import Device, DeviceController, DeviceHandle, NotObservedError, number, stream
+from rigup.device.handle import Adapter, PropModels
 from rigup.node import LocalAdapter
 from rigup_fakes import MockDevice
 from vxlib.reactivity import ReactiveQuery
@@ -18,7 +18,7 @@ def as_float(value: object) -> float:
 class TypedMockHandle(DeviceHandle[MockDevice]):
     def __init__(self, adapter: Adapter[MockDevice]) -> None:
         super().__init__(adapter)
-        self.value = self.props.property("value", as_float)
+        self.value = self.props.view("value", as_float)
 
 
 class Dimmer(Device, kind="dimmer"):
@@ -28,7 +28,7 @@ class Dimmer(Device, kind="dimmer"):
         self._level = 0.0
 
     @number(options=lambda self: self.level_options)
-    @prop(units="%")
+    @stream(units="%")
     def level(self) -> float:
         return self._level
 
@@ -48,7 +48,7 @@ async def handle() -> AsyncIterator[DeviceHandle[MockDevice]]:
 
 
 async def test_a_streamed_change_reaches_a_property_subscriber(handle: DeviceHandle[MockDevice]) -> None:
-    value = handle.props.property("value", as_float)
+    value = handle.props.view("value", as_float)
     await value.get()
     seen = asyncio.Event()
     value.subscribe(lambda new: seen.set() if new == 5.0 else None)
@@ -60,7 +60,7 @@ async def test_a_streamed_change_reaches_a_property_subscriber(handle: DeviceHan
 
 
 async def test_a_streamed_change_recomputes_a_reactive_query(handle: DeviceHandle[MockDevice]) -> None:
-    value = handle.props.property("value", as_float)
+    value = handle.props.view("value", as_float)
     await value.get()
 
     async def compute() -> float:
@@ -77,7 +77,7 @@ async def test_a_streamed_change_recomputes_a_reactive_query(handle: DeviceHandl
 
 
 async def test_writing_the_current_value_notifies_no_one(handle: DeviceHandle[MockDevice]) -> None:
-    value = handle.props.property("value", as_float)
+    value = handle.props.view("value", as_float)
     await value.get()
     seen: list[float] = []
     value.subscribe(seen.append)
@@ -89,7 +89,7 @@ async def test_writing_the_current_value_notifies_no_one(handle: DeviceHandle[Mo
 
 async def test_a_write_emits_the_whole_cache(handle: DeviceHandle[MockDevice]) -> None:
     await handle.props.get("enabled")
-    observed: list[DeviceProps] = []
+    observed: list[PropModels] = []
     handle.props.subscribe(observed.append)
 
     await handle.props.set(value=3.0)
@@ -134,7 +134,7 @@ async def test_changed_options_are_published_without_a_value_change() -> None:
     dimmer = Dimmer()
     handle = DeviceHandle(LocalAdapter(DeviceController(dimmer)))
     await handle.props.get("level")
-    observed: list[DeviceProps] = []
+    observed: list[PropModels] = []
     handle.props.subscribe(observed.append)
     dimmer.level_options = [0.0, 100.0]
 
@@ -145,3 +145,16 @@ async def test_changed_options_are_published_without_a_value_change() -> None:
 
     assert (current.value, current.options) == (0.0, [0.0, 100.0])
     assert [emitted["level"].options for emitted in observed] == [[0.0, 100.0]]
+
+
+async def test_a_typed_property_view_raises_until_a_value_has_come(handle: DeviceHandle[MockDevice]) -> None:
+    typed = TypedMockHandle.wrap(handle)
+
+    with pytest.raises(NotObservedError, match="Property 'value' has not been observed yet"):
+        _ = typed.value.value
+    with pytest.raises(NotObservedError):
+        _ = typed.value.model
+
+    await handle.props.refresh()
+
+    assert (typed.value.value, typed.value.model.value) == (1.0, 1.0)

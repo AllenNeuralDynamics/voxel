@@ -6,7 +6,7 @@ from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from rigup.device import action, choice, failsafe, integer, number, prop
+from rigup.device import action, choice, failsafe, integer, number, stream
 from vxlib.vector import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE
@@ -210,7 +210,7 @@ class XimeaCamera(Camera):
     # ==================== Stream Info ====================
 
     @property
-    @prop(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream="fast")
+    @stream("fast", label="Stream Info", desc="Acquisition state info or None if not streaming.")
     def stream_info(self) -> StreamInfo | None:
         """Return acquisition state or None if not acquiring."""
         try:
@@ -286,14 +286,14 @@ class XimeaCamera(Camera):
     # ==================== Temperature ====================
 
     @property
-    @prop(label="Sensor Temperature", units="°C", desc="Temperature of the sensor board.")
+    @stream("slow", label="Sensor Temperature", units="°C", desc="Temperature of the sensor board.")
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in Celsius."""
         self._camera.set_temp_selector("XI_TEMP_SENSOR_BOARD")
         return _to_float(self._camera.get_temp())
 
     @property
-    @prop(label="Interface Temperature", units="°C", desc="Temperature of the interface board.")
+    @stream("slow", label="Interface Temperature", units="°C", desc="Temperature of the interface board.")
     def interface_temperature_c(self) -> float:
         """Get the interface board temperature in Celsius."""
         self._camera.set_temp_selector("XI_TEMP_INTERFACE_BOARD")

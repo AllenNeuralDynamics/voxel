@@ -12,8 +12,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from rigup.device import DeviceController
-from rigup.device.interface import CommandInfo, PropertyInfo
-from rigup.device.results import PropertyModel
+from rigup.device.interface import CommandInfo, PropInfo
+from rigup.device.results import PropModel
 
 from vxl_drivers.cli.devices import Session, stop
 
@@ -46,7 +46,7 @@ class DriverShell(cmd.Cmd):
         self._output = output
         self._uid: str | None = None
         self._controller: DeviceController[Any] | None = None
-        self._properties: dict[str, PropertyInfo] = {}
+        self._properties: dict[str, PropInfo] = {}
         self._commands: dict[str, CommandInfo] = {}
 
     def open(self, uids: Iterable[str]) -> None:
@@ -167,7 +167,7 @@ class DriverShell(cmd.Cmd):
     def _activate(self, uid: str) -> None:
         self._uid = uid
         self._controller = self._session.controllers[uid]
-        self._properties = dict(self._controller.interface.properties)
+        self._properties = dict(self._controller.interface.props)
         self._commands = dict(self._controller.interface.commands)
         self.prompt = f"{uid}> "
 
@@ -226,7 +226,7 @@ class DriverShell(cmd.Cmd):
             self._output.print(f"{type(item).__name__}: {item}", style="red")
 
 
-def _limits(model: PropertyModel) -> str:
+def _limits(model: PropModel) -> str:
     if model.options is not None:
         return ", ".join(map(str, model.options))
     if model.minimum is None and model.maximum is None:

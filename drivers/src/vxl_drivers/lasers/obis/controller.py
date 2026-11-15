@@ -2,7 +2,7 @@
 
 import threading
 
-from rigup.device import Device, prop
+from rigup.device import Device, fact, stream
 
 from vxl_drivers.lasers.obis.link import ObisError, ObisLink
 
@@ -44,13 +44,13 @@ class ObisController(Device, kind="laser_controller"):
         return self._link
 
     @property
-    @prop(label="Installed Sources")
+    @fact(label="Installed Sources")
     def installed_sources(self) -> dict[int, str]:
         """Channel-to-identity mapping discovered at connection time."""
         return dict(self._lasers)
 
     @property
-    @prop(label="Reserved Sources")
+    @stream(label="Reserved Sources")
     def reserved_sources(self) -> list[int]:
         with self._lock:
             return list(self._owners)

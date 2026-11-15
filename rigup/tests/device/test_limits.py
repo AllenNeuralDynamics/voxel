@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 from rigup.device import Device, choice, integer, number
 from rigup.device.limits import ChoiceValue, NumberValue
-from rigup.device.results import PropertyModel
+from rigup.device.results import PropModel
 from rigup_fakes import write
 
 
@@ -400,16 +400,14 @@ def test_a_limited_property_keeps_its_deleter() -> None:
 
 
 def test_a_value_gives_its_property_model_with_its_limits() -> None:
-    assert PropertyModel.from_value(Panel().level) == PropertyModel(
+    assert PropModel.from_value(Panel().level) == PropModel(
         kind="float", value=0.0, minimum=0.0, maximum=10.0, step=0.5
     )
 
 
 def test_an_integer_value_gives_an_integer_model() -> None:
-    assert PropertyModel.from_value(Panel().count).kind == "integer"
+    assert PropModel.from_value(Panel().count).kind == "integer"
 
 
 def test_a_choice_value_gives_a_string_model_with_its_options() -> None:
-    assert PropertyModel.from_value(Panel().mode) == PropertyModel(
-        kind="string", value="auto", options=["auto", "manual"]
-    )
+    assert PropModel.from_value(Panel().mode) == PropModel(kind="string", value="auto", options=["auto", "manual"])

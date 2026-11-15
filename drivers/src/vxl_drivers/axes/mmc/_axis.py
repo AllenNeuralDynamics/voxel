@@ -3,7 +3,7 @@
 import math
 import time
 
-from rigup.device import action, choice, failsafe, number, prop
+from rigup.device import action, choice, fact, failsafe, number, stream
 from vxl_drivers.axes.mmc._cmds import (
     ENCODER_TYPE_FROM_WIRE,
     ENCODER_TYPE_TO_WIRE,
@@ -209,17 +209,17 @@ class MMCLinearAxis(ContinuousAxis):
     # MMC diagnostics and configuration ----------------------------------------------------------------------------
 
     @property
-    @prop(label="Firmware Version")
+    @fact(label="Firmware Version")
     def firmware_version(self) -> str:
         return self._firmware_version
 
     @property
-    @prop(label="Status", desc="Decoded MMC status register.")
+    @stream(label="Status", desc="Decoded MMC status register.")
     def status(self) -> AxisStatus:
         return parse_status(self.hub.query(self.axis_id, Cmd.STATUS))
 
     @property
-    @prop(label="Position Reading", desc="Theoretical and encoder positions in the configured axis units.")
+    @stream("slow", label="Position Reading", desc="Theoretical and encoder positions in the configured axis units.")
     def position_reading(self) -> PositionReading:
         reading = self._read_position()
         return PositionReading(
@@ -228,22 +228,22 @@ class MMCLinearAxis(ContinuousAxis):
         )
 
     @property
-    @prop(label="Encoder Position", units="axis units")
+    @stream("slow", label="Encoder Position", units="axis units")
     def encoder_position(self) -> float:
         return self._from_mm(self._read_position().encoder)
 
     @property
-    @prop(label="Limit Status")
+    @stream(label="Limit Status")
     def limit_status(self) -> LimitStatus:
         return parse_limit_status(self.hub.query(self.axis_id, Cmd.LIMIT_STATUS))
 
     @property
-    @prop(label="Homed", desc="Whether the controller has homed since startup.")
+    @stream(label="Homed", desc="Whether the controller has homed since startup.")
     def homed(self) -> bool:
         return bool(self._query_int(Cmd.HOME))
 
     @choice(options=[mode.value for mode in FeedbackMode])
-    @prop(label="Feedback Mode", desc="Open-loop or encoder-feedback control mode.")
+    @stream(label="Feedback Mode", desc="Open-loop or encoder-feedback control mode.")
     def feedback_mode(self) -> str:
         value = self._query_int(Cmd.FEEDBACK_MODE)
         try:
@@ -257,10 +257,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.FEEDBACK_MODE, FEEDBACK_MODE_TO_WIRE[mode])
 
     @property
-    @prop(
-        label="Motor Enabled",
-        desc="Motor current state. Disabling it may allow the piezo stage to shift.",
-    )
+    @stream(label="Motor Enabled", desc="Motor current state. Disabling it may allow the piezo stage to shift.")
     def motor_enabled(self) -> bool:
         return bool(self._query_int(Cmd.MOTOR_ENABLED))
 
@@ -269,7 +266,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.MOTOR_ENABLED, int(value))
 
     @choice(options=[encoder.value for encoder in EncoderType])
-    @prop(label="Encoder Type")
+    @stream("slow", label="Encoder Type")
     def encoder_type(self) -> str:
         value = self._query_int(Cmd.ENCODER_TYPE)
         try:
@@ -283,7 +280,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.ENCODER_TYPE, ENCODER_TYPE_TO_WIRE[encoder_type])
 
     @number(minimum=0.001, maximum=999.999)
-    @prop(label="Encoder Resolution", units="µm/count")
+    @stream("slow", label="Encoder Resolution", units="µm/count")
     def encoder_resolution_um_per_count(self) -> float:
         return self._query_float(Cmd.ENCODER_RESOLUTION)
 
@@ -292,12 +289,12 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.ENCODER_RESOLUTION, value)
 
     @property
-    @prop(label="Encoder Velocity", desc="Velocity measured by the encoder.")
+    @stream("slow", label="Encoder Velocity", desc="Velocity measured by the encoder.")
     def encoder_velocity(self) -> float:
         return self._from_mm(self._query_float(Cmd.ENCODER_VELOCITY))
 
     @property
-    @prop(label="Deadband", desc="Closed-loop tolerance and seek timeout.")
+    @stream("slow", label="Deadband", desc="Closed-loop tolerance and seek timeout.")
     def deadband(self) -> DeadbandSettings:
         return parse_deadband(self.hub.query(self.axis_id, Cmd.DEADBAND))
 
@@ -308,7 +305,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.DEADBAND, counts, timeout_s)
 
     @choice(options=[direction.value for direction in HomeDirection])
-    @prop(label="Home Direction")
+    @stream("slow", label="Home Direction")
     def home_direction(self) -> str:
         value = self._query_int(Cmd.HOME_DIRECTION)
         try:
@@ -325,7 +322,7 @@ class MMCLinearAxis(ContinuousAxis):
         minimum=lambda self: self._from_mm(0.001),
         maximum=lambda self: self.maximum_acceleration,
     )
-    @prop(label="Deceleration", desc="Controlled-motion deceleration in axis units/s².")
+    @stream("slow", label="Deceleration", desc="Controlled-motion deceleration in axis units/s².")
     def deceleration(self) -> float:
         return self._from_mm(self._query_float(Cmd.DECELERATION))
 
@@ -334,7 +331,7 @@ class MMCLinearAxis(ContinuousAxis):
         self.hub.command(self.axis_id, Cmd.DECELERATION, self._to_mm(value))
 
     @property
-    @prop(label="Maximum Velocity", desc="Controller-calculated velocity limit.")
+    @stream("slow", label="Maximum Velocity", desc="Controller-calculated velocity limit.")
     def maximum_velocity(self) -> float:
         return self._from_mm(self._query_float(Cmd.MAXIMUM_VELOCITY))
 
@@ -342,7 +339,7 @@ class MMCLinearAxis(ContinuousAxis):
         minimum=lambda self: self._from_mm(0.001),
         maximum=lambda self: self._from_mm(500.0),
     )
-    @prop(label="Maximum Acceleration", desc="Controller acceleration limit in axis units/s².")
+    @stream("slow", label="Maximum Acceleration", desc="Controller acceleration limit in axis units/s².")
     def maximum_acceleration(self) -> float:
         return self._from_mm(self._query_float(Cmd.MAXIMUM_ACCELERATION))
 

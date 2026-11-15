@@ -2,7 +2,7 @@
 
 from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
-from rigup.device.handle import Adapter, DeviceProperty
+from rigup.device.handle import Adapter, PropView
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
@@ -18,8 +18,8 @@ class GeneratorHandle(DeviceHandle[Generator]):
 
     def __init__(self, adapter: Adapter[Generator]) -> None:
         super().__init__(adapter)
-        self.pins: DeviceProperty[list[Pin]] = self.props.property("pins", _PINS.validate_python)
-        self.state: DeviceProperty[GeneratorState] = self.props.property("state", _STATE.validate_python)
+        self.pins: PropView[list[Pin]] = self.props.view("pins", _PINS.validate_python)
+        self.state: PropView[GeneratorState] = self.props.view("state", _STATE.validate_python)
 
     async def load(self, cycle: Cycle) -> None:
         """Arm ``cycle``. A generator that was running plays it until it is stopped."""

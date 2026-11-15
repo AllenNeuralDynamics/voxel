@@ -5,7 +5,7 @@ from enum import IntEnum, StrEnum
 from time import perf_counter
 from typing import Literal
 
-from rigup.device import Device, choice, number, prop, query
+from rigup.device import Device, choice, number, query, stream
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
 
 from vxl_drivers.lasers_legacy.base import Laser
@@ -428,7 +428,7 @@ class OxxiusLBX(Laser):
         return self._hub.baseplate_temperature_c
 
     @choice(options=list(ModulationMode))
-    @prop(label="Modulation Mode", desc="Laser modulation mode.")
+    @stream(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         external = BoolVal(self._hub.query(Query.EXTERNAL_POWER_CONTROL, self._prefix))
@@ -556,7 +556,7 @@ class OxxiusLCX(Laser):
         return self._hub.baseplate_temperature_c
 
     @number(minimum=0.0, maximum=lambda self: self.max_power_mw * 0.9, step=0.1)
-    @prop(label="AOM Power", units="mW", desc="AOM-linked power setting.")
+    @stream(label="AOM Power", units="mW", desc="AOM-linked power setting.")
     def aom_power_mw(self) -> float:
         """Get the AOM power in mW."""
         return float(self._hub.query(CombinerQuery.AOM_POWER, self._prefix))

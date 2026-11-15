@@ -15,7 +15,7 @@ from rigup.device.interface import DeviceInterface
 from rigup.device.results import CommandRequest, PropResults, Result, Results
 from rigup.node._broadcast import TopicDispatcher
 
-from ._base import DevicesBuildResult, DevicesConfig, Node, close_each
+from ._base import DevicesBuildResult, DevicesConfig, Node, close_each, first_read
 
 
 class LocalAdapter[D: Device](Adapter[D]):
@@ -105,20 +105,23 @@ class LocalNode(Node):
     ) -> DevicesBuildResult:
         await self.close_all_devices()
         result: BuildObjectsResult[Device] = await build_objects_async(devices, Device, ready=parts)
-        built, errors = result
-
-        for uid, err in errors.items():
-            self._log.error("Failed to build %s: %s", uid, err.msg)
+        built, errors = result[0], dict(result[1])
 
         handles: dict[str, DeviceHandle] = {}
         for uid, device in built.items():
             controller = device.make_controller(streaming=devices[uid].streaming)
+            handle: DeviceHandle = DeviceHandle(LocalAdapter(controller))
+            if (problem := await first_read(handle)) is not None:
+                errors[uid] = problem
+                await handle.close()
+                continue
             controller.start_streaming()
-            adapter: LocalAdapter = LocalAdapter(controller)
-            handle: DeviceHandle = DeviceHandle(adapter)
             self._controllers[uid] = controller
             self._handles[uid] = handle
             handles[uid] = handle
+
+        for uid, err in errors.items():
+            self._log.error("Failed to build %s: %s", uid, err.msg)
 
         return handles, errors
 

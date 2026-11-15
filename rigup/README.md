@@ -24,12 +24,12 @@ topology, and callers interact with every device through a `DeviceHandle`.
 
 ## Define a device
 
-A driver subclasses `Device` and says its kind in the class line. Only properties marked with `@prop` and methods
+A driver subclasses `Device` and says its kind in the class line. Only properties marked with `@fact` or `@stream` and methods
 marked with `@query`, `@action` or `@failsafe` become part of its public interface. `@number`, `@integer` and `@choice`
 add limits: every write is fitted to them, and every read carries them, such as `laser.power.maximum`.
 
 ```python
-from rigup.device import Device, action, number, prop
+from rigup.device import Device, action, fact, number, stream
 
 
 class Laser(Device, kind="laser"):
@@ -38,8 +38,13 @@ class Laser(Device, kind="laser"):
         self._power = 0.0
         self._enabled = False
 
+    @property
+    @fact(units="nm")
+    def wavelength(self) -> float:
+        return 488.0
+
     @number(minimum=0.0, maximum=100.0, step=0.1)
-    @prop(label="Power", units="mW", stream="fast")
+    @stream("fast", label="Power", units="mW")
     def power(self) -> float:
         return self._power
 
@@ -52,9 +57,12 @@ class Laser(Device, kind="laser"):
         self._enabled = True
 ```
 
-`stream="fast"` or `stream="slow"` asks the controller to poll the property at that tier's rate and publish changed
-observations. The rates are the controller's: its class line can set them for a device kind, and a rig config's
-`streaming:` can set them for 1 device. Streams suit live telemetry, not events that need lossless delivery.
+Every exposed property is either a fact or a stream. `@fact` marks a value that is constant while the device is open:
+the controller reads it once, and it cannot have a setter. `@stream` marks a value that can change: the controller polls
+it at its tier's rate (`"fast"`, `"normal"` by default, or `"slow"`) and publishes changed observations. Every property
+is read once when its device is built, so a handle's cache is complete from the start; a device with a property that
+cannot be read fails to build. The rates are the controller's: its class line can set them for a device kind, and a rig
+config's `streaming:` can set them for 1 device. Streams suit live telemetry, not events that need lossless delivery.
 
 An async command gives up its device at each `await`, so other calls, such as a failsafe `stop` during a move, can run
 in between. Guard a read-modify-write that spans an `await` with an `asyncio.Lock` on the device.
@@ -97,8 +105,35 @@ asyncio.run(main())
 commands, and property operations expose `Result` models when the caller needs per-operation error handling.
 
 Successful property reads, writes, and stream observations enter `handle.props.cache`. Subscribe to `handle.props`
-for complete cache snapshots, or use `handle.props.property(name, parser)` in a typed handle subclass for one parsed,
+for complete cache snapshots, or use `handle.props.view(name, parser)` in a typed handle subclass for one parsed,
 subscribable property.
+
+## Coordinate operations and activities
+
+`rigup.activity` is for the code that orchestrates a rig. An operation is short work, such as a stage move; one runs
+at a time. An activity is long-running work, such as a preview or a capture. Both declare the resources they
+require: device uids, or any hashable value that identifies a resource.
+
+```python
+from rigup.activity import ActivityInfo, ActivityScheduler
+
+scheduler = ActivityScheduler()
+
+capture = await scheduler.start(ActivityInfo(kind="capture"), requires={"camera", "stage"})
+
+async with scheduler.run("set the laser power", requires={"laser"}):
+    await laser.props.set(power=12.5)  # runs: the capture does not require the laser
+
+async with scheduler.run("move the stage", requires={"stage"}):
+    ...  # raises ActivityBusyError: "Unable to move the stage while capture is running"
+
+await capture.end()
+```
+
+An activity started with `restart=` does not block operations: an operation that requires one of its resources ends
+it, runs, and starts it again. `scheduler.activities` publishes the state of each running activity for a UI. The
+scheduler coordinates only the code that calls it. Device handles do not consult it, so the `@query`, `@action` and
+`@failsafe` intents are advisory metadata for that code.
 
 ## Place devices and parts
 

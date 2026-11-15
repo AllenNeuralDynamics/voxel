@@ -160,7 +160,7 @@ export class DeviceHandle {
       existing.model.update(snapshot);
       return;
     }
-    const info = this.interface?.properties?.[name];
+    const info = this.interface?.props?.[name];
     if (!info) return;
     const model = createPropModel(snapshot, {
       disabled: this.#disabled,

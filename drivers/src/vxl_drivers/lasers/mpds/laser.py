@@ -5,7 +5,7 @@ from enum import StrEnum
 from math import isclose, isfinite
 from typing import Any, Never
 
-from rigup.device import number, prop
+from rigup.device import fact, number
 from rigup.device.limits import NumberValue
 
 from vxl.devices.laser.base import Laser
@@ -73,13 +73,13 @@ class MPDSLaser(Laser):
                 raise
 
     @property
-    @prop(label="Level Control")
+    @fact(label="Level Control")
     def level_control(self) -> ControlTarget:
         """Component selected at construction to implement software/digital levels."""
         return self._level_control
 
     @property
-    @prop(label="Output Switch")
+    @fact(label="Output Switch")
     def output_switch(self) -> ControlTarget:
         """Component selected at construction to block output."""
         return self._output_switch

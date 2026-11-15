@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from rigup.config import DeviceConfig
 from rigup.device import _loop as loop
 from rigup.node import LocalNode
-from rigup_fakes import MockHolder, MockPart, Probe
+from rigup_fakes import MockHolder, MockPart, Probe, Unreadable
 
 MOCK = "rigup_fakes.MockDevice"
 PROBE = {"p": DeviceConfig(target="rigup_fakes.Probe")}
@@ -110,11 +110,11 @@ async def test_a_device_config_streaming_reaches_its_controller(node: LocalNode)
 
     interface = await handles["fast_one"].interface()
 
-    assert interface.streaming == {"fast": 0.01, "slow": 1.0}
+    assert interface.streaming == {"fast": 0.01, "normal": 1.0, "slow": 10.0}
 
 
 @pytest.mark.parametrize(
-    "streaming", [{"medium": 0.1}, {"fast": 0}, {"slow": -1.0}], ids=["unknown-tier", "zero", "negative"]
+    "streaming", [{"often": 0.1}, {"fast": 0}, {"slow": -1.0}], ids=["unknown-tier", "zero", "negative"]
 )
 def test_a_device_config_refuses_bad_streaming(streaming: dict[str, float]) -> None:
     with pytest.raises(ValidationError, match="streaming"):
@@ -168,7 +168,7 @@ async def test_interface_describes_the_device(node: LocalNode) -> None:
 
     assert interface.kind == "mock"
     assert "set_value" in interface.commands
-    assert "value" in interface.properties
+    assert "value" in interface.props
 
 
 async def test_a_device_built_by_a_node_refuses_direct_calls(node: LocalNode) -> None:
@@ -291,3 +291,21 @@ async def test_a_handle_refuses_calls_after_its_node_closed() -> None:
     result = await handles["p"].run_command("peak")
 
     assert not result
+
+
+async def test_a_new_handle_has_a_value_for_each_property(node: LocalNode) -> None:
+    handles, _ = await node.build_devices({"dev": DeviceConfig(target=MOCK, init={"initial_value": 3.0})})
+
+    cache = handles["dev"].props.cache
+
+    assert {name: model.value for name, model in cache.items()} == {"value": 3.0, "enabled": False}
+
+
+async def test_a_device_with_a_property_it_cannot_read_fails_to_build_and_is_closed(node: LocalNode) -> None:
+    configs = {"dev": DeviceConfig(target=MOCK), "bad": DeviceConfig(target="rigup_fakes.Unreadable")}
+
+    handles, errors = await node.build_devices(configs)
+
+    assert set(handles) == set(node.devices) == {"dev"}
+    assert (errors["bad"].code, errors["bad"].msg) == ("build.properties", "Unable to read 'serial': no answer")
+    assert Unreadable.disposed

@@ -3,7 +3,7 @@
 from enum import StrEnum
 
 from pycobolt import CoboltLaser
-from rigup.device import choice, number, prop
+from rigup.device import choice, number, stream
 
 from vxl_drivers.lasers_legacy.base import Laser
 
@@ -152,7 +152,7 @@ class CoboltSkyra(Laser):
         return None
 
     @choice(options=list(ModulationMode))
-    @prop(label="Modulation Mode", desc="Laser modulation mode.")
+    @stream(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         result = self._inst.send_cmd(f"{self._prefix}{Query.MODULATION_MODE}")

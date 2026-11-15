@@ -60,7 +60,7 @@ def test_scan_rules(scan: dict[str, Any], match: str) -> None:
 
 def _chain(example: Example) -> TriggerChain:
     gfp = example.default.profiles["gfp"]
-    return example.config.trigger_chain(gfp.channels, gfp.timelines)
+    return gfp.trigger_chain(example.config)
 
 
 def test_the_chain_follows_the_wires_from_the_pacer(config_data: dict[str, Any]) -> None:

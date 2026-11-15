@@ -3,7 +3,7 @@
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup.device import number, prop
+from rigup.device import fact, number, stream
 
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.lasers.skyra.controller import SkyraController, SkyraError
@@ -143,18 +143,18 @@ class SkyraSource(LaserSource):
         return self._controller.number(self._cmd("pa?")) * 1000
 
     @property
-    @prop(label="Line")
+    @fact(label="Line")
     def line(self) -> int:
         return self._line
 
     @property
-    @prop(label="Diode Current", units="mA")
+    @stream("slow", label="Diode Current", units="mA")
     def diode_current_ma(self) -> float:
         self._ensure_open()
         return self._controller.number(self._cmd("i?"))
 
     @property
-    @prop(label="In Autostart")
+    @stream("slow", label="In Autostart")
     def in_autostart(self) -> bool:
         """Whether the autostart sequence includes this line."""
         self._ensure_open()

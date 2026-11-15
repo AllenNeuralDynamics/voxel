@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 from rigup.device import DeviceInterface
-from rigup.device.results import PropertyModel
+from rigup.device.results import PropModel
 from vxl_records import PlannedVolume
 from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
@@ -39,7 +39,7 @@ class DeviceState(FrozenModel):
     """Serializable interface and latest-successful properties for one open device."""
 
     interface: DeviceInterface
-    props: dict[str, PropertyModel]
+    props: dict[str, PropModel]
 
 
 class InstrumentView(InstrumentState):

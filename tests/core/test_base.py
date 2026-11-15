@@ -3,14 +3,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from rigup.activity import ActivityBusyError, ActivityInfo
 from vxl_records import SQLiteRecords
 from vxlib.problems import Problems
 
-from vxl.core.errors import BusyError, RejectedError, StartupError
+from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.base import Instrument
-from vxl.core.instrument.config import InstrumentConfig, InstrumentState
+from vxl.core.instrument.config import InstrumentConfig
 from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.instrument.gate import Activity
+from vxl.core.instrument.state import InstrumentState
 from vxl.metadata import ExperimentMetadata
 from vxl.system import System
 
@@ -53,6 +54,12 @@ _RIG: dict[str, Any] = {
     },
 }
 
+_DEFAULT: dict[str, Any] = {
+    "profiles": {
+        "main": {"channels": {"camera": {"illumination": "laser_488", "fov": {"x": 0, "y": 0, "w": 64, "h": 64}}}}
+    }
+}
+
 
 class _State(InstrumentState, frozen=True):
     def problems(self, config: InstrumentConfig) -> Problems:
@@ -68,7 +75,7 @@ def _folder(
     tmp_path: Path, rig: dict[str, Any], kind: type[_Bench] | None = None
 ) -> InstrumentFolder[InstrumentConfig, _State]:
     """A folder as :meth:`InstrumentFolder.read` gives it, with no files on disk."""
-    return InstrumentFolder(tmp_path, kind, bench(rig), _State(), None, Problems())
+    return InstrumentFolder(tmp_path, kind, bench(rig), _State.model_validate(_DEFAULT), None, Problems())
 
 
 def _instrument(tmp_path: Path, rig: dict[str, Any]) -> _Bench:
@@ -127,16 +134,15 @@ async def test_move_stage_moves_only_the_given_axes(instrument: _Bench) -> None:
     assert positions == {"x": 100, "y": 0, "z": 250}
 
 
-async def test_a_hub_command_is_refused_while_an_activity_holds_a_device_on_it(
-    instrument: _Bench,
-) -> None:
-    gate = instrument._gate
-    async with gate.command("start a calibration", touches=()):
-        await gate.begin(Activity(kind="calibration"), {"daq"})
+async def test_a_device_command_runs_while_an_activity_holds_the_device(instrument: _Bench) -> None:
+    scheduler = instrument._scheduler
+    async with scheduler.run("start a calibration", requires=()):
+        await scheduler.start(ActivityInfo(kind="calibration"), {"laser_488"})
 
-    with pytest.raises(BusyError, match="while calibration is running"):
-        await instrument.execute_device_command("daq_hub", "close")
-    assert (await instrument.execute_device_command("laser_488", "output_disable")).is_ok
+    result = await instrument.execute_device_command("laser_488", "output_disable")
+
+    assert result.is_ok
+    assert [activity.kind for activity in instrument.activities.value] == ["calibration"]
 
 
 async def test_a_device_of_the_wrong_kind_stops_the_start(tmp_path: Path) -> None:
@@ -169,7 +175,7 @@ def test_a_kind_names_its_config_and_state_classes_in_its_class_line() -> None:
 
 
 def _create(tmp_path: Path, target: str) -> InstrumentFolder:
-    return InstrumentFolder.create({"rig": {**_RIG, "target": target}, "default": {}}, "bench", tmp_path)
+    return InstrumentFolder.create({"rig": {**_RIG, "target": target}, "default": _DEFAULT}, "bench", tmp_path)
 
 
 def test_read_finds_the_kind_and_reads_the_files(tmp_path: Path) -> None:
@@ -264,9 +270,9 @@ async def test_restoring_the_metadata_form_keeps_the_metadata_that_fits(instrume
 
 
 async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Bench) -> None:
-    gate = instrument._gate
-    async with gate.command("start a capture", touches=()):
-        await gate.begin(Activity(kind="capture"), {instrument._store})
+    scheduler = instrument._scheduler
+    async with scheduler.run("start a capture", requires=()):
+        await scheduler.start(ActivityInfo(kind="capture"), {instrument._store})
 
-    with pytest.raises(BusyError, match="Unable to update metadata while capture is running"):
+    with pytest.raises(ActivityBusyError, match="Unable to update metadata while capture is running"):
         await instrument.update_metadata(notes="left hemisphere")

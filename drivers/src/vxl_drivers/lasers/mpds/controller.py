@@ -8,7 +8,7 @@ from math import isfinite
 from time import sleep
 
 from pydantic import BaseModel, ConfigDict
-from rigup.device import Device, action, choice, integer, prop, query
+from rigup.device import Device, action, choice, fact, integer, query, stream
 from serial import SerialException
 
 from vxl_drivers.serial import SerialTransport
@@ -150,32 +150,32 @@ class MPDS(Device, kind="aotf"):
             yield
 
     @property
-    @prop(label="RF Lines")
+    @fact(label="RF Lines")
     def num_lines(self) -> int:
         return self._num_lines
 
     @property
-    @prop(label="Minimum RF Frequency", units="MHz")
+    @fact(label="Minimum RF Frequency", units="MHz")
     def min_frequency_mhz(self) -> float:
         return self._min_frequency_mhz
 
     @property
-    @prop(label="Maximum RF Frequency", units="MHz")
+    @fact(label="Maximum RF Frequency", units="MHz")
     def max_frequency_mhz(self) -> float:
         return self._max_frequency_mhz
 
     @property
-    @prop(label="Minimum RF Power", units="dBm")
+    @fact(label="Minimum RF Power", units="dBm")
     def min_power_dbm(self) -> float:
         return self._min_power_dbm
 
     @property
-    @prop(label="Maximum RF Power", units="dBm")
+    @fact(label="Maximum RF Power", units="dBm")
     def max_power_dbm(self) -> float:
         return self._max_power_dbm
 
     @integer(options=(5, 10))
-    @prop(label="External Voltage Range", units="V")
+    @stream(label="External Voltage Range", units="V")
     def external_voltage_range(self) -> int:
         """Last configured range; unavailable until set because hardware readback is absent."""
         if self._voltage_range is None:
@@ -193,7 +193,7 @@ class MPDS(Device, kind="aotf"):
             self._voltage_range = volts
 
     @choice(options=list(InputMode))
-    @prop(label="Blanking Mode")
+    @stream(label="Blanking Mode")
     def blanking_mode(self) -> str:
         """Read the common blanking input mode from the controller."""
         return self.blanking.input_mode.value
@@ -208,7 +208,7 @@ class MPDS(Device, kind="aotf"):
                 raise MPDSCommunicationError("MPDS did not establish requested blanking mode")
 
     @property
-    @prop(label="Blanking Enabled")
+    @stream(label="Blanking Enabled")
     def blanking_enabled(self) -> bool:
         """Read the vendor's common blanking ON/OFF state."""
         return self.blanking.enabled
@@ -224,7 +224,7 @@ class MPDS(Device, kind="aotf"):
                 raise MPDSCommunicationError("MPDS did not establish requested blanking state")
 
     @property
-    @prop(label="Blanking")
+    @stream(label="Blanking")
     def blanking(self) -> BlankingState:
         return self.get_status().blanking
 

@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup.device import Device, action, prop
+from rigup.device import Device, action, fact, stream
 from serial import SerialException
 
 from vxl_drivers.serial import SerialTransport
@@ -113,49 +113,49 @@ class SkyraController(Device, kind="laser_controller"):
                 )
 
     @property
-    @prop(label="Installed Lines")
+    @fact(label="Installed Lines")
     def installed_lines(self) -> dict[int, float]:
         """Line-to-wavelength mapping in nm, discovered at connection time."""
         return dict(self._lines)
 
     @property
-    @prop(label="Reserved Lines")
+    @stream(label="Reserved Lines")
     def reserved_lines(self) -> list[int]:
         with self._lock:
             return list(self._owners)
 
     @property
-    @prop(label="Serial Number")
+    @fact(label="Serial Number")
     def serial_number(self) -> str:
         return self._serial_number
 
     @property
-    @prop(label="Operating State")
+    @stream("slow", label="Operating State")
     def operating_state(self) -> str:
         """Autostart state from gom?."""
         reply = self.query("gom?")
         return _OPERATING_STATES.get(reply, f"unknown ({reply})")
 
     @property
-    @prop(label="Fault")
+    @stream(label="Fault")
     def fault(self) -> str:
         reply = self.query("f?")
         return _FAULTS.get(reply, f"unknown ({reply})")
 
     @property
-    @prop(label="Key Switch On")
+    @stream(label="Key Switch On")
     def key_switch_on(self) -> bool:
         return self.flag("@cobasks?")
 
     @property
-    @prop(label="Interlock")
+    @stream(label="Interlock")
     def interlock(self) -> str:
         """Reply to ilk?, unparsed until its meaning is confirmed."""
         # TODO: verify on real hardware which ilk? value means closed; the manual says both.
         return self.query("ilk?")
 
     @property
-    @prop(label="Operating Hours", units="h")
+    @stream("slow", label="Operating Hours", units="h")
     def operating_hours(self) -> float:
         return self.number("hrs?")
 

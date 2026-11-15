@@ -6,7 +6,7 @@ from time import monotonic, sleep
 from typing import Any, Never
 
 from numpy.polynomial import Polynomial
-from rigup.device import number, prop
+from rigup.device import fact, number, stream
 from vxlib.calibration import CalibrationModel, PiecewiseLinearCalibration, calibration_adapter
 
 from vxl.devices.laser.source import LaserSource, ModulationMode
@@ -65,12 +65,12 @@ class OxxiusLBXSource(LaserSource):
         return self._wavelength
 
     @property
-    @prop(label="Nominal Current", units="mA")
+    @fact(label="Nominal Current", units="mA")
     def nominal_current_ma(self) -> float:
         return self._nominal_current_ma
 
     @property
-    @prop(label="Current Setpoint", units="%")
+    @stream(label="Current Setpoint", units="%")
     def current_setpoint_percent(self) -> float:
         """Convert the hardware's mA setpoint readback to nominal-current percent."""
         self._ensure_open()

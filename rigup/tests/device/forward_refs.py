@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 from pydantic import BaseModel
-from rigup.device import Device, action, integer, prop, query
+from rigup.device import Device, action, integer, query, stream
 
 EPOCH = datetime.datetime(2000, 1, 1, tzinfo=datetime.UTC)
 
@@ -23,7 +23,7 @@ class FD(Device, kind="fd"):
         self.calls = []
 
     @integer(minimum=0, maximum=10, step=2)
-    @prop(units=lambda self: self.uid + "-u")
+    @stream(units=lambda self: self.uid + "-u")
     def count(self) -> int:
         return self.v
 
@@ -32,7 +32,7 @@ class FD(Device, kind="fd"):
         self.v = v
 
     @property
-    @prop()
+    @stream()
     def later(self) -> Later:
         return Later(a=1)
 

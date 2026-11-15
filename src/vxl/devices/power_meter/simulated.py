@@ -3,7 +3,7 @@
 from math import isfinite
 from typing import override
 
-from rigup.device import number, prop
+from rigup.device import number, stream
 
 from .base import PowerMeter
 
@@ -28,7 +28,7 @@ class SimulatedPowerMeter(PowerMeter):
         return self._incident_power_mw
 
     @number(minimum=0.0)
-    @prop(label="Simulated Incident Power", units="mW")
+    @stream(label="Simulated Incident Power", units="mW")
     def incident_power_mw(self) -> float:
         """Optical input supplied by the caller, independent of any registered laser."""
         self._ensure_open()

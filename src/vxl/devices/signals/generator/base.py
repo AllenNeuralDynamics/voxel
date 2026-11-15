@@ -8,7 +8,7 @@ from contextlib import suppress
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
-from rigup.device import Device, DeviceController, StreamTier, action, failsafe, prop
+from rigup.device import Device, DeviceController, StreamTier, action, fact, failsafe, stream
 from vxlib.schema import FrozenModel
 from vxlib.units import Frequency
 from vxlib.vector import Span
@@ -64,12 +64,12 @@ class GeneratorController(DeviceController["Generator"], streaming={"fast": 0.1}
         self._log = logging.getLogger(f"{device.uid}.GeneratorController")
 
     @property
-    @prop(desc="empty, loaded or running", stream="slow")
+    @stream(desc="empty, loaded or running")
     def state(self) -> GeneratorState:
         return self._state
 
     @property
-    @prop(label="Loaded cycle", desc="The cycle that the generator plays", stream="slow")
+    @stream(label="Loaded cycle", desc="The cycle that the generator plays")
     def loaded(self) -> Cycle | None:
         return self._loaded
 
@@ -129,12 +129,12 @@ class Generator(Device, kind=DeviceType.GENERATOR, controller=GeneratorControlle
     it), plays it, stops it, and releases what it reserved."""
 
     @property
-    @prop(desc="The pins a cycle can play on, and the pins whose edges can start it")
+    @fact(desc="The pins a cycle can play on, and the pins whose edges can start it")
     @abstractmethod
     def pins(self) -> list[Pin]: ...
 
     @property
-    @prop(label="Voltage range", units="V", desc="The lowest and highest volts a pin can put out")
+    @fact(label="Voltage range", units="V", desc="The lowest and highest volts a pin can put out")
     @abstractmethod
     def voltage_range(self) -> Span: ...
 

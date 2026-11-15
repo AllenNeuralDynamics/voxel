@@ -5,7 +5,7 @@ from math import isfinite
 from time import monotonic, sleep
 from typing import TypedDict
 
-from rigup.device import number, prop
+from rigup.device import fact, number, stream
 
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.lasers.obis.controller import ObisController
@@ -179,38 +179,38 @@ class ObisSource(LaserSource):
         return self._link.number(self._sour("TEMP:BAS?"), suffix="C")
 
     @property
-    @prop(label="Model")
+    @fact(label="Model")
     def model(self) -> str:
         return self._model
 
     @property
-    @prop(label="Serial Number")
+    @fact(label="Serial Number")
     def serial_number(self) -> str:
         return self._serial_number
 
     @property
-    @prop(label="Operating Hours")
+    @stream("slow", label="Operating Hours")
     def operating_hours(self) -> str:
         """Reply to SYST:HOUR?, unparsed until its format is confirmed."""
         self._ensure_open()
         return self._link.query(self._syst("HOUR?"))
 
     @property
-    @prop(label="CDRH Delay")
+    @stream("slow", label="CDRH Delay")
     def cdrh_delay(self) -> bool:
         """Whether emission starts 5 s after enable."""
         self._ensure_open()
         return self._link.flag(self._syst("CDRH?"))
 
     @property
-    @prop(label="Autostart")
+    @stream("slow", label="Autostart")
     def autostart(self) -> bool:
         """Whether the laser emits at power-up."""
         self._ensure_open()
         return self._link.flag(self._syst("AUT?"))
 
     @property
-    @prop(label="Interlock")
+    @stream(label="Interlock")
     def interlock(self) -> str:
         """Reply to SYST:LOCK?, unparsed until its meaning is confirmed."""
         # TODO: verify on real hardware what SYST:LOCK? replies with the interlock open and closed.
@@ -218,14 +218,14 @@ class ObisSource(LaserSource):
         return self._link.query(self._syst("LOCK?"))
 
     @property
-    @prop(label="Status Code")
+    @stream("slow", label="Status Code")
     def status_code(self) -> str:
         """Hex status bits from SYST:STAT?."""
         self._ensure_open()
         return self._link.query(self._syst("STAT?"))
 
     @property
-    @prop(label="Fault Code")
+    @stream(label="Fault Code")
     def fault_code(self) -> str:
         """Hex fault bits from SYST:FAUL?; 00000000 means no fault."""
         # TODO: verify on real hardware what bit 31 (80000000) means; one lab saw it with no fault.

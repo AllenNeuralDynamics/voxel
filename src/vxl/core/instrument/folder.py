@@ -13,7 +13,8 @@ from vxlib.problems import Problems
 from vxl._utils.files import load_yaml, update_yaml
 from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.base import Instrument
-from vxl.core.instrument.config import InstrumentConfig, InstrumentState, new_instrument_id
+from vxl.core.instrument.config import InstrumentConfig, new_instrument_id
+from vxl.core.instrument.state import InstrumentState
 from vxl.system import System
 
 

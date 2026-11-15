@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
-from rigup.device import Device, action, choice, failsafe, integer, number, prop, query
+from rigup.device import Device, action, choice, failsafe, integer, number, query, stream
 
 
 class Hardware:
@@ -44,7 +44,7 @@ class LaserBase(Device, ABC, kind="laser"):
     """Each property's kind and description; a driver gives the limits."""
 
     @number()
-    @prop(units="mW", desc="Output power", stream="fast")
+    @stream("fast", units="mW", desc="Output power")
     @abstractmethod
     def power(self) -> float: ...
 
@@ -53,7 +53,7 @@ class LaserBase(Device, ABC, kind="laser"):
     def power(self, value: float) -> None: ...
 
     @choice()
-    @prop(label="Emission mode")
+    @stream(label="Emission mode")
     @abstractmethod
     def mode(self) -> str: ...
 
@@ -62,13 +62,13 @@ class LaserBase(Device, ABC, kind="laser"):
     def mode(self, value: str) -> None: ...
 
     @property
-    @prop(units="°C", stream="slow")
+    @stream(units="°C")
     @abstractmethod
     def temperature(self) -> float:
         """Diode temperature."""
 
     @property
-    @prop(label="Output on")
+    @stream(label="Output on")
     @abstractmethod
     def enabled(self) -> bool: ...
 
@@ -172,7 +172,7 @@ class CameraStatus(BaseModel):
 
 class CameraBase(Device, ABC, kind="camera"):
     @number()
-    @prop(units="ms")
+    @stream(units="ms")
     @abstractmethod
     def exposure(self) -> float: ...
 
@@ -181,7 +181,7 @@ class CameraBase(Device, ABC, kind="camera"):
     def exposure(self, value: float) -> None: ...
 
     @integer()
-    @prop()
+    @stream()
     @abstractmethod
     def binning(self) -> int: ...
 
@@ -190,12 +190,12 @@ class CameraBase(Device, ABC, kind="camera"):
     def binning(self, value: int) -> None: ...
 
     @property
-    @prop(label="Sensor temperature", units="°C", stream="slow")
+    @stream(label="Sensor temperature", units="°C")
     @abstractmethod
     def sensor_temperature(self) -> float: ...
 
     @property
-    @prop(stream="fast")
+    @stream("fast")
     @abstractmethod
     def frames_done(self) -> int:
         """Frames taken since the last acquisition started."""

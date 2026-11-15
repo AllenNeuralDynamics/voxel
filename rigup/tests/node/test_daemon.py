@@ -133,7 +133,7 @@ async def test_a_device_config_streaming_reaches_the_daemon(served: Served) -> N
 
     interface = await handles["p"].interface()
 
-    assert interface.streaming == {"fast": 0.3, "slow": 1.0}
+    assert interface.streaming == {"fast": 0.3, "normal": 1.0, "slow": 10.0}
 
 
 async def test_close_device_removes_it_from_the_daemon(served: Served) -> None:
@@ -199,7 +199,7 @@ async def test_concurrent_remote_calls_never_overlap_on_the_device(served: Serve
 
 async def test_a_streamed_property_reaches_the_client_without_a_get(served: Served) -> None:
     handles, _ = await served.node.build_devices({"dev": DeviceConfig(target=MOCK, init={"initial_value": 1.0})})
-    value = handles["dev"].props.property("value", as_float)
+    value = handles["dev"].props.view("value", as_float)
     await value.get()
     changed = asyncio.Event()
 
@@ -247,3 +247,13 @@ async def test_a_shutdown_notice_ends_serve_until_shutdown(served: Served) -> No
     await send_notify(served.node.transport, Notify.SHUTDOWN, ShutdownPayload(reason="test"))
 
     await asyncio.wait_for(serving, 5.0)
+
+
+async def test_a_remote_device_with_a_property_it_cannot_read_fails_to_build_and_is_closed(served: Served) -> None:
+    configs = {"dev": DeviceConfig(target=MOCK), "bad": DeviceConfig(target="rigup_fakes.Unreadable")}
+
+    handles, errors = await served.node.build_devices(configs)
+
+    assert set(handles) == set(served.node.devices) == set(served.daemon._controllers) == {"dev"}
+    assert (errors["bad"].code, errors["bad"].msg) == ("build.properties", "Unable to read 'serial': no answer")
+    assert {name: model.value for name, model in handles["dev"].props.cache.items()} == {"value": 0.0, "enabled": False}

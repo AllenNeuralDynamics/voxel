@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 
-from rigup.device import action, failsafe, number, prop
+from rigup.device import action, failsafe, number, stream
 
 from vxl.devices.base import DeviceType
 
@@ -47,13 +47,13 @@ class Laser(LaserSource, kind=DeviceType.LASER):
         """Block light regardless of external inputs; retain source permission and settings."""
 
     @property
-    @prop(label="Output Enabled", stream="slow")
+    @stream(label="Output Enabled")
     @abstractmethod
     def is_output_enabled(self) -> bool:
         """Whether output is permitted, independently of modulation inputs or level."""
 
     @number()
-    @prop(label="Output Level", units="%", stream="fast")
+    @stream("fast", label="Output Level", units="%")
     @abstractmethod
     def output_level_percent(self) -> float:
         """Saved software/digital level; inactive in analog mode.
@@ -75,7 +75,7 @@ class Laser(LaserSource, kind=DeviceType.LASER):
         """
 
     @property
-    @prop(label="Output Power", units="mW", stream="fast")
+    @stream("fast", label="Output Power", units="mW")
     def output_power_mw(self) -> float | None:
         """Measured optical power at the laser output, or None when unavailable."""
         return None

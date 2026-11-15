@@ -9,14 +9,14 @@ from typing import Any
 
 from rigup.config import DeviceConfig, RigConfig
 from rigup.device import DeviceHandle
-from rigup.device.handle import DeviceProps
+from rigup.device.handle import PropModels
 from rigup.rig import Rig
 
 CONFIG = RigConfig(
     devices={
         "laser_488": DeviceConfig(target="devices.SimulatedLaser", init={"max_power": 300.0}),
         "laser_561": DeviceConfig(target="devices.SimulatedLaser", init={"max_power": 750.0}),
-        "camera": DeviceConfig(target="devices.SimulatedCamera", streaming={"fast": 0.02, "slow": 2.0}),
+        "camera": DeviceConfig(target="devices.SimulatedCamera", streaming={"fast": 0.02, "normal": 2.0}),
         "card": DeviceConfig(target="devices.SignalCard"),
     }
 )
@@ -25,7 +25,7 @@ CONFIG = RigConfig(
 async def show_interface(handle: DeviceHandle) -> None:
     found = await handle.interface()
     print(f"{found.uid} ({found.kind})")
-    for name, info in found.properties.items():
+    for name, info in found.props.items():
         details = [info.dtype + (f" {info.units}" if info.units else ""), info.access]
         details += [f"streams {info.stream}"] if info.stream else []
         print(f"  property {name}: {', '.join(details)}")
@@ -74,7 +74,7 @@ async def main() -> None:
         print("\nStreams send each change to subscribers")
         changed = asyncio.Event()
 
-        def on_change(props: DeviceProps) -> None:
+        def on_change(props: PropModels) -> None:
             if props["frames_done"].value == 25:
                 print(f"  camera frames_done = {props['frames_done'].value}")
                 changed.set()

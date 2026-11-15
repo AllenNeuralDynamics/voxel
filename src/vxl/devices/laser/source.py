@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-from rigup.device import Device, action, choice, failsafe, number, prop
+from rigup.device import Device, action, choice, fact, failsafe, number, stream
 
 
 class ModulationMode(StrEnum):
@@ -18,7 +18,7 @@ class _Source(Device, ABC):
     """Shared source identity, permission, and modulation; implementations own hardware state."""
 
     @property
-    @prop(units="nm")
+    @fact(units="nm")
     @abstractmethod
     def wavelength(self) -> float:
         """Nominal source wavelength."""
@@ -38,19 +38,19 @@ class _Source(Device, ABC):
         """Disable source operation while retaining its setpoint; idempotent."""
 
     @property
-    @prop(label="Source Enabled", stream="slow")
+    @stream(label="Source Enabled")
     @abstractmethod
     def is_source_enabled(self) -> bool:
         """Whether source operation is permitted, not instantaneous emission."""
 
     @property
-    @prop(label="Source Temperature", units="°C")
+    @stream("slow", label="Source Temperature", units="°C")
     def temperature_c(self) -> float | None:
         """Source temperature, or None when unavailable."""
         return None
 
     @choice(options=lambda self: list(self._get_modulation_modes()))
-    @prop(label="Modulation Mode", stream="slow")
+    @stream(label="Modulation Mode")
     def modulation_mode(self) -> str:
         """Established software, digital, or analog mode, with supported choices."""
         return self._read_modulation_mode().value
@@ -89,7 +89,7 @@ class LaserSource(_Source, kind="laser_source"):
     """A source controlled in mW; constraints belong on the numeric property."""
 
     @number()
-    @prop(label="Source Power Setpoint", units="mW", stream="fast")
+    @stream("fast", label="Source Power Setpoint", units="mW")
     @abstractmethod
     def source_power_setpoint_mw(self) -> float:
         """Requested source power; a fixed source exposes one numeric option."""
@@ -103,7 +103,7 @@ class LaserSource(_Source, kind="laser_source"):
         """
 
     @property
-    @prop(label="Source Power", units="mW", stream="fast")
+    @stream("fast", label="Source Power", units="mW")
     def source_power_mw(self) -> float | None:
         """Source-reported or estimated optical output, or None when unavailable."""
         return None
@@ -113,7 +113,7 @@ class CurrentControlledLaserSource(_Source, kind="current_controlled_laser_sourc
     """A source controlled in mA, awaiting calibration for a power-based interface."""
 
     @number()
-    @prop(label="Source Current Setpoint", units="mA", stream="fast")
+    @stream("fast", label="Source Current Setpoint", units="mA")
     @abstractmethod
     def source_current_setpoint_ma(self) -> float:
         """Requested diode current; implementations expose their range or options."""
@@ -124,7 +124,7 @@ class CurrentControlledLaserSource(_Source, kind="current_controlled_laser_sourc
         """Set diode current without changing enable permission."""
 
     @property
-    @prop(label="Source Current", units="mA", stream="fast")
+    @stream("fast", label="Source Current", units="mA")
     def source_current_ma(self) -> float | None:
         """Reported operating current, or None when unavailable."""
         return None

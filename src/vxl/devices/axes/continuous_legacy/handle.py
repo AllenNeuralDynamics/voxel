@@ -5,7 +5,7 @@ import time
 
 from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
-from rigup.device.handle import Adapter, DeviceProperty
+from rigup.device.handle import Adapter, PropView
 
 from vxl.devices.axes.continuous_legacy.base import ContinuousAxis, TTLStepperConfig
 
@@ -18,9 +18,9 @@ class ContinuousAxisHandle(DeviceHandle[ContinuousAxis]):
 
     def __init__(self, adapter: Adapter[ContinuousAxis]) -> None:
         super().__init__(adapter)
-        self.position: DeviceProperty[float] = self.props.property("position", _FLOAT_ADAPTER.validate_python)
-        self.lower_limit: DeviceProperty[float] = self.props.property("lower_limit", _FLOAT_ADAPTER.validate_python)
-        self.upper_limit: DeviceProperty[float] = self.props.property("upper_limit", _FLOAT_ADAPTER.validate_python)
+        self.position: PropView[float] = self.props.view("position", _FLOAT_ADAPTER.validate_python)
+        self.lower_limit: PropView[float] = self.props.view("lower_limit", _FLOAT_ADAPTER.validate_python)
+        self.upper_limit: PropView[float] = self.props.view("upper_limit", _FLOAT_ADAPTER.validate_python)
 
     # Property accessors
 

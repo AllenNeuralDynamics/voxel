@@ -661,7 +661,7 @@ export interface ArgSchema {
 export type CommandIntent = 'query' | 'action' | 'failsafe';
 
 /** A property's streaming tier. */
-export type StreamTier = 'fast' | 'slow';
+export type StreamTier = 'fast' | 'normal' | 'slow';
 
 /** A command: its name, label, intent, and JSON Schemas of its arguments and return value. */
 export interface CommandInfo {
@@ -679,7 +679,7 @@ export interface DeviceInterface {
   kind: string;
   streaming: Record<StreamTier, number>;
   commands: Record<string, CommandInfo>;
-  properties: Record<string, PropertyInfo>;
+  props: Record<string, PropertyInfo>;
 }
 
 /** Legacy device inspection shape retained by installed-instrument inspection models. */

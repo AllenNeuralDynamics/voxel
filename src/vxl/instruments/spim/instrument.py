@@ -1,35 +1,26 @@
-from collections.abc import AsyncGenerator, Collection, Hashable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Collection, Hashable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Unpack
+from typing import TYPE_CHECKING, Unpack
 
 from pydantic import PositiveFloat
-from rigup.device.results import PropResults
+from rigup.activity import Activity, ActivityInfo
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
-from vxlib.problems import Problems
 from vxlib.reactivity import Cell, Readable
 
-from vxl.core.errors import RejectedError, StartupError
+from vxl.core.errors import RejectedError
 from vxl.core.instrument.base import Instrument
-from vxl.core.instrument.config import AxisPosition, DeviceUid
-from vxl.core.instrument.gate import Activity, Hold, Resource
-from vxl.core.instrument.samples import render
-from vxl.core.instrument.signals import Timeline
-from vxl.core.instrument.store import Merge
-from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
-from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
+from vxl.core.instrument.config import DeviceUid
+from vxl.core.instrument.state import ProfileId
 from vxl.devices.camera.roi import AreaROI
-from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
 from vxl.system import System
 
-from .config import PositionRule, Profile, ProfileDetails, ProfileId, SPIMConfig, StageFollowRule
+from .config import SPIMConfig
 from .state import SPIMState, WriterFields
 from .task import Task, TaskFields, TaskId
 
 if TYPE_CHECKING:
-    from vxlib.problems import KeyPath
-
     from vxl.core.instrument.folder import InstrumentFolder
 
 type SPIMInstrumentFolder = "InstrumentFolder[SPIMConfig, SPIMState]"
@@ -37,18 +28,19 @@ type SPIMInstrumentFolder = "InstrumentFolder[SPIMConfig, SPIMState]"
 
 @dataclass(frozen=True)
 class _Preview:
-    """A running preview: its hold in the gate, and the devices it started."""
+    """A running preview: its activity, and the devices it started."""
 
-    hold: Hold
+    activity: Activity
     cameras: tuple[DeviceUid, ...]
     lasers: tuple[DeviceUid, ...]
     generators: tuple[DeviceUid, ...]
 
 
+type DeviceUids = Sequence[DeviceUid]
+
+
 class Microscope(Instrument[SPIMConfig, SPIMState]):
-    """A SPIM instrument. 1 profile is active: the devices are set to it at open, and when another is selected. A
-    command that changes which profile the devices are set to touches ``active_profile``, so an activity that holds
-    it, such as a preview, restarts around the change.
+    """A SPIM instrument.
 
     A preview shows the live image of some channels of the active profile, as each profile last chose them, or its
     first channel. Each generator runs on its own clock and the stage stands still, so it works the same on every
@@ -57,15 +49,9 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
 
     def __init__(self, folder: SPIMInstrumentFolder, *, records: VoxelRecords, system: System) -> None:
         super().__init__(folder, records=records, system=system)
-        self._active_profile = Cell[ProfileId](next(iter(self._store.value.profiles)))
         self._preview_choices: dict[ProfileId, frozenset[DeviceUid]] = {}
         self._preview_channels = Cell[tuple[DeviceUid, ...]](self._preview_choice(self._active_profile.value))
         self._preview: _Preview | None = None
-
-    @property
-    def active_profile(self) -> Readable[ProfileId]:
-        """The profile that the devices are set to: the first profile until another is selected."""
-        return self._active_profile
 
     @property
     def preview_channels(self) -> Readable[tuple[DeviceUid, ...]]:
@@ -74,19 +60,19 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
 
     async def start_preview(self) -> None:
         """Start a preview of the active profile's chosen channels. Do nothing when a preview runs."""
-        async with self._gate.command("start a preview", touches=()):
+        async with self._scheduler.run("start a preview", requires=()):
             if self._preview is None:
                 await self._begin_preview()
 
     async def stop_preview(self) -> None:
         """Stop the preview. Do nothing when none runs."""
-        async with self._gate.command("stop the preview", touches=()):
+        async with self._scheduler.run("stop the preview", requires=()):
             await self._end_preview()
 
     async def set_preview_channels(self, channels: Collection[DeviceUid]) -> None:
         """Choose the channels, by camera, that a preview of the active profile shows. A running preview restarts
         with them when they differ."""
-        async with self._gate.command("set the preview channels", touches=()):
+        async with self._scheduler.run("set the preview channels", requires=()):
             profile_id = self._active_profile.value
             known = self._store.value.profiles[profile_id].channels
             if not channels:
@@ -102,65 +88,11 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
             if running:
                 await self._begin_preview()
 
-    async def open(self) -> None:
-        """Open the devices, check them, and set them to the active profile. Raise :class:`StartupError` when a saved
-        position names a slot that its device does not have."""
-        async with self._gate.command("open the instrument", touches=()):
-            await super().open()
-            if problems := await self._axis_position_problems():
-                await self._hal.close()
-                raise StartupError(problems)
-            await self._apply_profile(self._active_profile.value)
-
-    async def close(self) -> None:
-        """Stop the preview, then turn off every laser and close the devices."""
-        async with self._gate.command("close the instrument", touches=()):
-            try:
-                await self._end_preview()
-            finally:
-                await super().close()
-
-    async def set_device_properties(self, device_id: DeviceUid, properties: Mapping[str, Any]) -> PropResults:
-        """Write properties of a device. Save each value that the device accepted into the active profile, as the
-        device reports it, when the device is on the profile's light paths and the property is on its autosave list.
-        A save cannot be undone."""
-        async with self._gate.command("set device properties", touches={device_id, self._store}):
-            results = await super().set_device_properties(device_id, properties)
-            active = self._active_profile.value
-            profile = self._store.value.profiles[active]
-            kept = self._config.autosave.get(device_id, [])
-            accepted = {
-                name: result.unwrap().value
-                for name, result in results.results.items()
-                if result.is_ok and (kept == "*" or name in kept)
-            }
-            if accepted and device_id in profile.path_nodes(self._config):
-                await self._store.update({("profiles", active, "props", device_id): Merge(accepted)})
-            return results
-
-    async def set_generator_timeline(self, generator: DeviceUid, timeline: Timeline) -> None:
-        """Load a timeline into a signal generator, and save it into the active profile. The profile's checks run
-        first, so a timeline that does not fit is refused before the generator changes. A save cannot be undone."""
-        async with self._gate.command(
-            "set a generator timeline", touches={generator, self._store, self._active_profile}
-        ):
-            handle = self._hal.signal_generators.get(generator)
-            if handle is None:
-                raise RejectedError(f"'{generator}' is not a signal generator")
-            active = self._active_profile.value
-            profile = self._store.value.profiles[active]
-            candidate = profile.model_copy(update={"timelines": {**profile.timelines, generator: timeline}})
-            if problems := candidate.problems(self._config):
-                problems = problems.under("profiles", active)
-                raise RejectedError(str(problems), problems)
-            await handle.load(self._generator_cycle(generator, timeline, OwnClock()))
-            await self._store.update({("profiles", active, "timelines", generator): timeline})
-
     async def set_camera_region(self, camera: DeviceUid, region: AreaROI | None) -> AreaROI:
         """Set a camera's region, or its full frame when ``region`` is ``None``, and give back the region the camera
         applied after snapping it to its grid. Save that region into the active profile when the camera is one of its
         channels. A save cannot be undone."""
-        async with self._gate.command("set a camera region", touches={camera, self._store}):
+        async with self._scheduler.run("set a camera region", requires={camera, self._store}):
             handle = self._hal.cameras.get(camera)
             if handle is None:
                 raise RejectedError(f"'{camera}' is not a camera")
@@ -170,18 +102,6 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
                 await self._store.update({("profiles", active, "channels", camera, "fov"): applied})
             return applied
 
-    async def select_profile(self, profile_id: ProfileId) -> None:
-        """Set the devices to a profile, and make it the active one. When a step fails, the active profile stays as it
-        was."""
-        async with self._gate.command("select a profile", touches=self._profile_touches(profile_id)):
-            await self._apply_profile(profile_id)
-
-    async def apply_profile(self) -> None:
-        """Set the devices to the active profile again, such as after an undo changed it."""
-        profile_id = self._active_profile.value
-        async with self._gate.command("apply the profile", touches=self._profile_touches(profile_id)):
-            await self._apply_profile(profile_id)
-
     async def update_writer_settings(self, **fields: Unpack[WriterFields]) -> None:
         """Change fields of the writer settings."""
         async with self._state_edit("Update writer settings") as edit:
@@ -189,32 +109,10 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
                 raise RejectedError(f"An edit cannot change {unknown} of the writer settings")
             await edit.record({("writer", name): value for name, value in fields.items()})
 
-    async def update_profile_details(self, profile_id: ProfileId, **details: Unpack[ProfileDetails]) -> None:
-        """Change the names and notes of a profile."""
-        async with self._state_edit("Update profile details") as edit:
-            if unknown := sorted(details.keys() - ProfileDetails.__annotations__.keys()):
-                raise RejectedError(f"An edit cannot change {unknown} of a profile")
-            path = ("profiles", profile_id)
-            channel_labels = details.pop("channel_labels", {})
-            values: dict[KeyPath, Any] = {(*path, name): value for name, value in details.items()}
-            values |= {(*path, "channels", camera, "label"): label for camera, label in channel_labels.items()}
-            await edit.record(values)
-
     async def set_spacing(self, profile_id: ProfileId, spacing: PositiveFloat) -> None:
         """Set the µm between frames along the scan axis in a profile."""
         async with self._state_edit("Set spacing") as edit:
             await edit.record({("profiles", profile_id, "spacing"): spacing})
-
-    async def set_position_rule(
-        self,
-        device_id: DeviceUid,
-        rule: PositionRule,
-        *,
-        edit_id: Hashable | None = None,
-    ) -> None:
-        """Set how a device gets its position for every profile: always 1 position, or by following the stage."""
-        async with self._state_edit("Set position rule", edit_id=edit_id) as edit:
-            await edit.record({("positions", device_id): rule})
 
     async def add_task(self, task: Task) -> None:
         """Add a task at the end of the plan."""
@@ -257,33 +155,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
             await edit.record({("plan",): [tasks[task_id] for task_id in task_ids]})
 
     async def _apply_profile(self, profile_id: ProfileId) -> None:
-        """Set the devices to a saved profile, in order: every laser output off, device positions (the instrument's at
-        the stage's position, then the profile's own), device properties, camera regions, setup commands, and each
-        generator's cycle on its own clock, ready for a preview. Make it the active profile when every step
-        succeeds."""
-        state = self._store.value
-        profile = state.profiles[profile_id]
-        hal = self._hal
-        await gather_all(*(laser.call("output_disable") for laser in hal.lasers.values()), message="laser off")
-        at = await gather_all(*(axis.position.get() for axis in hal.stage.values()), message="read the stage")
-        positions = {**state.positions_at(dict(zip(hal.stage, at, strict=True)), {}), **profile.positions}
-        await gather_all(*(self._move_axis(device, position) for device, position in positions.items()), message="move")
-        for device, props in profile.props.items():
-            results = await hal.device(device).props.set(**props)
-            if failed := sorted(name for name, result in results.results.items() if not result.is_ok):
-                raise RejectedError(f"'{device}' refused the properties {failed} of profile '{profile_id}'")
-        regions = (hal.cameras[camera].update_roi(channel.fov) for camera, channel in profile.channels.items())
-        await gather_all(*regions, message="camera regions")
-        for device, commands in profile.setup.items():
-            if not (await hal.device(device).run_commands(commands)).is_ok:
-                raise RejectedError(f"The setup commands of profile '{profile_id}' failed on '{device}'")
-        cycles = {
-            generator: self._generator_cycle(generator, timeline, OwnClock())
-            for generator, timeline in profile.timelines.items()
-        }
-        loads = (hal.signal_generators[generator].load(cycle) for generator, cycle in cycles.items())
-        await gather_all(*loads, message="timelines")
-        await self._active_profile.set(profile_id)
+        await super()._apply_profile(profile_id)
         await self._preview_channels.set(self._preview_choice(profile_id))
 
     def _preview_choice(self, profile_id: ProfileId) -> tuple[DeviceUid, ...]:
@@ -319,23 +191,24 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
         except BaseException:
             await self._stop_preview_devices(cameras, lasers, generators)
             raise
-        holds = {self._active_profile, *cameras, *lasers, *generators}
-        hold = await self._gate.begin(Activity(kind="preview"), holds, restart=self._restart_preview)
-        self._preview = _Preview(hold, cameras, lasers, generators)
+        requires = {self._active_profile, *cameras, *lasers, *generators}
+        activity = await self._scheduler.start(ActivityInfo(kind="preview"), requires, restart=self._restart_preview)
+        self._preview = _Preview(activity, cameras, lasers, generators)
+
+    async def _end_activities(self) -> None:
+        await self._end_preview()
 
     async def _end_preview(self) -> None:
-        """Stop the preview's devices and release its hold. Do nothing when no preview runs."""
+        """Stop the preview's devices and end its activity. Do nothing when no preview runs."""
         if (preview := self._preview) is None:
             return
         self._preview = None
         try:
             await self._stop_preview_devices(preview.cameras, preview.lasers, preview.generators)
         finally:
-            await self._gate.end(preview.hold)
+            await preview.activity.end()
 
-    async def _stop_preview_devices(
-        self, cameras: Sequence[DeviceUid], lasers: Sequence[DeviceUid], generators: Sequence[DeviceUid]
-    ) -> None:
+    async def _stop_preview_devices(self, cameras: DeviceUids, lasers: DeviceUids, generators: DeviceUids) -> None:
         """Stop a preview's devices, in order: lasers off, generators, cameras. Each step runs even when one fails;
         raise every failure together."""
         hal = self._hal
@@ -355,71 +228,8 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
 
     @asynccontextmanager
     async def _restart_preview(self) -> AsyncGenerator[None]:
-        """Stop the preview around a command that changes what it holds, then start it again as the instrument now
+        """Stop the preview around a command that changes what it requires, then start it again as the instrument now
         is. When the command fails, the preview stays stopped."""
         await self._end_preview()
         yield
         await self._begin_preview()
-
-    def _generator_cycle(self, generator: DeviceUid, timeline: Timeline, start: OwnClock | InputEdges) -> Cycle:
-        """``timeline`` as the cycle that ``generator`` plays: each wire's volts on that wire's pin. Raise
-        :class:`RejectedError` when the timeline has problems with the generator's wires."""
-        wires = self._config.wiring.outputs(generator)
-        rendered = render(timeline, wires)
-        if rendered.problems:
-            raise RejectedError(str(rendered.problems), rendered.problems)
-        volts = {wires[name].pin: samples.volts.tolist() for name, samples in rendered.wires.items()}
-        return Cycle(sample_rate=timeline.sample_rate, volts=volts, start=start)
-
-    async def _move_axis(self, device: DeviceUid, position: AxisPosition) -> None:
-        """Move 1 device to a position, and wait until it is there: a name for a discrete axis, a number for a
-        continuous one."""
-        match self._hal.device(device), position:
-            case DiscreteAxisHandle() as axis, str():
-                await axis.move_to(position, wait=True)
-            case ContinuousAxisNewHandle() as axis, float():
-                await axis.move_to(position, wait=True)
-            case _:
-                raise RejectedError(f"'{device}' cannot go to {position!r}")
-
-    def _profile_touches(self, profile_id: ProfileId) -> set[Resource]:
-        """What applying a profile touches: the active profile, which a preview holds, the devices it uses, the devices
-        the instrument sets, and every laser. Raise :class:`RejectedError` when there is no such profile."""
-        profile = self._store.value.profiles.get(profile_id)
-        if profile is None:
-            raise RejectedError(f"No profile '{profile_id}'")
-        devices = self._profile_devices(profile) | set(self._store.value.positions) | set(self._hal.lasers)
-        return {self._active_profile, *devices}
-
-    def _profile_devices(self, profile: Profile) -> set[DeviceUid]:
-        """The devices that a profile uses: those on its light paths, and those it sets."""
-        on_paths = profile.path_nodes(self._config) & set(self._config.all_devices)
-        named = (profile.channels, profile.positions, profile.props, profile.setup, profile.timelines)
-        return on_paths.union(*named)
-
-    async def _axis_position_problems(self) -> Problems:
-        """The saved positions that their device cannot take: a name that is not one of a discrete axis's slots, or a
-        position for a device that is not an axis of that kind."""
-        state = self._store.value
-        wanted: list[tuple[KeyPath, DeviceUid, AxisPosition]] = []
-        for device, rule in state.positions.items():
-            names = rule.order if isinstance(rule, StageFollowRule) else [rule]
-            wanted += [(("positions", device), device, name) for name in names]
-        for profile_id, profile in state.profiles.items():
-            wanted += [
-                (("profiles", profile_id, "positions", device), device, value)
-                for device, value in profile.positions.items()
-            ]
-        problems = Problems()
-        for loc, device, position in wanted:
-            handle = self._hal.devices.get(device)
-            if isinstance(handle, DiscreteAxisHandle) and isinstance(position, str):
-                labels = (await handle.props.get("labels")).results["labels"].unwrap().value
-                if position not in labels.values():
-                    known = ", ".join(sorted(str(label) for label in labels.values() if label))
-                    problems.add(
-                        "position.no_such_slot", f"'{device}' has no slot '{position}' (it has {known}).", *loc
-                    )
-            elif not (isinstance(handle, ContinuousAxisNewHandle) and isinstance(position, float)):
-                problems.add("position.wrong_kind", f"'{device}' cannot take the position {position!r}.", *loc)
-        return problems

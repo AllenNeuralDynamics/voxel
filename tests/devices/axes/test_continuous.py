@@ -26,7 +26,7 @@ async def test_each_kind_shows_its_unit_and_limits_across_a_rig_node() -> None:
     z, r = LinearAxisHandle.wrap(handles["z"]), RotationAxisHandle.wrap(handles["r"])
     try:
         for handle, unit in ((z, "µm"), (r, "deg")):
-            properties = (await handle.interface()).properties
+            properties = (await handle.interface()).props
             units = [properties[name].units for name in ("position", "limits", "speed", "acceleration")]
             assert units == [unit, unit, f"{unit}/s", f"{unit}/s²"]
         assert await z.get_limits() == Span(-100, 1000)

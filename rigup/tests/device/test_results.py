@@ -4,7 +4,7 @@ from typing import NamedTuple
 import pytest
 from pydantic import TypeAdapter
 from rigup.device import Result
-from rigup.device.results import PropertyModel, PropResults, Results
+from rigup.device.results import PropModel, PropResults, Results
 
 BATCH_JSON = '{"results":{"0:update_roi":{"ok":true,"value":{"x":0,"y":0,"w":4000,"h":2048}}}}'
 
@@ -36,13 +36,13 @@ def test_a_rebuilt_batch_member_dumps_cleanly() -> None:
     ("value", "crossed"), [(Range(-5.0, 5.0), [-5.0, 5.0]), ((1, 2), [1, 2])], ids=["named-tuple", "tuple"]
 )
 def test_a_tuple_value_crosses_as_a_list(value: tuple[float, ...], crossed: list[float]) -> None:
-    assert PropertyModel.from_value(value).value == crossed
+    assert PropModel.from_value(value).value == crossed
 
 
 def test_prop_results_with_limits_round_trip_through_json() -> None:
     results = PropResults(
         results={
-            "level": Result.ok(PropertyModel(kind="float", value=25.5, options=[0.0, 25.5, 100.0])),
+            "level": Result.ok(PropModel(kind="float", value=25.5, options=[0.0, 25.5, 100.0])),
             "binning": Result.err("binning cannot be 3"),
         }
     )

@@ -4,7 +4,7 @@ import time
 from collections.abc import Mapping
 
 import numpy as np
-from rigup.device import action, choice, failsafe, integer, number, prop
+from rigup.device import action, choice, failsafe, integer, number, stream
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
@@ -264,7 +264,7 @@ class HamamatsuCamera(Camera):
     # ==================== Sensor Mode ====================
 
     @choice(options=lambda self: list(self._sensor_mode_options.keys()))
-    @prop(label="Sensor Mode", desc="Camera sensor readout mode.")
+    @stream(label="Sensor Mode", desc="Camera sensor readout mode.")
     def sensor_mode(self) -> str:
         """Get the sensor mode."""
         return self._get_sensor_mode_name() or "area"
@@ -288,7 +288,7 @@ class HamamatsuCamera(Camera):
     # ==================== Stream Info ====================
 
     @property
-    @prop(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream="fast")
+    @stream("fast", label="Stream Info", desc="Acquisition state info or None if not streaming.")
     def stream_info(self) -> StreamInfo | None:
         """Return acquisition state or None if not acquiring."""
         try:
@@ -390,7 +390,7 @@ class HamamatsuCamera(Camera):
     # ==================== Temperature ====================
 
     @property
-    @prop(label="Sensor Temperature", units="°C", desc="Temperature of the sensor.")
+    @stream("slow", label="Sensor Temperature", units="°C", desc="Temperature of the sensor.")
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in Celsius."""
         return _unwrap(self._cam.prop_getvalue(_PROPS["sensor_temperature"]), 0.0)
@@ -402,7 +402,7 @@ class HamamatsuCamera(Camera):
         maximum=lambda self: _unwrap(self._cam.prop_getattr(_PROPS["line_interval"]), _DEFAULT_ATTR).valuemax * 1e6,
         step=0.01,
     )
-    @prop(label="Line Interval", units="µs", desc="Internal line interval for rolling shutter.")
+    @stream(label="Line Interval", units="µs", desc="Internal line interval for rolling shutter.")
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds."""
         return _unwrap(self._cam.prop_getvalue(_PROPS["line_interval"]), 0.0) * 1e6

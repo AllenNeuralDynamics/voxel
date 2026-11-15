@@ -35,7 +35,7 @@ from typing import override
 
 import pyvisa
 from pyvisa.resources import MessageBasedResource
-from rigup.device import integer, number, prop
+from rigup.device import fact, integer, number, stream
 
 from vxl.devices.power_meter import PowerMeter
 
@@ -104,19 +104,19 @@ class ThorlabsPowerMeter(PowerMeter):
         self._write(f"SENS:CORR:WAV {value}")
 
     @property
-    @prop(label="Meter Identification")
+    @fact(label="Meter Identification")
     def identification(self) -> str:
         """Manufacturer, model, serial number, and firmware returned by the meter."""
         return self._identity
 
     @property
-    @prop(label="Sensor Identification")
+    @stream("slow", label="Sensor Identification")
     def sensor_identification(self) -> str:
         """Identification of the attached sensor, as reported by the meter."""
         return self._query("SYST:SENS:IDN?")
 
     @integer(minimum=1)
-    @prop(label="Averaging Count")
+    @stream(label="Averaging Count")
     def averaging_count(self) -> int:
         """Number of samples averaged per reading; hardware enforces its upper limit."""
         return int(self._query("SENS:AVER:COUN?"))
@@ -126,7 +126,7 @@ class ThorlabsPowerMeter(PowerMeter):
         self._write(f"SENS:AVER:COUN {value}")
 
     @property
-    @prop(label="Autorange")
+    @stream(label="Autorange")
     def autorange(self) -> bool:
         """Whether the meter selects its power range automatically."""
         return bool(int(self._query("SENS:POW:RANG:AUTO?")))
@@ -141,7 +141,7 @@ class ThorlabsPowerMeter(PowerMeter):
         minimum=lambda self: self._number("SENS:POW:RANG:UPP? MIN") * 1000,
         maximum=lambda self: self._number("SENS:POW:RANG:UPP? MAX") * 1000,
     )
-    @prop(label="Power Range", units="mW")
+    @stream(label="Power Range", units="mW")
     def range_mw(self) -> float:
         """Current range upper bound; turn off autorange before selecting a manual range."""
         return self._number("SENS:POW:RANG:UPP?") * 1000

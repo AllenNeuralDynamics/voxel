@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
@@ -7,19 +8,20 @@ from typing import Any
 import pytest
 from ome_zarr_writer import WriterSettings
 from pydantic import BaseModel, ValidationError
+from rigup.activity import ActivityBusyError, ActivityInfo
 from vxl_records import SQLiteRecords
 
 from vxl._utils.files import load_yaml
-from vxl.core.errors import BusyError, RejectedError, StartupError
+from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.config import new_instrument_id
 from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.instrument.gate import Activity
 from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
+from vxl.core.instrument.state import StageFollowRule
 from vxl.core.instrument.store import ABSENT, InstrumentStore, Merge
 from vxl.devices.camera.roi import AreaROI
 from vxl.devices.signals.generator.base import OwnClock
-from vxl.instruments.spim.config import SPIMConfig, StageFollowRule
+from vxl.instruments.spim.config import SPIMConfig
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMState, WriterFields
 from vxl.instruments.spim.task import Task, TaskFields
@@ -410,10 +412,10 @@ async def test_an_unknown_profile_is_refused(opened: Microscope) -> None:
 
 
 async def test_a_capture_refuses_selecting_a_profile(opened: Microscope) -> None:
-    gate = opened._gate
-    async with gate.command("start a capture", touches=()):
-        await gate.begin(Activity(kind="capture"), {"camera"})
-    with pytest.raises(BusyError, match="Unable to select a profile while capture is running"):
+    scheduler = opened._scheduler
+    async with scheduler.run("start a capture", requires=()):
+        await scheduler.start(ActivityInfo(kind="capture"), {"camera"})
+    with pytest.raises(ActivityBusyError, match="Unable to select a profile while capture is running"):
         await opened.select_profile("slow")
 
 
@@ -426,8 +428,8 @@ async def test_selecting_a_profile_restarts_an_activity_that_holds_the_active_pr
         yield
         seen.append(f"start with {opened.active_profile.value}")
 
-    async with opened._gate.command("start a preview", touches=()):
-        await opened._gate.begin(Activity(kind="preview"), {opened.active_profile}, restart=restart)
+    async with opened._scheduler.run("start a preview", requires=()):
+        await opened._scheduler.start(ActivityInfo(kind="preview"), {opened.active_profile}, restart=restart)
     await opened.select_profile("slow")
     assert seen == ["stop with gfp", "start with slow"]
 
@@ -467,11 +469,11 @@ async def test_a_camera_region_is_saved_as_the_camera_snapped_it(opened: Microsc
 
 
 async def test_device_first_edits_are_refused_during_a_capture(opened: Microscope) -> None:
-    async with opened._gate.command("start a capture", touches=()):
-        await opened._gate.begin(Activity(kind="capture"), {opened._store})
-    with pytest.raises(BusyError):
+    async with opened._scheduler.run("start a capture", requires=()):
+        await opened._scheduler.start(ActivityInfo(kind="capture"), {opened._store})
+    with pytest.raises(ActivityBusyError):
         await opened.set_device_properties("camera", {"exposure_time_ms": 30.0})
-    with pytest.raises(BusyError):
+    with pytest.raises(ActivityBusyError):
         await opened.set_camera_region("camera", None)
 
 
@@ -483,8 +485,8 @@ async def test_a_property_edit_does_not_restart_a_preview(opened: Microscope) ->
         seen.append("restarted")
         yield
 
-    async with opened._gate.command("start a preview", touches=()):
-        await opened._gate.begin(Activity(kind="preview"), {opened.active_profile}, restart=restart)
+    async with opened._scheduler.run("start a preview", requires=()):
+        await opened._scheduler.start(ActivityInfo(kind="preview"), {opened.active_profile}, restart=restart)
     await opened.set_device_properties("camera", {"exposure_time_ms": 30.0})
     assert seen == []
 
@@ -581,15 +583,15 @@ async def test_a_timeline_edit_restarts_a_preview_and_is_refused_during_a_captur
         seen.append("start")
 
     timeline = _with_laser_offset(opened.state.value.profiles["gfp"].timelines["ao_main"], "-2 ms")
-    async with opened._gate.command("start a preview", touches=()):
-        preview = await opened._gate.begin(Activity(kind="preview"), {opened.active_profile}, restart=restart)
+    async with opened._scheduler.run("start a preview", requires=()):
+        preview = await opened._scheduler.start(ActivityInfo(kind="preview"), {opened.active_profile}, restart=restart)
     await opened.set_generator_timeline("ao_main", timeline)
     assert seen == ["stop", "start"]
 
-    await opened._gate.end(preview)
-    async with opened._gate.command("start a capture", touches=()):
-        await opened._gate.begin(Activity(kind="capture"), {opened._store})
-    with pytest.raises(BusyError):
+    await preview.end()
+    async with opened._scheduler.run("start a capture", requires=()):
+        await opened._scheduler.start(ActivityInfo(kind="capture"), {opened._store})
+    with pytest.raises(ActivityBusyError):
         await opened.set_generator_timeline("ao_main", timeline)
 
 
@@ -645,6 +647,62 @@ async def test_a_preview_starts_and_stops_its_devices(opened: Microscope) -> Non
         "generator": "loaded",
         "activities": [],
     }
+
+
+async def test_a_device_property_write_keeps_a_running_preview(opened: Microscope) -> None:
+    await opened.start_preview()
+    running = opened._preview
+
+    await opened.set_device_properties("laser", {"output_level_percent": 50.0})
+
+    assert opened._preview is running
+    await opened.stop_preview()
+
+
+async def test_a_laser_failsafe_during_a_preview_keeps_the_laser_off(opened: Microscope) -> None:
+    await opened.start_preview()
+
+    await opened.execute_device_command("laser", "output_disable")
+
+    live = await _live(opened)
+    assert live["laser"] is False
+    assert live["activities"] == ["preview"]
+    await opened.stop_preview()
+
+
+@pytest.mark.parametrize(
+    ("device", "command"), [("camera", "capture_state"), ("x_axis", "halt")], ids=["query", "failsafe"]
+)
+async def test_a_query_or_failsafe_runs_while_another_command_holds_the_instrument(
+    opened: Microscope, device: str, command: str
+) -> None:
+    holding, release = asyncio.Event(), asyncio.Event()
+
+    async def hold() -> None:
+        async with opened._scheduler.run("a long command", requires=()):
+            holding.set()
+            await release.wait()
+
+    holder = asyncio.create_task(hold())
+    await holding.wait()
+
+    try:
+        result = await asyncio.wait_for(opened.execute_device_command(device, command), 2)
+    finally:
+        release.set()
+        await holder
+    assert result.is_ok
+
+
+async def test_stop_ends_the_preview_and_runs_every_failsafe(opened: Microscope) -> None:
+    await opened.start_preview()
+
+    await opened.stop()
+
+    live = await _live(opened)
+    assert live["activities"] == []
+    assert live["laser"] is False
+    assert live["cameras"] == {"camera": "IDLE"}
 
 
 async def test_a_preview_disarms_the_scan_axis(opened: Microscope) -> None:

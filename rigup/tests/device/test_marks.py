@@ -3,12 +3,12 @@ from typing import Annotated, Any, Literal, cast
 
 import pytest
 from pydantic import Field
-from rigup.device import Device, DeviceController, action, failsafe, number, prop, query
+from rigup.device import Device, DeviceController, action, fact, failsafe, number, query, stream
 
 
 class LaserBase(Device, ABC, kind="laser"):
     @number()
-    @prop(units="mW", desc="Output power", stream="fast")
+    @stream("fast", units="mW", desc="Output power")
     @abstractmethod
     def power(self) -> float: ...
 
@@ -17,7 +17,7 @@ class LaserBase(Device, ABC, kind="laser"):
     def power(self, value: float) -> None: ...
 
     @property
-    @prop(units="°C", stream="slow")
+    @stream(units="°C")
     @abstractmethod
     def temperature(self) -> float:
         """Diode temperature."""
@@ -68,12 +68,12 @@ class Travel(Device):
     unit = ""
 
     @property
-    @prop(label="Position", units=lambda device: device.unit)
+    @stream(label="Position", units=lambda device: device.unit)
     def position(self) -> float:
         return 0.0
 
     @property
-    @prop(label="Speed", units=lambda device: f"{device.unit}/s")
+    @stream(label="Speed", units=lambda device: f"{device.unit}/s")
     def speed(self) -> float:
         return 0.0
 
@@ -100,7 +100,7 @@ class Documented(Device, kind="documented"):
 
 
 def test_a_property_takes_its_description_from_the_base() -> None:
-    power = DeviceController(Laser()).interface.properties["power"]
+    power = DeviceController(Laser()).interface.props["power"]
 
     assert (power.label, power.desc, power.units, power.stream, power.access) == (
         "Power",
@@ -112,9 +112,9 @@ def test_a_property_takes_its_description_from_the_base() -> None:
 
 
 def test_a_property_without_a_desc_uses_its_docstring() -> None:
-    temperature = DeviceController(Laser()).interface.properties["temperature"]
+    temperature = DeviceController(Laser()).interface.props["temperature"]
 
-    assert (temperature.desc, temperature.stream, temperature.access) == ("Diode temperature.", "slow", "ro")
+    assert (temperature.desc, temperature.stream, temperature.access) == ("Diode temperature.", "normal", "ro")
 
 
 def test_commands_report_their_intent() -> None:
@@ -148,8 +148,8 @@ def test_a_command_label_and_desc_fall_back_to_its_name_and_docstring() -> None:
 
 
 def test_units_from_a_function_follow_the_subclass() -> None:
-    slide = DeviceController(Slide("slide")).interface.properties
-    turntable = DeviceController(Turntable("turntable")).interface.properties
+    slide = DeviceController(Slide("slide")).interface.props
+    turntable = DeviceController(Turntable("turntable")).interface.props
 
     assert (slide["position"].units, slide["speed"].units) == ("µm", "µm/s")
     assert (turntable["position"].units, turntable["speed"].units) == ("deg", "deg/s")
@@ -163,6 +163,54 @@ def test_a_failsafe_with_arguments_is_refused() -> None:
         failsafe()(halt)
 
 
-def test_prop_above_a_limit_decorator_is_refused() -> None:
-    with pytest.raises(TypeError, match="put @prop under"):
-        prop()(cast("Any", number()(lambda _: 1.0)))
+class Marked(Device, kind="marked"):
+    def __init__(self) -> None:
+        super().__init__("marked")
+        self._power = 0.0
+
+    @property
+    @fact(units="nm", desc="The colour of its light")
+    def wavelength(self) -> float:
+        return 488.0
+
+    @property
+    @stream(units="°C")
+    def temperature(self) -> float:
+        return 24.5
+
+    @number(maximum=100.0)
+    @stream("fast", units="mW")
+    def power(self) -> float:
+        return self._power
+
+    @power.setter
+    def power(self, value: float) -> None:
+        self._power = value
+
+
+def test_a_fact_has_no_tier_and_a_stream_has_the_normal_tier_unless_it_names_one() -> None:
+    properties = DeviceController(Marked()).interface.props
+
+    assert {name: (info.stream, info.units, info.access) for name, info in properties.items()} == {
+        "wavelength": (None, "nm", "ro"),
+        "temperature": ("normal", "°C", "ro"),
+        "power": ("fast", "mW", "rw"),
+    }
+    assert properties["wavelength"].desc == "The colour of its light"
+
+
+def test_a_fact_with_a_setter_is_refused() -> None:
+    def read(self: Device) -> float:
+        del self
+        return 1.0
+
+    def write(self: Device, value: float) -> None:
+        del self, value
+
+    with pytest.raises(TypeError, match=r"Bad\.gain is a fact, so it cannot have a setter"):
+        type("Bad", (Device,), {"gain": property(fact()(read), write)}, kind="bad")
+
+
+def test_a_mark_above_the_property_decorator_is_refused() -> None:
+    with pytest.raises(TypeError, match="put @stream under @number, @integer, @choice or @property"):
+        stream()(cast("Any", property(lambda _: 1.0)))

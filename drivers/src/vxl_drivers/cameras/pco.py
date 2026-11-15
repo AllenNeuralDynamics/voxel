@@ -5,7 +5,7 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from rigup.device import action, choice, failsafe, integer, number, prop
+from rigup.device import action, choice, failsafe, integer, number, stream
 from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
@@ -192,7 +192,7 @@ class PCOCamera(Camera):
     # ==================== Readout Mode ====================
 
     @choice(options=list(ReadoutMode))
-    @prop(label="Readout Mode", desc="sCMOS readout direction mode.")
+    @stream(label="Readout Mode", desc="sCMOS readout direction mode.")
     def readout_mode(self) -> str:
         """Get the readout mode."""
         return self._get_readout_mode()
@@ -216,7 +216,7 @@ class PCOCamera(Camera):
     # ==================== Stream Info ====================
 
     @property
-    @prop(label="Stream Info", desc="Acquisition state info or None if not streaming.", stream="fast")
+    @stream("fast", label="Stream Info", desc="Acquisition state info or None if not streaming.")
     def stream_info(self) -> StreamInfo | None:
         """Return acquisition state or None if not acquiring."""
         try:
@@ -293,13 +293,13 @@ class PCOCamera(Camera):
     # ==================== Temperature ====================
 
     @property
-    @prop(label="Camera Temperature", units="°C", desc="Temperature of the camera.")
+    @stream("slow", label="Camera Temperature", units="°C", desc="Temperature of the camera.")
     def camera_temperature_c(self) -> float:
         """Get the camera temperature in Celsius."""
         return self._pco.sdk.get_temperature()["camera temperature"]
 
     @property
-    @prop(label="Sensor Temperature", units="°C", desc="Temperature of the sensor.")
+    @stream("slow", label="Sensor Temperature", units="°C", desc="Temperature of the sensor.")
     def sensor_temperature_c(self) -> float:
         """Get the sensor temperature in Celsius."""
         return self._pco.sdk.get_temperature()["sensor temperature"]
@@ -307,7 +307,7 @@ class PCOCamera(Camera):
     # ==================== Line Timing ====================
 
     @number(minimum=1.0, maximum=1000.0, step=0.1)
-    @prop(label="Line Interval", units="µs", desc="Line interval for rolling shutter.")
+    @stream(label="Line Interval", units="µs", desc="Line interval for rolling shutter.")
     def line_interval_us(self) -> float:
         """Get the line interval in microseconds."""
         return self._pco.sdk.get_cmos_line_timing()["line time"] * 1e6

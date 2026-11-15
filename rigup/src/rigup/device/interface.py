@@ -33,7 +33,10 @@ class AttributeInfo(BaseModel):
     desc: str | None = None
 
 
-class PropertyInfo(AttributeInfo):
+class PropInfo(AttributeInfo):
+    """Describes a property. ``stream`` is the tier at which the value is polled and published, or ``None`` for a
+    fact: a value that is constant while the device is open and is read once."""
+
     dtype: str
     access: Literal["ro", "rw"]
     units: str = ""
@@ -97,4 +100,4 @@ class DeviceInterface(BaseModel):
     kind: str
     streaming: dict[StreamTier, float] = Field(default_factory=dict)
     commands: dict[str, CommandInfo] = Field(default_factory=dict)
-    properties: dict[str, PropertyInfo] = Field(default_factory=dict)
+    props: dict[str, PropInfo] = Field(default_factory=dict)

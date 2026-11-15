@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from rigup.device import NotObservedError
 
 from vxl.instrument import IdleActivity, Instrument, OperationRejectedError, PreviewActivity
 from vxl.preview import PreviewFrame, PreviewLayer, PreviewSourceEmission, PreviewViewport
@@ -42,6 +43,14 @@ def preview_operations(opened_instrument: Instrument, monkeypatch: pytest.Monkey
     ):
         monkeypatch.setattr(handle, name, record(label))
     return events
+
+
+class _Unseen:
+    """A property view that no value has come to."""
+
+    @property
+    def value(self) -> float:
+        raise NotObservedError("Property 'position' has not been observed yet")
 
 
 def _previewing(instrument: Instrument) -> tuple[str, ...]:
@@ -254,7 +263,7 @@ async def test_preview_position_survives_stop_but_not_stream_reset(
         assert not instrument._preview_positions
         await emit(3)
         assert delivered[-1][3] == StagePosition(x=99, y=20, z=30)
-        samples[1].value = None
+        monkeypatch.setattr(stage.y, "position", _Unseen())
         await emit(4)
         assert delivered[-1][3] is None
         await instrument.close()

@@ -3,7 +3,7 @@
 import asyncio
 
 from rigup.device import DeviceHandle
-from rigup.device.handle import Adapter, DeviceProperty
+from rigup.device.handle import Adapter, PropView
 
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState
 
@@ -15,7 +15,7 @@ class DiscreteAxisHandle(DeviceHandle[DiscreteAxis]):
 
     def __init__(self, adapter: Adapter[DiscreteAxis]) -> None:
         super().__init__(adapter)
-        self.state: DeviceProperty[DiscreteAxisState] = self.props.property("state", DiscreteAxisState.model_validate)
+        self.state: PropView[DiscreteAxisState] = self.props.view("state", DiscreteAxisState.model_validate)
 
     async def move_to(self, position: str, *, wait: bool = False, timeout_s: float | None = None) -> None:
         """Move to the slot whose label is ``position``, optionally waiting for idle without occupying the device

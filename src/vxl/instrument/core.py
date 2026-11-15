@@ -13,8 +13,8 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, ValidationError
-from rigup.device import DeviceHandle, DeviceInterface, Result
-from rigup.device.handle import DeviceProps
+from rigup.device import DeviceHandle, DeviceInterface, NotObservedError, Result
+from rigup.device.handle import PropModels
 from rigup.device.results import PropResults
 from vxl_records import (
     AcquisitionManifest,
@@ -182,7 +182,7 @@ class Instrument:
         self._channels: dict[str, Channel] = {}
         self._preview_unsubs: list[Teardown] = []
         self._device_unsubs: list[Teardown] = []
-        self._device_props_updates = Emitter[tuple[str, DeviceProps]]()
+        self._device_props_updates = Emitter[tuple[str, PropModels]]()
         self._preview = Emitter[PreviewSourceEmission]()
         self._stream_revision = Cell(0)
         self._preview_source_ids: dict[str, str] = {}
@@ -286,7 +286,7 @@ class Instrument:
         return self._stream_revision
 
     @property
-    def device_props(self) -> dict[str, DeviceProps]:
+    def device_props(self) -> dict[str, PropModels]:
         """Latest successful property observations for every open device."""
         return {device_id: handle.props.cache for device_id, handle in self._hal.devices.items()}
 
@@ -296,7 +296,7 @@ class Instrument:
         return self._hal.device_interfaces
 
     @property
-    def device_props_updates(self) -> Subscribable[tuple[str, DeviceProps]]:
+    def device_props_updates(self) -> Subscribable[tuple[str, PropModels]]:
         """Complete device property snapshots paired with their device IDs."""
         return self._device_props_updates
 
@@ -828,7 +828,7 @@ class Instrument:
                 if node_id is not None:
                     loc = ("hal", "nodes", node_id, "devices", device_id, "autosave")
                 for index, name in enumerate(config.autosave):
-                    info = interface.properties.get(name)
+                    info = interface.props.get(name)
                     if info is None or info.access != "rw":
                         violations.append(
                             Violation(
@@ -866,7 +866,7 @@ class Instrument:
                     )
                     continue
                 for prop in props:
-                    info = interface.properties.get(prop)
+                    info = interface.props.get(prop)
                     if info is None:
                         violations.append(
                             Violation(
@@ -915,8 +915,6 @@ class Instrument:
                 if (generator := self._hal.signal_generators.get(uid)) is None:
                     continue
                 ports = generator.ports.value
-                if ports is None:
-                    raise RuntimeError(f"HAL has not initialized ports for signal generator '{uid}'")
                 for port in sorted(signals.waveforms.keys() - ports.keys()):
                     violations.append(
                         Violation(
@@ -941,10 +939,7 @@ class Instrument:
         stage = self._hal.stage
         limits: dict[str, tuple[float, float]] = {}
         for axis, handle in (("x", stage.x), ("y", stage.y), ("z", stage.z)):
-            lower, upper = handle.lower_limit.value, handle.upper_limit.value
-            if lower is None or upper is None:
-                raise RuntimeError(f"HAL has not initialized the {axis}-axis limits")
-            limits[axis] = (lower, upper)
+            limits[axis] = (handle.lower_limit.value, handle.upper_limit.value)
         violations = []
 
         def check(value: float, axis: str, loc: ViolationLoc, label: str) -> None:
@@ -1150,16 +1145,12 @@ class Instrument:
         positions = self._preview_positions.setdefault(camera_id, {})
         if frame_idx > max(positions, default=-1):
             stage = self._hal.stage
-            x, y, z = stage.x.position.value, stage.y.position.value, stage.z.position.value
             position = None
-            if (
-                not isinstance(self._activity.value, IdleActivity)
-                and x is not None
-                and y is not None
-                and z is not None
-                and all(math.isfinite(value) for value in (x, y, z))
-            ):
-                position = StagePosition(x=x, y=y, z=z)
+            if not isinstance(self._activity.value, IdleActivity):
+                with suppress(NotObservedError):
+                    x, y, z = stage.x.position.value, stage.y.position.value, stage.z.position.value
+                    if all(math.isfinite(value) for value in (x, y, z)):
+                        position = StagePosition(x=x, y=y, z=z)
             positions[frame_idx] = position
             # Retain recent captures for late detail packets; never re-anchor an older unknown frame.
             if len(positions) > 16:
@@ -1271,7 +1262,7 @@ class Instrument:
         updates = {
             name: model.value
             for name, model in results.ok.items()
-            if (info := interface.properties.get(name)) is not None
+            if (info := interface.props.get(name)) is not None
             and info.access == "rw"
             and (selection == "*" or name in selection)
         }
@@ -1398,8 +1389,9 @@ class Instrument:
                 if camera_id in profile_fovs:
                     continue
                 camera = self._hal.cameras.get(camera_id)
-                if camera is None or (sensor := camera.sensor.value) is None:
+                if camera is None:
                     continue
+                sensor = camera.sensor.value
                 pixel_size, sensor_size = sensor.pixel_um, sensor.size_px
                 roi = profile.rois.get(camera_id)
                 x, y, width_px, height_px = (

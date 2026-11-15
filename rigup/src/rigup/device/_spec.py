@@ -12,7 +12,7 @@ from pydantic.errors import PydanticInvalidForJsonSchema
 from pydantic.json_schema import PydanticJsonSchemaWarning
 
 from ._command import Command
-from .interface import CommandInfo, PropertyInfo, params_model
+from .interface import CommandInfo, PropInfo, params_model
 from .limits import Limited
 from .marks import CommandMark, PropMark, mark_of
 
@@ -80,6 +80,8 @@ def _read_member(cls: type, name: str, props: dict[str, SpecProp], commands: dic
             if isinstance(prop_mark := mark_of(declared.fget), PropMark):
                 _check_not_described_again(cls, name, owner)
                 _check_keeps_limits(cls, name, attr)
+                if prop_mark.stream is None and attr.fset is not None:
+                    raise TypeError(f"{cls.__name__}.{name} is a fact, so it cannot have a setter")
                 props[name] = SpecProp(attr, prop_mark, cast("Callable[..., Any]", declared.fget))
                 return
         elif callable(attr) and callable(declared) and isinstance(command_mark := mark_of(declared), CommandMark):
@@ -138,7 +140,7 @@ def check_pairing(device: type, controller: type) -> None:
 
 
 def _check_not_described_again(cls: type, name: str, describer: type) -> None:
-    """Refuse a second ``@prop`` on a property a base already describes."""
+    """Refuse a second ``@fact`` or ``@stream`` on a property a base already describes."""
     describer_getter = cast("property", vars(describer)[name]).fget
     for base in cls.__mro__[cls.__mro__.index(describer) + 1 :]:
         inherited = vars(base).get(name)
@@ -197,10 +199,10 @@ def _shown(function: Callable[..., Any]) -> str:
     return str(signature.replace(parameters=[p for p in signature.parameters.values() if p.name != "self"]))
 
 
-def collect_properties(obj: Any) -> dict[str, PropertyInfo]:
+def collect_properties(obj: Any) -> dict[str, PropInfo]:
     """Describe the properties ``obj`` exposes, reading units for this object."""
     return {
-        name: PropertyInfo.build(name, found.attr, found.mark, found.described, obj)
+        name: PropInfo.build(name, found.attr, found.mark, found.described, obj)
         for name, found in read_class(type(obj)).props.items()
     }
 

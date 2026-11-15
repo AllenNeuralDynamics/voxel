@@ -2,7 +2,7 @@ import math
 import random
 import time
 
-from rigup.device import number, prop
+from rigup.device import fact, number
 
 from vxl_drivers.aotf.base import AOTF
 from vxl_drivers.lasers_legacy.base import Laser
@@ -215,7 +215,7 @@ class SimulatedAOTFModulatedLaser(Laser):
         return self._aotf_channel
 
     @property
-    @prop(label="AOTF Frequency", units="MHz", desc="RF frequency for this wavelength.")
+    @fact(label="AOTF Frequency", units="MHz", desc="RF frequency for this wavelength.")
     def aotf_frequency_mhz(self) -> float:
         """Get the calibrated AOTF frequency."""
         return self._aotf_frequency_mhz

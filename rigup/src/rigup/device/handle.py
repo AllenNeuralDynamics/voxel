@@ -13,12 +13,12 @@ from vxlib.reactivity import Subscribable
 from .controller import StreamCallback
 from .device import Device
 from .interface import DeviceInterface
-from .results import CommandRequest, PropertyModel, PropResults, Result, Results
+from .results import CommandRequest, PropModel, PropResults, Result, Results
 
-type PropertyCallback[T] = Callable[[T], Awaitable[None] | None]
-type PropertyParser[T] = Callable[[object], T]
-type PropertyAccess = Literal["ro", "rw", "all"]
-type DeviceProps = Mapping[str, PropertyModel]
+type PropCallback[T] = Callable[[T], Awaitable[None] | None]
+type PropParser[T] = Callable[[object], T]
+type PropAccess = Literal["ro", "rw", "all"]
+type PropModels = Mapping[str, PropModel]
 
 
 class Adapter[D: Device](ABC):
@@ -26,13 +26,13 @@ class Adapter[D: Device](ABC):
 
     def __init__(self) -> None:
         self._interface_cache: DeviceInterface | None = None
-        self._props: DeviceProperties | None = None
+        self._props: DeviceProps | None = None
 
     @property
-    def props(self) -> "DeviceProperties":
+    def props(self) -> "DeviceProps":
         """Property state shared by every handle over this adapter."""
         if self._props is None:
-            self._props = DeviceProperties(self)
+            self._props = DeviceProps(self)
         return self._props
 
     async def cached_interface(self) -> DeviceInterface:
@@ -77,10 +77,14 @@ class Adapter[D: Device](ABC):
     async def close(self) -> None: ...
 
 
-class DeviceProperty[T](Subscribable[T]):
-    """A typed live view over one entry of a ``DeviceProperties`` cache."""
+class NotObservedError(LookupError):
+    """Raised when a property view is read before any value has been observed."""
 
-    def __init__(self, owner: "DeviceProperties", name: str, parser: PropertyParser[T]) -> None:
+
+class PropView[T](Subscribable[T]):
+    """A typed live view over one entry of a ``DeviceProps`` cache."""
+
+    def __init__(self, owner: "DeviceProps", name: str, parser: PropParser[T]) -> None:
         super().__init__()
         self._owner = owner
         self._name = name
@@ -91,14 +95,16 @@ class DeviceProperty[T](Subscribable[T]):
         return self._name
 
     @property
-    def value(self) -> T | None:
-        """The latest parsed value, or ``None`` until the property is observed."""
-        model = self._owner.cache.get(self._name)
-        return None if model is None else self._parser(model.value)
+    def value(self) -> T:
+        """The latest parsed value. Raises ``NotObservedError`` if no value has been observed."""
+        return self._parser(self.model.value)
 
     @property
-    def model(self) -> PropertyModel | None:
-        return self._owner.cache.get(self._name)
+    def model(self) -> PropModel:
+        """The latest value with its constraints. Raises ``NotObservedError`` if no value has been observed."""
+        if (model := self._owner.cache.get(self._name)) is None:
+            raise NotObservedError(f"Property '{self._name}' has not been observed yet")
+        return model
 
     async def get(self) -> T:
         """Read now, update the cache, and notify if the parsed value changed."""
@@ -110,14 +116,14 @@ class DeviceProperty[T](Subscribable[T]):
         results = await self._owner.set(**{self._name: value})
         return self._parser(results[self._name].unwrap().value)
 
-    async def notify_change(self, previous: PropertyModel | None, current: PropertyModel) -> None:
+    async def notify_change(self, previous: PropModel | None, current: PropModel) -> None:
         """Notify subscribers when the parsed value changed."""
         value = self._parser(current.value)
         if previous is None or self._parser(previous.value) != value:
             await self._notify(value)
 
 
-class DeviceProperties(Subscribable[DeviceProps]):
+class DeviceProps(Subscribable[PropModels]):
     """The latest successful property values of one device, kept from a single ``props.update`` subscription.
 
     Operations return their full ``PropResults``, errors included; only successful values enter ``cache``."""
@@ -125,8 +131,8 @@ class DeviceProperties(Subscribable[DeviceProps]):
     def __init__(self, adapter: Adapter[Any]) -> None:
         super().__init__()
         self._adapter = adapter
-        self._cache: dict[str, PropertyModel] = {}
-        self._properties: dict[str, DeviceProperty[Any]] = {}
+        self._cache: dict[str, PropModel] = {}
+        self._views: dict[str, PropView[Any]] = {}
         self._lock = asyncio.Lock()
         self._closed = False
         self._unsub: Teardown | None = self._adapter.subscribe(
@@ -136,7 +142,7 @@ class DeviceProperties(Subscribable[DeviceProps]):
         )
 
     @property
-    def cache(self) -> DeviceProps:
+    def cache(self) -> PropModels:
         return self._cache_snapshot()
 
     def close(self) -> None:
@@ -147,12 +153,12 @@ class DeviceProperties(Subscribable[DeviceProps]):
             self._unsub = None
         self._cache = {}
 
-    def property[T](self, name: str, parser: PropertyParser[T]) -> DeviceProperty[T]:
+    def view[T](self, name: str, parser: PropParser[T]) -> PropView[T]:
         """Return the typed view of one property; the first call's ``parser`` is kept."""
-        if existing := self._properties.get(name):
-            return cast("DeviceProperty[T]", existing)
-        prop = DeviceProperty(self, name, parser)
-        self._properties[name] = prop
+        if existing := self._views.get(name):
+            return cast("PropView[T]", existing)
+        prop = PropView(self, name, parser)
+        self._views[name] = prop
         return prop
 
     async def get(self, *props: str) -> PropResults:
@@ -162,10 +168,10 @@ class DeviceProperties(Subscribable[DeviceProps]):
             await self._adopt(results)
             return results
 
-    async def refresh(self, access: PropertyAccess = "all") -> PropResults:
+    async def refresh(self, access: PropAccess = "all") -> PropResults:
         """Read every property with the given access into the cache."""
         interface = await self._adapter.cached_interface()
-        names = [name for name, info in interface.properties.items() if access in ("all", info.access)]
+        names = [name for name, info in interface.props.items() if access in ("all", info.access)]
         if not names:
             return PropResults()
         return await self.get(*names)
@@ -177,7 +183,7 @@ class DeviceProperties(Subscribable[DeviceProps]):
             await self._adopt(results)
             return results
 
-    async def get_model(self, name: str) -> PropertyModel:
+    async def get_model(self, name: str) -> PropModel:
         results = await self.get(name)
         return results[name].unwrap()
 
@@ -185,7 +191,7 @@ class DeviceProperties(Subscribable[DeviceProps]):
         results = await self.get(name)
         return results[name].unwrap().value
 
-    async def get_values(self, access: PropertyAccess = "all") -> dict[str, Any]:
+    async def get_values(self, access: PropAccess = "all") -> dict[str, Any]:
         """Read the values of every property with the given access, leaving out failures."""
         results = await self.refresh(access)
         return {name: result.unwrap().value for name, result in results.results.items() if result.is_ok}
@@ -198,9 +204,9 @@ class DeviceProperties(Subscribable[DeviceProps]):
         if self._closed:
             return
         interface = await self._adapter.cached_interface()
-        changed: dict[str, tuple[PropertyModel | None, PropertyModel]] = {}
+        changed: dict[str, tuple[PropModel | None, PropModel]] = {}
         for name, model in results.ok.items():
-            if name not in interface.properties or self._cache.get(name) == model:
+            if name not in interface.props or self._cache.get(name) == model:
                 continue
             current = model.model_copy(deep=True)
             changed[name] = (self._cache.get(name), current)
@@ -209,11 +215,11 @@ class DeviceProperties(Subscribable[DeviceProps]):
             return
 
         for name, (previous, current) in changed.items():
-            if (prop := self._properties.get(name)) is not None:
+            if (prop := self._views.get(name)) is not None:
                 await prop.notify_change(previous, current)
         await self._notify(self._cache_snapshot())
 
-    def _cache_snapshot(self) -> DeviceProps:
+    def _cache_snapshot(self) -> PropModels:
         return MappingProxyType({name: model.model_copy(deep=True) for name, model in self._cache.items()})
 
 
@@ -238,7 +244,7 @@ class DeviceHandle[D: Device]:
         return self._adapter.uid
 
     @property
-    def props(self) -> DeviceProperties:
+    def props(self) -> DeviceProps:
         return self._props
 
     async def interface(self) -> DeviceInterface:

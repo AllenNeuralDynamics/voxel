@@ -8,7 +8,8 @@ from vxlib.problems import Problems
 
 from vxl import system as system_module
 from vxl.core.instrument.base import Instrument
-from vxl.core.instrument.config import InstrumentConfig, InstrumentState
+from vxl.core.instrument.config import InstrumentConfig
+from vxl.core.instrument.state import InstrumentState
 from vxl.core.station import Station, StationConfig
 from vxl.core.views import StationStatus
 
@@ -51,7 +52,11 @@ _TEMPLATE: dict[str, Any] = {
             "camera": {"width": {"y": 1}, "height": {"x": -1}},
         },
     },
-    "default": {},
+    "default": {
+        "profiles": {
+            "main": {"channels": {"camera": {"illumination": "laser", "fov": {"x": 0, "y": 0, "w": 64, "h": 64}}}}
+        }
+    },
 }
 
 
@@ -109,7 +114,7 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
 
 async def test_a_session_that_fails_to_open_leaves_the_station_idle(station: Station) -> None:
     rig = {**_TEMPLATE["rig"], "stage": {"x": "camera", "y": "y_axis", "z": "z_axis"}}
-    await station.create_instrument("bench", {"rig": rig, "default": {}})
+    await station.create_instrument("bench", {"rig": rig, "default": _TEMPLATE["default"]})
 
     with pytest.raises(Exception, match="not a linear_axis device"):
         await station.open_session("bench")

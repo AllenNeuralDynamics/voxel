@@ -6,7 +6,7 @@ from enum import StrEnum
 from math import isclose, isfinite
 from typing import Literal
 
-from rigup.device import Device, prop
+from rigup.device import Device, fact, stream
 from serial import SerialException
 
 from vxl_drivers.serial import SerialTransport
@@ -91,13 +91,13 @@ class OxxiusController(Device, kind="laser_controller"):
         return self._closed
 
     @property
-    @prop(label="Installed Sources")
+    @fact(label="Installed Sources")
     def installed_sources(self) -> dict[str, str]:
         """Slot-to-model mapping discovered at connection time."""
         return dict(self._models)
 
     @property
-    @prop(label="Reserved Sources")
+    @stream(label="Reserved Sources")
     def reserved_sources(self) -> list[str]:
         with self._transport.transaction():
             return list(self._owners)

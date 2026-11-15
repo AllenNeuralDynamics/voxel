@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from rigup.device import DeviceInterface
-    from rigup.device.results import PropertyModel
+    from rigup.device.results import PropModel
 
     from vxl.instrument import Instrument
     from vxl.station_legacy.models import SessionView
@@ -45,7 +45,7 @@ class DeviceHandleQt(QObject):
         self._interface = interface
         self._uid = interface.uid
         self._started = False
-        self._models: dict[str, PropertyModel] = {}  # latest full model per property (value + options/bounds)
+        self._models: dict[str, PropModel] = {}  # latest full model per property (value + options/bounds)
         self.log = logging.getLogger(f"{self.__class__.__name__}[{self._uid}]")
 
     @property
@@ -58,7 +58,7 @@ class DeviceHandleQt(QObject):
         """Device interface type."""
         return self._interface.kind
 
-    def start(self, props: Mapping[str, PropertyModel]) -> None:
+    def start(self, props: Mapping[str, PropModel]) -> None:
         """Start the adapter from one complete StationFeed device view."""
         if self._started:
             return
@@ -87,21 +87,21 @@ class DeviceHandleQt(QObject):
         self.connected.emit(False)
         self.log.info("Adapter stopped")
 
-    def apply_properties(self, props: Mapping[str, PropertyModel]) -> None:
+    def apply_properties(self, props: Mapping[str, PropModel]) -> None:
         """Replace cached models and emit only values that changed."""
         changed = {name: model.value for name, model in props.items() if self._models.get(name) != model}
         self._models = {name: model.model_copy(deep=True) for name, model in props.items()}
         if changed:
             self.properties_changed.emit(changed)
 
-    def merge_properties(self, props: Mapping[str, PropertyModel]) -> None:
+    def merge_properties(self, props: Mapping[str, PropModel]) -> None:
         """Merge an operation-specific property result into the complete cache."""
         changed = {name: model.value for name, model in props.items() if self._models.get(name) != model}
         self._models.update({name: model.model_copy(deep=True) for name, model in props.items()})
         if changed:
             self.properties_changed.emit(changed)
 
-    def model(self, name: str) -> PropertyModel | None:
+    def model(self, name: str) -> PropModel | None:
         """Latest full model for ``name`` — its value plus any enumerated options / numeric bounds."""
         return self._models.get(name)
 

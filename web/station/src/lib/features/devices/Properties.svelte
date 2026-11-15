@@ -25,7 +25,7 @@
   const groups = $derived.by(() => {
     const settings: Prop[] = [];
     const readings: Prop[] = [];
-    for (const name of Object.keys(device.interface?.properties ?? {})) {
+    for (const name of Object.keys(device.interface?.props ?? {})) {
       const prop = device.getProp(name);
       if (!prop) continue;
       if (!nested(prop) && prop.access === 'rw' && editable(prop)) settings.push(prop);

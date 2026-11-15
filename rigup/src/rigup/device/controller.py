@@ -16,7 +16,7 @@ from ._loop import DeviceLoop, take
 from ._spec import check_class, check_pairing, collect_commands, collect_properties
 from .interface import DeviceInterface
 from .marks import StreamTier
-from .results import CommandRequest, PropertyModel, PropResults, Result, Results
+from .results import CommandRequest, PropModel, PropResults, Result, Results
 
 # Typed events let subscribers receive the model and serialize on demand; schemaless streams go out as raw bytes.
 type PublishTypedFn = Callable[[str, BaseModel], Awaitable[None]]
@@ -29,9 +29,11 @@ _NO_VALUE = object()
 class DeviceController[D: "Device"]:
     """Run a device's commands and property access on its own thread, and stream its properties.
 
+    A fact is read from the device once and cached; later reads return the cached value.
+
     Subclass for device-specific behaviour. A device is owned by one open controller at a time."""
 
-    __default_streaming: ClassVar[dict[StreamTier, float]] = {"fast": 0.05, "slow": 1.0}
+    __default_streaming: ClassVar[dict[StreamTier, float]] = {"fast": 0.05, "normal": 1.0, "slow": 10.0}
 
     def __init_subclass__(cls, *, streaming: Mapping[StreamTier, float] | None = None, **kwargs: Any) -> None:
         """Accept ``streaming`` in the class line to override the default interval of the tiers it names."""
@@ -68,7 +70,7 @@ class DeviceController[D: "Device"]:
             kind=device.kind,
             streaming=dict(self.__streaming),
             commands={name: cmd.info for name, cmd in self._commands.items()},
-            properties=all_properties,
+            props=all_properties,
         )
 
         self._stream_props: dict[StreamTier, list[str]] = {}
@@ -76,6 +78,8 @@ class DeviceController[D: "Device"]:
             if info.stream is not None:
                 self._stream_props.setdefault(info.stream, []).append(name)
         self._stream_tasks: list[asyncio.Task[None]] = []
+        self._fact_names = {name for name, info in all_properties.items() if info.stream is None}
+        self._facts: dict[str, Result] = {}
 
     @property
     def streaming(self) -> dict[StreamTier, float]:
@@ -139,18 +143,18 @@ class DeviceController[D: "Device"]:
         return Results(results=results)
 
     async def get_props(self, *props: str) -> PropResults:
-        props_to_get = list(props) if props else list(self._interface.properties.keys())
+        """Read the named properties, or every property when none is named."""
+        names = list(props) if props else list(self._interface.props)
+        asked = [name for name in names if name not in self._facts]
 
-        def _get() -> PropResults:
-            results: dict[str, Result] = {}
-            for name in props_to_get:
-                if name not in self._interface.properties:
-                    results[name] = Result.err(f"Unknown property: {name}")
-                    continue
-                results[name] = self._access_prop(name)
-            return PropResults(results=results)
+        def _get() -> dict[str, Result]:
+            unknown = {name: Result.err(f"Unknown property: {name}") for name in asked}
+            return unknown | {name: self._access_prop(name) for name in asked if name in self._interface.props}
 
-        return await self._run(_get)
+        read = await self._run(_get) if asked else {}
+        self._facts |= {name: result for name, result in read.items() if name in self._fact_names and result.is_ok}
+        kept = {name: self._facts[name].model_copy(deep=True) for name in names if name in self._facts}
+        return PropResults(results={name: kept[name] if name in kept else read[name] for name in names})
 
     async def set_props(self, **props: Any) -> PropResults:
         summary = ", ".join(f"{k}={v}" for k, v in props.items())
@@ -159,7 +163,7 @@ class DeviceController[D: "Device"]:
         def _set() -> PropResults:
             results: dict[str, Result] = {}
             for name, value in props.items():
-                info = self._interface.properties.get(name)
+                info = self._interface.props.get(name)
                 if info is None or info.access != "rw":
                     results[name] = Result.err(
                         f"Unknown property: {name}" if info is None else f"Read-only property: {name}"
@@ -176,7 +180,7 @@ class DeviceController[D: "Device"]:
         try:
             if value is not _NO_VALUE:
                 setattr(target, name, value)
-            return Result.ok(PropertyModel.from_value(getattr(target, name)))
+            return Result.ok(PropModel.from_value(getattr(target, name)))
         except Exception as e:
             return Result.err(str(e))
 

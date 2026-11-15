@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
 from rigup.device import DeviceHandle, DeviceInterface
-from rigup.device.handle import DeviceProps
+from rigup.device.handle import PropModels
 from vxlib.asyncio import gather_all
 from vxlib.problems import Problems
 from vxlib.reactivity import Cell, Readable
@@ -42,18 +42,16 @@ _HANDLES: dict[str, type[DeviceHandle[Any]]] = {
 
 
 class HAL:
-    """The rig of 1 instrument. Once open, ``devices`` has a handle for each device, of the class its kind has, such as
-    :class:`CameraHandle`, and ``interfaces`` has what each device says it is. ``stage``, ``cameras``, ``lasers`` and
-    ``signal_generators`` hold the same handles by role, each of the class that its role needs: the checks at open
-    prove it."""
+    """The rig of 1 instrument. Once open, :meth:`device` gives the handle of a device by name, of the class its kind
+    has, such as :class:`CameraHandle`. ``stage``, ``cameras``, ``lasers`` and ``signal_generators`` hold the same
+    handles by role, each of the class that its role needs: the checks at open prove it."""
 
     def __init__(self, config: InstrumentConfig) -> None:
         from rigup.rig import Rig  # noqa: PLC0415  # the network runtime loads only when devices open
 
         self._config = config
         self._rig = Rig(config, config.name)
-        self.devices: dict[DeviceUid, DeviceHandle[Any]] = {}
-        self.interfaces: dict[DeviceUid, DeviceInterface] = {}
+        self._devices: dict[DeviceUid, DeviceHandle[Any]] = {}
         self.stage: dict[SpecimenAxis, LinearAxisHandle] = {}
         self.cameras: dict[DeviceUid, CameraHandle] = {}
         self.lasers: dict[DeviceUid, DeviceHandle[Any]] = {}
@@ -70,7 +68,7 @@ class HAL:
     def device(self, uid: DeviceUid) -> DeviceHandle[Any]:
         """The handle of an open device. Raise :class:`RejectedError` with its name when there is none."""
         try:
-            return self.devices[uid]
+            return self._devices[uid]
         except KeyError:
             raise RejectedError(f"Device '{uid}' not found") from None
 
@@ -81,13 +79,14 @@ class HAL:
         try:
             await self._rig.open()
             problems = Problems(self._rig.build_errors.values())
-            problems += await self._inspect()
-            problems += self._role_problems()
-            problems += self._autosave_problems()
+            inspected, interfaces = await self._inspect()
+            problems += inspected
+            problems += self._role_problems(interfaces)
+            problems += self._autosave_problems(interfaces)
             for found in await asyncio.gather(
                 self._camera_geometry_problems(),
                 self._stage_limit_problems(),
-                self._pin_problems(),
+                self._pin_problems(interfaces),
             ):
                 problems += found
         except BaseException:
@@ -98,16 +97,15 @@ class HAL:
             raise StartupError(problems)
         await self._device_views.set(
             {
-                uid: DeviceView(interface=self.interfaces[uid], props=dict(device.props.cache))
-                for uid, device in self.devices.items()
+                uid: DeviceView(interface=interfaces[uid], props=dict(device.props.cache))
+                for uid, device in self._devices.items()
             }
         )
         self._props_unsubs = [
             device.props.subscribe(lambda props, uid=uid: self._show_props(uid, props))
-            for uid, device in self.devices.items()
+            for uid, device in self._devices.items()
         ]
         try:
-            await self._refresh_props()
             await gather_all(
                 *(laser.call("output_disable") for laser in self.lasers.values()),
                 message="Lasers did not turn off their output",
@@ -126,6 +124,16 @@ class HAL:
         finally:
             await self._shut_down()
 
+    async def stop(self) -> None:
+        """Run every failsafe of every open device: try every device, then raise every failure together."""
+
+        async def run(handle: DeviceHandle[Any]) -> None:
+            for name, info in (await handle.interface()).commands.items():
+                if info.intent == "failsafe":
+                    (await handle.run_command(name)).unwrap()
+
+        await gather_all(*(run(handle) for handle in self._devices.values()), message="failsafes")
+
     async def _shut_down(self) -> None:
         """Stop following the devices' properties and the cameras' preview workers, close the rig, and forget the
         devices."""
@@ -139,8 +147,7 @@ class HAL:
                 await self._rig.close()
             finally:
                 for found in (
-                    self.devices,
-                    self.interfaces,
+                    self._devices,
                     self.stage,
                     self.cameras,
                     self.lasers,
@@ -149,16 +156,18 @@ class HAL:
                     found.clear()
                 await self._device_views.set({})
 
-    async def _show_props(self, uid: DeviceUid, props: DeviceProps) -> None:
+    async def _show_props(self, uid: DeviceUid, props: PropModels) -> None:
         """Put the new properties of 1 device in its view."""
-        view = DeviceView(interface=self.interfaces[uid], props=dict(props))
+        view = DeviceView(interface=self._device_views.value[uid].interface, props=dict(props))
         await self._device_views.set({**self._device_views.value, uid: view})
 
-    async def _inspect(self) -> Problems:
-        """Ask each built device what it is, and wrap it in the handle class of its kind."""
+    async def _inspect(self) -> tuple[Problems, dict[DeviceUid, DeviceInterface]]:
+        """Ask each built device what it is, and wrap it in the handle class of its kind. Give the problems, and what
+        each device said it is."""
         devices = list(self._rig.devices.items())
         answers = await asyncio.gather(*(handle.interface() for _, handle in devices), return_exceptions=True)
         problems = Problems()
+        interfaces: dict[DeviceUid, DeviceInterface] = {}
         for (uid, handle), answer in zip(devices, answers, strict=True):
             if isinstance(answer, BaseException):
                 error = _error(answer)
@@ -168,55 +177,54 @@ class HAL:
                     *self._config.component_location(uid),
                 )
                 continue
-            self.interfaces[uid] = answer
+            interfaces[uid] = answer
             if (wrapper := _HANDLES.get(answer.kind)) is not None:
-                self.devices[uid] = wrapper.wrap(handle)
+                self._devices[uid] = wrapper.wrap(handle)
             else:
-                self.devices[uid] = handle
+                self._devices[uid] = handle
                 if answer.kind != "laser":
                     logger.debug("Uncategorized device '%s' of type '%s'", uid, answer.kind)
-        handles = self.devices
+        handles = self._devices
         self.stage = {
             axis: handle
             for axis, uid in self._config.stage.devices().items()
             if isinstance(handle := handles.get(uid), LinearAxisHandle)
         }
         self.cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, CameraHandle)}
-        self.lasers = {uid: handles[uid] for uid, found in self.interfaces.items() if found.kind == "laser"}
+        self.lasers = {uid: handles[uid] for uid, found in interfaces.items() if found.kind == "laser"}
         self.signal_generators = {
             uid: handle for uid, handle in sorted(handles.items()) if isinstance(handle, GeneratorHandle)
         }
-        return problems
+        return problems, interfaces
 
-    def _role_problems(self) -> Problems:
+    def _role_problems(self, interfaces: Mapping[DeviceUid, DeviceInterface]) -> Problems:
         """Each device whose role needs another kind of device: each stage axis is a linear axis, each camera a
         camera, each light source a laser, and each device that sends the light a different way at each position a
         discrete axis. A device with 2 roles is checked for each. A device that did not build or answer has its own
         problem already."""
         config = self._config
-        by_position = [name for name, node in config.optics.elements().items() if isinstance(node.to, dict)]
         needs = [
             *((uid, "linear_axis") for uid in config.stage.devices().values()),
             *((uid, "camera") for uid in config.optics.detectors()),
             *((uid, "laser") for uid in config.optics.sources() if uid in config.all_devices),
-            *((uid, "discrete_axis") for uid in by_position if uid in config.all_devices),
+            *((uid, "discrete_axis") for uid in config.optics.routers() if uid in config.all_devices),
         ]
         problems = Problems()
         for uid, needed in dict.fromkeys(needs):
-            if (interface := self.interfaces.get(uid)) is not None and interface.kind != needed:
+            if (interface := interfaces.get(uid)) is not None and interface.kind != needed:
                 msg = f"'{uid}' is not a {needed} device: it is a {interface.kind} device."
                 problems.add(f"rig.device.not_{needed}", msg, *config.component_location(uid))
         return problems
 
-    def _autosave_problems(self) -> Problems:
+    def _autosave_problems(self, interfaces: Mapping[DeviceUid, DeviceInterface]) -> Problems:
         """Each explicit ``autosave`` name must be a property that the device can write."""
         problems = Problems()
         for uid, names in self._config.autosave.items():
-            interface = self.interfaces.get(uid)
+            interface = interfaces.get(uid)
             if names == "*" or interface is None:
                 continue
             for index, name in enumerate(names):
-                info = interface.properties.get(name)
+                info = interface.props.get(name)
                 if info is None or info.access != "rw":
                     msg = f"Autosave requires a writable property: '{uid}.{name}'."
                     problems.add("device.autosave.not_writable", msg, "autosave", uid, index)
@@ -247,15 +255,15 @@ class HAL:
                 )
         return problems
 
-    async def _pin_problems(self) -> Problems:
+    async def _pin_problems(self, interfaces: Mapping[DeviceUid, DeviceInterface]) -> Problems:
         """Read the pins of each device that has them, then check the wiring against them. Parts, and devices that
         list no pins, are not checked."""
 
         async def read(uid: str) -> dict[str, Pin]:
-            listed = _PINS.validate_python(await self.devices[uid].props.get_value("pins"))
+            listed = _PINS.validate_python(await self._devices[uid].props.get_value("pins"))
             return {pin.name: pin for pin in listed}
 
-        uids = [uid for uid, interface in self.interfaces.items() if "pins" in interface.properties]
+        uids = [uid for uid, interface in interfaces.items() if "pins" in interface.props]
         results = await asyncio.gather(*(read(uid) for uid in uids), return_exceptions=True)
         problems = Problems()
         pins: dict[str, dict[str, Pin]] = {}
@@ -267,18 +275,6 @@ class HAL:
                 pins[uid] = result
         problems += self._config.wiring.pin_problems(pins).under("wiring")
         return problems
-
-    async def _refresh_props(self) -> None:
-        """Read every property of every device into its handle's cache, as far as each device answers."""
-        devices = list(self.devices.items())
-        results = await asyncio.gather(*(handle.props.refresh() for _, handle in devices), return_exceptions=True)
-        for (uid, _), result in zip(devices, results, strict=True):
-            if isinstance(result, BaseException):
-                error = _error(result)
-                logger.warning("Could not refresh properties for device %s: %s", uid, error)
-                continue
-            if failed := [name for name, found in result.results.items() if not found.is_ok]:
-                logger.warning("Could not refresh properties %s for device %s", failed, uid)
 
 
 def _error(failure: BaseException) -> Exception:

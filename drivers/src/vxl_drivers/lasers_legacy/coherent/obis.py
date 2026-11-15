@@ -5,7 +5,7 @@ from enum import StrEnum
 from obis_laser import LSModulationType, LXModulationType
 from obis_laser import ObisLS as ObisLSDriver
 from obis_laser import ObisLX as ObisLXDriver
-from rigup.device import choice, number, prop, query
+from rigup.device import choice, number, query, stream
 from serial import Serial
 
 from vxl_drivers.lasers_legacy.base import Laser
@@ -102,7 +102,7 @@ class ObisLX(Laser):
         return self._inst.temperature
 
     @choice(options=list(ModulationMode))
-    @prop(label="Modulation Mode", desc="Laser modulation mode.")
+    @stream(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         mode = self._inst.modulation_mode
@@ -196,7 +196,7 @@ class ObisLS(Laser):
         return self._inst.temperature
 
     @choice(options=list(ModulationMode))
-    @prop(label="Modulation Mode", desc="Laser modulation mode.")
+    @stream(label="Modulation Mode", desc="Laser modulation mode.")
     def modulation_mode(self) -> str:
         """Get the modulation mode."""
         mode = self._inst.modulation_mode

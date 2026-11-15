@@ -27,7 +27,7 @@ from rigup.node._protocol import (
 )
 from rigup.transport import TransportClient
 
-from ._base import DevicesBuildResult, DevicesConfig, Node
+from ._base import DevicesBuildResult, DevicesConfig, Node, first_read
 from ._logs import relay_logs
 
 
@@ -178,9 +178,7 @@ class TransportNode(Node):
             timeout_s=120.0,
         )
 
-        for uid, err in response.errors.items():
-            self._log.error("Remote build failed for %s: %s", uid, err.msg)
-
+        errors = dict(response.errors)
         handles: dict[str, DeviceHandle] = {}
         for uid in response.built:
             adapter: TransportAdapter = TransportAdapter(uid, self._transport)
@@ -188,9 +186,16 @@ class TransportNode(Node):
             handle = DeviceHandle(adapter)
             self._adapters[uid] = adapter
             self._handles[uid] = handle
+            if (problem := await first_read(handle)) is not None:
+                errors[uid] = problem
+                await self.close_device(uid)
+                continue
             handles[uid] = handle
 
-        return handles, response.errors
+        for uid, err in errors.items():
+            self._log.error("Remote build failed for %s: %s", uid, err.msg)
+
+        return handles, errors
 
     async def close_device(self, uid: str) -> None:
         with suppress(Exception):

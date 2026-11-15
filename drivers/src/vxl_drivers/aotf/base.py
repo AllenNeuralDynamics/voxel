@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from enum import StrEnum
 
-from rigup.device import Device, action, prop, query
+from rigup.device import Device, action, fact, query, stream
 
 
 class ChannelCollisionError(Exception):
@@ -86,13 +86,13 @@ class AOTF(Device, kind="aotf"):
 
     @property
     @abstractmethod
-    @prop(label="Channels")
+    @fact(label="Channels")
     def num_channels(self) -> int:
         """Number of available AOTF channels."""
 
     @property
     @abstractmethod
-    @prop(label="Blanking Mode")
+    @stream(label="Blanking Mode")
     def blanking_mode(self) -> BlankingMode:
         """Blanking control mode. External uses TTL input for synchronization."""
 

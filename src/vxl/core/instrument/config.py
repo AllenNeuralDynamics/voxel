@@ -2,14 +2,14 @@
 
 import math
 import secrets
-from abc import abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from itertools import pairwise
+from types import MappingProxyType
 from typing import Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import (
-    BaseModel,
     BeforeValidator,
     ConfigDict,
     Discriminator,
@@ -17,7 +17,6 @@ from pydantic import (
     PlainSerializer,
     RootModel,
     Tag,
-    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -29,7 +28,6 @@ from vxlib.vector import Span, Vec3D
 
 from rigup import Part
 from vxl.devices.base import Pin, PinName
-from vxl.metadata import ExperimentMetadata, MetadataCls
 from vxl.parts import Filter, Objective
 
 _ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
@@ -403,6 +401,21 @@ type OpticalNode = Annotated[
 """1 node of the optical graph. A node that gives ``width`` or ``height`` is a detector."""
 
 
+@dataclass(frozen=True)
+class LightPath:
+    """1 way the light goes on 1 side of the sample: from a source to the sample, or from the sample to a detector.
+    ``positions`` gives the position that each device on it needs to send the light this way."""
+
+    nodes: tuple[OpticalNodeName, ...]
+    positions: Mapping[OpticalNodeName, str]
+
+    def fits(self, positions: Mapping[str, AxisPosition | None]) -> bool:
+        """Whether the light can go this way with each device in ``positions`` at its position there. A device that
+        ``positions`` leaves out can be at any position. A device at ``None`` is at no position, so no way that needs
+        it fits."""
+        return all(positions.get(device, label) == label for device, label in self.positions.items())
+
+
 class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
     """``optics``: each node, by name."""
 
@@ -422,12 +435,45 @@ class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
         lit = {target for node in elements.values() for targets in node.ways().values() for target in targets}
         return {name: node for name, node in elements.items() if name not in lit and name != _SAMPLE}
 
-    def problems(
-        self,
-        *,
-        devices: Collection[str],
-        parts: Collection[str],
-    ) -> Problems:
+    def routers(self) -> dict[OpticalNodeName, tuple[str, ...]]:
+        """The nodes that send the light a different way at each position, each with its positions."""
+        return {name: tuple(node.to) for name, node in self.elements().items() if isinstance(node.to, dict)}
+
+    def paths_from(self, source: str, positions: Mapping[str, AxisPosition | None]) -> list[LightPath]:
+        """Every way the light goes from ``source`` to the sample, with each device in ``positions`` at its position
+        there. A device that ``positions`` leaves out can be at any position."""
+        return [path for path in self._paths if path.nodes[0] == source and path.fits(positions)]
+
+    def paths_to(self, detector: str, positions: Mapping[str, AxisPosition | None]) -> list[LightPath]:
+        """Every way the light goes from the sample to ``detector``, with each device in ``positions`` at its
+        position there. A device that ``positions`` leaves out can be at any position."""
+        return [path for path in self._paths if path.nodes[-1] == detector and path.fits(positions)]
+
+    @cached_property
+    def _paths(self) -> tuple[LightPath, ...]:
+        """Every way from a source to the sample, then every way from the sample to a detector. No way passes a node
+        2 times."""
+        found: list[LightPath] = []
+        elements = self.elements()
+
+        def walk(end: str, nodes: tuple[str, ...], positions: dict[str, str]) -> None:
+            here = nodes[-1]
+            if here == end:
+                found.append(LightPath(nodes, MappingProxyType(positions)))
+            elif here in elements:
+                for label, targets in elements[here].ways().items():
+                    needs = positions if label is None else {**positions, here: label}
+                    for target in targets:
+                        if target not in nodes:
+                            walk(end, (*nodes, target), needs)
+
+        for source in self.sources():
+            walk(_SAMPLE, (source,), {})
+        for detector in self.detectors():
+            walk(detector, (_SAMPLE,), {})
+        return tuple(found)
+
+    def problems(self, *, devices: Collection[str], parts: Collection[str]) -> Problems:
         """Return the problems of the optical graph that the file alone shows."""
         problems = Problems()
         if _SAMPLE not in self.elements():
@@ -453,17 +499,6 @@ class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
 
 
 # === Instrument config ===
-
-
-@dataclass(frozen=True)
-class LightPath:
-    """1 way the light goes on 1 side of the sample: from a source to the sample, or from the sample to a detector.
-    ``magnification`` and ``band`` come from the parts that the light passes, in nm for the band, and are ``None``
-    when no part gives one."""
-
-    nodes: tuple[OpticalNodeName, ...]
-    magnification: float | None
-    band: tuple[float | None, float | None] | None
 
 
 class InstrumentConfig(RigConfig, frozen=True):
@@ -493,69 +528,34 @@ class InstrumentConfig(RigConfig, frozen=True):
         problems += self.optics.problems(devices=devices, parts=parts).under("optics")
         return problems
 
-    def illumination_paths(self, source: str, positions: Mapping[str, AxisPosition]) -> list[LightPath]:
-        """Every way the light goes from ``source`` to the sample, with each device in ``positions`` at its position
-        there. A device that ``positions`` leaves out can be at any position, and holds no part."""
-        return self._paths(source, _SAMPLE, positions)
+    def magnification(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> float | None:
+        """The magnification of the parts that the light passes on ``path``, with each device in ``positions`` at its
+        position there: ``None`` when no part gives one."""
+        found = [part.magnification for part in self._parts_on(path, positions) if isinstance(part, Objective)]
+        return math.prod(found) if found else None
 
-    def detection_paths(self, detector: str, positions: Mapping[str, AxisPosition]) -> list[LightPath]:
-        """Every way the light goes from the sample to ``detector``, with each device in ``positions`` at its
-        position there. A device that ``positions`` leaves out can be at any position, and holds no part."""
-        return self._paths(_SAMPLE, detector, positions)
-
-    def _paths(self, start: str, end: str, positions: Mapping[str, AxisPosition]) -> list[LightPath]:
-        """Every way the light goes from ``start`` to ``end``. No way passes a node 2 times."""
-        found: list[LightPath] = []
-        parts = self.parts
-
-        def walk(name: str, nodes: tuple[str, ...], held: tuple[str, ...]) -> None:
-            if name == end:
-                found.append(self._path(nodes, held, parts))
-                return
-            for target, part in self._steps(name, positions, parts):
-                if target not in nodes:
-                    walk(target, (*nodes, target), held if part is None else (*held, part))
-
-        walk(start, (start,), ())
-        return found
-
-    def _steps(
-        self, name: str, positions: Mapping[str, AxisPosition], parts: Mapping[str, Part]
-    ) -> list[tuple[OpticalNodeName, str | None]]:
-        """Each node that ``name`` sends light to, with ``name`` at its position in ``positions``. With it: the part
-        that ``name`` holds in the light's way at that position, or ``None``."""
-        node = self.optics.root.get(name)
-        if not isinstance(node, OpticalElement):
-            return []
-        given = positions.get(name)
-        steps: list[tuple[OpticalNodeName, str | None]] = []
-        for label, targets in node.ways().items():
-            if label is None or given is None or given == label:
-                held = self._part_at(given if label is None else label, parts)
-                steps += [(target, held) for target in targets]
-        return steps
-
-    def _part_at(self, position: AxisPosition | None, parts: Mapping[str, Part]) -> str | None:
-        """The part that a device holds at ``position``: the part of that name, when the part is not a node of the
-        optical graph."""
-        if isinstance(position, str) and position in parts and position not in self.optics.root:
-            return position
-        return None
-
-    def _path(self, nodes: tuple[str, ...], held: tuple[str, ...], parts: Mapping[str, Part]) -> LightPath:
-        """The path with the magnification and the band of its parts: the nodes that are parts, and the parts in
-        ``held``, which the devices on it hold."""
-        passed = [parts[name] for name in (*nodes, *held) if name in parts]
-        magnifications = [part.magnification for part in passed if isinstance(part, Objective)]
+    def band(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> tuple[float | None, float | None] | None:
+        """The wavelengths, in nm, that the parts on ``path`` let through, with each device in ``positions`` at its
+        position there: ``None`` when no part gives a band."""
         low: float | None = None
         high: float | None = None
         banded = False
-        for part in passed:
+        for part in self._parts_on(path, positions):
             if isinstance(part, Filter):
                 banded = True
                 low = part.band[0] if low is None else low if part.band[0] is None else max(low, part.band[0])
                 high = part.band[1] if high is None else high if part.band[1] is None else min(high, part.band[1])
-        return LightPath(nodes, math.prod(magnifications) if magnifications else None, (low, high) if banded else None)
+        return (low, high) if banded else None
+
+    def _parts_on(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> list[Part]:
+        """The parts that the light passes on ``path``: its nodes that are parts, and the part that each device on it
+        holds in the light's way. A device holds the part with the name of its position, when that part is not a node
+        of the optical graph. A device is at the position that ``path`` needs, or else at its position in
+        ``positions``."""
+        parts = self.parts
+        at = (path.positions.get(node, positions.get(node)) for node in path.nodes[:-1])
+        held = (position for position in at if isinstance(position, str) and position not in self.optics.root)
+        return [parts[name] for name in (*path.nodes, *held) if name in parts]
 
     def _name_problems(self) -> Problems:
         problems = Problems(
@@ -572,32 +572,3 @@ class InstrumentConfig(RigConfig, frozen=True):
             msg = "'sample' names the node where the 2 sides of the optical graph meet, so no device or part takes it."
             problems.add("rig.reserved_name", msg, *self.component_location(_SAMPLE))
         return problems
-
-
-# === Instrument state ===
-
-
-class InstrumentState(BaseModel, frozen=True):
-    """What the operator edits. ``state.json`` has this form, and so do ``default.yaml`` and a preset. A kind of
-    instrument adds its own fields in a subclass. ``metadata`` is the facts about the specimen, in the form that
-    ``metadata_cls`` gives."""
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    metadata_cls: MetadataCls = ExperimentMetadata
-    metadata: Annotated[dict[str, Any], NotDefault] = Field(default_factory=dict, validate_default=True)
-
-    @field_validator("metadata")
-    @classmethod
-    def _check_metadata(cls, metadata: dict[str, Any], info: ValidationInfo) -> dict[str, Any]:
-        form = info.data.get("metadata_cls")  # missing when metadata_cls itself failed
-        return metadata if form is None else form.model_validate(metadata).model_dump()
-
-    @classmethod
-    def default_fields(cls) -> frozenset[str]:
-        """The fields that can be saved as a default: those with no ``NotDefault`` mark."""
-        return frozenset(name for name, field in cls.model_fields.items() if NotDefault not in field.metadata)
-
-    @abstractmethod
-    def problems(self, config: InstrumentConfig) -> Problems:
-        """Return the problems of this state against ``config``."""

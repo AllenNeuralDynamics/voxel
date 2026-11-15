@@ -3,7 +3,7 @@
 from abc import abstractmethod
 from typing import ClassVar
 
-from rigup.device import prop
+from rigup.device import fact
 from vxlib.vector import Span
 
 from vxl.devices.base import DeviceType
@@ -28,7 +28,7 @@ class LinearAxis(ContinuousAxisNew, kind=DeviceType.LINEAR_AXIS, controller=Line
     unit: ClassVar[str] = "µm"
 
     @property
-    @prop(units="µm", desc="The lowest and highest position it may go to")
+    @fact(units="µm", desc="The lowest and highest position it may go to")
     @abstractmethod
     def limits(self) -> Span: ...
 

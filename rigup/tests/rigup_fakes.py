@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Literal
 
 from rigup.component import Part, RigComponent
-from rigup.device import Device, action, failsafe, number, prop, query
+from rigup.device import Device, action, fact, failsafe, number, query, stream
 
 
 class MockState(StrEnum):
@@ -28,7 +28,7 @@ class MockDevice(Device[MockState], kind="mock"):
         self._enabled = False
 
     @property
-    @prop(label="Value", units="V", stream="fast")
+    @stream("fast", label="Value", units="V")
     def value(self) -> float:
         return self._value
 
@@ -37,7 +37,7 @@ class MockDevice(Device[MockState], kind="mock"):
         self._value = v
 
     @property
-    @prop(label="Enabled")
+    @stream(label="Enabled")
     def enabled(self) -> bool:
         return self._enabled
 
@@ -95,12 +95,12 @@ class Probe(Device, kind="probe"):
         self.inside -= 1
 
     @property
-    @prop()
+    @stream()
     def value(self) -> int:
         return self.count
 
     @number(minimum=0.0, maximum=lambda probe: probe.maximum)
-    @prop(units="V", stream="fast")
+    @stream("fast", units="V")
     def level(self) -> float:
         return self._level
 
@@ -198,3 +198,22 @@ def write(obj: object, name: str, value: object) -> None:
 def subclass(name: str, base: type, **members: object) -> type:
     """Define a subclass as untyped code does, so rigup alone judges its overrides."""
     return type(name, (base,), members)
+
+
+class Unreadable(Device, kind="unreadable"):
+    """Its ``serial`` cannot be read."""
+
+    disposed: bool = False
+
+    @property
+    @stream()
+    def level(self) -> float:
+        return 1.0
+
+    @property
+    @fact()
+    def serial(self) -> str:
+        raise RuntimeError("no answer")
+
+    def dispose(self) -> None:
+        Unreadable.disposed = True

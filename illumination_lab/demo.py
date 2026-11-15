@@ -1,5 +1,5 @@
-"""A session on a simulated SPIM microscope whose light comes from a laser head and an AOM, driven only through the
-commands an app would call. After each step it prints what an app would see.
+"""A session on a simulated SPIM microscope with the new light devices, driven only through the commands an app would
+call. After each step it prints what an app would see.
 
 Run from the repo root: ``uv run -m illumination_lab.demo``."""
 
@@ -22,84 +22,153 @@ from vxl.system import System
 from .instrument import LabMicroscope
 
 _DIGITAL = {"kind": "digital", "off": "0 V", "on": "5 V"}
+_LIGHT = "vxl.devices.light.simulated"
+_FLIP = {
+    "target": "vxl.devices.axes.discrete.mapped.OwnedMappedDiscreteAxis",
+    "init": {
+        "axis": {
+            "target": "vxl.devices.axes.simulated.SimulatedContinuousAxis",
+            "init": {"lower_limit": 0, "upper_limit": 100},
+        },
+        "slots": {
+            "0": {"label": "left", "position": 0},
+            "1": {"label": "right", "position": 10},
+            "2": {"label": "closed", "position": 20},
+        },
+        "tolerance": 1,
+    },
+}
 
 
 class Session:
-    """The SPIM test rig with its laser swapped for a 561 nm head behind an AOM and a shutter; the generator gates the
-    AOM. A second profile ``rfp`` is like ``gfp``."""
+    """The SPIM test rig with a 488 nm laser, 1 AOTF line, a shutter, and a flip mirror that sends the light to the
+    left or the right arm, or nowhere when it is ``closed``. The generator can gate the AOTF line and set the laser's
+    power.
+
+    It has 3 profiles. ``gfp`` gates the AOTF line with the generator, and gives it 1 power for each side. ``align``
+    is the same with no gate signal, for a steady light. ``analog`` also sets the laser's power with a wire."""
 
     def __init__(self, home: Path) -> None:
         data = simulated(config_data())
         data["target"] = "illumination_lab.instrument.LabMicroscope"
-        data["devices"]["laser"] = {
-            "target": "illumination_lab.devices.SimulatedLaserHead",
-            "init": {"wavelength": 561, "low": 1, "high": 100},
+        data["devices"] |= {
+            "laser": {"target": f"{_LIGHT}.SimulatedLaser", "init": {"wavelength": 488}},
+            "laser_561": {"target": f"{_LIGHT}.SimulatedLaser", "init": {"wavelength": 561}},
+            "aotf": {"target": f"{_LIGHT}.SimulatedModulator", "init": {"pins": ["ttl_in"]}},
+            "shutter": {"target": f"{_LIGHT}.SimulatedShutter"},
+            "flip": _FLIP,
         }
-        data["devices"]["aom"] = {
-            "target": "illumination_lab.devices.SimulatedModulator",
-            "init": {"lines": [{"name": "561", "wavelength": 561, "min_transmission": 0.005, "pins": ["ttl_561"]}]},
+        data["parts"] |= {"left_arm": {"kind": "mirror"}, "right_arm": {"kind": "mirror"}}
+        data["optics"] |= {
+            "laser": {"to": "aotf"},
+            "laser_561": {"to": "flip"},
+            "aotf": {"to": "shutter"},
+            "shutter": {"to": "flip"},
+            "flip": {"to": {"left": "left_arm", "right": "right_arm"}},
+            "left_arm": {"to": "galvo"},
+            "right_arm": {"to": "galvo"},
         }
-        data["devices"]["shutter"] = {"target": "illumination_lab.devices.SimulatedShutter"}
-        data["optics"]["laser"] = {"to": "aom"}
-        data["optics"]["aom"] = {"to": "shutter"}
-        data["optics"]["shutter"] = {"to": "galvo"}
-        data["wiring"]["ao_main"]["laser"] = {"pin": "ao1", "to": ["aom/ttl_561"], **_DIGITAL}
-        profiles = data["default"]["profiles"]
-        profiles["rfp"] = copy.deepcopy(profiles["gfp"]) | {"positions": {"fw": "RFP"}}
+        wires = data["wiring"]["ao_main"]
+        del wires["laser"]
+        wires["gate"] = {"pin": "ao1", "to": ["aotf/ttl_in"], **_DIGITAL}
+        wires["laser_power"] = {
+            "pin": "ao4",
+            "to": ["laser/analog_in"],
+            "kind": "analog",
+            "limits": {"V": [0, 5]},
+            "park": "0 V",
+        }
+        default = data["default"]
+        default["positions"] = {"flip": "left"}
+        gfp = default["profiles"]["gfp"]
+        signals = gfp["timelines"]["ao_main"]["signals"]
+        signals["gate"] = signals.pop("laser")
+        gfp["power"] = {
+            "full": {"laser": "50 mW", "aotf": {"flip": {"left": "30 %", "right": "42 %"}}},
+            "dim": {"aotf": {"flip": {"left": "3 %", "right": "4 %"}}},
+        }
+        align = copy.deepcopy(gfp)
+        del align["timelines"]["ao_main"]["signals"]["gate"]
+        analog = copy.deepcopy(gfp)
+        analog["timelines"]["ao_main"]["signals"]["laser_power"] = {"kind": "constant", "value": "2 V"}
+        del analog["power"]["full"]["laser"]
+        default["profiles"] |= {"align": align, "analog": analog}
         folder = InstrumentFolder.create(template(data), "lab", home)
         records = SQLiteRecords(home / "records.sqlite3", resolve_root=lambda spec: home / spec.path.as_posix())
         system = System(store=home / "data", scratch=home / "scratch", remotes={}, max_ram_fraction=0.1)
         self.microscope = LabMicroscope(folder, records=records, system=system)
 
-    async def step(self, what: str, call: Awaitable[Any] | None = None) -> None:
-        """Run 1 command, then print what an app would see."""
+    async def step(self, what: str, *calls: Awaitable[Any]) -> None:
+        """Run the commands of 1 step, then print what an app would see."""
         print(f"\n> {what}")
-        if call is not None:
+        for call in calls:
             try:
                 await call
             except RejectedError as error:
                 print(f"  refused: {error}")
         m = self.microscope
-        laser = await self._props("laser", "is_enabled", "power_mw", "modulation")
-        aom = await self._props("aom", "enabled_lines", "transmissions", "modulations")
-        shutter = (await self._props("shutter", "is_open"))["is_open"]
-        line_open = "561" in aom["enabled_lines"]
-        lit = laser["is_enabled"] and line_open and shutter
-        sample = laser["power_mw"] * aom["transmissions"]["561"] if lit else 0.0
-        powers = {camera: f"{full:g} mW, dim {dim}" for camera, (full, dim) in m.channel_powers().items()}
-        activities = [activity.kind for activity in m.activities.value] or "off"
-        print(f"  profile {m.active_profile.value}; channel powers {powers}")
-        print(f"  preview {activities}; channels {m.preview_channels.value}; light {m.preview_light.value}")
-        laser_state = "on" if laser["is_enabled"] else "off"
-        print(f"  laser {laser_state}, {laser['power_mw']:g} mW, {str(laser['modulation']).lower()}")
-        aom_state = "open" if line_open else "closed"
-        mode = str(aom["modulations"]["561"]).lower()
-        print(f"  aom/561 {aom_state}, transmission {aom['transmissions']['561']:.3g}, {mode}")
-        print(f"  shutter {'open' if shutter else 'closed'}")
-        print(f"  power meter: {sample:.3g} mW")
+        laser = await self.props("laser", "is_on", "power", "control_mode")
+        aotf = await self.props("aotf", "is_on", "power", "control_mode")
+        shutter = await self.props("shutter", "is_open")
+        bare = await self.props("laser_561", "is_on")
+        activities = [activity.kind for activity in m.activities.value] or "none"
+        side = m.state.value.positions["flip"]
+        print(f"  profile {m.active_profile.value}; side {side}; power mode {m.power_mode.value}; running {activities}")
+        print(f"  laser   {_on(laser['is_on'])}, {laser['power']:g} mW, control {laser['control_mode']}")
+        print(f"  aotf    {_on(aotf['is_on'])}, {aotf['power']:g} %, control {aotf['control_mode']}")
+        print(f"  shutter {'open' if shutter['is_open'] else 'closed'}")
+        print(f"  laser_561 {_on(bare['is_on'])} (nothing after it stops its light)")
 
-    async def _props(self, device: str, *names: str) -> dict[str, Any]:
+    async def props(self, device: str, *names: str) -> dict[str, Any]:
+        """The values of some properties of a device, read now."""
         results = await self.microscope.get_device_properties(device, names)
         return {name: results.results[name].unwrap().value for name in names}
 
 
+def _on(value: bool) -> str:
+    return "on " if value else "off"
+
+
 async def main() -> None:
-    logging.basicConfig(level=logging.WARNING, stream=sys.stdout, format="  note: %(message)s")
+    logging.basicConfig(level=logging.CRITICAL, stream=sys.stdout)
     with tempfile.TemporaryDirectory() as tmp:
         session = Session(Path(tmp))
         m = session.microscope
         await session.step("open()", m.open())
         try:
-            await session.step('set_channel_power("camera", 10)', m.set_channel_power("camera", 10))
-            await session.step('set_channel_dim_power("camera", 1)', m.set_channel_dim_power("camera", 1))
+            await session.step('execute_device_command("laser_561", "on")', m.execute_device_command("laser_561", "on"))
             await session.step("start_preview()", m.start_preview())
-            await session.step('set_preview_light("full")', m.set_preview_light("full"))
-            await session.step('set_channel_power("camera", 12)', m.set_channel_power("camera", 12))
-            await session.step('set_channel_power("camera", 500)', m.set_channel_power("camera", 500))
-            await session.step('select_profile("rfp")', m.select_profile("rfp"))
-            await session.step('set_channel_power("camera", 3)', m.set_channel_power("camera", 3))
-            await session.step('select_profile("gfp")', m.select_profile("gfp"))
+            await session.step('set_power_mode("full")', m.set_power_mode("full"))
+            await session.step('set_power("aotf", 35)', m.set_power("aotf", 35))
+            await session.step('set_power("aotf", 500)', m.set_power("aotf", 500))
+            await session.step(
+                'set_position_rule("flip", "right"), apply_profile()',
+                m.set_position_rule("flip", "right"),
+                m.apply_profile(),
+            )
+            await session.step(
+                'set_dim_power("aotf", 5), set_power_mode("dim")',
+                m.set_dim_power("aotf", 5),
+                m.set_power_mode("dim"),
+            )
+            await session.step(
+                'set_position_rule("flip", "closed"), apply_profile()',
+                m.set_position_rule("flip", "closed"),
+                m.apply_profile(),
+            )
+            await session.step(
+                'set_position_rule("flip", "right"), apply_profile()',
+                m.set_position_rule("flip", "right"),
+                m.apply_profile(),
+            )
+            await session.step('select_profile("align")', m.select_profile("align"))
+            await session.step('select_profile("analog")', m.select_profile("analog"))
+            await session.step('set_power("laser", 20)', m.set_power("laser", 20))
+            await session.step("lights_off()", m.lights_off())
+            await session.step("lasers_off()", m.lasers_off())
             await session.step("stop_preview()", m.stop_preview())
+            saved = m.state.value.profiles["gfp"].model_dump(mode="json")["power"]
+            print(f"\nthe gfp profile's saved power: {saved}")
         finally:
             await m.close()
 

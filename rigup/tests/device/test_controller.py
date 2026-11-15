@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 import pytest
 from forward_refs import FD
 from pydantic import Field
-from rigup.device import Device, DeviceController, action, integer, number, prop, query
+from rigup.device import Device, DeviceController, action, fact, integer, number, query, stream
 from rigup_fakes import MockDevice
 
 type Take = Callable[[Device], DeviceController[Any]]
@@ -14,7 +14,7 @@ type Take = Callable[[Device], DeviceController[Any]]
 
 class LaserBase(Device, ABC, kind="laser"):
     @number()
-    @prop(units="mW", stream="fast")
+    @stream("fast", units="mW")
     @abstractmethod
     def power(self) -> float: ...
 
@@ -23,7 +23,7 @@ class LaserBase(Device, ABC, kind="laser"):
     def power(self, value: float) -> None: ...
 
     @property
-    @prop(units="°C", stream="slow")
+    @stream(units="°C")
     def temperature(self) -> float:
         return 24.5
 
@@ -72,7 +72,7 @@ class Options(Device, kind="options"):
         self._binning = 1
 
     @number(options=[0.0, 25.5, 100.0])
-    @prop(units="%")
+    @stream(units="%")
     def level(self) -> float:
         return self._level
 
@@ -81,7 +81,7 @@ class Options(Device, kind="options"):
         self._level = value
 
     @integer(options=[1, 2, 4])
-    @prop()
+    @stream()
     def binning(self) -> int:
         return self._binning
 
@@ -96,7 +96,7 @@ class Mixin:
         return "hi"
 
     @property
-    @prop()
+    @stream()
     def mix(self) -> int:
         return 1
 
@@ -254,22 +254,22 @@ async def test_a_mixin_member_is_refused_from_another_thread(take: Take, read: C
 
 
 def test_streaming_uses_the_default_rates() -> None:
-    assert DeviceController(Laser()).streaming == {"fast": 0.05, "slow": 1.0}
+    assert DeviceController(Laser()).streaming == {"fast": 0.05, "normal": 1.0, "slow": 10.0}
 
 
 def test_streaming_takes_the_rates_of_the_controller_class_line() -> None:
-    assert Camera("camera").make_controller().streaming == {"fast": 0.02, "slow": 1.0}
+    assert Camera("camera").make_controller().streaming == {"fast": 0.02, "normal": 1.0, "slow": 10.0}
 
 
 def test_streaming_takes_the_rig_config_rates_over_the_class_line() -> None:
-    controller = Camera("camera").make_controller(streaming={"slow": 5.0})
+    controller = Camera("camera").make_controller(streaming={"normal": 5.0})
 
-    assert controller.streaming == {"fast": 0.02, "slow": 5.0}
-    assert controller.interface.streaming == {"fast": 0.02, "slow": 5.0}
+    assert controller.streaming == {"fast": 0.02, "normal": 5.0, "slow": 10.0}
+    assert controller.interface.streaming == {"fast": 0.02, "normal": 5.0, "slow": 10.0}
 
 
 async def test_streams_send_each_tier_and_resend_a_changed_property() -> None:
-    controller = DeviceController(Laser(), streaming={"fast": 0.02, "slow": 2.0})
+    controller = DeviceController(Laser(), streaming={"fast": 0.02, "normal": 2.0})
     sent: list[tuple[str, ...]] = []
     first_power, second_power = asyncio.Event(), asyncio.Event()
 
@@ -293,3 +293,36 @@ async def test_streams_send_each_tier_and_resend_a_changed_property() -> None:
 
     assert ("temperature",) in sent
     assert sent.count(("power",)) == 2
+
+
+class Counted(Device, kind="counted"):
+    def __init__(self) -> None:
+        super().__init__("counted")
+        self.reads = {"pins": 0, "level": 0}
+
+    @property
+    @fact()
+    def pins(self) -> list[str]:
+        self.reads["pins"] += 1
+        return ["a", "b"]
+
+    @property
+    @stream()
+    def level(self) -> float:
+        self.reads["level"] += 1
+        return 1.0
+
+
+async def test_a_fact_is_read_from_the_device_1_time_and_a_stream_on_each_read() -> None:
+    device = Counted()
+    controller = DeviceController(device)
+    try:
+        first = await controller.get_props()
+        first["pins"].unwrap().value.append("changed by a caller")
+        second = await controller.get_props("level", "pins")
+    finally:
+        await controller.close()
+
+    assert device.reads == {"pins": 1, "level": 2}
+    assert second.unwrap()["pins"].value == ["a", "b"]
+    assert list(second.results) == ["level", "pins"]

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from time import monotonic, sleep
 
 from pylablib.devices.Thorlabs import MFF
-from rigup.device import integer, prop
+from rigup.device import integer, stream
 
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotContent
 
@@ -69,7 +69,7 @@ class MFF101(DiscreteAxis):
             sleep(0.05)
 
     @integer(minimum=500, maximum=2800, step=100)
-    @prop(label="Flip Time", units="ms", desc="Time to travel between slots.")
+    @stream(label="Flip Time", units="ms", desc="Time to travel between slots.")
     def flip_time_ms(self) -> int:
         return round(self._inst.get_flipper_parameters().transit_time * 1000)
 

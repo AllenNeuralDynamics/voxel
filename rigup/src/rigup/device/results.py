@@ -13,16 +13,16 @@ logger = logging.getLogger("rigup")
 
 
 # Enumeration is orthogonal to kind: any kind with ``options`` set is its enumerated variant.
-type PropertyKind = Literal["integer", "float", "string", "bool", "generic"]
+type PropKind = Literal["integer", "float", "string", "bool", "generic"]
 
 
-class PropertyModel[T: str | int | float | bool](BaseModel):
+class PropModel[T: str | int | float | bool](BaseModel):
     """A property value with its constraints at the time it was read.
 
     Non-null ``options`` restricts the value, and an empty list permits none; check it before the numeric bounds.
     Constraints can change between reads while the value stays the same."""
 
-    kind: PropertyKind = "generic"
+    kind: PropKind = "generic"
     value: Any
     minimum: float | None = None
     maximum: float | None = None
@@ -30,46 +30,46 @@ class PropertyModel[T: str | int | float | bool](BaseModel):
     options: list[T] | None = None
 
     @staticmethod
-    def from_value(value: Any) -> "PropertyModel":
-        if isinstance(value, PropertyModel):
+    def from_value(value: Any) -> "PropModel":
+        if isinstance(value, PropModel):
             return value
         if isinstance(value, NumberValue | IntegerValue):
-            kind: PropertyKind = "float" if isinstance(value, NumberValue) else "integer"
+            kind: PropKind = "float" if isinstance(value, NumberValue) else "integer"
             options = None if value.options is None else list(value.options)
             number = float(value) if isinstance(value, NumberValue) else int(value)
-            return PropertyModel(
+            return PropModel(
                 kind=kind, value=number, minimum=value.minimum, maximum=value.maximum, step=value.step, options=options
             )
         if isinstance(value, ChoiceValue):
-            return PropertyModel(
+            return PropModel(
                 kind="string", value=str(value), options=None if value.options is None else list(value.options)
             )
         if isinstance(value, Enum):
             enum_class = type(value)
-            return PropertyModel(
+            return PropModel(
                 kind="string",
                 value=value.name if hasattr(value, "name") else str(value),
                 options=[e.name for e in enum_class],
             )
         if isinstance(value, BaseModel):
-            return PropertyModel(value=value.model_dump(mode="json"))
+            return PropModel(value=value.model_dump(mode="json"))
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
-            return PropertyModel(value=dataclasses.asdict(value))
+            return PropModel(value=dataclasses.asdict(value))
         # bool is a subclass of int, so it is checked first.
         if isinstance(value, bool):
-            return PropertyModel(kind="bool", value=value)
+            return PropModel(kind="bool", value=value)
         if isinstance(value, int):
-            return PropertyModel(kind="integer", value=value)
+            return PropModel(kind="integer", value=value)
         if isinstance(value, float):
-            return PropertyModel(kind="float", value=value)
+            return PropModel(kind="float", value=value)
         if isinstance(value, str):
-            return PropertyModel(kind="string", value=value)
+            return PropModel(kind="string", value=value)
         if isinstance(value, tuple):
-            return PropertyModel(value=list(value))
+            return PropModel(value=list(value))
         if not isinstance(value, list | dict | type(None)):
             logger.warning("Unserializable property value of type %s coerced to str", type(value).__name__)
-            return PropertyModel(kind="string", value=str(value))
-        return PropertyModel(value=value)
+            return PropModel(kind="string", value=str(value))
+        return PropModel(value=value)
 
 
 class CommandRequest(BaseModel):
@@ -155,5 +155,5 @@ class Results[V](BaseModel):
         return {k: v.unwrap_or(default) for k, v in self.results.items()}
 
 
-class PropResults(Results[PropertyModel]):
-    """Property results, concrete so ``PropertyModel`` values deserialize."""
+class PropResults(Results[PropModel]):
+    """Property results, concrete so ``PropModel`` values deserialize."""

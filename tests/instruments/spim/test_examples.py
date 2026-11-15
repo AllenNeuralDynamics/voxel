@@ -23,7 +23,7 @@ def test_an_example_file_has_no_problems_and_a_full_chain(
     assert file.problems() == []
 
     for profile in file.default.profiles.values():
-        chain = file.config.trigger_chain(profile.channels, profile.timelines)
+        chain = profile.trigger_chain(file.config)
         assert chain.starters == starters
         assert {device: f"{wire.sender}.{wire.name}" for device, wire in chain.waits.items()} == waits
         assert chain.unstarted == ()

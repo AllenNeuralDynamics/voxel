@@ -21,7 +21,7 @@ References:
 
 from enum import StrEnum
 
-from rigup.device import action, choice, number, prop, query
+from rigup.device import action, choice, fact, number, query, stream
 
 from vxl_drivers.lasers_legacy.base import Laser
 from vxl_drivers.serial import SerialTransport
@@ -190,7 +190,7 @@ class MpbVfl(Laser):
         return float(self._query(Query.POWER))
 
     @number(minimum=0.0, maximum=lambda self: self._max_current_ma, step=1.0)
-    @prop(label="Current Setpoint", units="mA", desc="Commanded diode current (ACC mode).", stream="fast")
+    @stream("fast", label="Current Setpoint", units="mA", desc="Commanded diode current (ACC mode).")
     def current_setpoint_ma(self) -> float:
         """Get the commanded diode current setpoint in mA."""
         return float(self._query(Query.CURRENT_SETPOINT))
@@ -202,7 +202,7 @@ class MpbVfl(Laser):
         self.log.debug(f"Current setpoint set to {value} mA")
 
     @property
-    @prop(label="Diode Current", units="mA", desc="Measured laser diode current.", stream="fast")
+    @stream("fast", label="Diode Current", units="mA", desc="Measured laser diode current.")
     def ld_current_ma(self) -> float:
         """Get the measured laser diode current in mA."""
         return float(self._query(Query.LD_CURRENT))
@@ -213,13 +213,13 @@ class MpbVfl(Laser):
         return float(self._query(Query.LD_TEMP))
 
     @property
-    @prop(label="TEC Temperature", units="°C", desc="Thermoelectric cooler temperature.", stream="slow")
+    @stream(label="TEC Temperature", units="°C", desc="Thermoelectric cooler temperature.")
     def tec_temp_c(self) -> float:
         """Get the TEC temperature in °C."""
         return float(self._query(Query.TEC_TEMP))
 
     @choice(options=list(ControlMode))
-    @prop(label="Control Mode", desc="APC (constant power) or ACC (constant current).")
+    @stream(label="Control Mode", desc="APC (constant power) or ACC (constant current).")
     def control_mode(self) -> str:
         """Get the active control mode."""
         wire = self._query(Query.POWER_ENABLE)
@@ -233,13 +233,13 @@ class MpbVfl(Laser):
         self.log.debug(f"Control mode set to {value}")
 
     @property
-    @prop(label="Model", desc="Identification string reported by the device.")
+    @fact(label="Model", desc="Identification string reported by the device.")
     def idn(self) -> str:
         """Get the device identification string."""
         return self._idn
 
     @number(minimum=0.0, maximum=200.0, step=0.01)
-    @prop(label="SHG Temp Setpoint", units="°C", desc="Commanded SHG crystal temperature.", stream="slow")
+    @stream(label="SHG Temp Setpoint", units="°C", desc="Commanded SHG crystal temperature.")
     def shg_temp_setpoint_c(self) -> float:
         """Get the SHG temperature setpoint in °C."""
         return float(self._query(Query.SHG_TEMP_SETPOINT))
@@ -251,7 +251,7 @@ class MpbVfl(Laser):
         self.log.debug(f"SHG temp setpoint set to {value} °C")
 
     @property
-    @prop(label="SHG Temperature", units="°C", desc="Measured SHG crystal temperature.", stream="slow")
+    @stream(label="SHG Temperature", units="°C", desc="Measured SHG crystal temperature.")
     def shg_temp_c(self) -> float:
         """Get the measured SHG crystal temperature in °C."""
         return float(self._query(Query.SHG_TEMP))

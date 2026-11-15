@@ -125,17 +125,18 @@ def test_each_side_of_the_sample_takes_its_numbers_from_its_own_parts() -> None:
         "Objective",
     ]
 
-    (lit,) = hal.illumination_paths("laser", {"fw": "GFP"})
+    gfp = {"fw": "GFP"}
+    (lit,) = hal.optics.paths_from("laser", {})
     assert lit.nodes == ("laser", "galvo", "excitation_objective", "sample")
-    assert (lit.magnification, lit.band) == (10, None)
+    assert (hal.magnification(lit, gfp), hal.band(lit, gfp)) == (10, None)
 
-    (gfp,) = hal.detection_paths("camera", {"fw": "GFP"})
-    assert gfp.nodes == ("sample", "objective", "fw", "camera")
-    assert (gfp.magnification, gfp.band) == (5, (500, 550))
-    (rfp,) = hal.detection_paths("camera", {"fw": "RFP"})
-    assert rfp.band == (575, None)
+    (seen,) = hal.optics.paths_to("camera", {})
+    assert seen.nodes == ("sample", "objective", "fw", "camera")
+    assert (hal.magnification(seen, gfp), hal.band(seen, gfp)) == (5, (500, 550))
+    assert hal.band(seen, {"fw": "RFP"}) == (575, None)
 
 
 def test_a_device_with_no_position_given_holds_no_part() -> None:
-    (path,) = bench(_HAL).detection_paths("camera", {})
-    assert (path.magnification, path.band) == (5, None)
+    hal = bench(_HAL)
+    (path,) = hal.optics.paths_to("camera", {})
+    assert (hal.magnification(path, {}), hal.band(path, {})) == (5, None)

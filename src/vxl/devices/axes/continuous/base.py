@@ -9,8 +9,8 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Literal, Self
 
 from pydantic import Field, PositiveFloat, TypeAdapter, model_validator
-from rigup.device import Device, DeviceController, DeviceHandle, action, failsafe, number, prop, query
-from rigup.device.handle import Adapter, DeviceProperty
+from rigup.device import Device, DeviceController, DeviceHandle, action, fact, failsafe, number, query, stream
+from rigup.device.handle import Adapter, PropView
 from vxlib.schema import FrozenModel
 from vxlib.vector import Span
 
@@ -173,27 +173,27 @@ class ContinuousAxisNew(Device):
     unit: ClassVar[str]
 
     @property
-    @prop(units=lambda device: device.unit, stream="fast")
+    @stream("fast", units=lambda device: device.unit)
     @abstractmethod
     def position(self) -> float: ...
 
     @property
-    @prop(label="Moving", stream="fast")
+    @stream("fast", label="Moving")
     @abstractmethod
     def is_moving(self) -> bool: ...
 
     @property
-    @prop(desc="idle, stepping or sweeping, as the hardware does it", stream="slow")
+    @stream(desc="idle, stepping or sweeping, as the hardware does it")
     @abstractmethod
     def scan_state(self) -> ScanState: ...
 
     @property
-    @prop(desc="What is wrong now, or nothing", stream="slow")
+    @stream(desc="What is wrong now, or nothing")
     @abstractmethod
     def fault(self) -> str | None: ...
 
     @number(minimum=lambda self: self._get_speed_range().low, maximum=lambda self: self._get_speed_range().high)
-    @prop(units=lambda device: f"{device.unit}/s", desc="The speed of a move")
+    @stream(units=lambda device: f"{device.unit}/s", desc="The speed of a move")
     def speed(self) -> float:
         return self._get_speed()
 
@@ -205,7 +205,7 @@ class ContinuousAxisNew(Device):
         minimum=lambda self: self._get_acceleration_range().low,
         maximum=lambda self: self._get_acceleration_range().high,
     )
-    @prop(units=lambda device: f"{device.unit}/s²")
+    @stream(units=lambda device: f"{device.unit}/s²")
     def acceleration(self) -> float:
         return self._get_acceleration()
 
@@ -214,12 +214,12 @@ class ContinuousAxisNew(Device):
         self._set_acceleration(value)
 
     @property
-    @prop(label="Scan abilities", desc="steps, sweep and pulses, as far as it can do them")
+    @fact(label="Scan abilities", desc="steps, sweep and pulses, as far as it can do them")
     @abstractmethod
     def abilities(self) -> list[ScanAbility]: ...
 
     @property
-    @prop(desc="The pins that can take pulses to step on, and that can send a sweep's pulses")
+    @fact(desc="The pins that can take pulses to step on, and that can send a sweep's pulses")
     @abstractmethod
     def pins(self) -> list[Pin]: ...
 
@@ -278,13 +278,11 @@ class ContinuousAxisNewHandle[D: ContinuousAxisNew](DeviceHandle[D]):
 
     def __init__(self, adapter: Adapter[D]) -> None:
         super().__init__(adapter)
-        self.position: DeviceProperty[float] = self.props.property("position", TypeAdapter(float).validate_python)
-        self.is_moving: DeviceProperty[bool] = self.props.property("is_moving", TypeAdapter(bool).validate_python)
-        self.scan_state: DeviceProperty[ScanState] = self.props.property(
-            "scan_state", TypeAdapter(ScanState).validate_python
-        )
-        self.fault: DeviceProperty[str | None] = self.props.property("fault", TypeAdapter(str | None).validate_python)
-        self.pins: DeviceProperty[list[Pin]] = self.props.property("pins", TypeAdapter(list[Pin]).validate_python)
+        self.position: PropView[float] = self.props.view("position", TypeAdapter(float).validate_python)
+        self.is_moving: PropView[bool] = self.props.view("is_moving", TypeAdapter(bool).validate_python)
+        self.scan_state: PropView[ScanState] = self.props.view("scan_state", TypeAdapter(ScanState).validate_python)
+        self.fault: PropView[str | None] = self.props.view("fault", TypeAdapter(str | None).validate_python)
+        self.pins: PropView[list[Pin]] = self.props.view("pins", TypeAdapter(list[Pin]).validate_python)
 
     async def move_to(self, position: float, *, wait: bool = False, timeout_s: float | None = None) -> None:
         await self.call("move_to", position)

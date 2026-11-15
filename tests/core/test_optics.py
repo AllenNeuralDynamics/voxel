@@ -71,17 +71,17 @@ def test_a_path_gives_the_magnification_and_the_band_of_its_parts() -> None:
     assert list(graph.detectors()) == ["camera_a", "camera_b"]
     assert list(graph.elements()) == ["laser", "sample", "objective", "splitter", "tube_a", "long_pass", "wheel"]
 
-    (lit,) = hal.illumination_paths("laser", {})
+    (lit,) = graph.paths_from("laser", {})
     assert lit.nodes == ("laser", "sample")
 
-    (green,) = hal.detection_paths("camera_a", {"wheel": "green"})
-    assert green.nodes == ("sample", "objective", "splitter", "tube_a", "long_pass", "wheel", "camera_a")
-    assert (green.magnification, green.band) == (10, (510, 550))
-    (clear,) = hal.detection_paths("camera_a", {"wheel": "open"})
-    assert clear.band == (500, None)
+    (to_a,) = graph.paths_to("camera_a", {})
+    assert to_a.nodes == ("sample", "objective", "splitter", "tube_a", "long_pass", "wheel", "camera_a")
+    green = {"wheel": "green"}
+    assert (hal.magnification(to_a, green), hal.band(to_a, green)) == (10, (510, 550))
+    assert hal.band(to_a, {"wheel": "open"}) == (500, None)
 
-    (to_b,) = hal.detection_paths("camera_b", {"wheel": "green"})
-    assert (to_b.magnification, to_b.band) == (20, None)
+    (to_b,) = graph.paths_to("camera_b", {})
+    assert (hal.magnification(to_b, green), hal.band(to_b, green)) == (20, None)
 
 
 def test_a_position_can_send_the_light_to_another_node() -> None:
@@ -99,12 +99,14 @@ def test_a_position_can_send_the_light_to_another_node() -> None:
         devices=["arm_switch"],
     )
 
+    assert hal.optics.routers() == {"arm_switch": ("left", "right")}
+
     def ways(position: str | None) -> list[str]:
         positions = {} if position is None else {"arm_switch": position}
-        return sorted(path.nodes[2] for path in hal.illumination_paths("laser", positions))
+        return sorted(path.nodes[2] for path in hal.optics.paths_from("laser", positions))
 
     assert ways(None) == ["left_lens", "monitor", "right_lens"]
     assert ways("left") == ["left_lens"]
     assert ways("right") == ["monitor", "right_lens"]
     assert ways("off") == []
-    assert [path.nodes for path in hal.detection_paths("camera", {"arm_switch": "off"})] == [("sample", "camera")]
+    assert [path.nodes for path in hal.optics.paths_to("camera", {"arm_switch": "off"})] == [("sample", "camera")]

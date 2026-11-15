@@ -4,7 +4,7 @@ from enum import StrEnum
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup.device import action, number, prop, query
+from rigup.device import action, fact, number, query, stream
 
 from vxl.devices.laser.source import LaserSource, ModulationMode
 from vxl_drivers.serial import SerialTransport
@@ -220,40 +220,40 @@ class MpbVflSource(LaserSource):
         return float(self._query(Query.LD_TEMP))
 
     @property
-    @prop(label="Model")
+    @fact(label="Model")
     def model(self) -> str:
         """Identification string reported by the device at connection time."""
         return self._model
 
     @property
-    @prop(label="Fault", stream="slow")
+    @stream(label="Fault")
     def is_faulted(self) -> bool:
         """Whether the most recent reply carried the fault prompt."""
         return self._faulted
 
     @property
-    @prop(label="Diode Current", units="mA")
+    @stream("slow", label="Diode Current", units="mA")
     def diode_current_ma(self) -> float:
         """Measured laser diode current."""
         self._ensure_open()
         return float(self._query(Query.LD_CURRENT))
 
     @property
-    @prop(label="TEC Temperature", units="°C")
+    @stream("slow", label="TEC Temperature", units="°C")
     def tec_temperature_c(self) -> float:
         """Thermoelectric cooler temperature."""
         self._ensure_open()
         return float(self._query(Query.TEC_TEMP))
 
     @property
-    @prop(label="SHG Temperature", units="°C")
+    @stream("slow", label="SHG Temperature", units="°C")
     def shg_temperature_c(self) -> float:
         """Measured SHG crystal temperature."""
         self._ensure_open()
         return float(self._query(Query.SHG_TEMP))
 
     @property
-    @prop(label="SHG Temperature Setpoint", units="°C")
+    @stream("slow", label="SHG Temperature Setpoint", units="°C")
     def shg_temperature_setpoint_c(self) -> float:
         """Commanded SHG crystal temperature; SHG tuning owns this value."""
         self._ensure_open()

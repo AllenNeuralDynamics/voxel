@@ -15,7 +15,8 @@ from vxlib.reactivity import Cell, Readable, Subscribable
 
 from vxl._utils.files import atomic_write, update_yaml
 from vxl.core.errors import RejectedError
-from vxl.core.instrument.config import InstrumentConfig, InstrumentState
+from vxl.core.instrument.config import InstrumentConfig
+from vxl.core.instrument.state import InstrumentState
 
 
 class Absent(Enum):

@@ -4,7 +4,7 @@ from math import isclose, isfinite
 from time import monotonic, sleep
 from typing import Never
 
-from rigup.device import number, prop
+from rigup.device import number, stream
 from rigup.device.limits import NumberValue
 
 from vxl.devices.laser.base import Laser
@@ -109,7 +109,7 @@ class OxxiusLCXLaser(Laser):
         return self._controller.number(Query.TEMPERATURE, self._prefix)
 
     @property
-    @prop(label="Physical Source Enabled", stream="slow")
+    @stream(label="Physical Source Enabled")
     def physical_source_enabled(self) -> bool:
         """Hardware temperature-regulation permission; not instantaneous optical output."""
         return not self._closed and self._controller.is_enabled(self._prefix)

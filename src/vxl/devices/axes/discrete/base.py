@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator
-from rigup.device import action, failsafe, prop, query
+from rigup.device import action, fact, failsafe, query, stream
 from vxlib.schema import check_identifier
 
 from rigup import RigComponent
@@ -39,7 +39,8 @@ class DiscreteAxisState(BaseModel, frozen=True):
 
 
 class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
-    """Named discrete slots with synchronous motion commands and streamed state."""
+    """Named discrete slots with synchronous motion commands and streamed state. The slot count and the labels are
+    fixed while the device is open."""
 
     def __init__(
         self,
@@ -76,19 +77,19 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
     # State properties _______________________________________________________________________________________________
 
     @property
-    @prop(desc="Total number of physical slots.")
+    @fact(desc="Total number of physical slots.")
     def slot_count(self) -> int:
         """Physical slot count."""
         return self._slot_count
 
     @property
-    @prop(desc="Map of slot index to human-readable label.")
+    @fact(desc="Map of slot index to human-readable label.")
     def labels(self) -> Mapping[int, str | None]:
         """Slot labels; ``None`` denotes an unlabeled slot."""
         return self._labels
 
     @property
-    @prop(desc="Current slot, last commanded slot, and movement status.", stream="fast")
+    @stream("fast", desc="Current slot, last commanded slot, and movement status.")
     @abstractmethod
     def state(self) -> DiscreteAxisState:
         """Read a coherent snapshot; propagate communication errors."""

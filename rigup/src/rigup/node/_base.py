@@ -51,6 +51,19 @@ class Node(ABC):
         """Return the built device handles by uid."""
 
 
+async def first_read(handle: DeviceHandle) -> Problem | None:
+    """Read every property of a newly built device into its handle, so its cache is complete from the start. Return
+    a problem if any property cannot be read."""
+    try:
+        failed = (await handle.props.refresh()).errors
+    except Exception as error:
+        failed = {"*": str(error)}
+    if not failed:
+        return None
+    msg = "Unable to read " + "; ".join(f"'{name}': {reason}" for name, reason in failed.items())
+    return Problem(code="build.properties", msg=msg, loc=(handle.uid,))
+
+
 async def close_each(uids: Iterable[str], close: Callable[[str], Awaitable[None]], log: logging.Logger) -> None:
     """Close every device in ``uids`` in reverse, so a device closes before those it was given, even when one fails;
     then raise the first failure."""
