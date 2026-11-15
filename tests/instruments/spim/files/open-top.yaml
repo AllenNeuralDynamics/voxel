@@ -29,11 +29,11 @@ rig:
       init: {pixel_size_um: {x: 6.5, y: 6.5}, serial: "000123"}
 
     laser_488:
-      target: vxl.devices.laser.simulated.SimulatedLaser
-      init: {wavelength: 488, source_enable_delay_s: 1}
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 488}
     laser_638:
-      target: vxl.devices.laser.simulated.SimulatedLaser
-      init: {wavelength: 638, source_enable_delay_s: 1}
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 638}
 
     fw_emission:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
@@ -55,8 +55,6 @@ rig:
 
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms]
-    laser_488: [source_power_setpoint_mw]
-    laser_638: [source_power_setpoint_mw]
 
   stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
   # z_axis: this motor counts up as the sample goes up, but +z is deeper: its direction will be set on the device
@@ -64,8 +62,8 @@ rig:
   wiring:                                         # every wire on the bench, grouped by the device that sends it
     ao_main:
       camera_trigger: {pin: ao0, to: [camera/trigger_in],   kind: digital, off: 0 V, on: 5 V}
-      laser_488:      {pin: ao1, to: [laser_488/enable_in], kind: digital, off: 0 V, on: 5 V}
-      laser_638:      {pin: ao2, to: [laser_638/enable_in], kind: digital, off: 0 V, on: 5 V}
+      laser_488:      {pin: ao1, to: [laser_488/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      laser_638:      {pin: ao2, to: [laser_638/ttl_in],    kind: digital, off: 0 V, on: 5 V}
       galvo_sheet:    {pin: ao3, to: [sheet_galvo/in],      kind: analog, limits: {V: [-2, 2]}, park: 0 V}   # scans the beam to make the sheet
     x_axis:
       x_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while X sweeps
@@ -113,8 +111,8 @@ default:
       channels:                                   # 1 entry for each camera that is on: its light and the region it reads out
         camera: {illumination: laser_488, fov: {x: 0, y: 0, w: 2048, h: 2048}}   # the height is about 800 µm: 565 µm deep and 565 µm along X
       positions: {fw_emission: BP525}             # the devices that this profile sets, 1 value each
-      props:
-        laser_488: {source_power_setpoint_mw: 50}
+      power:                                      # the power of each laser and modulator that software sets
+        laser_488: {full: 50 mW}
       timelines:                                  # 1 for each signal generator that plays. Only the wires it plays
         ao_main:
           sample_rate: 100 kHz
@@ -130,8 +128,8 @@ default:
       channels:
         camera: {illumination: laser_638, fov: {x: 0, y: 0, w: 2048, h: 2048}}
       positions: {fw_emission: LP650}
-      props:
-        laser_638: {source_power_setpoint_mw: 50}
+      power:                                      # the power of each laser and modulator that software sets
+        laser_638: {full: 50 mW}
       timelines:
         ao_main:
           sample_rate: 100 kHz

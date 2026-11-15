@@ -67,10 +67,12 @@ def render(timeline: Timeline, wires: Mapping[WireName, WireConfig]) -> Rendered
         if isinstance(wire, DigitalWire) != isinstance(signal, DigitalOn | DigitalOff):
             continue
         ideal = _ideal(signal, window, timeline)
-        smooth, turn = _smooth(ideal, wire, rate)
-        output, outside = _output(smooth, signal, wire)
+        smooth, smooth_problems = _smooth(ideal, wire, rate)
+        output, output_problems = _output(smooth, signal, wire)
         samples[name] = WireSamples(ideal, smooth, output)
-        problems = _sample_problems(ideal, smooth, turn, output, outside, wire, window, timeline)
+        problems = _timing_problems(wire, window, timeline) if ideal.any() else Problems()
+        problems += smooth_problems
+        problems += output_problems
         found += problems.under("signals", name)
 
     # Each follow copies the volts of its source, so it comes after it. A loop is never ready; the timeline's edge
@@ -133,12 +135,13 @@ def _ideal(signal: Signal, window: Span, timeline: Timeline) -> np.ndarray:
     return np.roll(np.concatenate([shape, between]), start)
 
 
-def _smooth(ideal: np.ndarray, wire: WireConfig, rate: float) -> tuple[np.ndarray, int]:
-    """The shape the device can follow, and the time of each turn in samples. Each try blurs ``ideal``, then stretches
-    it back to the sharp low and high. The narrowest blur that stays within the wire's acceleration wins; when none
-    does, the one that reaches the most of the sharp swing."""
+def _smooth(ideal: np.ndarray, wire: WireConfig, rate: float) -> tuple[np.ndarray, Problems]:
+    """The shape the device can follow, and its problems: a swing it cannot reach, and 2 turns closer than the time
+    of 1 turn. Each try blurs ``ideal``, then stretches it back to the sharp low and high. The narrowest blur that
+    stays within the wire's acceleration wins; when none does, the one that reaches the most of the sharp swing."""
+    found = Problems()
     if not isinstance(wire, AnalogWire) or wire.travel_time is None:
-        return ideal, 0
+        return ideal, found
     limit = _acceleration_limit(wire, rate)
     jerk = round(float(wire.jerk_time or 0.0) * rate)
     swing = float(np.ptp(ideal))
@@ -171,83 +174,65 @@ def _smooth(ideal: np.ndarray, wire: WireConfig, rate: float) -> tuple[np.ndarra
         if reach > best_reach:
             best, best_reach = width, reach
         below = width
-    return attempt(best)[0], 2 * (best - 1) + max(jerk - 1, 0)
+    smooth, turn = attempt(best)[0], 2 * (best - 1) + max(jerk - 1, 0)
+    if (reached := float(np.ptp(smooth))) < swing * (1 - 1e-6):
+        msg = f"The device cannot turn fast enough for the full swing; it reaches {reached:g} of {swing:g} {wire.unit}."
+        found.add("timeline.signal.swing_short", msg)
+    if turn > 0 and (closest := _closest_breaks(ideal, limit)) is not None:
+        at, apart = closest
+        if apart < turn:
+            msg = (
+                f"At {at / rate * 1e3:g} ms, 2 turns are {apart / rate * 1e3:g} ms apart, but each turn takes "
+                f"{turn / rate * 1e3:g} ms."
+            )
+            found.add("timeline.signal.turn_overlap", msg)
+    return smooth, found
 
 
-def _output(smooth: np.ndarray, signal: Signal, wire: WireConfig) -> tuple[dict[str, np.ndarray], list[str]]:
-    """What goes out in each unit: ``smooth`` through the correction, which leaves a value outside its table as it
-    is, then through each scale table down to V, which holds a value outside it at the table's end. Also the tables
-    that some value fell outside: ``correction``, or the unit a scale starts from."""
+def _output(smooth: np.ndarray, signal: Signal, wire: WireConfig) -> tuple[dict[str, np.ndarray], Problems]:
+    """What goes out in each unit, and its problems: ``smooth`` through the correction, which leaves a value outside
+    its table as it is, then through each scale table down to V, which holds a value outside it at the table's end.
+    The problems are each table that some value fell outside, and each limit that the values pass."""
+    found = Problems()
     if isinstance(wire, DigitalWire):
         off = 0.0 if wire.off is None else float(wire.off)
         on = 1.0 if wire.on is None else float(wire.on)
-        return {"V": off + (on - off) * smooth}, []
-    outside: list[str] = []
+        return {"V": off + (on - off) * smooth}, found
     values = smooth
     if (correction := getattr(signal, "correction", None)) is not None:
         rows = correction.rows
         corrected = _table([float(w) for w, _ in rows], [float(s) for _, s in rows], values)
         if np.isnan(corrected).any():
-            outside.append("correction")
+            msg = "Some values are outside the correction table; they are sent as is."
+            found.add("timeline.signal.outside_table", msg, "correction")
         values = np.where(np.isnan(corrected), values, corrected)
     output = {wire.unit: values}
     for upper, lower in pairwise(wire.units):
         table = wire.scales[upper]
         scaled = _table(table[upper], table[lower], values)
         if np.isnan(scaled).any():
-            outside.append(upper)
+            msg = f"Some values are outside the scale from {upper}; they are held at its ends."
+            found.add("timeline.signal.outside_table", msg)
             scaled = _table(table[upper], table[lower], values, clip=True)
         values = output[lower] = scaled
-    return output, outside
-
-
-def _sample_problems(
-    ideal: np.ndarray,
-    smooth: np.ndarray,
-    turn: int,
-    output: Mapping[str, np.ndarray],
-    outside: list[str],
-    wire: WireConfig,
-    window: Span,
-    timeline: Timeline,
-) -> Problems:
-    """Every problem in 1 wire's samples."""
-    rate, n = float(timeline.sample_rate), timeline.samples
-    found = Problems()
-
-    def add(code: str, msg: str, *at: str) -> None:
-        found.add(f"timeline.signal.{code}", msg, *at)
-
-    if isinstance(wire, DigitalWire):
-        on = round(window.b * rate) - round(window.a * rate)
-        if 0 < on < n and ideal.any():
-            for key, value in {"on_time": on / rate, "off_time": (n - on) / rate, "repeat_time": n / rate}.items():
-                if (least := getattr(wire, key)) is not None and value < least * (1 - _TOLERANCE):
-                    name = key.replace("_", " ")
-                    add(key, f"The {name} is {value * 1e3:g} ms; the receiver needs {least * 1e3:g} ms.")
-        return found
-
-    unit, swing, reached = wire.unit, float(np.ptp(ideal)), float(np.ptp(smooth))
-    if reached < swing * (1 - 1e-6):
-        add(
-            "swing_short",
-            f"The device cannot turn fast enough for the full swing; it reaches {reached:g} of {swing:g} {unit}.",
-        )
-    if turn > 0 and (closest := _closest_breaks(ideal, _acceleration_limit(wire, rate))) is not None:
-        at, apart = closest
-        if apart < turn:
-            add(
-                "turn_overlap",
-                f"At {at / rate * 1e3:g} ms, 2 turns are {apart / rate * 1e3:g} ms apart, but each turn takes "
-                f"{turn / rate * 1e3:g} ms.",
-            )
-    for table in outside:
-        if table == "correction":
-            add("outside_table", "Some values are outside the correction table; they are sent as is.", "correction")
-        else:
-            add("outside_table", f"Some values are outside the scale from {table}; they are held at its ends.")
     # Limits in the wire's own unit check the values wanted; limits in the units below check the output.
-    found += _limit_problems({**output, unit: smooth}, wire)
+    found += _limit_problems({**output, wire.unit: smooth}, wire)
+    return output, found
+
+
+def _timing_problems(wire: WireConfig, window: Span, timeline: Timeline) -> Problems:
+    """The times of a digital wire that are shorter than its receiver needs: on, off, and from 1 start to the next."""
+    found = Problems()
+    if not isinstance(wire, DigitalWire):
+        return found
+    rate, n = float(timeline.sample_rate), timeline.samples
+    on = round(window.b * rate) - round(window.a * rate)
+    if not 0 < on < n:
+        return found
+    for key, value in {"on_time": on / rate, "off_time": (n - on) / rate, "repeat_time": n / rate}.items():
+        if (least := getattr(wire, key)) is not None and value < least * (1 - _TOLERANCE):
+            msg = f"The {key.replace('_', ' ')} is {value * 1e3:g} ms; the receiver needs {least * 1e3:g} ms."
+            found.add(f"timeline.signal.{key}", msg)
     return found
 
 

@@ -45,6 +45,8 @@ from vxl.system import System, remote_store_fingerprint
 
 log = logging.getLogger(__name__)
 
+_GIB = 1024**3
+
 
 class CameraSensor(FrozenModel):
     """The size of a camera's sensor, and of 1 pixel on it."""
@@ -151,10 +153,10 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         await super().close()
 
     @property
-    @stream(label="RAM Budget", units="bytes")
-    def ram_budget_bytes(self) -> int:
-        """Current RAM share for this camera from the host RAM budget."""
-        return System.Ram.reserved(self.device.uid)
+    @stream("slow", label="RAM Budget", units="GiB")
+    def ram_budget_gib(self) -> float:
+        """This camera's share of the host RAM budget, rounded down to a quarter GiB."""
+        return System.Ram.reserved(self.device.uid) // (_GIB // 4) / 4
 
     @property
     @stream(label="Camera Mode")
@@ -354,7 +356,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         released — so the RAM share read here is not depressed by memory this camera is giving back.
         Refuses below ``MIN_SLOTS``: a single slot would serialize collect against flush.
         """
-        budget = self.ram_budget_bytes
+        budget = System.Ram.reserved(self.device.uid)
         available = System.Ram.available_bytes()
         slots = slots_for_budget(
             config.batch_shape,

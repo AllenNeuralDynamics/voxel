@@ -1,12 +1,16 @@
-"""MPB Communications VFL source (SHG variant) over serial; software modulation only."""
+"""MPB Communications VFL laser (SHG variant) over serial; software control only."""
 
 from enum import StrEnum
 from math import isfinite
 from time import monotonic, sleep
+from typing import ClassVar
 
-from rigup.device import action, fact, number, query, stream
+from rigup.device import action, fact, query, stream
+from vxlib.vector import Span
 
-from vxl.devices.laser.source import LaserSource, ModulationMode
+from vxl.devices.base import Pin
+from vxl.devices.light.base import ControlMode
+from vxl.devices.light.laser import Laser
 from vxl_drivers.serial import SerialTransport
 
 DEFAULT_BAUD = 9600
@@ -48,8 +52,11 @@ class Query(StrEnum):
     STATUS = "shlaser"
 
 
-class MpbVflSource(LaserSource):
-    """One VFL per serial port; wrap with SourceOnlyLaser for source-scaled output."""
+class MpbVflLaser(Laser):
+    """One VFL per serial port, with its power in mW. :meth:`on` waits out the startup delay. It has no pins, so
+    only commands control it."""
+
+    unit: ClassVar[str] = "mW"
 
     def __init__(
         self,
@@ -72,8 +79,7 @@ class MpbVflSource(LaserSource):
         if not isfinite(setpoint_tolerance_mw) or setpoint_tolerance_mw <= 0:
             raise ValueError("setpoint tolerance must be finite and positive")
         self._wavelength = float(wavelength)
-        self._min_power_mw = 0.0
-        self._max_power_mw = max_power_mw
+        self._range = Span(0.0, max_power_mw)
         self._startup_delay_s = startup_delay_s
         self._setpoint_tolerance_mw = setpoint_tolerance_mw
         self._enabled_at: float | None = None
@@ -84,35 +90,36 @@ class MpbVflSource(LaserSource):
             self._initialize()
         except Exception as error:
             try:
-                self.source_disable()
+                self.off()
             except Exception as cleanup_error:
                 raise ExceptionGroup("MPB initialization and inhibition failed", [error, cleanup_error]) from None
             finally:
                 self._t.close()
             raise
-        self.log.info(f"Initialized MPB VFL: port={port}, model={self._model}, max_power={self._max_power_mw} mW")
+        self.log.info(f"Initialized MPB VFL: port={port}, model={self._model}, max_power={self._range.high} mW")
 
     def _initialize(self) -> None:
         self._t.drain_input()
         self._model = self._query(Query.MODEL)
-        self.source_disable()
-        self._configure_modulation_mode(ModulationMode.SOFTWARE)
-        self._read_modulation_mode()
-        self._min_power_mw, self._max_power_mw = self._read_power_limits(fallback=(0.0, self._max_power_mw))
+        self.off()
+        self._set_control_mode("software")
+        if self.control_mode != "software":
+            raise MpbCommandError("MPB did not establish power control")
+        self._range = self._read_power_limits(fallback=self._range)
         # Adopt the existing target within the firmware range and resolution.
-        self.source_power_setpoint_mw = float(self._query(Query.POWER_SETPOINT))
+        self._set_power(float(self._query(Query.POWER_SETPOINT)))
 
-    def _read_power_limits(self, fallback: tuple[float, float]) -> tuple[float, float]:
+    def _read_power_limits(self, fallback: Span) -> Span:
         """Return firmware setpoint limits in mW; reply format "<min> <max>" per PYME."""
         try:
             minimum, maximum = (float(part) for part in self._query(Query.POWER_LIMITS).split()[:2])
         except (ValueError, MpbCommandError) as error:
-            self.log.warning(f"Could not read power limits ({error!r}); using fallback {fallback} mW")
+            self.log.warning(f"Could not read power limits ({error!r}); using fallback {tuple(fallback)} mW")
             return fallback
         if not 0 <= minimum < maximum:
-            self.log.warning(f"Invalid power limits {minimum}..{maximum} mW; using fallback {fallback} mW")
+            self.log.warning(f"Invalid power limits {minimum}..{maximum} mW; using fallback {tuple(fallback)} mW")
             return fallback
-        return minimum, maximum
+        return Span(minimum, maximum)
 
     def _query(self, msg: str) -> str:
         """Send a command and return the trimmed response.
@@ -147,40 +154,61 @@ class MpbVflSource(LaserSource):
 
     @property
     def wavelength(self) -> float:
-        """Configured nominal wavelength of the installed source."""
         return self._wavelength
 
-    def source_enable(self, *, wait: bool = False) -> None:
-        """Enable emission; optionally wait out the configured startup delay."""
+    @property
+    def power(self) -> float:
+        self._ensure_open()
+        return float(self._query(Query.POWER_SETPOINT))
+
+    @property
+    def power_range(self) -> Span:
+        return self._range
+
+    @property
+    def is_on(self) -> bool:
+        return not self._closed and self._flag(Query.LD_ENABLE)
+
+    @property
+    def control_mode(self) -> ControlMode:
+        self._ensure_open()
+        if not self._flag(Query.POWER_ENABLE):  # 1 is APC (constant power), 0 is ACC
+            raise MpbCommandError("MPB power control changed outside this driver")
+        return "software"
+
+    @property
+    def pins(self) -> list[Pin]:
+        return []
+
+    def on(self) -> None:
         self._ensure_open()
         with self._t.transaction():
             try:
-                self._enable(wait=wait)
+                self._enable()
             except Exception as error:
                 try:
-                    self.source_disable()
+                    self.off()
                 except Exception as cleanup_error:
                     raise ExceptionGroup("MPB enable and inhibition failed", [error, cleanup_error]) from None
                 raise
 
-    def _enable(self, *, wait: bool) -> None:
-        if not self.is_source_enabled:
+    def _enable(self) -> None:
+        if not self.is_on:
             self._query(f"{Cmd.LD_ENABLE} 1")
             self._enabled_at = monotonic()
-            if not self.is_source_enabled:
+            if not self.is_on:
                 raise MpbCommandError("MPB did not report its laser diode enabled")
-        if wait:
-            if self._enabled_at is None:
-                self._enabled_at = monotonic()
-            remaining = self._startup_delay_s - (monotonic() - self._enabled_at)
-            if remaining > 0:
-                sleep(remaining)
-            if not self.is_source_enabled:
-                raise MpbCommandError("MPB enable permission was lost during startup")
+        if self._enabled_at is None:
+            self._enabled_at = monotonic()
+        remaining = self._startup_delay_s - (monotonic() - self._enabled_at)
+        if remaining > 0:
+            sleep(remaining)
+        if not self.is_on:
+            raise MpbCommandError("MPB enable permission was lost during startup")
         if self._faulted:
             raise MpbCommandError("MPB reports a fault")
 
-    def source_disable(self) -> None:
+    def off(self) -> None:
         if self._closed:
             return
         self._query(f"{Cmd.LD_ENABLE} 0")
@@ -188,34 +216,31 @@ class MpbVflSource(LaserSource):
             raise MpbCommandError("MPB did not disable its laser diode")
         self._enabled_at = None
 
-    @property
-    def is_source_enabled(self) -> bool:
-        return not self._closed and self._flag(Query.LD_ENABLE)
-
-    # TODO: verify on real hardware whether SETPOWER 0 accepts decimals; if so, lower step and the write format.
-    @number(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=1.0)
-    def source_power_setpoint_mw(self) -> float:
-        self._ensure_open()
-        return float(self._query(Query.POWER_SETPOINT))
-
-    @source_power_setpoint_mw.setter
-    def source_power_setpoint_mw(self, value: float) -> None:
+    # TODO: verify on real hardware whether SETPOWER 0 accepts decimals; if so, change the write format.
+    def _set_power(self, value: float) -> None:
         self._ensure_open()
         if not isfinite(value):
-            raise ValueError("source power must be finite")
+            raise ValueError("power must be finite")
         self._query(f"{Cmd.POWER_SETPOINT} {value:.0f}")
         readback = float(self._query(Query.POWER_SETPOINT))
         if abs(readback - value) > self._setpoint_tolerance_mw:
             raise MpbCommandError(f"MPB power setpoint reads {readback} mW after setting {value} mW")
 
+    def _set_control_mode(self, mode: ControlMode) -> None:
+        self._ensure_open()
+        if mode != "software":
+            raise ValueError(f"{self.uid} does only software control")
+        self._query(f"{Cmd.POWER_ENABLE} 1")
+
     @property
-    def source_power_mw(self) -> float:
+    @stream("fast", label="Measured Power", units="mW")
+    def measured_power_mw(self) -> float:
         self._ensure_open()
         return float(self._query(Query.POWER))
 
     @property
+    @stream("slow", label="Laser Diode Temperature", units="°C")
     def temperature_c(self) -> float:
-        """Laser diode temperature."""
         self._ensure_open()
         return float(self._query(Query.LD_TEMP))
 
@@ -285,29 +310,14 @@ class MpbVflSource(LaserSource):
         self._ensure_open()
         return self._query(Query.STATUS).split("\r")
 
-    def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
-        return (ModulationMode.SOFTWARE,)
-
-    def _read_modulation_mode(self) -> ModulationMode:
-        self._ensure_open()
-        if not self._flag(Query.POWER_ENABLE):  # 1 is APC (constant power), 0 is ACC
-            raise MpbCommandError("MPB power control changed outside this driver")
-        return ModulationMode.SOFTWARE
-
-    def _configure_modulation_mode(self, mode: ModulationMode) -> None:
-        self._ensure_open()
-        if mode != ModulationMode.SOFTWARE:
-            raise ValueError("MpbVflSource currently supports software modulation only")
-        self._query(f"{Cmd.POWER_ENABLE} 1")
-
     def dispose(self) -> None:
-        """Disable emission, then release the serial port; failures can be retried."""
+        """Turn the laser off, then release the serial port; failures can be retried."""
         if self._closed:
             return
-        self.source_disable()
+        self.off()
         self._t.close()
         self._closed = True
 
     def _ensure_open(self) -> None:
         if self._closed:
-            raise RuntimeError("MPB source is closed")
+            raise RuntimeError("MPB laser is closed")

@@ -20,7 +20,7 @@ from .support import bench
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from vxl.core.views import DeviceView
+    from vxl.core.instrument.hal import DeviceView
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
@@ -39,8 +39,8 @@ _RIG: dict[str, Any] = {
             "init": {"frame_source": {"sensor_size_px": {"x": 64, "y": 64}, "pixel_size_um": {"x": 3.76, "y": 3.76}}},
         },
         "laser_488": {
-            "target": "vxl.devices.laser.simulated.SimulatedLaser",
-            "init": {"wavelength": 488, "source_enable_delay_s": 0},
+            "target": "vxl.devices.light.simulated.SimulatedLaser",
+            "init": {"wavelength": 488},
         },
         "x_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
         "y_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
@@ -95,7 +95,7 @@ async def instrument(tmp_path: Path) -> AsyncIterator[_Bench]:
 
 
 async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
-    views = instrument.device_views.value
+    views = instrument.view.value.device_views
     kinds = {uid: view.interface.kind for uid, view in views.items()}
 
     assert set(kinds) == set(_RIG["devices"])
@@ -105,23 +105,23 @@ async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
 
 async def test_a_property_set_is_written_and_shown(instrument: _Bench) -> None:
     sent: list[Mapping[str, DeviceView]] = []
-    instrument.device_views.subscribe(sent.append)
+    instrument.view.subscribe(lambda view: sent.append(view.device_views))
 
-    results = await instrument.set_device_properties("laser_488", {"source_power_setpoint_mw": 12.5})
+    results = await instrument.set_device_properties("camera", {"exposure_time_ms": 12.5})
 
-    assert results.ok["source_power_setpoint_mw"].value == 12.5
+    assert results.ok["exposure_time_ms"].value == 12.5
     assert sent
-    assert instrument.device_views.value["laser_488"].props["source_power_setpoint_mw"].value == 12.5
+    assert instrument.view.value.device_views["camera"].props["exposure_time_ms"].value == 12.5
 
 
 async def test_the_views_are_empty_after_close(instrument: _Bench) -> None:
     await instrument.close()
 
-    assert instrument.device_views.value == {}
+    assert instrument.view.value.device_views == {}
 
 
 async def test_a_device_command_runs(instrument: _Bench) -> None:
-    result = await instrument.execute_device_command("laser_488", "output_disable")
+    result = await instrument.execute_device_command("laser_488", "off")
 
     assert result.is_ok
 
@@ -139,10 +139,10 @@ async def test_a_device_command_runs_while_an_activity_holds_the_device(instrume
     async with scheduler.run("start a calibration", requires=()):
         await scheduler.start(ActivityInfo(kind="calibration"), {"laser_488"})
 
-    result = await instrument.execute_device_command("laser_488", "output_disable")
+    result = await instrument.execute_device_command("laser_488", "off")
 
     assert result.is_ok
-    assert [activity.kind for activity in instrument.activities.value] == ["calibration"]
+    assert [activity.kind for activity in instrument.view.value.activities] == ["calibration"]
 
 
 async def test_a_device_of_the_wrong_kind_stops_the_start(tmp_path: Path) -> None:
@@ -212,13 +212,13 @@ class _LabMetadata(ExperimentMetadata):
 
 async def test_a_metadata_edit_can_be_undone_and_redone(instrument: _Bench) -> None:
     await instrument.update_metadata(notes="left hemisphere")
-    assert instrument.state.value.metadata["notes"] == "left hemisphere"
-    assert instrument.history.value.undo_label == "Update metadata"
+    assert instrument.view.value.state.metadata["notes"] == "left hemisphere"
+    assert instrument.view.value.history.undo_label == "Update metadata"
 
     await instrument.undo()
-    assert instrument.state.value.metadata.get("notes", "") == ""
+    assert instrument.view.value.state.metadata.get("notes", "") == ""
     await instrument.redo()
-    assert instrument.state.value.metadata["notes"] == "left hemisphere"
+    assert instrument.view.value.state.metadata["notes"] == "left hemisphere"
 
 
 async def test_metadata_that_does_not_fit_its_form_is_rejected_at_its_field(instrument: _Bench) -> None:
@@ -226,33 +226,33 @@ async def test_metadata_that_does_not_fit_its_form_is_rejected_at_its_field(inst
         await instrument.update_metadata(weight=12)
 
     assert [problem.loc for problem in caught.value.problems] == [("metadata", "weight")]
-    assert instrument.history.value.undo_label is None
+    assert instrument.view.value.history.undo_label is None
 
 
 async def test_changing_the_metadata_form_keeps_what_fits_and_can_be_undone(instrument: _Bench) -> None:
     await instrument.update_metadata(notes="left hemisphere")
 
     await instrument.set_metadata_class(_LabMetadata)
-    assert instrument.state.value.metadata == {"notes": "left hemisphere", "operator": ""}
-    assert instrument.history.value.undo_label == "Change the metadata form"
+    assert instrument.view.value.state.metadata == {"notes": "left hemisphere", "operator": ""}
+    assert instrument.view.value.history.undo_label == "Change the metadata form"
 
     await instrument.undo()
-    assert instrument.state.value.metadata_cls is ExperimentMetadata
+    assert instrument.view.value.state.metadata_cls is ExperimentMetadata
     await instrument.undo()
-    assert instrument.state.value.metadata.get("notes", "") == ""
+    assert instrument.view.value.state.metadata.get("notes", "") == ""
 
 
 async def test_the_default_state_is_saved_and_restored(instrument: _Bench) -> None:
     await instrument.set_metadata_class(_LabMetadata)
     await instrument.save_as_default_state()
-    assert instrument.default_state.value.metadata_cls is _LabMetadata
+    assert instrument.view.value.default_state.metadata_cls is _LabMetadata
 
     await instrument.set_metadata_class(ExperimentMetadata)
     await instrument.restore_default_state()
-    assert instrument.state.value.metadata_cls is _LabMetadata
+    assert instrument.view.value.state.metadata_cls is _LabMetadata
 
     await instrument.undo()
-    assert instrument.state.value.metadata_cls is ExperimentMetadata
+    assert instrument.view.value.state.metadata_cls is ExperimentMetadata
 
 
 async def test_restoring_the_metadata_form_keeps_the_metadata_that_fits(instrument: _Bench) -> None:
@@ -262,11 +262,11 @@ async def test_restoring_the_metadata_form_keeps_the_metadata_that_fits(instrume
     await instrument.update_metadata(operator="ana")
 
     await instrument.restore_default_state()
-    assert instrument.state.value.metadata_cls is ExperimentMetadata
-    assert instrument.state.value.metadata == {"notes": "left hemisphere"}
+    assert instrument.view.value.state.metadata_cls is ExperimentMetadata
+    assert instrument.view.value.state.metadata == {"notes": "left hemisphere"}
 
     await instrument.undo()
-    assert instrument.state.value.metadata == {"notes": "left hemisphere", "operator": "ana"}
+    assert instrument.view.value.state.metadata == {"notes": "left hemisphere", "operator": "ana"}
 
 
 async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Bench) -> None:

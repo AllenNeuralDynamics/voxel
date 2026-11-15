@@ -1,13 +1,17 @@
-"""Vortran Stradus source over serial; the laser takes power values only while it emits."""
+"""Vortran Stradus laser over serial; the laser takes power values only while it emits."""
 
 from enum import IntFlag
 from math import isfinite
 from time import monotonic, sleep
+from typing import ClassVar
 
-from rigup.device import fact, number, query, stream
+from rigup.device import fact, query, stream
 from serial import Serial, SerialException
+from vxlib.vector import Span
 
-from vxl.devices.laser.source import LaserSource, ModulationMode
+from vxl.devices.base import Pin
+from vxl.devices.light.base import ControlMode
+from vxl.devices.light.laser import Laser
 from vxl_drivers.serial import SerialTransport
 
 _EOL = b"\r\n"
@@ -47,12 +51,15 @@ _STARTING = Status.STANDBY | Status.WARMUP
 _BLOCKING = Status(0x7FF0)
 
 
-class StradusSource(LaserSource):
-    """One Stradus per serial port; wrap with SourceOnlyLaser for source-scaled output.
+class StradusLaser(Laser):
+    """One Stradus per serial port, with its power in mW.
 
-    The laser ignores power values while off, so enable writes the saved value once emission starts.
-    Disable parks the power at 0 first, so emission never starts above the saved value.
-    """
+    The laser ignores power values while off, so :meth:`on` writes the saved value once emission starts, and waits
+    out the startup delay. :meth:`off` parks the power at 0 first, so emission never starts above the saved value.
+    The laser changes its control mode only while it is off, so a change while it is on turns it off, changes the
+    mode, and turns it on again. It does not do mixed control."""
+
+    unit: ClassVar[str] = "mW"
 
     def __init__(
         self,
@@ -87,7 +94,7 @@ class StradusSource(LaserSource):
             self._initialize()
         except Exception as error:
             try:
-                self.source_disable()
+                self.off()
             except Exception as cleanup_error:
                 raise ExceptionGroup("Stradus initialization and inhibition failed", [error, cleanup_error]) from None
             finally:
@@ -113,8 +120,8 @@ class StradusSource(LaserSource):
                 raise StradusError(f"Invalid Stradus maximum power {self._max_power_mw} mW")
             # Adopt the stored target before disable parks the hardware at 0.
             self._setpoint_mw = min(max(self._number("LPS"), 0.0), self._max_power_mw)
-            self.source_disable()
-            self._configure_modulation_mode(ModulationMode.SOFTWARE)
+            self.off()
+            self._write_control_mode("software")
 
     def _exchange(self, name: str, value: object = None) -> str:
         """Send ?NAME or NAME=value and return the value from the NAME=value reply."""
@@ -168,36 +175,65 @@ class StradusSource(LaserSource):
 
     @property
     def wavelength(self) -> float:
-        """Configured nominal wavelength of the installed source."""
         return self._wavelength
 
-    def source_enable(self, *, wait: bool = False) -> None:
-        """Start emission, wait until the laser emits, then write the saved power."""
+    @property
+    def power(self) -> float:
+        self._ensure_open()
+        return self._setpoint_mw
+
+    @property
+    def power_range(self) -> Span:
+        return Span(0.0, self._max_power_mw)
+
+    @property
+    def is_on(self) -> bool:
+        return not self._closed and self._flag("LE")
+
+    @property
+    def control_mode(self) -> ControlMode:
+        self._ensure_open()
+        with self._t.transaction():
+            if self._flag("C"):
+                raise StradusError("Stradus current control was set outside this driver")
+            analog = self._flag("EPC")
+            digital = self._flag("PUL")
+        if analog and digital:
+            raise StradusError("Stradus analog and digital modulation are both on")
+        return "analog" if analog else "digital" if digital else "software"
+
+    @property
+    def pins(self) -> list[Pin]:
+        return [
+            Pin(name="ttl_in", direction="in", kind="digital"),
+            Pin(name="analog_in", direction="in", kind="analog"),
+        ]
+
+    def on(self) -> None:
         self._ensure_open()
         with self._t.transaction():
             try:
-                self._enable(wait=wait)
+                self._enable()
             except Exception as error:
                 try:
-                    self.source_disable()
+                    self.off()
                 except Exception as cleanup_error:
                     raise ExceptionGroup("Stradus enable and inhibition failed", [error, cleanup_error]) from None
                 raise
 
-    def _enable(self, *, wait: bool) -> None:
-        if not self.is_source_enabled:
+    def _enable(self) -> None:
+        if not self.is_on:
             self._switch("LE", True)
             self._enabled_at = monotonic()
             self._wait_for_emission()
-            self._write_power(self._setpoint_mw, self._read_modulation_mode())
-        if wait:
-            if self._enabled_at is None:
-                self._enabled_at = monotonic()
-            remaining = self._startup_delay_s - (monotonic() - self._enabled_at)
-            if remaining > 0:
-                sleep(remaining)
-            if not self.is_source_enabled:
-                raise StradusError("Stradus emission permission was lost during startup")
+            self._write_power(self._setpoint_mw, self.control_mode)
+        if self._enabled_at is None:
+            self._enabled_at = monotonic()
+        remaining = self._startup_delay_s - (monotonic() - self._enabled_at)
+        if remaining > 0:
+            sleep(remaining)
+        if not self.is_on:
+            raise StradusError("Stradus emission permission was lost during startup")
 
     # TODO: verify on real hardware that ?FC drops STANDBY and WARMUP once emission is active.
     def _wait_for_emission(self) -> None:
@@ -211,8 +247,7 @@ class StradusSource(LaserSource):
             previous = status
             sleep(_POLL_S)
 
-    def source_disable(self) -> None:
-        """Park the power at 0 while emitting, then stop emission."""
+    def off(self) -> None:
         if self._closed:
             return
         with self._t.transaction():
@@ -225,35 +260,22 @@ class StradusSource(LaserSource):
         self._enabled_at = None
 
     def _park(self) -> None:
-        mode = ModulationMode.DIGITAL if self._flag("PUL") else ModulationMode.SOFTWARE
+        mode: ControlMode = "digital" if self._flag("PUL") else "software"
         name, readback_name = _power_names(mode)
         self._exchange(name, 0)
         if (parked := self._number(readback_name)) > self._setpoint_tolerance_mw:
             raise StradusError(f"power reads {parked} mW")
 
-    @property
-    def is_source_enabled(self) -> bool:
-        return not self._closed and self._flag("LE")
-
-    @number(minimum=0.0, maximum=lambda self: self._max_power_mw, step=0.1)
-    def source_power_setpoint_mw(self) -> float:
-        """Saved power; the hardware holds it only while emitting."""
+    def _set_power(self, value: float) -> None:
+        """Write and confirm while emitting; otherwise save the value for the next :meth:`on`."""
         self._ensure_open()
-        return self._setpoint_mw
-
-    @source_power_setpoint_mw.setter
-    def source_power_setpoint_mw(self, value: float) -> None:
-        """Write and confirm while emitting; otherwise save the value for the next enable."""
-        self._ensure_open()
-        if not isfinite(value) or not 0 <= value <= self._max_power_mw:
-            raise ValueError(f"source power must be in 0..{self._max_power_mw} mW")
         with self._t.transaction():
-            if self.is_source_enabled:
-                self._write_power(value, self._read_modulation_mode())
+            if self.is_on:
+                self._write_power(value, self.control_mode)
             self._setpoint_mw = value
 
     # TODO: verify on real hardware that ?LPS rounds to whole mW and ?PP returns the setting, not a measurement.
-    def _write_power(self, value: float, mode: ModulationMode) -> None:
+    def _write_power(self, value: float, mode: ControlMode) -> None:
         name, readback_name = _power_names(mode)
         self._exchange(name, f"{value:.1f}")
         readback = self._number(readback_name)
@@ -261,13 +283,14 @@ class StradusSource(LaserSource):
             raise StradusError(f"Stradus power setpoint reads {readback} mW after setting {value} mW")
 
     @property
-    def source_power_mw(self) -> float:
+    @stream("fast", label="Measured Power", units="mW")
+    def measured_power_mw(self) -> float:
         self._ensure_open()
         return self._number("LP")
 
     @property
+    @stream("slow", label="Base Plate Temperature", units="°C")
     def temperature_c(self) -> float:
-        """Base plate temperature."""
         self._ensure_open()
         return self._number("BPT")
 
@@ -319,49 +342,47 @@ class StradusSource(LaserSource):
         self._ensure_open()
         return [flag.name or "" for flag in self._status()]
 
-    def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
-        return tuple(ModulationMode)
-
-    def _read_modulation_mode(self) -> ModulationMode:
+    def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
+        if mode == "mixed":
+            raise ValueError(f"{self.uid} does not do mixed control")
         with self._t.transaction():
-            if self._flag("C"):
-                raise StradusError("Stradus current control was set outside this driver")
-            analog = self._flag("EPC")
-            digital = self._flag("PUL")
-        if analog and digital:
-            raise StradusError("Stradus analog and digital modulation are both on")
-        return ModulationMode.ANALOG if analog else ModulationMode.DIGITAL if digital else ModulationMode.SOFTWARE
+            if self.control_mode == mode:
+                return
+            was_on = self.is_on
+            if was_on:
+                self.off()
+            self._write_control_mode(mode)
+            if was_on:
+                self.on()
 
     # TODO: verify on real hardware that pulse mode works in power control (C=0), as the manual says;
     # the vortran_laser package claims it needs current control.
-    def _configure_modulation_mode(self, mode: ModulationMode) -> None:
-        self._ensure_open()
+    def _write_control_mode(self, mode: ControlMode) -> None:
         with self._t.transaction():
-            self._ensure_modulation_change_allowed()
             self._switch("C", False)
-            states = {"EPC": mode == ModulationMode.ANALOG, "PUL": mode == ModulationMode.DIGITAL}
+            states = {"EPC": mode == "analog", "PUL": mode == "digital"}
             for name, on in sorted(states.items(), key=lambda item: item[1]):
                 self._switch(name, on)
-            if self._read_modulation_mode() != mode:
-                raise StradusError(f"Stradus did not establish {mode} modulation")
+            if self.control_mode != mode:
+                raise StradusError(f"Stradus did not establish {mode} control")
 
     def dispose(self) -> None:
-        """Disable emission, then release the serial port; failures can be retried."""
+        """Turn the laser off, then release the serial port; failures can be retried."""
         if self._closed:
             return
-        self.source_disable()
+        self.off()
         self._t.close()
         self._closed = True
 
     def _ensure_open(self) -> None:
         if self._closed:
-            raise RuntimeError("Stradus source is closed")
+            raise RuntimeError("Stradus laser is closed")
 
 
-def _power_names(mode: ModulationMode) -> tuple[str, str]:
+def _power_names(mode: ControlMode) -> tuple[str, str]:
     """Return the power command and its setpoint query; pulse mode uses peak power."""
-    return ("PP", "PP") if mode == ModulationMode.DIGITAL else ("LP", "LPS")
+    return ("PP", "PP") if mode == "digital" else ("LP", "LPS")
 
 
 def _read_line(port: Serial) -> str:

@@ -1,24 +1,27 @@
-"""Genesis MX source using the pinned coherent-lasers HOPS SDK."""
-
-from __future__ import annotations
+"""Genesis MX laser using the pinned coherent-lasers HOPS SDK."""
 
 from math import isfinite
 from time import monotonic, sleep
+from typing import ClassVar
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX
-from rigup.device import number
+from rigup.device import stream
+from vxlib.vector import Span
 
-from vxl.devices.laser.source import LaserSource, ModulationMode
+from vxl.devices.base import Pin
+from vxl.devices.light.base import ControlMode
+from vxl.devices.light.laser import Laser
 
 
-class GenesisMXSource(LaserSource):
-    """Software-controlled optical power, with optional configured startup delay.
+class GenesisMXLaser(Laser):
+    """A Genesis MX, with its power in mW. :meth:`on` waits out the startup delay.
 
-    Power limits are installation-specific, in mW. startup_delay_s defaults to
-    zero: no optical readiness estimate is provided until a delay is configured.
-    Analog input is disabled; its hardware scaling is not yet part of this driver.
-    """
+    Power limits are installation-specific, in mW. startup_delay_s defaults to zero: no optical readiness estimate
+    is provided until a delay is configured. Analog input is disabled, because its hardware scaling is not yet part
+    of this driver. So the laser has no pins, and only commands control it."""
+
+    unit: ClassVar[str] = "mW"
 
     def __init__(
         self,
@@ -43,8 +46,7 @@ class GenesisMXSource(LaserSource):
         if not isfinite(setpoint_tolerance_mw) or setpoint_tolerance_mw <= 0:
             raise ValueError("setpoint tolerance must be finite and positive")
         self._wavelength = float(wavelength)
-        self._min_power_mw = min_power_mw
-        self._max_power_mw = max_power_mw
+        self._range = Span(float(min_power_mw), float(max_power_mw))
         self._startup_delay_s = startup_delay_s
         self._setpoint_tolerance_mw = setpoint_tolerance_mw
         self._enabled_at: float | None = None
@@ -59,13 +61,8 @@ class GenesisMXSource(LaserSource):
                 raise ExceptionGroup("Genesis initialization and cleanup failed", [error, cleanup_error]) from None
             raise
 
-    @property
-    def wavelength(self) -> float:
-        """Configured nominal wavelength of the installed source."""
-        return self._wavelength
-
     def _initialize(self, serial: str) -> None:
-        self.source_disable()
+        self.off()
         actual_serial = self._inst.head.serial
         if actual_serial != serial:
             raise ValueError(f"Serial number mismatch: expected {serial}, got {actual_serial}")
@@ -74,96 +71,105 @@ class GenesisMXSource(LaserSource):
         if self._inst.mode != OperationModes.PHOTO or self._inst.analog_input_enable:
             raise RuntimeError("failed to establish software power control")
         # Adopt the existing target within the configured range and resolution.
-        self.source_power_setpoint_mw = self._inst.power_setpoint_mw
+        self._set_power(self._inst.power_setpoint_mw)
 
-    def source_enable(self, *, wait: bool = False) -> None:
-        """Enable emission; optionally wait out the configured startup delay."""
+    @property
+    def wavelength(self) -> float:
+        return self._wavelength
+
+    @property
+    def power(self) -> float:
+        self._ensure_open()
+        return self._inst.power_setpoint_mw
+
+    @property
+    def power_range(self) -> Span:
+        return self._range
+
+    @property
+    def is_on(self) -> bool:
+        return not self._closed and self._inst.enable_loop.software
+
+    @property
+    def control_mode(self) -> ControlMode:
+        self._ensure_open()
+        if self._inst.analog_input_enable or self._inst.mode != OperationModes.PHOTO:
+            raise RuntimeError("Genesis power-control configuration changed outside this driver")
+        return "software"
+
+    @property
+    def pins(self) -> list[Pin]:
+        return []
+
+    def on(self) -> None:
         self._ensure_open()
         try:
-            self._enable(wait=wait)
+            self._enable()
         except Exception as error:
             try:
-                self.source_disable()
+                self.off()
             except Exception as cleanup_error:
                 raise ExceptionGroup("Genesis enable and inhibition failed", [error, cleanup_error]) from None
             raise
 
-    def _enable(self, *, wait: bool) -> None:
+    def _enable(self) -> None:
         state = self._inst.enable_loop
         if not state.software:
             state = self._inst.enable()
             self._enabled_at = monotonic()
         if not state.enabled:
             raise RuntimeError("Genesis emission is blocked by its software switch, key, or interlock")
-        if wait:
-            if self._enabled_at is None:
-                self._enabled_at = monotonic()
-            remaining = self._startup_delay_s - (monotonic() - self._enabled_at)
-            if remaining > 0:
-                sleep(remaining)
-            if not self._inst.enable_loop.enabled:
-                raise RuntimeError("Genesis enable permission was lost during startup")
+        if self._enabled_at is None:
+            self._enabled_at = monotonic()
+        remaining = self._startup_delay_s - (monotonic() - self._enabled_at)
+        if remaining > 0:
+            sleep(remaining)
+        if not self._inst.enable_loop.enabled:
+            raise RuntimeError("Genesis enable permission was lost during startup")
 
-    def source_disable(self) -> None:
+    def off(self) -> None:
         if self._closed:
             return
         if self._inst.disable().software:
             raise RuntimeError("Genesis did not disable its software emission switch")
         self._enabled_at = None
 
-    @property
-    def is_source_enabled(self) -> bool:
-        return not self._closed and self._inst.enable_loop.software
-
-    @number(minimum=lambda self: self._min_power_mw, maximum=lambda self: self._max_power_mw, step=0.1)
-    def source_power_setpoint_mw(self) -> float:
-        self._ensure_open()
-        return self._inst.power_setpoint_mw
-
-    @source_power_setpoint_mw.setter
-    def source_power_setpoint_mw(self, value: float) -> None:
+    def _set_power(self, value: float) -> None:
         self._ensure_open()
         if not isfinite(value):
-            raise ValueError("source power must be finite")
+            raise ValueError("power must be finite")
         self._inst.power_mw = value
         readback = self._inst.power_setpoint_mw
         if abs(readback - value) > self._setpoint_tolerance_mw:
             raise RuntimeError(f"Genesis power setpoint reads {readback} mW after setting {value} mW")
 
+    def _set_control_mode(self, mode: ControlMode) -> None:
+        self._ensure_open()
+        if mode != "software":
+            raise ValueError(f"{self.uid} does only software control")
+        self._inst.analog_input_enable = False
+
     @property
-    def source_power_mw(self) -> float:
+    @stream("fast", label="Measured Power", units="mW")
+    def measured_power_mw(self) -> float:
         self._ensure_open()
         return self._inst.power_mw
 
     @property
+    @stream("slow", label="Temperature", units="°C")
     def temperature_c(self) -> float:
         self._ensure_open()
         return self._inst.temperature_c
 
-    def _get_modulation_modes(self) -> tuple[ModulationMode, ...]:
-        return (ModulationMode.SOFTWARE,)
-
-    def _read_modulation_mode(self) -> ModulationMode:
-        self._ensure_open()
-        if self._inst.analog_input_enable or self._inst.mode != OperationModes.PHOTO:
-            raise RuntimeError("Genesis power-control configuration changed outside this driver")
-        return ModulationMode.SOFTWARE
-
-    def _configure_modulation_mode(self, mode: ModulationMode) -> None:
-        self._ensure_open()
-        if mode != ModulationMode.SOFTWARE:
-            raise ValueError("GenesisMXSource currently supports software modulation only")
-        self._inst.analog_input_enable = False
-
     def dispose(self) -> None:
-        """Disable before releasing HOPS; bypass the pinned SDK's broken close()."""
+        """Turn the laser off before releasing HOPS; bypass the pinned SDK's broken close()."""
         if self._closed:
             return
-        self.source_disable()
+        self.off()
         # SDK 0.1.0 close() assigns to a read-only power_setpoint_mw property.
         self._inst.hops.close()
         self._closed = True
 
     def _ensure_open(self) -> None:
         if self._closed:
-            raise RuntimeError("source is closed")
+            raise RuntimeError("Genesis laser is closed")

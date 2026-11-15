@@ -1,1 +1,1 @@
-"""Coherent OBIS source and controller drivers; import concrete classes from their modules."""
+"""Coherent OBIS laser and hub drivers; import concrete classes from their modules."""

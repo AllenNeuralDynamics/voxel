@@ -8,7 +8,6 @@ from vxlib.schema import FrozenModel, check_identifier
 class DeviceType(StrEnum):
     DAQ = "daq"
     CAMERA = "camera"
-    LASER = "laser"
     POWER_METER = "power_meter"
     CONTINUOUS_AXIS = "continuous_axis"
     LINEAR_AXIS = "linear_axis"

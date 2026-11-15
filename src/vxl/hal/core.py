@@ -216,7 +216,7 @@ class HAL:
                     self.cameras[uid] = CameraHandle.wrap(handle)
                 case "signal_generator":
                     self.signal_generators[uid] = SignalGeneratorHandle.wrap(handle)
-                case "laser":
+                case "laser_legacy":
                     self.lasers[uid] = handle
                 case "continuous_axis":
                     self.continuous_axes[uid] = ContinuousAxisHandle.wrap(handle)

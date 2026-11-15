@@ -3,11 +3,10 @@ import logging
 from collections.abc import AsyncGenerator, Collection, Hashable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, Unpack, get_args, get_origin
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, Unpack, cast, get_args, get_origin
 
-from pydantic import ValidationError
+from pydantic import SerializeAsAny, ValidationError
 from rigup.activity import ActivityInfo, ActivityScheduler, Resource
 from rigup.build import dependencies
 from rigup.device import Result
@@ -16,23 +15,26 @@ from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.history import HistoryState, UndoHistory
 from vxlib.problems import KeyPath, Problems
-from vxlib.reactivity import Cell, Readable
+from vxlib.reactivity import Cell, Computed, Readable
+from vxlib.schema import FrozenModel
+from vxlib.units import Quantity
 
 from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
-from vxl.core.instrument.hal import HAL
+from vxl.core.instrument.hal import HAL, DeviceView
 from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
 from vxl.core.instrument.state import (
     InstrumentState,
     PositionRule,
+    Power,
+    PowerMode,
     Profile,
     ProfileDetails,
     ProfileId,
     StageFollowRule,
 )
 from vxl.core.instrument.store import InstrumentStore, Merge, StateValues
-from vxl.core.views import DeviceView
 from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
@@ -45,7 +47,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Instrument[C: InstrumentConfig, S: InstrumentState]:
+class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
+    """The open instrument as a screen sees it: its ``rig.yaml``, its saved state and default state, the next edit to
+    undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, and the object
+    stores that every camera can write to. ``config`` and the states keep every field of the kind of instrument. A
+    kind with more to show adds fields in its own class."""
+
+    config: SerializeAsAny[C]
+    state: SerializeAsAny[S]
+    default_state: SerializeAsAny[S]
+    history: HistoryState
+    active_profile: ProfileId
+    power_mode: PowerMode
+    activities: tuple[ActivityInfo, ...]
+    device_views: dict[DeviceUid, DeviceView]
+    remote_stores: dict[str, Remote]
+
+
+class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = InstrumentView[C, S]]:
     """An instrument: its files, its devices, and the scheduler that lets 1 command at a time use them. A kind of
     instrument names its config and state classes in its own class line, such as
     ``Microscope(Instrument[SPIMConfig, SPIMState])``; they are kept as ``config_cls`` and ``state_cls``. It adds
@@ -55,10 +74,12 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
     commands and property writes never touch an activity, and its queries and failsafes skip the scheduler.
 
     1 profile is active: the first profile until another is selected. A command that changes which profile the
-    devices are set to touches ``active_profile``, so an activity that holds it restarts around the change."""
+    devices are set to touches ``active_profile``, so an activity that holds it restarts around the change. The
+    power mode says which powers of the active profile are in use: the dim ones until it is set."""
 
     config_cls: ClassVar[type[InstrumentConfig]]
     state_cls: ClassVar[type[InstrumentState]]
+    view_cls: ClassVar[type[InstrumentView[Any, Any]]] = InstrumentView
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -66,7 +87,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
             if get_origin(base) is Instrument:
                 args = get_args(base)
                 if not any(isinstance(arg, TypeVar) for arg in args):  # a base that is still generic names none
-                    cls.config_cls, cls.state_cls = args
+                    cls.config_cls, cls.state_cls, *view = args
+                    if view:
+                        cls.view_cls = view[0]
 
     def __init__(self, folder: "InstrumentFolder[C, S]", *, records: VoxelRecords, system: System) -> None:
         """Construct the instrument of ``folder`` without opening hardware. Raise :class:`StartupError` when the
@@ -82,14 +105,11 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
         self._system = system
         self._hal = HAL(config)
         self._scheduler = ActivityScheduler(self._devices_resource_map(config))
-        self._remote_stores: dict[str, Remote] = {}
+        self._remote_stores = Cell[dict[str, Remote]]({})
         self._history = UndoHistory()
         self._active_profile = Cell[ProfileId](next(iter(self._store.value.profiles)))
-
-    @property
-    def path(self) -> Path:
-        """The instrument's folder."""
-        return self._store.home
+        self._power_mode = Cell[PowerMode]("dim")
+        self._view: Computed[V] | None = None
 
     @property
     def config(self) -> C:
@@ -97,39 +117,17 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
         return self._config
 
     @property
-    def state(self) -> Readable[S]:
-        """The saved state, as it changes."""
-        return self._store
-
-    @property
-    def default_state(self) -> Readable[S]:
-        """The saved default state, in ``default.yaml``."""
-        return self._store.default_state
-
-    @property
-    def history(self) -> Readable[HistoryState]:
-        """The next edit to undo and to redo."""
-        return self._history.state
-
-    @property
-    def active_profile(self) -> Readable[ProfileId]:
-        """The profile that the devices are set to: the first profile until another is selected."""
-        return self._active_profile
-
-    @property
-    def activities(self) -> Readable[tuple[ActivityInfo, ...]]:
-        """The activities that run now, such as a preview or a capture."""
-        return self._scheduler.activities
-
-    @property
-    def device_views(self) -> Readable[Mapping[DeviceUid, DeviceView]]:
-        """Each open device as a screen sees it: what it is, and its last properties."""
-        return self._hal.device_views
-
-    @property
-    def remote_stores(self) -> Mapping[str, Remote]:
-        """The object stores set up the same on this computer and on every camera's computer."""
-        return dict(self._remote_stores)
+    def view(self) -> Readable[V]:
+        """The instrument as a screen sees it: everything about it that changes, and its config. It changes when any
+        part of it changes."""
+        if self._view is None:
+            sources = self._view_sources()
+            view_cls = cast("type[V]", self.view_cls)
+            self._view = Computed[V](
+                *sources.values(),
+                fn=lambda: view_cls(config=self._config, **{name: source.value for name, source in sources.items()}),
+            )
+        return self._view
 
     # === Open, close, stop ===
 
@@ -150,7 +148,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
             try:
                 await self._end_activities()
             finally:
-                self._remote_stores = {}
+                await self._remote_stores.set({})
                 await self._history.clear()
                 await self._hal.close()
 
@@ -239,8 +237,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
             await self._apply_profile(profile_id)
 
     async def set_generator_timeline(self, generator: DeviceUid, timeline: Timeline) -> None:
-        """Load a timeline into a signal generator, and save it into the active profile. The profile's checks run
-        first, so a timeline that does not fit is refused before the generator changes. A save cannot be undone."""
+        """Load a timeline into a signal generator, and save it into the active profile. Then set what controls each
+        laser and modulator, as the timelines now say. The profile's checks run first, so a timeline that does not fit
+        is refused before the generator changes. A save cannot be undone."""
         async with self._scheduler.run(
             "set a generator timeline", requires={generator, self._store, self._active_profile}
         ):
@@ -255,6 +254,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
                 raise RejectedError(str(problems), problems)
             await handle.load(self._generator_cycle(generator, timeline, OwnClock()))
             await self._store.update({("profiles", active, "timelines", generator): timeline})
+            await self._apply_light(candidate)
 
     async def update_profile_details(self, profile_id: ProfileId, **details: Unpack[ProfileDetails]) -> None:
         """Change the names and notes of a profile."""
@@ -277,6 +277,35 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
         """Set how a device gets its position for every profile: always 1 position, or by following the stage."""
         async with self._state_edit("Set position rule", edit_id=edit_id) as edit:
             await edit.record({("positions", device_id): rule})
+
+    # === Light ===
+
+    async def set_power(self, device: DeviceUid, value: float) -> None:
+        """Set the full power of a laser or a modulator in the active profile, in the device's own unit, and save it.
+        When the profile has 1 power for each position of a device, set the one for the position it is at now."""
+        await self._edit_power("full", device, value)
+
+    async def set_dim_power(self, device: DeviceUid, value: float) -> None:
+        """Set the dim power of a laser or a modulator in the active profile, as :meth:`set_power` does."""
+        await self._edit_power("dim", device, value)
+
+    async def set_power_mode(self, mode: PowerMode) -> None:
+        """Use the full or the dim powers. A running preview changes at once."""
+        async with self._scheduler.run("set the power mode", requires=()):
+            await self._apply_powers(self._store.value.profiles[self._active_profile.value], mode)
+            await self._power_mode.set(mode)
+
+    async def lights_off(self) -> None:
+        """Make every light dark: no light reaches the sample, and a laser whose light something after it stops stays
+        on. A running preview goes dark and keeps running."""
+        async with self._scheduler.run("turn the lights off", requires=()):
+            await self._hal.lights_off()
+
+    async def lasers_off(self) -> None:
+        """Turn off every laser and modulator, and close every shutter. A running preview goes dark and keeps
+        running."""
+        async with self._scheduler.run("turn the lasers off", requires=()):
+            await self._hal.lasers_off()
 
     # === Saved state ===
 
@@ -320,14 +349,38 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
     async def _end_activities(self) -> None:
         """End every activity. A kind of instrument that runs activities overrides this."""
 
+    def _view_sources(self) -> dict[str, Readable[Any]]:
+        """Each changing field of :attr:`view`, by its name there. A kind of instrument with more to show adds its
+        own fields to these."""
+        return {
+            "state": self._store,
+            "default_state": self._store.default_state,
+            "history": self._history.state,
+            "active_profile": self._active_profile,
+            "power_mode": self._power_mode,
+            "activities": self._scheduler.activities,
+            "device_views": self._hal.device_views,
+            "remote_stores": self._remote_stores,
+        }
+
     async def _apply_profile(self, profile_id: ProfileId) -> None:
-        """Set the devices to a saved profile, in order: every laser output off, device positions (the instrument's at
-        the stage's position, then the profile's own), device properties, camera regions, setup commands, and each
-        generator's cycle on its own clock. Make it the active profile when every step succeeds."""
+        """Set the devices to a saved profile, in order: every light dark, device positions (the instrument's at the
+        stage's position, then the profile's own), device properties, camera regions, setup commands, each generator's
+        cycle on its own clock, then what controls each laser and modulator, and its power. Make it the active profile
+        when every step succeeds. A power that a device cannot do is refused before any device changes."""
         state = self._store.value
         profile = state.profiles[profile_id]
         hal = self._hal
-        await gather_all(*(laser.call("output_disable") for laser in hal.lasers.values()), message="laser off")
+        ranges = await hal.light_power_ranges()
+        problems = Problems()
+        for device, power in profile.power.items():
+            if device in ranges:
+                problems += power.problems(*ranges[device]).under(device)
+            else:
+                problems.add("profile.power.not_dimmable", f"'{device}' is not a laser or a modulator.", device)
+        if problems := problems.under("profiles", profile_id, "power"):
+            raise RejectedError(str(problems), problems)
+        await hal.lights_off()
         positions = {**state.positions_at(await self.stage_position(), {}), **profile.positions}
         await gather_all(*(self._move_axis(device, position) for device, position in positions.items()), message="move")
         for device, props in profile.props.items():
@@ -345,6 +398,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
         }
         loads = (hal.signal_generators[generator].load(cycle) for generator, cycle in cycles.items())
         await gather_all(*loads, message="timelines")
+        await self._apply_light(profile)
         await self._active_profile.set(profile_id)
 
     def _profile_requires(self, profile_id: ProfileId) -> set[Resource]:
@@ -414,6 +468,51 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
 
     # === Helpers of this class ===
 
+    async def _edit_power(self, mode: PowerMode, device: DeviceUid, value: float) -> None:
+        async with self._scheduler.run("set a power", requires={self._store}):
+            hal = self._hal
+            ranges = await hal.light_power_ranges()
+            if device not in ranges:
+                raise RejectedError(f"'{device}' is not a laser or a modulator")
+            lowest, highest = ranges[device]
+            power = Quantity.of(value, lowest.unit)
+            active = self._active_profile.value
+            before = self._store.value.profiles[active].power.get(device)
+            position = None
+            if before is not None and before.router is not None:
+                position = (await hal.router_positions()).get(before.router)
+                if position is None:
+                    raise RejectedError(f"'{before.router}' is at no position now, so '{device}' has no power to set")
+            if before is not None:
+                after = before.replace(mode, power, position)
+            elif mode == "full":
+                after = Power(full=power)
+            else:
+                raise RejectedError(f"'{device}' has no full power in this profile, so it has no dim power to set")
+            if problems := after.problems(lowest, highest).under("profiles", active, "power", device):
+                raise RejectedError(str(problems), problems)
+            await self._store.update({("profiles", active, "power", device): after.model_dump(mode="json")})
+            in_use = self._power_mode.value
+            now = after.at(in_use, position)
+            if now is not None and (before is None or now != before.at(in_use, position)):
+                await hal.set_light_powers({device: now.number})
+
+    async def _apply_light(self, profile: Profile) -> None:
+        """Set what controls each laser and modulator, as the profile's timelines say, then their powers."""
+        await self._hal.set_light_control_modes(profile.live_inputs(self._config))
+        await self._apply_powers(profile, self._power_mode.value)
+
+    async def _apply_powers(self, profile: Profile, mode: PowerMode) -> None:
+        """Set each power of the profile in a power mode, for the position each device that sends the light a
+        different way is at now."""
+        where = await self._hal.router_positions()
+        numbers: dict[DeviceUid, float] = {}
+        for device, power in profile.power.items():
+            position = where.get(power.router) if power.router is not None else None
+            if (found := power.at(mode, position)) is not None:
+                numbers[device] = found.number
+        await self._hal.set_light_powers(numbers)
+
     def _profile_devices(self, profile: Profile) -> set[DeviceUid]:
         """The devices that a profile uses: those on its light paths, and those it sets."""
         on_paths = profile.path_nodes(self._config) & set(self._config.all_devices)
@@ -465,7 +564,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
         for uid, stores in zip(cameras, reported, strict=True):
             if isinstance(stores, BaseException):
                 logger.warning("Could not discover remote stores for camera %s: %s", uid, stores)
-        self._remote_stores = {
+        shared = {
             name: remote
             for name, remote in sorted(local.items())
             if all(
@@ -474,6 +573,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState]:
                 for stores in reported
             )
         }
+        await self._remote_stores.set(shared)
 
     @staticmethod
     def _devices_resource_map(config: InstrumentConfig) -> dict[Resource, set[Resource]]:

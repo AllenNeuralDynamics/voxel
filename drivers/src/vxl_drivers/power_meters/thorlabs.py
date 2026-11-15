@@ -12,7 +12,7 @@ Example entry in a rig's devices mapping (replace the resource address)::
         resource: USB0::0x1313::0x8078::YOUR_SERIAL::INSTR
         timeout_s: 2.0
       defaults:
-        wavelength_nm: 561
+        wavelength: 561
         averaging_count: 10
         autorange: true
 
@@ -21,8 +21,8 @@ selects absolute power in watts and disables delta mode; other sensor correction
 are retained. Keep the sensor attached and avoid external reconfiguration during use.
 Property docstrings describe measurement and range settings.
 
-Transactions are serialized and check SCPI errors. Readings reject nonfinite values,
-overflow sentinels, and questionable status. Optical settling belongs to the caller;
+Transactions are serialized and check SCPI errors. A nonfinite value, an overflow
+sentinel, or a questionable status gives no reading. Optical settling belongs to the caller;
 increase timeout_s if instrument averaging requires it. Closing releases only this
 instrument, preserving PyVISA's shared manager and other devices' connections.
 
@@ -37,7 +37,9 @@ import pyvisa
 from pyvisa.resources import MessageBasedResource
 from rigup.device import fact, integer, number, stream
 
-from vxl.devices.power_meter import PowerMeter
+from vxl.devices.light.meter import PowerMeter
+
+_OVERFLOW = 1e30  # SCPI instruments may encode invalid or overflow results as large finite sentinels
 
 
 class ThorlabsPowerMeter(PowerMeter):
@@ -82,23 +84,24 @@ class ThorlabsPowerMeter(PowerMeter):
 
     @property
     @override
-    def power_mw(self) -> float:
-        """Acquire one reading with the configured averaging; reject questionable status."""
+    def power(self) -> float | None:
+        """Acquire one reading with the configured averaging. ``None`` for a nonfinite value, an overflow sentinel,
+        or a questionable measurement status."""
         with self._lock:
-            watts = self._number("READ?")
+            watts = float(self._query("READ?"))
             questionable = int(self._query("STAT:QUES:COND?"))
-            if questionable:
-                raise RuntimeError(f"meter reports questionable measurement status: 0x{questionable:04x}")
+            if questionable or not isfinite(watts) or abs(watts) >= _OVERFLOW:
+                return None
             return watts * 1000.0
 
     @number(minimum=lambda self: self._min_wavelength_nm, maximum=lambda self: self._max_wavelength_nm)
     @override
-    def wavelength_nm(self) -> float:
+    def wavelength(self) -> float:
         return self._number("SENS:CORR:WAV?")
 
-    @wavelength_nm.setter
+    @wavelength.setter
     @override
-    def wavelength_nm(self, value: float) -> None:
+    def wavelength(self, value: float) -> None:
         if not isfinite(value):
             raise ValueError("wavelength must be finite")
         self._write(f"SENS:CORR:WAV {value}")
@@ -157,8 +160,7 @@ class ThorlabsPowerMeter(PowerMeter):
 
     def _number(self, command: str) -> float:
         value = float(self._query(command))
-        # SCPI instruments may encode invalid/overflow results as large finite sentinels.
-        if not isfinite(value) or abs(value) >= 1e30:
+        if not isfinite(value) or abs(value) >= _OVERFLOW:
             raise RuntimeError(f"invalid meter response to {command}: {value}")
         return value
 

@@ -37,8 +37,8 @@ _TEMPLATE: dict[str, Any] = {
                 },
             },
             "laser": {
-                "target": "vxl.devices.laser.simulated.SimulatedLaser",
-                "init": {"wavelength": 488, "source_enable_delay_s": 0},
+                "target": "vxl.devices.light.simulated.SimulatedLaser",
+                "init": {"wavelength": 488},
             },
             **{
                 f"{axis}_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}}
@@ -103,10 +103,10 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
     assert written["session"]["instrument"]["config"]["target"].endswith("._Kind")
 
     async with station.instrument(info.id) as instrument:
-        await instrument.set_device_properties("laser", {"source_power_setpoint_mw": 12.5})
+        await instrument.set_device_properties("camera", {"exposure_time_ms": 12.5})
     session = station.view.value.session
     assert session is not None
-    assert session.instrument.device_views["laser"].props["source_power_setpoint_mw"].value == 12.5
+    assert session.instrument.device_views["camera"].props["exposure_time_ms"].value == 12.5
 
     await station.close_session(info.id)
     assert station.view.value.status is StationStatus.IDLE

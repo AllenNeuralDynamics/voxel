@@ -1,5 +1,4 @@
-"""A session on a simulated SPIM microscope with the new light devices, driven only through the commands an app would
-call. After each step it prints what an app would see.
+"""A session on a simulated SPIM microscope that prints the lights after each command.
 
 Run from the repo root: ``uv run -m illumination_lab.demo``."""
 
@@ -17,9 +16,8 @@ from vxl_records import SQLiteRecords
 from tests.instruments.spim.support import config_data, simulated, template
 from vxl.core.errors import RejectedError
 from vxl.core.instrument.folder import InstrumentFolder
+from vxl.instruments.spim.instrument import Microscope
 from vxl.system import System
-
-from .instrument import LabMicroscope
 
 _DIGITAL = {"kind": "digital", "off": "0 V", "on": "5 V"}
 _LIGHT = "vxl.devices.light.simulated"
@@ -50,7 +48,6 @@ class Session:
 
     def __init__(self, home: Path) -> None:
         data = simulated(config_data())
-        data["target"] = "illumination_lab.instrument.LabMicroscope"
         data["devices"] |= {
             "laser": {"target": f"{_LIGHT}.SimulatedLaser", "init": {"wavelength": 488}},
             "laser_561": {"target": f"{_LIGHT}.SimulatedLaser", "init": {"wavelength": 561}},
@@ -84,36 +81,40 @@ class Session:
         signals = gfp["timelines"]["ao_main"]["signals"]
         signals["gate"] = signals.pop("laser")
         gfp["power"] = {
-            "full": {"laser": "50 mW", "aotf": {"flip": {"left": "30 %", "right": "42 %"}}},
-            "dim": {"aotf": {"flip": {"left": "3 %", "right": "4 %"}}},
+            "laser": {"full": "50 mW"},
+            "aotf": {
+                "router": "flip",
+                "full": {"left": "30 %", "right": "42 %"},
+                "dim": {"left": "3 %", "right": "4 %"},
+            },
         }
         align = copy.deepcopy(gfp)
         del align["timelines"]["ao_main"]["signals"]["gate"]
         analog = copy.deepcopy(gfp)
         analog["timelines"]["ao_main"]["signals"]["laser_power"] = {"kind": "constant", "value": "2 V"}
-        del analog["power"]["full"]["laser"]
+        del analog["power"]["laser"]
         default["profiles"] |= {"align": align, "analog": analog}
         folder = InstrumentFolder.create(template(data), "lab", home)
         records = SQLiteRecords(home / "records.sqlite3", resolve_root=lambda spec: home / spec.path.as_posix())
         system = System(store=home / "data", scratch=home / "scratch", remotes={}, max_ram_fraction=0.1)
-        self.microscope = LabMicroscope(folder, records=records, system=system)
+        self.microscope = Microscope(folder, records=records, system=system)
 
     async def step(self, what: str, *calls: Awaitable[Any]) -> None:
-        """Run the commands of 1 step, then print what an app would see."""
+        """Run the commands of 1 step, then print the lights."""
         print(f"\n> {what}")
         for call in calls:
             try:
                 await call
             except RejectedError as error:
                 print(f"  refused: {error}")
-        m = self.microscope
+        view = self.microscope.view.value
         laser = await self.props("laser", "is_on", "power", "control_mode")
         aotf = await self.props("aotf", "is_on", "power", "control_mode")
         shutter = await self.props("shutter", "is_open")
         bare = await self.props("laser_561", "is_on")
-        activities = [activity.kind for activity in m.activities.value] or "none"
-        side = m.state.value.positions["flip"]
-        print(f"  profile {m.active_profile.value}; side {side}; power mode {m.power_mode.value}; running {activities}")
+        activities = [activity.kind for activity in view.activities] or "none"
+        side = view.state.positions["flip"]
+        print(f"  profile {view.active_profile}; side {side}; power mode {view.power_mode}; running {activities}")
         print(f"  laser   {_on(laser['is_on'])}, {laser['power']:g} mW, control {laser['control_mode']}")
         print(f"  aotf    {_on(aotf['is_on'])}, {aotf['power']:g} %, control {aotf['control_mode']}")
         print(f"  shutter {'open' if shutter['is_open'] else 'closed'}")
@@ -167,7 +168,7 @@ async def main() -> None:
             await session.step("lights_off()", m.lights_off())
             await session.step("lasers_off()", m.lasers_off())
             await session.step("stop_preview()", m.stop_preview())
-            saved = m.state.value.profiles["gfp"].model_dump(mode="json")["power"]
+            saved = m.view.value.state.profiles["gfp"].model_dump(mode="json", exclude_none=True)["power"]
             print(f"\nthe gfp profile's saved power: {saved}")
         finally:
             await m.close()

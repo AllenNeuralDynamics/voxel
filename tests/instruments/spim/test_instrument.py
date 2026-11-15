@@ -261,21 +261,21 @@ def microscope(config_data: dict[str, Any], tmp_path: Path) -> Microscope:
 
 
 def _task(microscope: Microscope, task_id: str) -> Task:
-    return Task.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.state.value.task)
+    return Task.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.view.value.state.task)
 
 
 async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope: Microscope) -> None:
     await microscope.update_writer_settings(shard_z_chunks=4, target_shard_gb=2.0)
     await microscope.set_spacing("gfp", 2.5)
     await microscope.update_profile_details("gfp", label="GFP", desc="green", channel_labels={"camera": "green"})
-    state = microscope.state.value
+    state = microscope.view.value.state
     assert (state.writer.shard_z_chunks, state.profiles["gfp"].spacing) == (4, 2.5)
     assert (state.profiles["gfp"].label, state.profiles["gfp"].desc) == ("GFP", "green")
     assert state.profiles["gfp"].channels["camera"].label == "green"
 
     for _ in range(3):
         await microscope.undo()
-    assert microscope.state.value == microscope.default_state.value
+    assert microscope.view.value.state == microscope.view.value.default_state
 
 
 @pytest.mark.parametrize(
@@ -288,7 +288,7 @@ async def test_a_spacing_edit_is_refused_at_its_path(
     with pytest.raises(RejectedError) as caught:
         await microscope.set_spacing(profile_id, spacing)
     assert [problem.loc for problem in caught.value.problems] == [loc]
-    assert microscope.history.value.undo_label is None
+    assert microscope.view.value.history.undo_label is None
 
 
 async def test_a_channel_label_for_a_camera_not_in_the_profile_is_refused(microscope: Microscope) -> None:
@@ -315,11 +315,11 @@ async def test_quick_position_edits_are_1_undo_step(config_data: dict[str, Any],
     for at in (4000, 4500, 5000):
         rule = StageFollowRule(axis="x", order=["GFP", "RFP"], at=[at])
         await microscope.set_position_rule("fw", rule, edit_id="drag")
-    assert microscope.state.value.positions["fw"] == rule
+    assert microscope.view.value.state.positions["fw"] == rule
 
     await microscope.undo()
-    assert "fw" not in microscope.state.value.positions
-    assert microscope.history.value.undo_label is None
+    assert "fw" not in microscope.view.value.state.positions
+    assert microscope.view.value.history.undo_label is None
 
 
 async def test_task_edits_keep_their_order_and_undo_in_turn(microscope: Microscope) -> None:
@@ -329,17 +329,17 @@ async def test_task_edits_keep_their_order_and_undo_in_turn(microscope: Microsco
         await microscope.update_task("b", iteration=iteration, edit_id="typing")
     await microscope.reorder_tasks(["c", "a", "b"])
     await microscope.remove_tasks(["a"])
-    assert [(task.id, task.iteration) for task in microscope.state.value.plan] == [
+    assert [(task.id, task.iteration) for task in microscope.view.value.state.plan] == [
         ("c", "position_major"),
         ("b", "profile_major"),
     ]
 
     await microscope.undo()
     await microscope.undo()
-    assert [task.id for task in microscope.state.value.plan] == ["a", "b", "c"]
+    assert [task.id for task in microscope.view.value.state.plan] == ["a", "b", "c"]
     await microscope.undo()
-    assert microscope.state.value.plan[1].iteration == "position_major"
-    assert microscope.history.value.undo_label == "Add task"
+    assert microscope.view.value.state.plan[1].iteration == "position_major"
+    assert microscope.view.value.history.undo_label == "Add task"
 
 
 async def test_task_edits_that_name_unknown_tasks_are_refused(microscope: Microscope) -> None:
@@ -353,7 +353,7 @@ async def test_task_edits_that_name_unknown_tasks_are_refused(microscope: Micros
         await microscope.remove_tasks(["a", "z"])
     with pytest.raises(RejectedError, match="each task of the plan 1 time"):
         await microscope.reorder_tasks(["a", "a"])
-    assert [task.id for task in microscope.state.value.plan] == ["a"]
+    assert [task.id for task in microscope.view.value.state.plan] == ["a"]
 
 
 @pytest.fixture
@@ -381,7 +381,7 @@ async def _filter_slot(microscope: Microscope) -> int | None:
 
 
 async def test_opening_sets_the_devices_to_the_first_profile(opened: Microscope) -> None:
-    assert opened.active_profile.value == "gfp"
+    assert opened.view.value.active_profile == "gfp"
     assert await _exposure(opened) == pytest.approx(20.0)
     assert await _filter_slot(opened) == 0
 
@@ -389,7 +389,7 @@ async def test_opening_sets_the_devices_to_the_first_profile(opened: Microscope)
 async def test_selecting_a_profile_sets_its_devices_and_makes_it_active(opened: Microscope) -> None:
     await opened.execute_device_command("fw", "move_to", ["RFP"], {"wait": True})
     await opened.select_profile("slow")
-    assert opened.active_profile.value == "slow"
+    assert opened.view.value.active_profile == "slow"
     assert await _exposure(opened) == pytest.approx(30.0)
     assert await _filter_slot(opened) == 0
 
@@ -403,7 +403,7 @@ async def test_applying_the_profile_again_undoes_live_changes(opened: Microscope
 async def test_a_failed_step_keeps_the_active_profile(opened: Microscope) -> None:
     with pytest.raises(RejectedError, match="refused the properties"):
         await opened.select_profile("bad")
-    assert opened.active_profile.value == "gfp"
+    assert opened.view.value.active_profile == "gfp"
 
 
 async def test_an_unknown_profile_is_refused(opened: Microscope) -> None:
@@ -424,18 +424,18 @@ async def test_selecting_a_profile_restarts_an_activity_that_holds_the_active_pr
 
     @asynccontextmanager
     async def restart() -> AsyncGenerator[None]:
-        seen.append(f"stop with {opened.active_profile.value}")
+        seen.append(f"stop with {opened.view.value.active_profile}")
         yield
-        seen.append(f"start with {opened.active_profile.value}")
+        seen.append(f"start with {opened.view.value.active_profile}")
 
     async with opened._scheduler.run("start a preview", requires=()):
-        await opened._scheduler.start(ActivityInfo(kind="preview"), {opened.active_profile}, restart=restart)
+        await opened._scheduler.start(ActivityInfo(kind="preview"), {opened._active_profile}, restart=restart)
     await opened.select_profile("slow")
     assert seen == ["stop with gfp", "start with slow"]
 
 
 def _saved_camera_props(microscope: Microscope) -> dict[str, Any]:
-    return microscope.state.value.profiles["gfp"].props.get("camera", {})
+    return microscope.view.value.state.profiles["gfp"].props.get("camera", {})
 
 
 async def test_an_autosaved_edit_is_saved_as_the_device_reports_it(opened: Microscope) -> None:
@@ -443,7 +443,7 @@ async def test_an_autosaved_edit_is_saved_as_the_device_reports_it(opened: Micro
     reported = results.results["exposure_time_ms"].unwrap().value
     assert reported == pytest.approx(30.0)
     assert _saved_camera_props(opened)["exposure_time_ms"] == reported
-    assert opened.history.value.undo_label is None
+    assert opened.view.value.history.undo_label is None
 
 
 @pytest.mark.parametrize(
@@ -454,18 +454,18 @@ async def test_an_autosaved_edit_is_saved_as_the_device_reports_it(opened: Micro
 async def test_an_edit_that_is_not_kept_is_not_saved(
     opened: Microscope, device: str, properties: dict[str, Any]
 ) -> None:
-    before = opened.state.value
+    before = opened.view.value.state
     await opened.set_device_properties(device, properties)
-    assert opened.state.value == before
+    assert opened.view.value.state == before
 
 
 async def test_a_camera_region_is_saved_as_the_camera_snapped_it(opened: Microscope) -> None:
     applied = await opened.set_camera_region("camera", AreaROI(x=3, y=5, w=1001, h=999))
-    assert opened.state.value.profiles["gfp"].channels["camera"].fov == applied
+    assert opened.view.value.state.profiles["gfp"].channels["camera"].fov == applied
 
     full = await opened.set_camera_region("camera", None)
     assert (full.w, full.h) == (2048, 2048)
-    assert opened.state.value.profiles["gfp"].channels["camera"].fov == full
+    assert opened.view.value.state.profiles["gfp"].channels["camera"].fov == full
 
 
 async def test_device_first_edits_are_refused_during_a_capture(opened: Microscope) -> None:
@@ -486,7 +486,7 @@ async def test_a_property_edit_does_not_restart_a_preview(opened: Microscope) ->
         yield
 
     async with opened._scheduler.run("start a preview", requires=()):
-        await opened._scheduler.start(ActivityInfo(kind="preview"), {opened.active_profile}, restart=restart)
+        await opened._scheduler.start(ActivityInfo(kind="preview"), {opened._active_profile}, restart=restart)
     await opened.set_device_properties("camera", {"exposure_time_ms": 30.0})
     assert seen == []
 
@@ -525,10 +525,10 @@ async def test_a_region_on_a_camera_outside_the_active_profile_is_set_but_not_sa
     microscope = _microscope(_second_camera(simulated(config_data)), tmp_path)
     await microscope.open()
     try:
-        before = microscope.state.value
+        before = microscope.view.value.state
         applied = await microscope.set_camera_region("camera2", AreaROI(x=0, y=0, w=1024, h=1024))
         assert (applied.w, applied.h) == (1024, 1024)
-        assert microscope.state.value == before
+        assert microscope.view.value.state == before
     finally:
         await microscope.close()
 
@@ -546,7 +546,7 @@ def _rendered(microscope: Microscope, timeline: Timeline) -> dict[str, list[floa
 
 
 async def test_opening_loads_the_active_profiles_timelines(opened: Microscope) -> None:
-    timeline = opened.state.value.profiles["gfp"].timelines["ao_main"]
+    timeline = opened.view.value.state.profiles["gfp"].timelines["ao_main"]
     assert await _loaded(opened) == _rendered(opened, timeline)
 
 
@@ -557,20 +557,20 @@ def _with_laser_offset(timeline: Timeline, offset: str) -> Timeline:
 
 
 async def test_a_new_timeline_is_loaded_then_saved(opened: Microscope) -> None:
-    timeline = _with_laser_offset(opened.state.value.profiles["gfp"].timelines["ao_main"], "-2 ms")
+    timeline = _with_laser_offset(opened.view.value.state.profiles["gfp"].timelines["ao_main"], "-2 ms")
     await opened.set_generator_timeline("ao_main", timeline)
     assert await _loaded(opened) == _rendered(opened, timeline)
-    assert opened.state.value.profiles["gfp"].timelines["ao_main"] == timeline
-    assert opened.history.value.undo_label is None
+    assert opened.view.value.state.profiles["gfp"].timelines["ao_main"] == timeline
+    assert opened.view.value.history.undo_label is None
 
 
 async def test_a_timeline_that_does_not_fit_is_refused_before_the_generator_changes(opened: Microscope) -> None:
-    before_loaded, before_state = await _loaded(opened), opened.state.value
-    data = opened.state.value.profiles["gfp"].timelines["ao_main"].model_dump(mode="json")
+    before_loaded, before_state = await _loaded(opened), opened.view.value.state
+    data = opened.view.value.state.profiles["gfp"].timelines["ao_main"].model_dump(mode="json")
     data["duration"] = "100.05 ms"  # not a whole number of samples at 10 kHz
     with pytest.raises(RejectedError, match="whole number of samples"):
         await opened.set_generator_timeline("ao_main", Timeline.model_validate(data))
-    assert (await _loaded(opened), opened.state.value) == (before_loaded, before_state)
+    assert (await _loaded(opened), opened.view.value.state) == (before_loaded, before_state)
 
 
 async def test_a_timeline_edit_restarts_a_preview_and_is_refused_during_a_capture(opened: Microscope) -> None:
@@ -582,9 +582,9 @@ async def test_a_timeline_edit_restarts_a_preview_and_is_refused_during_a_captur
         yield
         seen.append("start")
 
-    timeline = _with_laser_offset(opened.state.value.profiles["gfp"].timelines["ao_main"], "-2 ms")
+    timeline = _with_laser_offset(opened.view.value.state.profiles["gfp"].timelines["ao_main"], "-2 ms")
     async with opened._scheduler.run("start a preview", requires=()):
-        preview = await opened._scheduler.start(ActivityInfo(kind="preview"), {opened.active_profile}, restart=restart)
+        preview = await opened._scheduler.start(ActivityInfo(kind="preview"), {opened._active_profile}, restart=restart)
     await opened.set_generator_timeline("ao_main", timeline)
     assert seen == ["stop", "start"]
 
@@ -622,13 +622,13 @@ async def test_a_profile_loads_cycles_on_the_generators_own_clock(
 
 
 async def _live(microscope: Microscope) -> dict[str, object]:
-    """What a preview has started: each camera's mode, the laser's output, the generator's state, the activities."""
+    """What a preview has started: each camera's mode, if the laser is on, the generator's state, the activities."""
     hal = microscope._hal
     return {
         "cameras": {uid: (await camera.props.get_value("mode")) for uid, camera in hal.cameras.items()},
-        "laser": await hal.lasers["laser"].props.get_value("is_output_enabled"),
+        "laser": await hal.device("laser").props.get_value("is_on"),
         "generator": await hal.signal_generators["ao_main"].state.get(),
-        "activities": [activity.kind for activity in microscope.activities.value],
+        "activities": [activity.kind for activity in microscope.view.value.activities],
     }
 
 
@@ -653,7 +653,7 @@ async def test_a_device_property_write_keeps_a_running_preview(opened: Microscop
     await opened.start_preview()
     running = opened._preview
 
-    await opened.set_device_properties("laser", {"output_level_percent": 50.0})
+    await opened.set_device_properties("camera", {"exposure_time_ms": 20.0})
 
     assert opened._preview is running
     await opened.stop_preview()
@@ -662,7 +662,7 @@ async def test_a_device_property_write_keeps_a_running_preview(opened: Microscop
 async def test_a_laser_failsafe_during_a_preview_keeps_the_laser_off(opened: Microscope) -> None:
     await opened.start_preview()
 
-    await opened.execute_device_command("laser", "output_disable")
+    await opened.execute_device_command("laser", "off")
 
     live = await _live(opened)
     assert live["laser"] is False
@@ -727,13 +727,13 @@ async def test_each_profile_keeps_its_preview_channels(config_data: dict[str, An
     await microscope.open()
     try:
         await microscope.start_preview()
-        assert microscope.preview_channels.value == ("camera",)
+        assert microscope.view.value.preview_channels == ("camera",)
         await microscope.set_preview_channels(["camera_2"])
         assert (await _live(microscope))["cameras"] == {"camera": "IDLE", "camera_2": "PREVIEW"}
         await microscope.select_profile("rfp")
-        assert microscope.preview_channels.value == ("camera",)
+        assert microscope.view.value.preview_channels == ("camera",)
         await microscope.select_profile("gfp")
-        assert microscope.preview_channels.value == ("camera_2",)
+        assert microscope.view.value.preview_channels == ("camera_2",)
         assert (await _live(microscope))["cameras"] == {"camera": "IDLE", "camera_2": "PREVIEW"}
         with pytest.raises(RejectedError, match="no channel"):
             await microscope.set_preview_channels(["laser"])

@@ -1,1 +1,1 @@
-"""Oxxius source and laser drivers; import concrete classes from their modules."""
+"""Oxxius hub and laser drivers; import concrete classes from their modules."""

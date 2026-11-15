@@ -4,12 +4,10 @@ from abc import abstractmethod
 
 from rigup.device import action, failsafe, number, stream
 
-from vxl.devices.base import DeviceType
-
 from .source import LaserSource, ModulationMode
 
 
-class Laser(LaserSource, kind=DeviceType.LASER):
+class Laser(LaserSource, kind="laser_legacy"):
     """Source settings and controlled output, before microscope illumination optics.
 
     Implementations may combine multiple devices. Permissions do not report

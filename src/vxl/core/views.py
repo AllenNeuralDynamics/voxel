@@ -1,26 +1,14 @@
-"""What screens see: each open device, the open instrument, and the station's status."""
+"""The station as a client sees it: its identity, its status, and its open session."""
 
 from enum import StrEnum
 from typing import Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
-from rigup.activity import ActivityInfo
-from rigup.device import DeviceInterface
-from rigup.device.results import PropModel
 from vxlib.schema import FrozenModel
 
-from vxl.core.instrument.config import DeviceUid, InstrumentConfig
-from vxl.core.instrument.state import InstrumentState
+from vxl.core.instrument.base import InstrumentView
 from vxl.preview import StreamCursor
-from vxl.system import Remote
-
-
-class DeviceView(FrozenModel):
-    """1 open device as a screen sees it: what it said it is when it opened, and its last properties read."""
-
-    interface: DeviceInterface
-    props: dict[str, PropModel]
 
 
 class StationInfo(BaseModel):
@@ -50,23 +38,11 @@ class SessionInfo(FrozenModel):
     instrument_name: str = Field(min_length=1)
 
 
-class InstrumentView(FrozenModel):
-    """The open instrument as a screen sees it: its ``rig.yaml``, its saved state, what runs, its devices, and the
-    object stores that every camera can write to. ``config`` and ``state`` keep every field of the kind of
-    instrument."""
-
-    config: SerializeAsAny[InstrumentConfig]
-    state: SerializeAsAny[InstrumentState]
-    activities: tuple[ActivityInfo, ...]
-    device_views: dict[DeviceUid, DeviceView]
-    remote_stores: dict[str, Remote]
-
-
 class SessionView(FrozenModel):
     """Complete bounded view belonging to one opened instrument session."""
 
     info: SessionInfo
-    instrument: InstrumentView
+    instrument: SerializeAsAny[InstrumentView]
 
 
 class StationView(FrozenModel):
@@ -99,8 +75,6 @@ class StationFeedView(StationView):
 
 
 __all__ = [
-    "DeviceView",
-    "InstrumentView",
     "SessionInfo",
     "SessionView",
     "StationFeedView",

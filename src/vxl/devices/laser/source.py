@@ -1,4 +1,4 @@
-"""Source interfaces for optical-power and diode-current control."""
+"""Source interface for optical-power control."""
 
 from abc import ABC, abstractmethod
 from enum import StrEnum
@@ -106,25 +106,4 @@ class LaserSource(_Source, kind="laser_source"):
     @stream("fast", label="Source Power", units="mW")
     def source_power_mw(self) -> float | None:
         """Source-reported or estimated optical output, or None when unavailable."""
-        return None
-
-
-class CurrentControlledLaserSource(_Source, kind="current_controlled_laser_source"):
-    """A source controlled in mA, awaiting calibration for a power-based interface."""
-
-    @number()
-    @stream("fast", label="Source Current Setpoint", units="mA")
-    @abstractmethod
-    def source_current_setpoint_ma(self) -> float:
-        """Requested diode current; implementations expose their range or options."""
-
-    @source_current_setpoint_ma.setter
-    @abstractmethod
-    def source_current_setpoint_ma(self, value: float) -> None:
-        """Set diode current without changing enable permission."""
-
-    @property
-    @stream("fast", label="Source Current", units="mA")
-    def source_current_ma(self) -> float | None:
-        """Reported operating current, or None when unavailable."""
         return None

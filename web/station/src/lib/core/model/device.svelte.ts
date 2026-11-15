@@ -554,7 +554,7 @@ export function createDevice(
   switch (snapshot.interface?.kind) {
     case 'camera':
       return new CameraHandle(client, base, snapshot, disabled, assignment);
-    case 'laser':
+    case 'laser_legacy':
       return new LaserHandle(client, base, snapshot, disabled, assignment);
     case 'continuous_axis':
       return new AxisHandle(client, base, snapshot, disabled, assignment);

@@ -1,7 +1,8 @@
+import logging
 from collections.abc import AsyncGenerator, Collection, Hashable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Unpack
+from typing import TYPE_CHECKING, Any, Unpack
 
 from pydantic import PositiveFloat
 from rigup.activity import Activity, ActivityInfo
@@ -10,7 +11,7 @@ from vxlib.asyncio import gather_all
 from vxlib.reactivity import Cell, Readable
 
 from vxl.core.errors import RejectedError
-from vxl.core.instrument.base import Instrument
+from vxl.core.instrument.base import Instrument, InstrumentView
 from vxl.core.instrument.config import DeviceUid
 from vxl.core.instrument.state import ProfileId
 from vxl.devices.camera.roi import AreaROI
@@ -23,6 +24,8 @@ from .task import Task, TaskFields, TaskId
 if TYPE_CHECKING:
     from vxl.core.instrument.folder import InstrumentFolder
 
+logger = logging.getLogger(__name__)
+
 type SPIMInstrumentFolder = "InstrumentFolder[SPIMConfig, SPIMState]"
 
 
@@ -32,31 +35,33 @@ class _Preview:
 
     activity: Activity
     cameras: tuple[DeviceUid, ...]
-    lasers: tuple[DeviceUid, ...]
     generators: tuple[DeviceUid, ...]
 
 
 type DeviceUids = Sequence[DeviceUid]
 
 
-class Microscope(Instrument[SPIMConfig, SPIMState]):
+class SPIMView(InstrumentView[SPIMConfig, SPIMState]):
+    """A SPIM microscope as a screen sees it: also the channels that a preview of the active profile shows, by camera,
+    whether or not a preview runs."""
+
+    preview_channels: tuple[DeviceUid, ...]
+
+
+class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     """A SPIM instrument.
 
     A preview shows the live image of some channels of the active profile, as each profile last chose them, or its
-    first channel. Each generator runs on its own clock and the stage stands still, so it works the same on every
-    rig. It holds the active profile and the devices it uses, but not the stage: a change to one of them restarts
-    it, and the stage moves freely under it. The choices last while the instrument runs."""
+    first channel, lit by the lasers of those channels. Each generator runs on its own clock and the stage stands
+    still, so it works the same on every rig. It holds the active profile, the devices it uses and every device on a
+    path that the lasers' light can take, but not the stage: a change to one of them restarts it, and the stage moves
+    freely under it. The choices last while the instrument runs."""
 
     def __init__(self, folder: SPIMInstrumentFolder, *, records: VoxelRecords, system: System) -> None:
         super().__init__(folder, records=records, system=system)
         self._preview_choices: dict[ProfileId, frozenset[DeviceUid]] = {}
         self._preview_channels = Cell[tuple[DeviceUid, ...]](self._preview_choice(self._active_profile.value))
         self._preview: _Preview | None = None
-
-    @property
-    def preview_channels(self) -> Readable[tuple[DeviceUid, ...]]:
-        """The channels that a preview of the active profile shows, by camera, whether or not a preview runs."""
-        return self._preview_channels
 
     async def start_preview(self) -> None:
         """Start a preview of the active profile's chosen channels. Do nothing when a preview runs."""
@@ -166,34 +171,36 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
         return tuple(camera for camera in channels if camera in chosen) or (next(iter(channels)),)
 
     async def _begin_preview(self) -> None:
-        """Start the preview's devices, in order: every laser output off; the scan axis disarmed when it scans; the
-        chosen channels' laser sources on; their cameras, waiting for triggers; those lasers' outputs on; every
-        generator of the profile. Then hold
-        the active profile and those devices. When a step fails, stop what started."""
+        """Start the preview's devices, in order: the scan axis disarmed when it scans, the chosen channels' cameras,
+        the light of their lasers, every generator of the profile. Then hold the active profile, those devices, and
+        every device on a path that the lasers' light can take, so a change to one of them lights the sample again. A
+        laser whose light has no way to the sample now stays off, and the preview runs without it. When a step fails,
+        turn every light off and stop what started."""
         hal = self._hal
         profile = self._store.value.profiles[self._active_profile.value]
         cameras = self._preview_channels.value
-        lasers = tuple(
-            dict.fromkeys(
-                profile.channels[c].illumination for c in cameras if profile.channels[c].illumination in hal.lasers
-            )
-        )
         generators = tuple(profile.timelines)
-        await gather_all(*(laser.call("output_disable") for laser in hal.lasers.values()), message="laser off")
+        sources = dict.fromkeys(profile.channels[c].illumination for c in cameras)
+        axis = hal.stage[self._config.scan.axis]
+        if await axis.scan_state.get() != "idle":
+            await axis.halt()
         try:
-            axis = hal.stage[self._config.scan.axis]
-            if await axis.scan_state.get() != "idle":
-                await axis.halt()
-            await gather_all(*(hal.lasers[uid].call("source_enable", wait=True) for uid in lasers), message="sources")
             await gather_all(*(hal.cameras[c].start_preview() for c in cameras), message="cameras")
-            await gather_all(*(hal.lasers[uid].call("output_enable", wait=True) for uid in lasers), message="lasers on")
+            lit = await hal.lights_on(sources)
             await gather_all(*(hal.signal_generators[g].start() for g in generators), message="generators")
         except BaseException:
-            await self._stop_preview_devices(cameras, lasers, generators)
+            await self._stop_preview_devices(cameras, generators)
             raise
-        requires = {self._active_profile, *cameras, *lasers, *generators}
+        if blocked := sorted(source for source, paths in lit.items() if not paths):
+            logger.warning("The preview runs without %s: its light has no way to the sample now", ", ".join(blocked))
+        paths = (path for source in sources for path in self._config.optics.paths_from(source, {}))
+        on_paths = {node for path in paths for node in path.nodes if node in self._config.all_devices}
+        requires = {self._active_profile, *cameras, *generators, *on_paths}
         activity = await self._scheduler.start(ActivityInfo(kind="preview"), requires, restart=self._restart_preview)
-        self._preview = _Preview(activity, cameras, lasers, generators)
+        self._preview = _Preview(activity, cameras, generators)
+
+    def _view_sources(self) -> dict[str, Readable[Any]]:
+        return {**super()._view_sources(), "preview_channels": self._preview_channels}
 
     async def _end_activities(self) -> None:
         await self._end_preview()
@@ -204,16 +211,16 @@ class Microscope(Instrument[SPIMConfig, SPIMState]):
             return
         self._preview = None
         try:
-            await self._stop_preview_devices(preview.cameras, preview.lasers, preview.generators)
+            await self._stop_preview_devices(preview.cameras, preview.generators)
         finally:
             await preview.activity.end()
 
-    async def _stop_preview_devices(self, cameras: DeviceUids, lasers: DeviceUids, generators: DeviceUids) -> None:
-        """Stop a preview's devices, in order: lasers off, generators, cameras. Each step runs even when one fails;
-        raise every failure together."""
+    async def _stop_preview_devices(self, cameras: DeviceUids, generators: DeviceUids) -> None:
+        """Stop a preview's devices, in order: every light dark, generators, cameras. Each step runs even when one
+        fails; raise every failure together."""
         hal = self._hal
         steps = (
-            ((hal.lasers[uid].call("output_disable") for uid in lasers), "lasers off"),
+            ((hal.lights_off(),), "lights off"),
             ((hal.signal_generators[g].stop() for g in generators), "generators"),
             ((hal.cameras[c].stop_preview() for c in cameras), "cameras"),
         )

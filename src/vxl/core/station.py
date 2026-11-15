@@ -19,7 +19,7 @@ from vxl.core.errors import BusyError, RejectedError, StationNotConfiguredError
 from vxl.core.feed import StationFeed
 from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.views import InstrumentView, SessionInfo, SessionView, StationInfo, StationStatus, StationView
+from vxl.core.views import SessionInfo, SessionView, StationInfo, StationStatus, StationView
 from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
 from vxl.system import System
 
@@ -265,12 +265,7 @@ class Station:
                     id=session_id,
                     instrument_name=instrument_name,
                 )
-                self._session_teardowns += [
-                    instrument.activities.subscribe(self._refresh_session_view),
-                    instrument.state.subscribe(self._refresh_session_view),
-                    instrument.default_state.subscribe(self._refresh_session_view),
-                    instrument.device_views.subscribe(self._refresh_session_view),
-                ]
+                self._session_teardowns.append(instrument.view.subscribe(self._refresh_session_view))
                 session_view = self._build_session_view(instrument)
             except BaseException as launch_error:
                 await self._teardown_failed_launch(instrument, launch_error)
@@ -435,16 +430,7 @@ class Station:
     def _build_session_view(self, instrument: AnyInstrument) -> SessionView:
         if self._session_info is None:
             raise RuntimeError("station instrument has no attached session")
-        return SessionView(
-            info=self._session_info,
-            instrument=InstrumentView(
-                config=instrument.config,
-                state=instrument.state.value,
-                activities=instrument.activities.value,
-                device_views=dict(instrument.device_views.value),
-                remote_stores=dict(instrument.remote_stores),
-            ),
-        )
+        return SessionView(info=self._session_info, instrument=instrument.view.value)
 
 
 __all__ = ["Station", "StationConfig"]

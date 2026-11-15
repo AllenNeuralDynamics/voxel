@@ -1,1 +1,1 @@
-"""Physical laser drivers and compositions for vxl.devices.laser."""
+"""Physical laser drivers. The modulator of a laser box lives with the lasers of that box."""

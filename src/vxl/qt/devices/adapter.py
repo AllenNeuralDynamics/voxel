@@ -269,7 +269,7 @@ class DevicesStore(QObject):
 
     def get_lasers(self) -> dict[str, DeviceHandleQt]:
         """Get all laser device adapters."""
-        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "laser"}
+        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "laser_legacy"}
 
     def get_cameras(self) -> dict[str, DeviceHandleQt]:
         """Get all camera device adapters."""

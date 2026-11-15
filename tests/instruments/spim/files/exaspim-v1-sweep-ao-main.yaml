@@ -32,14 +32,14 @@ rig:
       init: {pixel_size_um: {x: 3.76, y: 3.76}, serial: MP151BDZ014}
 
     laser_488:
-      target: vxl.devices.laser.simulated.SimulatedLaser
-      init: {wavelength: 488, source_enable_delay_s: 1}
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 488}
     laser_561:
-      target: vxl.devices.laser.simulated.SimulatedLaser
-      init: {wavelength: 561, source_enable_delay_s: 1}
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 561}
     laser_640:
-      target: vxl.devices.laser.simulated.SimulatedLaser
-      init: {wavelength: 640, source_enable_delay_s: 1}
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 640}
 
     fw_emission:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
@@ -82,18 +82,15 @@ rig:
 
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms, binning, pixel_format]
-    laser_488: [source_power_setpoint_mw, output_level_percent]
-    laser_561: [source_power_setpoint_mw, output_level_percent]
-    laser_640: [source_power_setpoint_mw, output_level_percent]
 
   stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
 
   wiring:                                         # every wire on the bench, grouped by the device that sends it
     ao_main:
       camera_trigger: {pin: ao21, to: [camera/trigger_in],     kind: digital, off: 0 V, on: 5 V}
-      laser_488:      {pin: ao17, to: [laser_488/enable_in],   kind: digital, off: 0 V, on: 5 V}
-      laser_561:      {pin: ao13, to: [laser_561/enable_in],   kind: digital, off: 0 V, on: 5 V}
-      laser_640:      {pin: ao9,  to: [laser_640/enable_in],   kind: digital, off: 0 V, on: 5 V}
+      laser_488:      {pin: ao17, to: [laser_488/ttl_in],      kind: digital, off: 0 V, on: 5 V}
+      laser_561:      {pin: ao13, to: [laser_561/ttl_in],      kind: digital, off: 0 V, on: 5 V}
+      laser_640:      {pin: ao9,  to: [laser_640/ttl_in],      kind: digital, off: 0 V, on: 5 V}
       lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
       lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
       galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
@@ -161,8 +158,8 @@ default:
       channels:                                   # 1 entry for each camera that is on: its light and the region it reads out
         camera: {illumination: laser_488, fov: {x: 0, y: 0, w: 14192, h: 10640}}
       positions: {fw_emission: BP525}             # the devices that this profile sets, 1 value each
-      props:
-        laser_488: {source_power_setpoint_mw: 100, output_level_percent: 10}
+      power:                                      # the power of each laser and modulator that software sets
+        laser_488: {full: 100 mW, dim: 10 mW}
       timelines:                                  # 1 for each signal generator that plays. Only the wires it plays
         ao_main:
           sample_rate: 10 kHz
@@ -181,8 +178,8 @@ default:
       channels:
         camera: {illumination: laser_561, fov: {x: 0, y: 0, w: 14192, h: 10640}}
       positions: {fw_emission: BP600}
-      props:
-        laser_561: {source_power_setpoint_mw: 100, output_level_percent: 10}
+      power:                                      # the power of each laser and modulator that software sets
+        laser_561: {full: 100 mW, dim: 10 mW}
       timelines:
         ao_main:
           sample_rate: 10 kHz
@@ -201,8 +198,8 @@ default:
       channels:
         camera: {illumination: laser_640, fov: {x: 0, y: 0, w: 14192, h: 10640}}
       positions: {fw_emission: BP700}
-      props:
-        laser_640: {source_power_setpoint_mw: 100, output_level_percent: 10}
+      power:                                      # the power of each laser and modulator that software sets
+        laser_640: {full: 100 mW, dim: 10 mW}
       timelines:
         ao_main:
           sample_rate: 10 kHz

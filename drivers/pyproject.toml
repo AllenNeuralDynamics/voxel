@@ -20,7 +20,7 @@ dependencies = [
 
 [project.scripts]
 vxl-drivers = "vxl_drivers.cli.main:main"
-vxl-calibrate-mpds = "vxl_drivers.lasers.mpds.cli:main"
+vxl-calibrate-mpds = "vxl_drivers.modulators.mpds.cli:main"
 
 [project.optional-dependencies]
 # vxl-drivers shell: Tab completion and history on Windows

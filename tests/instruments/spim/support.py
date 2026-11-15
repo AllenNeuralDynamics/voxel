@@ -32,7 +32,7 @@ _CONFIG: dict[str, Any] = {
     "wiring": {
         "ao_main": {
             "camera_trigger": {"pin": "ao0", "to": ["camera/trigger_in"], **_DIGITAL},
-            "laser": {"pin": "ao1", "to": ["laser/enable_in"], **_DIGITAL},
+            "laser": {"pin": "ao1", "to": ["laser/ttl_in"], **_DIGITAL},
             "galvo": {"pin": "ao2", "to": ["galvo/in"], "kind": "analog", "limits": {"V": [-1, 1]}, "park": "0 V"},
             "z_step": {"pin": "ao3", "to": ["z_axis/ttl_in"], **_DIGITAL},
         },
@@ -213,8 +213,8 @@ def simulated(data: dict[str, Any]) -> dict[str, Any]:
         "init": {"frame_source": sensor, "start_delay_s": 0, "stop_delay_s": 0},
     }
     devices["laser"] = {
-        "target": "vxl.devices.laser.simulated.SimulatedLaser",
-        "init": {"wavelength": 488, "source_enable_delay_s": 0},
+        "target": "vxl.devices.light.simulated.SimulatedLaser",
+        "init": {"wavelength": 488},
     }
     for axis in ("x_axis", "y_axis", "z_axis"):
         devices[axis] = {"target": _STAGE_AXIS, "init": {"lower": -50000, "upper": 50000, "speed": 100_000}}

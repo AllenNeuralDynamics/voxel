@@ -4,12 +4,13 @@
 from bisect import bisect_right
 from collections.abc import Mapping, Sequence
 from itertools import pairwise, product
-from typing import Annotated, Any, Self, TypedDict
+from typing import Annotated, Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from rigup.device.results import CommandRequest
 from vxlib.problems import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
+from vxlib.units import Quantity
 
 from vxl.core.instrument.config import (
     AxisPosition,
@@ -39,13 +40,74 @@ class Channel(FrozenModel):
     label: str | None = None
 
 
+type PowerMode = Literal["full", "dim"]
+"""Which powers of a profile are in use."""
+
+
+class Power(FrozenModel):
+    """The power of 1 laser or modulator that software sets, in the device's own unit. ``dim`` is for a dim light: where
+    there is none, the full power holds. Each is 1 power, or 1 for each position of ``router``, a device that sends the
+    light a different way."""
+
+    full: dict[str, Quantity] | Quantity
+    dim: dict[str, Quantity] | Quantity | None = None
+    router: DeviceUid | None = None
+
+    @model_validator(mode="after")
+    def _positions_need_a_router(self) -> Self:
+        if self.router is None and (isinstance(self.full, dict) or isinstance(self.dim, dict)):
+            raise ValueError("a power for each position needs a router")
+        return self
+
+    def at(self, mode: PowerMode, position: str | None = None) -> Quantity | None:
+        """The power in a power mode, with the router at ``position``. Where there is no dim power, the full one
+        holds. ``None`` when there is no power for the position."""
+        for level in (self.dim, self.full) if mode == "dim" else (self.full,):
+            if not isinstance(level, dict):
+                if level is not None:
+                    return level
+            elif position is not None and position in level:
+                return level[position]
+        return None
+
+    def replace(self, mode: PowerMode, power: Quantity, position: str | None = None) -> Self:
+        """A copy with ``power`` in a power mode. A power for each position changes only at ``position``, and a new dim
+        power takes the shape of the full one. Raise ``ValueError`` when a power for each position gets no position."""
+        level = self.full if mode == "full" or self.dim is None else self.dim
+        if not isinstance(level, dict):
+            return self.model_copy(update={mode: power})
+        if position is None:
+            raise ValueError(f"a power for each position of '{self.router}' needs a position")
+        kept = level if mode == "full" or self.dim is not None else {}
+        return self.model_copy(update={mode: {**kept, position: power}})
+
+    def problems(self, lowest: Quantity, highest: Quantity) -> Problems:
+        """The problems of the powers against the lowest and highest power of the device: each is in its unit and
+        inside its range."""
+        problems = Problems()
+        for mode, level in (("full", self.full), ("dim", self.dim)):
+            if level is None:
+                continue
+            for power in level.values() if isinstance(level, dict) else [level]:
+                if power.unit != lowest.unit:
+                    problems.add(
+                        "profile.power.unit", f"It takes its power in {lowest.unit}, not in {power.unit}.", mode
+                    )
+                elif not lowest.number <= power.number <= highest.number:
+                    can = f"{lowest.number:g}..{highest.number:g} {lowest.unit}"
+                    problems.add("profile.power.out_of_range", f"It cannot do {power} (it can do {can}).", mode)
+        return problems
+
+
 class Profile(FrozenModel):
     """What is on at the same moment, and all that it needs to run. ``channels`` has 1 entry for each camera that is
-    on. ``positions`` gives the position of each device that this profile sets, and ``timelines`` what each signal
-    generator plays. A kind of instrument adds its own fields in a subclass."""
+    on. ``positions`` gives the position of each device that this profile sets, ``power`` the power of each laser and
+    modulator that software sets, and ``timelines`` what each signal generator plays. A kind of instrument adds its
+    own fields in a subclass."""
 
     channels: dict[DeviceUid, Channel] = Field(min_length=1)
     positions: dict[DeviceUid, AxisPosition] = Field(default_factory=dict)
+    power: dict[DeviceUid, Power] = Field(default_factory=dict)
     props: dict[DeviceUid, dict[PropertyName, Any]] = Field(default_factory=dict)
     setup: dict[DeviceUid, list[CommandRequest]] = Field(default_factory=dict)
     timelines: dict[DeviceUid, Timeline] = Field(default_factory=dict)
@@ -99,6 +161,7 @@ class Profile(FrozenModel):
             if device not in nodes or device not in config.all_devices:
                 msg = f"'{device}' is not a device on the light paths of this profile's channels."
                 problems.add("profile.setup_inactive", msg, "setup", device)
+        problems += self._power_problems(config, nodes)
         problems += self._timeline_problems(config)
         return problems
 
@@ -110,6 +173,32 @@ class Profile(FrozenModel):
             if device not in nodes or device not in elements or device not in config.all_devices:
                 msg = f"'{device}' is not a device on the light paths of this profile's channels."
                 problems.add("profile.position.unexpected", msg, "positions", device)
+        return problems
+
+    def _power_problems(self, config: InstrumentConfig, nodes: set[str]) -> Problems:
+        """The problems of the powers that the files alone show: each is for a device on the light paths whose power no
+        wire sets, and each router sends the light of this profile a different way and has the positions that the powers
+        name."""
+        wired = {pin.device for pin, wire in self.live_inputs(config).items() if wire.config.kind == "analog"}
+        routers = config.optics.routers()
+        problems = Problems()
+        for device, power in self.power.items():
+            if device not in nodes or device not in config.all_devices:
+                msg = f"'{device}' is not a device on the light paths of this profile's channels."
+                problems.add("profile.power.unexpected", msg, "power", device)
+            elif device in wired:
+                msg = f"A wire sets the power of '{device}' in this profile. Change its signal in the timeline."
+                problems.add("profile.power.wired", msg, "power", device)
+            if (router := power.router) is None:
+                continue
+            if router not in routers or router not in nodes:
+                msg = f"'{router}' does not send the light of this profile a different way at each position."
+                problems.add("profile.power.not_a_choice", msg, "power", device, "router")
+                continue
+            for mode, level in (("full", power.full), ("dim", power.dim)):
+                if isinstance(level, dict) and (unknown := sorted(set(level) - set(routers[router]))):
+                    msg = f"'{router}' has no position {', '.join(unknown)} (it has {', '.join(routers[router])})."
+                    problems.add("profile.power.no_such_position", msg, "power", device, mode)
         return problems
 
     def _channel_problems(self, config: InstrumentConfig) -> Problems:

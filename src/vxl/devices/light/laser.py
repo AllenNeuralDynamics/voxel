@@ -7,7 +7,7 @@ from rigup.device import fact
 from .base import Dimmable, DimmableHandle
 
 
-class Laser(Dimmable, kind="laser_new"):
+class Laser(Dimmable, kind="laser"):
     """The device side of a laser. Its driver gives ``unit``: ``mW``, or ``%`` of its rated power."""
 
     @property

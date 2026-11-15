@@ -72,39 +72,40 @@ firmware, operating-system drivers, and vendor runtimes.
 
 ### Lasers and AOTFs
 
-The [canonical laser contract](../src/vxl/devices/laser/README.md) separates source settings from output control.
-The package cutover is complete; instrument, template, and UI integration is still in progress.
+A laser implements `vxl.devices.light.laser.Laser`. A line of an AOTF, or an AOM, implements
+`vxl.devices.light.modulator.Modulator`. A box that several of them share is a hub, and each of them takes it as
+`hub` in its `init`.
 
 | Hardware | Target | Python support |
 | --- | --- | --- |
-| Coherent Genesis MX source | `vxl_drivers.lasers.genesis_mx.GenesisMXSource` | `coherent-laser` extra |
-| MPB VFL source | `vxl_drivers.lasers.mpb_vfl.MpbVflSource` | Serial support included |
-| Coherent OBIS LX/LS source | `vxl_drivers.lasers.obis.source.ObisSource` | Serial support included; direct port or controller channel |
-| Coherent OBIS LaserBox or Remote | `vxl_drivers.lasers.obis.controller.ObisController` | Serial support included |
-| Cobolt Skyra line source | `vxl_drivers.lasers.skyra.source.SkyraSource` | Serial support included; one line of a controller |
-| Cobolt Skyra | `vxl_drivers.lasers.skyra.controller.SkyraController` | Serial support included |
-| Vortran Stradus source | `vxl_drivers.lasers.stradus.StradusSource` | Serial support included |
-| Oxxius shared controller | `vxl_drivers.lasers.oxxius.controller.OxxiusController` | Serial support included |
-| Oxxius LBX source | `vxl_drivers.lasers.oxxius.lbx.OxxiusLBXSource` | Serial support included |
-| Oxxius LCX with linked AOM | `vxl_drivers.lasers.oxxius.lcx.OxxiusLCXLaser` | Serial support included |
-| MPDS controller | `vxl_drivers.lasers.mpds.controller.MPDS` | Serial support included |
-| Source with MPDS modulation | `vxl_drivers.lasers.mpds.laser.MPDSLaser` | Configured with a source and MPDS controller |
+| Coherent Genesis MX laser | `vxl_drivers.lasers.genesis_mx.GenesisMXLaser` | `coherent-laser` extra |
+| MPB VFL laser | `vxl_drivers.lasers.mpb_vfl.MpbVflLaser` | Serial support included |
+| Coherent OBIS LX/LS laser | `vxl_drivers.lasers.obis.laser.ObisLaser` | Serial support included; direct port or 1 channel of a hub |
+| Coherent OBIS LaserBox or Remote | `vxl_drivers.lasers.obis.hub.ObisHub` | Serial support included |
+| Cobolt Skyra line laser | `vxl_drivers.lasers.skyra.laser.SkyraLaser` | Serial support included; one line of a hub |
+| Cobolt Skyra | `vxl_drivers.lasers.skyra.hub.SkyraHub` | Serial support included |
+| Vortran Stradus laser | `vxl_drivers.lasers.stradus.StradusLaser` | Serial support included |
+| Oxxius combiner | `vxl_drivers.lasers.oxxius.hub.OxxiusHub` | Serial support included |
+| Oxxius LBX laser | `vxl_drivers.lasers.oxxius.lbx.OxxiusLBXLaser` | Serial support included |
+| Oxxius LCX laser | `vxl_drivers.lasers.oxxius.lcx.OxxiusLCXLaser` | Serial support included |
+| Oxxius LCX linked modulator | `vxl_drivers.lasers.oxxius.lcx.OxxiusLCXModulator` | The modulator of an LCX slot of an `OxxiusHub` |
+| MPDS controller | `vxl_drivers.modulators.mpds.hub.MPDSHub` | Serial support included |
+| MPDS line, as a modulator | `vxl_drivers.modulators.mpds.modulator.MPDSModulator` | One RF line of an `MPDSHub` |
 
-Wrap standalone sources with `vxl.devices.laser.source_only.SourceOnlyLaser` to expose the complete `Laser` API.
 The MPDS calibration CLI is `vxl-calibrate-mpds`; install the `mpds-calibration` extra for plotting.
 
-Older laser implementations are retained under `vxl_drivers.lasers_legacy`. They report `laser_legacy`, remain
+Older laser implementations are retained under `vxl_drivers._legacy.lasers`. They report `laser_archived`, remain
 accessible through `hal.devices`, and cannot be assigned as canonical illumination lasers.
 
 | Legacy hardware | Target | Python support |
 | --- | --- | --- |
-| Vortran Stradus | `vxl_drivers.lasers_legacy.vortran_stradus.VortranStradus` | `vortran-laser` extra |
-| Cobolt Skyra | `vxl_drivers.lasers_legacy.cobolt_skyra.CoboltSkyra` | `pycobolt-laser` extra |
-| Coherent Genesis MX | `vxl_drivers.lasers_legacy.coherent.genesis_mx.GenesisMX` | `coherent-laser` extra |
-| Coherent OBIS LX and LS | `vxl_drivers.lasers_legacy.coherent.obis.ObisLX`, `ObisLS` | `obis-laser` extra |
-| MPB VFL | `vxl_drivers.lasers_legacy.mpb.vfl.MpbVfl` | Serial support included |
-| Oxxius LBX and LCX | `vxl_drivers.lasers_legacy.oxxius.OxxiusLBX`, `OxxiusLCX` | Shared `vxl_drivers.lasers_legacy.oxxius.OxxiusHub` |
-| AA Opto-Electronic MPDSnC | `vxl_drivers.aotf.mpds.MpdsAotf` | Included `aaopto-aotf` dependency |
+| Vortran Stradus | `vxl_drivers._legacy.lasers.vortran_stradus.VortranStradus` | `vortran-laser` extra |
+| Cobolt Skyra | `vxl_drivers._legacy.lasers.cobolt_skyra.CoboltSkyra` | `pycobolt-laser` extra |
+| Coherent Genesis MX | `vxl_drivers._legacy.lasers.coherent.genesis_mx.GenesisMX` | `coherent-laser` extra |
+| Coherent OBIS LX and LS | `vxl_drivers._legacy.lasers.coherent.obis.ObisLX`, `ObisLS` | `obis-laser` extra |
+| MPB VFL | `vxl_drivers._legacy.lasers.mpb.vfl.MpbVfl` | Serial support included |
+| Oxxius LBX and LCX | `vxl_drivers._legacy.lasers.oxxius.OxxiusLBX`, `OxxiusLCX` | Shared `vxl_drivers._legacy.lasers.oxxius.OxxiusHub` |
+| AA Opto-Electronic MPDSnC | `vxl_drivers._legacy.aotf.mpds.MpdsAotf` | Included `aaopto-aotf` dependency |
 
 ### Power meters
 

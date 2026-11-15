@@ -1,13 +1,16 @@
 """Light devices that keep what they are told, for tests and simulated rigs."""
 
+from math import isfinite
 from typing import ClassVar
 
+from rigup.device import number, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
 
 from .base import ControlMode, Dimmable
 from .laser import Laser
+from .meter import PowerMeter
 from .modulator import Modulator
 from .shutter import Shutter
 
@@ -98,4 +101,52 @@ class SimulatedShutter(Shutter):
         self._open = False
 
 
-__all__ = ["SimulatedDimmable", "SimulatedLaser", "SimulatedModulator", "SimulatedShutter"]
+class SimulatedPowerMeter(PowerMeter):
+    """An ideal meter that reads the power it is given. It starts at 0 mW and 532 nm, and the wavelength does not
+    change its reading. Once disposed, every read raises."""
+
+    def __init__(self, uid: str) -> None:
+        super().__init__(uid=uid)
+        self._incident_power = 0.0
+        self._wavelength = 532.0
+        self._closed = False
+
+    @property
+    def power(self) -> float | None:
+        self._ensure_open()
+        return self._incident_power
+
+    @number(minimum=0.0)
+    @stream(label="Simulated Incident Power", units="mW")
+    def incident_power(self) -> float:
+        self._ensure_open()
+        return self._incident_power
+
+    @incident_power.setter
+    def incident_power(self, value: float) -> None:
+        self._ensure_open()
+        if not isfinite(value):
+            raise ValueError("incident power must be finite")
+        self._incident_power = value
+
+    @number(minimum=1.0, maximum=10000.0)
+    def wavelength(self) -> float:
+        self._ensure_open()
+        return self._wavelength
+
+    @wavelength.setter
+    def wavelength(self, value: float) -> None:
+        self._ensure_open()
+        if not isfinite(value):
+            raise ValueError("wavelength must be finite")
+        self._wavelength = value
+
+    def dispose(self) -> None:
+        self._closed = True
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("power meter is closed")
+
+
+__all__ = ["SimulatedDimmable", "SimulatedLaser", "SimulatedModulator", "SimulatedPowerMeter", "SimulatedShutter"]

@@ -89,7 +89,7 @@ def test_a_pin_is_live_when_its_wire_has_a_signal_or_comes_from_a_camera(config_
 
     assert live(config_data) == {
         "camera/trigger_in": "ao_main.camera_trigger",
-        "laser/enable_in": "ao_main.laser",
+        "laser/ttl_in": "ao_main.laser",
         "galvo/in": "ao_main.galvo",
         "z_axis/ttl_in": "ao_main.z_step",
     }

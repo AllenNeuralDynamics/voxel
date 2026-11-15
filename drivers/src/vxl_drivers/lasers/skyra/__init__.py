@@ -1,1 +1,1 @@
-"""Cobolt Skyra controller and line source drivers; import concrete classes from their modules."""
+"""Cobolt Skyra hub and line laser drivers; import concrete classes from their modules."""
