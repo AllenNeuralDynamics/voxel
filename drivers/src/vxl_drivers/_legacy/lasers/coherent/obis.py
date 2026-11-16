@@ -7,6 +7,7 @@ from obis_laser import ObisLS as ObisLSDriver
 from obis_laser import ObisLX as ObisLXDriver
 from rigup.device import choice, number, query, stream
 from serial import Serial
+
 from vxl_drivers._legacy.lasers.base import Laser
 
 

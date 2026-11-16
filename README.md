@@ -47,6 +47,15 @@ open it. The simulated configuration exercises the application without requiring
 Station initialization is a one-time operation that writes `~/.voxel/station.yaml`. Remote device nodes do not need
 a station configuration; they use an optional `~/.voxel/system.yaml`, `VOXEL_*` environment variables, or defaults.
 
+Voxel's files live in one folder, `~/.voxel`. It holds the station settings, your instruments and the acquisition
+records, and by default image data is written there too.
+
+| Environment variable | Moves | Default |
+| --- | --- | --- |
+| `VOXEL_HOME` | The whole folder | `~/.voxel` |
+| `VOXEL_STORE` | Image data | `~/.voxel/store` |
+| `VOXEL_SCRATCH` | Data staged here before upload to an object store | `~/.voxel/scratch` |
+
 The Qt interface is an early implementation and does not yet cover the complete web workflow. To try it, install the
 Qt dependencies and launch the same station:
 

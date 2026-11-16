@@ -70,7 +70,7 @@ members = [
     "omezarr",
     "bench",
     "records",
-    "illumination_lab",
+    "prototypes",
 ]
 
 [tool.uv.sources]

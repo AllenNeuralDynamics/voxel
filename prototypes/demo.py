@@ -1,6 +1,6 @@
 """A session on a simulated SPIM microscope that prints the lights after each command.
 
-Run from the repo root: ``uv run -m illumination_lab.demo``."""
+Run from the repo root: ``uv run -m prototypes.demo``."""
 
 import asyncio
 import copy

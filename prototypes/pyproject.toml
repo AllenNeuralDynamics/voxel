@@ -1,0 +1,15 @@
+[project]
+name = "prototypes"
+version = "0"
+description = "Prototypes tried next to the app before they move into it (internal workspace tooling; not built or published)"
+requires-python = ">=3.13"
+dependencies = ["vxl", "vxlib", "rigup"]
+
+# Virtual member, as bench: run it as a module from the repo root, e.g. `uv run -m prototypes.demo`.
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+vxl = { workspace = true }
+vxlib = { workspace = true }
+rigup = { workspace = true }

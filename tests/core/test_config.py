@@ -70,6 +70,8 @@ def _wires(data: dict[str, Any]) -> dict[str, Any]:
             lambda d: d["parts"].update(sample={"kind": "spot"}),
             "rig.reserved_name",
         ),
+        (lambda d: d["devices"].update(__monitor={"target": "builtins.object"}), "rig.reserved_name"),
+        (lambda d: d["parts"].update(__lens={"kind": "lens"}), "rig.reserved_name"),
         (lambda d: d["stage"].update(x="x_axiss"), "rig.stage.device_missing"),
         (lambda d: d["optics"]["sample"].update(to="fw_emision"), "rig.optics.target_missing"),
         (lambda d: d["parts"].pop("galvo"), "rig.optics.node_unknown"),

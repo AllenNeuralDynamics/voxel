@@ -28,6 +28,7 @@ from vxl.devices.light.base import ControlMode, DimmableHandle
 from vxl.devices.light.laser import LaserHandle
 from vxl.devices.light.modulator import ModulatorHandle
 from vxl.devices.light.shutter import ShutterHandle
+from vxl.devices.node import NodeMonitorHandle
 from vxl.devices.signals.generator.handle import GeneratorHandle
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ _HANDLES: dict[str, type[DeviceHandle[Any]]] = {
     "laser": LaserHandle,
     "modulator": ModulatorHandle,
     "shutter": ShutterHandle,
+    "node_monitor": NodeMonitorHandle,
 }
 
 

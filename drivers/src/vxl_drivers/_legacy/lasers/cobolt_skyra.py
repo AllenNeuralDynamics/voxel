@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from pycobolt import CoboltLaser
 from rigup.device import choice, number, stream
+
 from vxl_drivers._legacy.lasers.base import Laser
 
 

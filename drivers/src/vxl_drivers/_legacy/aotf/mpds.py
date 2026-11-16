@@ -7,6 +7,7 @@ rigup device framework.
 from aaopto_aotf.aotf import MAX_POWER_DBM, MPDS
 from aaopto_aotf.device_codes import BlankingMode as MPDSBlankingMode
 from aaopto_aotf.device_codes import InputMode
+
 from vxl_drivers._legacy.aotf.base import AOTF, BlankingMode
 
 

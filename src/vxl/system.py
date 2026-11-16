@@ -1,18 +1,22 @@
 """Machine-local facts and configuration for the box this code runs on.
 
 ``System`` exposes what is true of *this* machine — CPU count, platform, hostname,
-the RAM budget (:class:`System.Ram`), and the local storage roots (``store``/``scratch``).
+the RAM budget, and the local storage roots (``store``/``scratch``). The Voxel processes on one machine
+share its RAM budget through a registry file (:class:`MachineRegistry`).
 Machine-specific knobs are sourced from ``VOXEL_*`` env vars and one machine file. A
 control station's ``station.yaml`` is a superset of ``system.yaml`` and takes its place
 when present; nodes and other non-control processes can use ``system.yaml`` or defaults.
 """
 
 import logging
+import os
 import socket
+import sqlite3
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
-from typing import ClassVar
 
 import psutil
 from cloudpathlib import S3Path
@@ -34,6 +38,7 @@ from vxl_records import (
     StorageSpec,
 )
 from vxlib.s3 import S3Store
+from vxlib.schema import FrozenModel
 
 from vxl._utils.files import load_yaml
 
@@ -41,10 +46,12 @@ log = logging.getLogger(__name__)
 
 
 def voxel_home() -> Path:
-    """The fixed config/state home, ``~/.voxel`` -- holds machine config and ``instruments/``.
-    Relocate it by setting ``$HOME``; move the data roots independently with
-    ``VOXEL_STORE`` / ``VOXEL_SCRATCH``."""
-    return Path.home() / ".voxel"
+    """Return the config and state home: ``$VOXEL_HOME`` when it is set, otherwise ``~/.voxel``.
+
+    It holds the machine config and ``instruments/``. Move the data roots independently with ``VOXEL_STORE`` and
+    ``VOXEL_SCRATCH``."""
+    home = os.environ.get("VOXEL_HOME")
+    return Path(home).expanduser() if home else Path.home() / ".voxel"
 
 
 def yaml_source(settings_cls: type[BaseSettings], path: Path) -> InitSettingsSource:
@@ -53,11 +60,11 @@ def yaml_source(settings_cls: type[BaseSettings], path: Path) -> InitSettingsSou
 
 
 def load_voxel_env() -> None:
-    """Load ``~/.voxel/.env`` into the process environment if present (a no-op when absent;
+    """Load ``.env`` of the Voxel home into the process environment if present (a no-op when absent;
     existing vars win). A per-machine escape hatch for ambient settings the file layer can't
     reach: the ``VOXEL_*`` knobs *and* the AWS chain (``AWS_*``, ``S3_ENDPOINT_URL``) that
-    s5cmd / boto3 / TensorStore read. Call once at startup, before constructing :class:`System`
-    or any S3 client."""
+    s5cmd / boto3 / TensorStore read. ``VOXEL_HOME`` itself cannot be set there, because the file is found
+    through it. Call once at startup, before constructing :class:`System` or any S3 client."""
     load_dotenv(voxel_home() / ".env", override=False)
 
 
@@ -89,6 +96,163 @@ def remote_store_fingerprint(store: S3Store) -> str:
     return f"s3:{sha256(identity).hexdigest()}"
 
 
+_REGISTRY_VERSION = 1
+_REGISTRY_SCHEMA = """
+CREATE TABLE processes (
+    pid INTEGER PRIMARY KEY,
+    started REAL NOT NULL,
+    name TEXT NOT NULL
+) STRICT;
+CREATE TABLE claims (
+    pid INTEGER NOT NULL REFERENCES processes (pid) ON DELETE CASCADE,
+    resource TEXT NOT NULL,
+    consumer TEXT NOT NULL,
+    amount REAL NOT NULL CHECK (amount > 0),
+    PRIMARY KEY (pid, resource, consumer)
+) STRICT, WITHOUT ROWID;
+"""
+
+_PROCESS_START_TOLERANCE_S = (
+    1.0  # psutil can report the start time of one process slightly differently in two processes
+)
+
+
+class ProcessEntry(FrozenModel):
+    """A live Voxel process on this machine, with the amount each of its consumers claims of each resource."""
+
+    pid: int
+    name: str
+    claims: dict[str, dict[str, float]]
+
+
+class MachineRegistry:
+    """The Voxel processes on this machine and their claims on shared resources.
+
+    A claim is an amount of a named resource for one consumer of one process. What an amount means belongs to the
+    class that manages that resource. A claim ends with its process.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._process = psutil.Process()
+
+    @property
+    def pid(self) -> int:
+        """The process ID that this registry writes for."""
+        return self._process.pid
+
+    def join(self, name: str) -> None:
+        """Register this process under ``name``, replacing an earlier registration."""
+        row = (self.pid, self._process.create_time(), name)
+        with self._transaction() as db:
+            db.execute(
+                "INSERT INTO processes VALUES (?, ?, ?) ON CONFLICT (pid) DO UPDATE SET name = excluded.name", row
+            )
+
+    def leave(self) -> None:
+        """Remove this process and its claims."""
+        with self._transaction() as db:
+            db.execute("DELETE FROM processes WHERE pid = ?", (self.pid,))
+
+    def processes(self) -> list[ProcessEntry]:
+        """Return the live registered processes of this machine."""
+        with self._transaction() as db:
+            names = db.execute("SELECT pid, name FROM processes ORDER BY pid").fetchall()
+            rows = db.execute("SELECT pid, resource, consumer, amount FROM claims").fetchall()
+        claims: dict[int, dict[str, dict[str, float]]] = {pid: {} for pid, _ in names}
+        for pid, resource, consumer, amount in rows:
+            claims[pid].setdefault(resource, {})[consumer] = amount
+        return [ProcessEntry(pid=pid, name=name, claims=claims[pid]) for pid, name in names]
+
+    def claim(self, resource: str, consumer_id: str, amount: float) -> None:
+        """Set the amount that a consumer of this process claims of ``resource``, registering the process if needed."""
+        with self._transaction() as db:
+            started, name = self._process.create_time(), self._process.name()
+            db.execute("INSERT OR IGNORE INTO processes VALUES (?, ?, ?)", (self.pid, started, name))
+            db.execute("INSERT OR REPLACE INTO claims VALUES (?, ?, ?, ?)", (self.pid, resource, consumer_id, amount))
+
+    def unclaim(self, resource: str, consumer_id: str) -> None:
+        """Remove a claim of this process; do nothing if there is none."""
+        with self._transaction() as db:
+            db.execute(
+                "DELETE FROM claims WHERE pid = ? AND resource = ? AND consumer = ?", (self.pid, resource, consumer_id)
+            )
+
+    def claims(self, resource: str) -> dict[tuple[int, str], float]:
+        """Return every live claim on ``resource``, by process ID and consumer."""
+        with self._transaction() as db:
+            rows = db.execute("SELECT pid, consumer, amount FROM claims WHERE resource = ?", (resource,)).fetchall()
+        return {(pid, consumer): amount for pid, consumer, amount in rows}
+
+    @contextmanager
+    def _transaction(self) -> Generator[sqlite3.Connection]:
+        """Open the registry with the write lock held and the rows of ended processes removed.
+
+        A file of another version is emptied and rebuilt: live processes write their rows again on their next access.
+        """
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        db = sqlite3.connect(self._path, timeout=10.0, isolation_level=None)
+        try:
+            db.execute("PRAGMA foreign_keys = ON")  # without it, the claims of a removed process would stay
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("PRAGMA user_version").fetchone()[0] != _REGISTRY_VERSION:
+                db.execute("DROP TABLE IF EXISTS claims")
+                db.execute("DROP TABLE IF EXISTS processes")
+                for statement in _REGISTRY_SCHEMA.split(";"):
+                    db.execute(statement)
+                db.execute(f"PRAGMA user_version = {_REGISTRY_VERSION}")
+            for pid, started in db.execute("SELECT pid, started FROM processes").fetchall():
+                try:  # a reused pid has another start time, and a pid of another user's process is not ours
+                    alive = abs(psutil.Process(pid).create_time() - started) < _PROCESS_START_TOLERANCE_S
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    alive = False
+                if not alive:
+                    db.execute("DELETE FROM processes WHERE pid = ?", (pid,))
+            yield db
+            db.execute("COMMIT")
+        except BaseException:
+            if db.in_transaction:
+                db.execute("ROLLBACK")
+            raise
+        finally:
+            db.close()
+
+
+class RamBudget:
+    """Divide a machine's RAM budget among the consumers of every registered process, in proportion to their
+    weights. It keeps the weights of its own consumers and writes them again on each read, so a registry that was
+    emptied or replaced is restored."""
+
+    _RESOURCE = "ram"
+
+    def __init__(self, machine: "System") -> None:
+        self._machine = machine
+        self._weights: dict[str, float] = {}
+
+    def reserve(self, consumer_id: str, weight: float = 1.0) -> int:
+        """Register a consumer of this process and return its share in bytes."""
+        if weight <= 0:
+            raise ValueError(f"weight must be > 0, got {weight}")
+        self._weights[consumer_id] = weight
+        return self.reserved(consumer_id)
+
+    def release(self, consumer_id: str) -> None:
+        """Remove a consumer of this process; do nothing if it is not registered."""
+        self._weights.pop(consumer_id, None)
+        self._machine.registry.unclaim(self._RESOURCE, consumer_id)
+
+    def reserved(self, consumer_id: str) -> int:
+        """Return the current share of a consumer of this process, in bytes.
+
+        Raises KeyError if the consumer is not registered.
+        """
+        own = self._weights[consumer_id]
+        registry = self._machine.registry
+        for consumer, weight in self._weights.items():
+            registry.claim(self._RESOURCE, consumer, weight)
+        return int(self._machine.ram_budget_bytes * own / sum(registry.claims(self._RESOURCE).values()))
+
+
 class System(BaseSettings):
     """This machine: ``VOXEL_*`` env knobs, machine YAML config, and introspected facts.
 
@@ -97,7 +261,8 @@ class System(BaseSettings):
     the fallback. Exposes the local storage roots (``store``/``scratch``, overridable via
     ``VOXEL_STORE``/``VOXEL_SCRATCH``), the object-store registry (:attr:`remotes`), the fixed config
     home (:attr:`dir`), the pure machine
-    facts (``cpu_count``/``platform``/``hostname``), and the shared RAM budget (:class:`Ram`). Paths
+    facts (``cpu_count``/``platform``/``hostname``), and the RAM budget that the Voxel processes of this
+    machine share (:attr:`ram`). Paths
     are resolved only; whoever writes creates them.
     """
 
@@ -165,6 +330,30 @@ class System(BaseSettings):
         return socket.gethostname()
 
     @staticmethod
+    def total_ram_bytes() -> int:
+        return psutil.virtual_memory().total
+
+    @staticmethod
+    def available_ram_bytes() -> int:
+        return psutil.virtual_memory().available
+
+    @property
+    def ram_budget_bytes(self) -> int:
+        """Available RAM times ``max_ram_fraction``, read now."""
+        return int(self.available_ram_bytes() * self.max_ram_fraction)
+
+    @property
+    def registry(self) -> "MachineRegistry":
+        """The registry of the Voxel processes on this machine. Its file is named after the machine, so two
+        machines that share a home by mistake do not share a registry."""
+        return MachineRegistry(self.dir / "run" / f"machine-{self.hostname()}.db")
+
+    @property
+    def ram(self) -> "RamBudget":
+        """A new budget of this machine's RAM. Keep it for as long as its consumers live."""
+        return RamBudget(self)
+
+    @staticmethod
     def local_ip() -> str:
         """Return the best-effort outbound IPv4 address, falling back to loopback."""
         try:
@@ -212,55 +401,11 @@ class System(BaseSettings):
             key=target.key,
         )
 
-    class Ram:
-        """Weighted RAM-budget mediation for consumers sharing this machine's memory.
-
-        Holds a policy fraction of available RAM and divides it among registered
-        consumers in proportion to their weights. Consumers register via
-        ``reserve()`` / ``release()`` and read their allocation via ``reserved()``.
-        """
-
-        _consumers: ClassVar[dict[str, float]] = {}
-
-        @classmethod
-        def total_bytes(cls) -> int:
-            return psutil.virtual_memory().total
-
-        @classmethod
-        def available_bytes(cls) -> int:
-            return psutil.virtual_memory().available
-
-        @classmethod
-        def max_bytes(cls) -> int:
-            """Live policy cap: available system RAM * VOXEL_MAX_RAM_FRACTION."""
-            return int(cls.available_bytes() * System().max_ram_fraction)
-
-        @classmethod
-        def reserve(cls, consumer_id: str, weight: float = 1.0) -> int:
-            """Register ``consumer_id`` with ``weight``; return its share in bytes."""
-            if weight <= 0:
-                raise ValueError(f"weight must be > 0, got {weight}")
-            cls._consumers[consumer_id] = weight
-            return cls.reserved(consumer_id)
-
-        @classmethod
-        def release(cls, consumer_id: str) -> None:
-            """Deregister ``consumer_id`` (no-op if not registered)."""
-            cls._consumers.pop(consumer_id, None)
-
-        @classmethod
-        def reserved(cls, consumer_id: str) -> int:
-            """Return the consumer's current weighted share in bytes.
-
-            Raises KeyError if the consumer hasn't been registered via reserve().
-            """
-            if consumer_id not in cls._consumers:
-                raise KeyError(consumer_id)
-            total_weight = sum(cls._consumers.values()) or 1.0
-            return int(cls.max_bytes() * cls._consumers[consumer_id] / total_weight)
-
 
 __all__ = [
+    "MachineRegistry",
+    "ProcessEntry",
+    "RamBudget",
     "Remote",
     "System",
     "load_voxel_env",

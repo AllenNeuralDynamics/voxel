@@ -330,6 +330,7 @@ OpticalNodeName = Annotated[str, identifier("Optical node")]
 """A node of the optical graph: a device, a part, or ``sample``."""
 
 _SAMPLE = "sample"
+_RESERVED_PREFIX = "__"  # the names of the devices that Voxel adds to a rig itself
 """The node where the light meets the sample."""
 
 
@@ -571,4 +572,8 @@ class InstrumentConfig(RigConfig, frozen=True):
         if _SAMPLE in self.all_devices or _SAMPLE in self.parts:
             msg = "'sample' names the node where the 2 sides of the optical graph meet, so no device or part takes it."
             problems.add("rig.reserved_name", msg, *self.component_location(_SAMPLE))
+        for name in (*self.all_devices, *self.parts):
+            if name.startswith(_RESERVED_PREFIX):
+                msg = f"'{name}' starts with '{_RESERVED_PREFIX}', which names the devices that Voxel adds to a rig."
+                problems.add("rig.reserved_name", msg, *self.component_location(name))
         return problems

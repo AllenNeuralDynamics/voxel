@@ -45,8 +45,6 @@ from vxl.system import System, remote_store_fingerprint
 
 log = logging.getLogger(__name__)
 
-_GIB = 1024**3
-
 
 class CameraSensor(FrozenModel):
     """The size of a camera's sensor, and of 1 pixel on it."""
@@ -138,7 +136,8 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         self._task_kind: Literal["batch", "close"] | None = None
         self._publish_tasks: dict[PreviewLayer, asyncio.Task[None]] = {}
         # Preview-publish counters (best-effort publish is skip-if-busy); reported per stack.
-        System.Ram.reserve(self.device.uid, weight=1.0)
+        self._ram = self._system.ram
+        self._ram.reserve(self.device.uid, weight=1.0)
 
     async def close(self) -> None:
         self._publish_fn = None
@@ -149,14 +148,13 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         if self._writer is not None:  # free the reusable ring (its slots' workers + shared memory)
             await self._run(self._writer.close)
             self._writer = None
-        System.Ram.release(self.device.uid)
+        self._ram.release(self.device.uid)
         await super().close()
 
-    @property
-    @stream("slow", label="RAM Budget", units="GiB")
-    def ram_budget_gib(self) -> float:
-        """This camera's share of the host RAM budget, rounded down to a quarter GiB."""
-        return System.Ram.reserved(self.device.uid) // (_GIB // 4) / 4
+    @query()
+    def ram_budget_bytes(self) -> int:
+        """Return this camera's current share of the host RAM budget."""
+        return self._ram.reserved(self.device.uid)
 
     @property
     @stream(label="Camera Mode")
@@ -356,8 +354,8 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         released — so the RAM share read here is not depressed by memory this camera is giving back.
         Refuses below ``MIN_SLOTS``: a single slot would serialize collect against flush.
         """
-        budget = System.Ram.reserved(self.device.uid)
-        available = System.Ram.available_bytes()
+        budget = self.ram_budget_bytes()
+        available = System.available_ram_bytes()
         slots = slots_for_budget(
             config.batch_shape,
             config.max_level,

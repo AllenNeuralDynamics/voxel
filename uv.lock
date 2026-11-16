@@ -13,8 +13,8 @@ resolution-markers = [
 [manifest]
 members = [
     "bench",
-    "illumination-lab",
     "ome-zarr-writer",
+    "prototypes",
     "rigup",
     "vxl",
     "vxl-drivers",
@@ -771,23 +771,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cd/63/9496c57188a2ee585e0f1db071d75089a11e98aa86eb99d9d7618fc1edce/idna-3.18.tar.gz", hash = "sha256:ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848", size = 196711, upload-time = "2026-06-02T14:34:07.794Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/5e/d4e9f1a599fb8e573b7b87160658329fbf28d19eac2718f51fc3def3aa5a/idna-3.18-py3-none-any.whl", hash = "sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2", size = 65455, upload-time = "2026-06-02T14:34:06.319Z" },
-]
-
-[[package]]
-name = "illumination-lab"
-version = "0"
-source = { virtual = "illumination_lab" }
-dependencies = [
-    { name = "rigup" },
-    { name = "vxl" },
-    { name = "vxlib" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "rigup", editable = "rigup" },
-    { name = "vxl", editable = "." },
-    { name = "vxlib", editable = "vxlib" },
 ]
 
 [[package]]
@@ -1808,6 +1791,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6c/d2/578712a979a50e9aba08ea173a38e7598461130d3c9899f176373bc03280/plumbum-2.0.2.tar.gz", hash = "sha256:233751d7819c9e6743ec1c2405927eb4fa52a284c7b894bd10e28106a9309a92", size = 390799, upload-time = "2026-07-22T04:13:12.157Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/55/fdd01894807d20fb6181f13590ae247585b10e909b42e6ada833379fe520/plumbum-2.0.2-py3-none-any.whl", hash = "sha256:a865771826c1d2cce0ca8b2a2c48aa0447ed7a518859e389a95f158e9c369547", size = 168804, upload-time = "2026-07-22T04:13:10.76Z" },
+]
+
+[[package]]
+name = "prototypes"
+version = "0"
+source = { virtual = "prototypes" }
+dependencies = [
+    { name = "rigup" },
+    { name = "vxl" },
+    { name = "vxlib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "rigup", editable = "rigup" },
+    { name = "vxl", editable = "." },
+    { name = "vxlib", editable = "vxlib" },
 ]
 
 [[package]]

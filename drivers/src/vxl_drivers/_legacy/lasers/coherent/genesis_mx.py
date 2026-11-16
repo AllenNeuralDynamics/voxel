@@ -3,6 +3,7 @@
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX as GenesisMXDriver
 from rigup.device import number
+
 from vxl_drivers._legacy.lasers.base import Laser
 
 

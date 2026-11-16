@@ -7,6 +7,7 @@ from typing import Literal
 
 from rigup.device import Device, choice, number, query, stream
 from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE, Serial, SerialTimeoutException
+
 from vxl_drivers._legacy.lasers.base import Laser
 
 # ==================== Protocol Constants ====================
