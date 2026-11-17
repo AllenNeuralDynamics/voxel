@@ -15,7 +15,7 @@ def _hal(optics: dict[str, Any], *, parts: dict[str, Any], devices: list[str]) -
         {
             "parts": parts,
             "devices": {uid: {"target": "builtins.object"} for uid in (*axes, *devices)},
-            "stage": dict(zip("xyz", axes, strict=True)),
+            "stage": {axis: {"device": device} for axis, device in zip("xyz", axes, strict=True)},
             "optics": optics,
         }
     )
@@ -47,8 +47,8 @@ def test_node_rules(node: dict[str, Any], match: str) -> None:
 def test_a_path_gives_the_magnification_and_the_band_of_its_parts() -> None:
     hal = _hal(
         {
-            "laser": {"to": "sample"},
-            "sample": {"to": "objective"},
+            "laser": {"to": "specimen"},
+            "specimen": {"to": "objective"},
             "objective": {"to": "splitter"},
             "splitter": {"to": ["tube_a", "camera_b"]},
             "tube_a": {"to": "long_pass"},
@@ -69,13 +69,13 @@ def test_a_path_gives_the_magnification_and_the_band_of_its_parts() -> None:
     graph = hal.optics
     assert list(graph.sources()) == ["laser"]
     assert list(graph.detectors()) == ["camera_a", "camera_b"]
-    assert list(graph.elements()) == ["laser", "sample", "objective", "splitter", "tube_a", "long_pass", "wheel"]
+    assert list(graph.elements()) == ["laser", "specimen", "objective", "splitter", "tube_a", "long_pass", "wheel"]
 
     (lit,) = graph.paths_from("laser", {})
-    assert lit.nodes == ("laser", "sample")
+    assert lit.nodes == ("laser", "specimen")
 
     (to_a,) = graph.paths_to("camera_a", {})
-    assert to_a.nodes == ("sample", "objective", "splitter", "tube_a", "long_pass", "wheel", "camera_a")
+    assert to_a.nodes == ("specimen", "objective", "splitter", "tube_a", "long_pass", "wheel", "camera_a")
     green = {"wheel": "green"}
     assert (hal.magnification(to_a, green), hal.band(to_a, green)) == (10, (510, 550))
     assert hal.band(to_a, {"wheel": "open"}) == (500, None)
@@ -89,10 +89,10 @@ def test_a_position_can_send_the_light_to_another_node() -> None:
         {
             "laser": {"to": "arm_switch"},
             "arm_switch": {"to": {"left": "left_lens", "right": ["right_lens", "monitor"]}},
-            "left_lens": {"to": "sample"},
-            "right_lens": {"to": "sample"},
-            "monitor": {"to": "sample"},
-            "sample": {"to": "camera"},
+            "left_lens": {"to": "specimen"},
+            "right_lens": {"to": "specimen"},
+            "monitor": {"to": "specimen"},
+            "specimen": {"to": "camera"},
             "camera": {"width": {"y": 1}, "height": {"x": 1}},
         },
         parts={},
@@ -109,4 +109,4 @@ def test_a_position_can_send_the_light_to_another_node() -> None:
     assert ways("left") == ["left_lens"]
     assert ways("right") == ["monitor", "right_lens"]
     assert ways("off") == []
-    assert [path.nodes for path in hal.optics.paths_to("camera", {"arm_switch": "off"})] == [("sample", "camera")]
+    assert [path.nodes for path in hal.optics.paths_to("camera", {"arm_switch": "off"})] == [("specimen", "camera")]

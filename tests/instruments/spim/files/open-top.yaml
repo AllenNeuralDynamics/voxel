@@ -56,8 +56,11 @@ rig:
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms]
 
-  stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
-  # z_axis: this motor counts up as the sample goes up, but +z is deeper: its direction will be set on the device
+  stage:                                          # each specimen axis: its device, and where imaging can happen (µm)
+    x: {device: x_axis}
+    y: {device: y_axis}
+    z: {device: z_axis}
+  # z_axis: this motor counts up as the specimen goes up, but +z is deeper: its direction will be set on the device
 
   wiring:                                         # every wire on the bench, grouped by the device that sends it
     ao_main:
@@ -68,7 +71,7 @@ rig:
     x_axis:
       x_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while X sweeps
 
-  optics:                                         # where the light goes: light sources → sample → detectors
+  optics:                                         # where the light goes: light sources → specimen → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
     # Rule 2: what a part does to the light is in parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
@@ -77,9 +80,9 @@ rig:
     laser_488:   {to: combiner}                   # the 2 lasers point at 1 node: the beams join there
     laser_638:   {to: combiner}
     combiner:    {to: sheet_galvo}
-    sheet_galvo: {to: sample}                     # the wire galvo_sheet drives it: it scans the beam into a sheet
+    sheet_galvo: {to: specimen}                   # the wire galvo_sheet drives it: it scans the beam into a sheet
 
-    sample:      {to: objective}
+    specimen:    {to: objective}
     objective:   {to: fw_emission}
 
     fw_emission:                                  # it holds the filters that its slot labels name

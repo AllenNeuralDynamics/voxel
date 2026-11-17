@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pydantic import Field
 from vxlib.reactivity import Emitter
 
 from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, StreamCursor, VoxelPreviewPacket
@@ -22,10 +23,21 @@ if TYPE_CHECKING:
 
     from vxlib.reactivity import Readable, Subscribable
 
-    from vxl.core.views import StationInfo
 
 from vxl.core.errors import FeedLaggedError
-from vxl.core.views import StationFeedView, StationStatus, StationView
+from vxl.core.station import StationInfo, StationStatus, StationView
+
+
+class StationFeedView(StationView):
+    """The station view at 1 place in the ordered feed."""
+
+    cursor: StreamCursor
+    observed_at_unix_us: int = Field(ge=0)
+    station: StationInfo
+
+    def wire_dict(self) -> dict[str, object]:
+        """Serialize the complete view, including fields cleared to null."""
+        return self.model_dump(mode="json", exclude_none=False)
 
 
 def _unix_time_us() -> int:
@@ -185,6 +197,9 @@ class StationFeed:
                 return
             if station_view == self._station_view:
                 return
+            before, after = self._station_view.session, station_view.session
+            if (before and before.info.id) != (after and after.info.id):
+                self.clear_preview()  # frames of an ended session are never delivered
 
             self._station_view = station_view
             self._seq += 1
@@ -198,6 +213,8 @@ class StationFeed:
                 connection_state.terminate(
                     FeedLaggedError(f"station feed connection fell behind at {view.cursor.stream_id}:{view.cursor.seq}")
                 )
+        if station_view.status is StationStatus.CLOSED:
+            await self.close()  # a closed station never reopens, so its feed has nothing more to deliver
 
     async def _drain_frames(self) -> None:
         """Deliver latest-only packets without propagating consumer delay to Instrument."""
@@ -251,4 +268,4 @@ class StationFeed:
         )
 
 
-__all__ = ["StationFeed", "StationFeedConnection"]
+__all__ = ["StationFeed", "StationFeedConnection", "StationFeedView"]

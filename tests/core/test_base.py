@@ -46,10 +46,10 @@ _RIG: dict[str, Any] = {
         "y_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
         "z_axis": {"target": _AXIS, "init": {"lower": 0, "upper": 1000, "speed": 100_000}},
     },
-    "stage": {"x": "x_axis", "y": "y_axis", "z": "z_axis"},
+    "stage": {"x": {"device": "x_axis"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}},
     "optics": {
-        "laser_488": {"to": "sample"},
-        "sample": {"to": "camera"},
+        "laser_488": {"to": "specimen"},
+        "specimen": {"to": "camera"},
         "camera": {"width": {"y": 1}, "height": {"x": -1}},
     },
 }
@@ -146,7 +146,7 @@ async def test_a_device_command_runs_while_an_activity_holds_the_device(instrume
 
 
 async def test_a_device_of_the_wrong_kind_stops_the_start(tmp_path: Path) -> None:
-    rig = {**_RIG, "stage": {"x": "daq", "y": "y_axis", "z": "z_axis"}}
+    rig = {**_RIG, "stage": {"x": {"device": "daq"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}}}
     instrument = _instrument(tmp_path, rig)
 
     with pytest.raises(StartupError) as caught:
@@ -156,7 +156,7 @@ async def test_a_device_of_the_wrong_kind_stops_the_start(tmp_path: Path) -> Non
 
 
 async def test_a_device_with_2_roles_is_checked_for_each(tmp_path: Path) -> None:
-    rig = {**_RIG, "stage": {"x": "camera", "y": "y_axis", "z": "z_axis"}}
+    rig = {**_RIG, "stage": {"x": {"device": "camera"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}}}
     instrument = _instrument(tmp_path, rig)
 
     with pytest.raises(StartupError) as caught:

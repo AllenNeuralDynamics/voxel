@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, Self
 from uuid import UUID, uuid4
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator, model_validator
 from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
 from vxl_records import SQLiteRecords, VoxelRecords
 from vxlib.reactivity import Cell, Readable
-from vxlib.schema import check_identifier
+from vxlib.schema import FrozenModel, check_identifier
 
 from vxl import system
 from vxl._utils.files import save_yaml
 from vxl.core.errors import BusyError, RejectedError, StationNotConfiguredError
-from vxl.core.feed import StationFeed
-from vxl.core.instrument.base import Instrument
+from vxl.core.instrument.base import Instrument, InstrumentView
 from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.views import SessionInfo, SessionView, StationInfo, StationStatus, StationView
 from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
 from vxl.system import System
 
@@ -31,6 +30,57 @@ if TYPE_CHECKING:
 
 
 type AnyInstrument = Instrument[Any, Any]
+
+
+class StationInfo(BaseModel):
+    """Stable public identity of a Voxel control station."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+
+
+class StationStatus(StrEnum):
+    """Lifecycle status of the station's active session."""
+
+    IDLE = "idle"
+    OPENING = "opening"
+    ACTIVE = "active"
+    CLOSING = "closing"
+    FAULTED = "faulted"
+    CLOSED = "closed"
+
+
+class SessionInfo(FrozenModel):
+    """Stable identity of one opened instrument session."""
+
+    id: UUID
+    instrument_name: str = Field(min_length=1)
+
+
+class SessionView(FrozenModel):
+    """Complete bounded view belonging to one opened instrument session."""
+
+    info: SessionInfo
+    instrument: SerializeAsAny[InstrumentView]
+
+
+class StationView(FrozenModel):
+    """The live station as a screen sees it: its phase, its open session, and its last error."""
+
+    status: StationStatus = StationStatus.IDLE
+    session: SessionView | None = None
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_session_lifecycle(self) -> Self:
+        if self.status in {StationStatus.ACTIVE, StationStatus.CLOSING} and self.session is None:
+            raise ValueError(f"{self.status} station state requires a session")
+        empty_statuses = {StationStatus.IDLE, StationStatus.OPENING, StationStatus.CLOSED}
+        if self.status in empty_statuses and self.session is not None:
+            raise ValueError(f"{self.status} station state cannot contain a session")
+        return self
 
 
 def _describe_error(error: BaseException) -> str:
@@ -134,7 +184,7 @@ class StationConfig(System):
 
 
 class Station:
-    """Own one station configuration, stable feed, and at most one instrument.
+    """Own one station configuration and at most one instrument.
 
     Lifecycle methods are serialized so hardware ownership and the published
     station projection change in one deterministic order. Instrument behavior
@@ -166,7 +216,6 @@ class Station:
         self._leases_released = asyncio.Condition(self._lifecycle_lock)
         self._instrument_leases: set[asyncio.Task[object]] = set()
         self._lease_drain_timeout_s = lease_drain_timeout_s
-        self._feed = StationFeed(config.info, self._view)
 
     @property
     def config(self) -> StationConfig:
@@ -177,11 +226,6 @@ class Station:
     def records(self) -> VoxelRecords:
         """The durable record service composed with this station."""
         return self._records
-
-    @property
-    def feed(self) -> StationFeed:
-        """The stable station feed, independent of instrument lifetime."""
-        return self._feed
 
     @property
     def view(self) -> Readable[StationView]:
@@ -305,14 +349,12 @@ class Station:
             await self._close_session_locked(session_id)
 
     async def close(self) -> None:
-        """Close any active session and permanently stop this station's feed."""
+        """Close any active session and mark the station closed for good."""
         async with self._lifecycle_lock:
             if self._view.value.status is StationStatus.CLOSED:
-                await self._feed.close()
                 return
             await self._close_session_locked()
             await self._view.set(StationView(status=StationStatus.CLOSED))
-            await self._feed.close()
 
     async def _close_session_locked(self, expected_session_id: UUID | None = None) -> None:
         view = self._view.value
@@ -353,7 +395,6 @@ class Station:
         for teardown in self._session_teardowns:
             teardown()
         self._session_teardowns = []
-        self._feed.clear_preview()
         self._session_info = None
         try:
             await instrument.close()
@@ -390,7 +431,6 @@ class Station:
         for teardown in self._session_teardowns:
             teardown()
         self._session_teardowns = []
-        self._feed.clear_preview()
         self._session_info = None
 
         if instrument is None:
@@ -433,4 +473,12 @@ class Station:
         return SessionView(info=self._session_info, instrument=instrument.view.value)
 
 
-__all__ = ["Station", "StationConfig"]
+__all__ = [
+    "SessionInfo",
+    "SessionView",
+    "Station",
+    "StationConfig",
+    "StationInfo",
+    "StationStatus",
+    "StationView",
+]

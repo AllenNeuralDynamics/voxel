@@ -47,11 +47,11 @@ class SPIMState(InstrumentState, frozen=True):
     def problems(self, config: InstrumentConfig) -> Problems:
         if not isinstance(config, SPIMConfig):
             raise TypeError(f"a SPIMState is for a SPIMConfig, not a {type(config).__name__}")
-        problems = self.task.problems(config.scan).under("task")
+        problems = self.task.problems(config).under("task")
         problems += super().problems(config)
         problems += self._follow_problems(config).under("positions")
         for index, task in enumerate(self.plan):
-            found = task.problems(config.scan)
+            found = task.problems(config)
             for profile_index, profile_id in enumerate(task.profiles):
                 if profile_id not in self.profiles:
                     loc = ("profiles", profile_index)

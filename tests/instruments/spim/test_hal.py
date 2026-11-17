@@ -34,7 +34,7 @@ def _wires(data: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.parametrize(
     ("change", "code"),
     [
-        (lambda d: d["optics"]["sample"].update(to="fw_emision"), "rig.optics.target_missing"),
+        (lambda d: d["optics"]["specimen"].update(to="fw_emision"), "rig.optics.target_missing"),
         (lambda d: d["devices"].update(software={"target": "builtins.object"}), "rig.reserved_name"),
         (lambda d: d["scan"].update(pacer="ao_mian"), "rig.scan.pacer_missing"),
         (lambda d: _follow(d, "z"), "positions.follows_scan_axis"),

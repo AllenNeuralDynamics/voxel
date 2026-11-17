@@ -110,3 +110,18 @@ def test_task_ids_are_unique(config_data: dict[str, Any]) -> None:
     task = {"id": "same", "region": _REGION, "profiles": ["gfp"]}
     with pytest.raises(ValidationError, match="task ids must be unique"):
         _preset(config_data, task, task)
+
+
+@pytest.mark.parametrize(("specimen", "outside"), [([-1000, 9000], False), ([0, 5000], True)])
+def test_a_region_stays_inside_the_specimen_range(
+    config_data: dict[str, Any], specimen: list[float], outside: bool
+) -> None:
+    config_data["stage"]["x"]["specimen"] = specimen
+    codes = _codes(config_data, {"id": "brain", "region": _REGION, "profiles": ["gfp"]})
+    assert ("task.region.outside_specimen" in codes) is outside
+
+
+def test_a_specimen_range_needs_2_different_numbers(config_data: dict[str, Any]) -> None:
+    config_data["stage"]["x"]["specimen"] = [5, 5]
+    with pytest.raises(ValidationError, match="2 different numbers"):
+        load(config_data)

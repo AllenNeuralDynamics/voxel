@@ -127,7 +127,7 @@ class Profile(FrozenModel):
         return found
 
     def path_nodes(self, config: InstrumentConfig) -> set[str]:
-        """Every node on the light paths of the channels, on both sides of the sample, with each device at any
+        """Every node on the light paths of the channels, on both sides of the specimen, with each device at any
         position."""
         nodes: set[str] = set()
         for camera, channel in self.channels.items():
@@ -203,7 +203,7 @@ class Profile(FrozenModel):
 
     def _channel_problems(self, config: InstrumentConfig) -> Problems:
         """The problems of the channels: each names a camera and a light source, and the light can go from the
-        source to the sample and from the sample to the camera, with each device at any position."""
+        source to the specimen and from the specimen to the camera, with each device at any position."""
         cameras, sources = config.optics.detectors(), config.optics.sources()
         problems = Problems()
         for camera, channel in self.channels.items():
@@ -220,10 +220,10 @@ class Profile(FrozenModel):
                     "illumination",
                 )
             elif not config.optics.paths_from(channel.illumination, {}):
-                msg = f"No light path goes from '{channel.illumination}' to the sample."
+                msg = f"No light path goes from '{channel.illumination}' to the specimen."
                 problems.add("profile.channel.no_path", msg, "channels", camera)
             elif not config.optics.paths_to(camera, {}):
-                msg = f"No light path goes from the sample to '{camera}'."
+                msg = f"No light path goes from the specimen to '{camera}'."
                 problems.add("profile.channel.no_path", msg, "channels", camera)
         return problems
 
@@ -233,9 +233,9 @@ class Profile(FrozenModel):
         problems = Problems()
         for camera, channel in self.channels.items():
             if not config.optics.paths_from(channel.illumination, self.positions):
-                msg = f"No light of '{channel.illumination}' reaches the sample with {self._given()}."
+                msg = f"No light of '{channel.illumination}' reaches the specimen with {self._given()}."
             elif not config.optics.paths_to(camera, self.positions):
-                msg = f"No light goes from the sample to '{camera}' with {self._given()}."
+                msg = f"No light goes from the specimen to '{camera}' with {self._given()}."
             else:
                 continue
             problems.add("profile.channel.dark", msg, "channels", camera)
@@ -249,7 +249,7 @@ class Profile(FrozenModel):
                 problems.add("profile.timeline.no_wires", msg, "timelines", generator)
                 continue
             found = timeline.problems(wires)
-            if not found:  # the samples of a wrong timeline would repeat its problems
+            if not found:  # the specimens of a wrong timeline would repeat its problems
                 found = render(timeline, wires).problems
             problems += found.under("timelines", generator)
         return problems
@@ -332,7 +332,7 @@ class InstrumentState(BaseModel, frozen=True):
     def positions_at(self, stage: Mapping[SpecimenAxis, float], previous: _DevicePositions) -> _DevicePositions:
         """The position of each device in ``positions``, with the stage at ``stage``. ``previous`` gives the positions
         at the stop before, which a device that follows the stage keeps within its margin."""
-        found: _DevicePositions = {}
+        found: dict[DeviceUid, AxisPosition] = {}
         for device, rule in self.positions.items():
             if isinstance(rule, StageFollowRule):
                 before = previous.get(device)
@@ -397,7 +397,7 @@ class InstrumentState(BaseModel, frozen=True):
         return problems
 
     def _magnification_problems(self, config: InstrumentConfig) -> Problems:
-        """Each camera of a profile gets 1 magnification from the parts between the sample and the camera. A device
+        """Each camera of a profile gets 1 magnification from the parts between the specimen and the camera. A device
         that follows the stage is checked at each position of its rule."""
         problems = Problems()
         for profile_id, profile in self.profiles.items():

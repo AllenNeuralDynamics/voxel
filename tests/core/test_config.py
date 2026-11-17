@@ -31,13 +31,13 @@ _HAL: dict[str, Any] = {
     },
     "optics": {
         "laser": {"to": "galvo"},
-        "galvo": {"to": "sample"},
-        "sample": {"to": "objective"},
+        "galvo": {"to": "specimen"},
+        "specimen": {"to": "objective"},
         "objective": {"to": "fw"},
         "fw": {"to": "camera"},
         "camera": {"width": {"y": 1}, "height": {"x": -1}},
     },
-    "stage": {"x": "x_axis", "y": "y_axis", "z": "z_axis"},
+    "stage": {"x": {"device": "x_axis"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}},
 }
 
 
@@ -67,15 +67,15 @@ def _wires(data: dict[str, Any]) -> dict[str, Any]:
         (lambda d: d["wiring"].update(galvo={}), "rig.wiring.device_missing"),
         (lambda d: _wires(d)["galvo"].update(to=["galvoo/in"]), "rig.wiring.receiver_missing"),
         (
-            lambda d: d["parts"].update(sample={"kind": "spot"}),
+            lambda d: d["parts"].update(specimen={"kind": "spot"}),
             "rig.reserved_name",
         ),
         (lambda d: d["devices"].update(__monitor={"target": "builtins.object"}), "rig.reserved_name"),
         (lambda d: d["parts"].update(__lens={"kind": "lens"}), "rig.reserved_name"),
-        (lambda d: d["stage"].update(x="x_axiss"), "rig.stage.device_missing"),
-        (lambda d: d["optics"]["sample"].update(to="fw_emision"), "rig.optics.target_missing"),
+        (lambda d: d["stage"].update(x={"device": "x_axiss"}), "rig.stage.device_missing"),
+        (lambda d: d["optics"]["specimen"].update(to="fw_emision"), "rig.optics.target_missing"),
         (lambda d: d["parts"].pop("galvo"), "rig.optics.node_unknown"),
-        (lambda d: d["optics"].pop("sample"), "rig.optics.sample_missing"),
+        (lambda d: d["optics"].pop("specimen"), "rig.optics.specimen_missing"),
         (lambda d: d["optics"]["fw"].update(to={"GFP": "camra"}), "rig.optics.target_missing"),
     ],
 )
@@ -112,11 +112,11 @@ def test_a_part_and_a_device_cannot_share_a_name() -> None:
         bench(data)
 
 
-def test_each_side_of_the_sample_takes_its_numbers_from_its_own_parts() -> None:
+def test_each_side_of_the_specimen_takes_its_numbers_from_its_own_parts() -> None:
     data = copy.deepcopy(_HAL)
     data["parts"]["excitation_objective"] = {"target": "vxl.parts.Objective", "magnification": 10}
     data["optics"]["galvo"]["to"] = "excitation_objective"
-    data["optics"]["excitation_objective"] = {"to": "sample"}
+    data["optics"]["excitation_objective"] = {"to": "specimen"}
     hal = bench(data)
     assert hal.problems() == []
     assert [type(part).__name__ for part in hal.parts.values()] == [
@@ -129,11 +129,11 @@ def test_each_side_of_the_sample_takes_its_numbers_from_its_own_parts() -> None:
 
     gfp = {"fw": "GFP"}
     (lit,) = hal.optics.paths_from("laser", {})
-    assert lit.nodes == ("laser", "galvo", "excitation_objective", "sample")
+    assert lit.nodes == ("laser", "galvo", "excitation_objective", "specimen")
     assert (hal.magnification(lit, gfp), hal.band(lit, gfp)) == (10, None)
 
     (seen,) = hal.optics.paths_to("camera", {})
-    assert seen.nodes == ("sample", "objective", "fw", "camera")
+    assert seen.nodes == ("specimen", "objective", "fw", "camera")
     assert (hal.magnification(seen, gfp), hal.band(seen, gfp)) == (5, (500, 550))
     assert hal.band(seen, {"fw": "RFP"}) == (575, None)
 

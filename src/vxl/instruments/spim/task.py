@@ -18,7 +18,7 @@ from vxl.core.instrument.config import (
 )
 from vxl.core.instrument.state import ProfileId
 
-from .config import Scan
+from .config import SPIMConfig
 
 TaskId = Annotated[str, identifier("Task id")]
 
@@ -238,8 +238,9 @@ class TaskDefaults(FrozenModel):
     path: TaskPath
     iteration: Iteration
 
-    def problems(self, scan: Scan) -> Problems:
-        """Return each axis here that does not fit the axis that ``scan`` moves and those it tiles."""
+    def problems(self, config: SPIMConfig) -> Problems:
+        """Return each axis here that does not fit the axis that the scan of ``config`` moves and those it tiles."""
+        scan = config.scan
         tiled = scan.tiled()
         problems = Problems.assignments(
             expected=tiled,
@@ -284,8 +285,18 @@ class Task(TaskDefaults):
         filled = defaults.model_dump(mode="json") | dict(data)
         return cls.model_validate(filled)
 
-    def problems(self, scan: Scan) -> Problems:
-        problems = super().problems(scan)
+    def problems(self, config: SPIMConfig) -> Problems:
+        """The problems of the defaults, and the region's: each axis it reaches past the stage's ``specimen`` range."""
+        problems = super().problems(config)
+        scan = config.scan
+        for axis in Stage.axes():
+            specimen, extent = config.stage.axis(axis).specimen, self.region.extent(axis)
+            if specimen is not None and (extent.low < specimen.low or extent.high > specimen.high):
+                msg = (
+                    f"The region reaches [{extent.low}, {extent.high}] on {axis}, past the specimen range "
+                    f"[{specimen.low}, {specimen.high}]."
+                )
+                problems.add("task.region.outside_specimen", msg, "region")
         if isinstance(self.region.outline, ExplicitPoints) and set(self.region.across) != set(scan.tiled()):
             msg = f"Explicit points place captures on the tiled axes, so they must name {' and '.join(scan.tiled())}."
             problems.add("task.region.explicit_points_untiled", msg, "region", "outline")

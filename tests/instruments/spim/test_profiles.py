@@ -124,7 +124,7 @@ def test_a_device_can_hold_parts_that_magnify(config_data: dict[str, Any]) -> No
     del hal["parts"]["objective"], hal["optics"]["objective"]
     hal["parts"]["10x"] = {"target": "vxl.parts.Objective", "magnification": 10}
     hal["parts"]["20x"] = {"target": "vxl.parts.Objective", "magnification": 20}
-    hal["optics"]["sample"]["to"] = "turret"
+    hal["optics"]["specimen"]["to"] = "turret"
     hal["optics"]["turret"] = {"to": "fw"}
     assert "profile.channel.magnification" in codes(load(config_data))
 

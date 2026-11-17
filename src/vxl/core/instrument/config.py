@@ -76,20 +76,38 @@ type _SpecimenDirection = dict[SpecimenAxis, float]
 """A direction in the specimen's axes, such as ``{x: 1, z: 1}``. Only the direction counts, not the length."""
 
 
-class Stage(FrozenModel):
-    """The device that drives each specimen axis."""
+class StageAxis(FrozenModel):
+    """1 specimen axis: the ``device`` that drives it, and the ``specimen`` range, in µm, where the specimen can be
+    imaged on it. Without ``specimen``, the device's own limits bound imaging."""
 
-    x: DeviceUid
-    y: DeviceUid
-    z: DeviceUid
+    device: DeviceUid
+    specimen: Span | None = None
+
+    @field_validator("specimen")
+    @classmethod
+    def _spans(cls, value: Span | None) -> Span | None:
+        if value is not None and value.length == 0:
+            raise ValueError(f"'specimen' needs 2 different numbers, got {list(value)}")
+        return value
+
+
+class Stage(FrozenModel):
+    """Each specimen axis of the instrument."""
+
+    x: StageAxis
+    y: StageAxis
+    z: StageAxis
 
     @staticmethod
     def axes() -> tuple[SpecimenAxis, ...]:
         """The specimen axes, in order."""
         return ("x", "y", "z")
 
-    def device(self, axis: SpecimenAxis) -> DeviceUid:
+    def axis(self, axis: SpecimenAxis) -> StageAxis:
         return getattr(self, axis)
+
+    def device(self, axis: SpecimenAxis) -> DeviceUid:
+        return self.axis(axis).device
 
     def devices(self) -> dict[SpecimenAxis, DeviceUid]:
         """The device of each axis."""
@@ -327,11 +345,12 @@ class Wiring(RootModel[dict[DeviceUid, dict[WireName, WireConfig]]]):
 # === Optics ===
 
 OpticalNodeName = Annotated[str, identifier("Optical node")]
-"""A node of the optical graph: a device, a part, or ``sample``."""
+"""A node of the optical graph: a device, a part, or ``specimen``."""
 
-_SAMPLE = "sample"
+_SPECIMEN = "specimen"
+"""The node where the light meets the specimen."""
+
 _RESERVED_PREFIX = "__"  # the names of the devices that Voxel adds to a rig itself
-"""The node where the light meets the sample."""
 
 
 _NodeList = Annotated[UniqueList[OpticalNodeName], Field(min_length=2)]
@@ -377,7 +396,7 @@ class Detector(FrozenModel):
 
 
 class OpticalElement(FrozenModel):
-    """A node that sends the light on: a device, a part, or ``sample``. ``to`` says where the light goes next: 1
+    """A node that sends the light on: a device, a part, or ``specimen``. ``to`` says where the light goes next: 1
     node, or several at once. A device that sends the light a different way at each of its positions gives the node
     for each position. At a position that it leaves out, the light stops."""
 
@@ -404,8 +423,8 @@ type OpticalNode = Annotated[
 
 @dataclass(frozen=True)
 class LightPath:
-    """1 way the light goes on 1 side of the sample: from a source to the sample, or from the sample to a detector.
-    ``positions`` gives the position that each device on it needs to send the light this way."""
+    """1 way the light goes on 1 side of the specimen: from a source to the specimen, or from the specimen to a
+    detector. ``positions`` gives the position that each device on it needs to send the light this way."""
 
     nodes: tuple[OpticalNodeName, ...]
     positions: Mapping[OpticalNodeName, str]
@@ -434,25 +453,25 @@ class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
         """The nodes that nothing sends light to."""
         elements = self.elements()
         lit = {target for node in elements.values() for targets in node.ways().values() for target in targets}
-        return {name: node for name, node in elements.items() if name not in lit and name != _SAMPLE}
+        return {name: node for name, node in elements.items() if name not in lit and name != _SPECIMEN}
 
     def routers(self) -> dict[OpticalNodeName, tuple[str, ...]]:
         """The nodes that send the light a different way at each position, each with its positions."""
         return {name: tuple(node.to) for name, node in self.elements().items() if isinstance(node.to, dict)}
 
     def paths_from(self, source: str, positions: Mapping[str, AxisPosition | None]) -> list[LightPath]:
-        """Every way the light goes from ``source`` to the sample, with each device in ``positions`` at its position
+        """Every way the light goes from ``source`` to the specimen, with each device in ``positions`` at its position
         there. A device that ``positions`` leaves out can be at any position."""
         return [path for path in self._paths if path.nodes[0] == source and path.fits(positions)]
 
     def paths_to(self, detector: str, positions: Mapping[str, AxisPosition | None]) -> list[LightPath]:
-        """Every way the light goes from the sample to ``detector``, with each device in ``positions`` at its
+        """Every way the light goes from the specimen to ``detector``, with each device in ``positions`` at its
         position there. A device that ``positions`` leaves out can be at any position."""
         return [path for path in self._paths if path.nodes[-1] == detector and path.fits(positions)]
 
     @cached_property
     def _paths(self) -> tuple[LightPath, ...]:
-        """Every way from a source to the sample, then every way from the sample to a detector. No way passes a node
+        """Every way from a source to the specimen, then every way from the specimen to a detector. No way passes a node
         2 times."""
         found: list[LightPath] = []
         elements = self.elements()
@@ -469,20 +488,20 @@ class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
                             walk(end, (*nodes, target), needs)
 
         for source in self.sources():
-            walk(_SAMPLE, (source,), {})
+            walk(_SPECIMEN, (source,), {})
         for detector in self.detectors():
-            walk(detector, (_SAMPLE,), {})
+            walk(detector, (_SPECIMEN,), {})
         return tuple(found)
 
     def problems(self, *, devices: Collection[str], parts: Collection[str]) -> Problems:
         """Return the problems of the optical graph that the file alone shows."""
         problems = Problems()
-        if _SAMPLE not in self.elements():
-            msg = "The optical graph needs a 'sample' node with 'to': where the light goes on."
-            problems.add("rig.optics.sample_missing", msg)
+        if _SPECIMEN not in self.elements():
+            msg = "The optical graph needs a 'specimen' node with 'to': where the light goes on."
+            problems.add("rig.optics.specimen_missing", msg)
         for name, node in self.root.items():
             is_device = name in devices
-            if name != _SAMPLE and not is_device and name not in parts:
+            if name != _SPECIMEN and not is_device and name not in parts:
                 msg = f"'{name}' is not a device or a part; declare it in 'parts'."
                 problems.add("rig.optics.node_unknown", msg, name)
             if isinstance(node, Detector):
@@ -569,9 +588,9 @@ class InstrumentConfig(RigConfig, frozen=True):
             for device in self.autosave
             if device not in self.all_devices
         )
-        if _SAMPLE in self.all_devices or _SAMPLE in self.parts:
-            msg = "'sample' names the node where the 2 sides of the optical graph meet, so no device or part takes it."
-            problems.add("rig.reserved_name", msg, *self.component_location(_SAMPLE))
+        if _SPECIMEN in self.all_devices or _SPECIMEN in self.parts:
+            msg = "'specimen' names the node where the 2 sides of the optical graph meet, so no device or part has it."
+            problems.add("rig.reserved_name", msg, *self.component_location(_SPECIMEN))
         for name in (*self.all_devices, *self.parts):
             if name.startswith(_RESERVED_PREFIX):
                 msg = f"'{name}' starts with '{_RESERVED_PREFIX}', which names the devices that Voxel adds to a rig."

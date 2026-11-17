@@ -64,7 +64,7 @@ class HAL:
     """The rig of 1 instrument. Once open, :meth:`device` gives the handle of a device by name, of the class its kind
     has, such as :class:`CameraHandle`. ``stage``, ``cameras`` and ``signal_generators`` hold the same handles by role,
     each of the class that its role needs: the checks at open prove it. The lasers, the modulators and the shutters are
-    not public: the HAL sets their powers and what controls them, lights the sample, and makes it dark."""
+    not public: the HAL sets their powers and what controls them, lights the specimen, and makes it dark."""
 
     def __init__(self, config: InstrumentConfig) -> None:
         self._config = config
@@ -216,11 +216,11 @@ class HAL:
         await gather_all(*(control(uid, handle) for uid, handle in self._dimmables.items()), message="control modes")
 
     async def lights_on(self, sources: Collection[DeviceUid]) -> dict[DeviceUid, list[LightPath]]:
-        """Light the sample with the lasers in ``sources``, and make every other light dark. Give back the paths that
-        the light of each laser takes now: none for a laser whose light has no way to the sample.
+        """Light the specimen with the lasers in ``sources``, and make every other light dark. Give back the paths that
+        the light of each laser takes now: none for a laser whose light has no way to the specimen.
 
         Every modulator off those paths turns off, and every shutter off them closes. A laser off them stays as it is
-        when one of those stops its light on each of its ways to the sample, and turns off when a way has nothing to
+        when one of those stops its light on each of its ways to the specimen, and turns off when a way has nothing to
         stop it. Raise :class:`RejectedError`, touching no device, when a source is not a laser."""
         if unknown := sorted(set(sources) - set(self._lasers)):
             raise RejectedError(f"{', '.join(unknown)} is not a laser")
@@ -245,8 +245,8 @@ class HAL:
         return lit
 
     async def lights_off(self) -> None:
-        """Make every light dark: no light reaches the sample. A laser whose light a modulator or a shutter stops stays
-        as it is. Any other laser turns off."""
+        """Make every light dark: no light reaches the specimen. A laser whose light a modulator or a shutter stops
+        stays as it is. Any other laser turns off."""
         await self.lights_on(())
 
     async def lasers_off(self) -> None:
@@ -346,7 +346,8 @@ class HAL:
         return problems
 
     async def _stage_limit_problems(self) -> Problems:
-        """Read each stage axis's limits: an axis whose limits cannot be read is a problem."""
+        """Read each stage axis's limits: an axis whose limits cannot be read is a problem, and so is a ``specimen``
+        range that reaches past them."""
         axes = list(self._stage.items())
         results = await asyncio.gather(*(handle.get_limits() for _, handle in axes), return_exceptions=True)
         problems = Problems()
@@ -356,6 +357,14 @@ class HAL:
                 problems.add(
                     "rig.stage.limit_unavailable", f"Unable to read the {axis}-axis limits: {error}", "stage", axis
                 )
+            elif (specimen := self._config.stage.axis(axis).specimen) is not None and (
+                specimen.low < result.low or specimen.high > result.high
+            ):
+                msg = (
+                    f"The {axis}-axis specimen range [{specimen.low}, {specimen.high}] reaches past the device limits "
+                    f"[{result.low}, {result.high}]."
+                )
+                problems.add("rig.stage.specimen_outside_limits", msg, "stage", axis, "specimen")
         return problems
 
     async def _pin_problems(self, interfaces: Mapping[DeviceUid, DeviceInterface]) -> Problems:

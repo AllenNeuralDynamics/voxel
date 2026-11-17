@@ -83,7 +83,10 @@ rig:
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms, binning, pixel_format]
 
-  stage: {x: x_axis, y: y_axis, z: z_axis}        # the device that drives each axis
+  stage:                                          # each specimen axis: its device, and where imaging can happen (µm)
+    x: {device: x_axis}
+    y: {device: y_axis}
+    z: {device: z_axis}
 
   wiring:                                         # every wire on the bench, grouped by the device that sends it
     ao_main:
@@ -99,7 +102,7 @@ rig:
     z_axis:
       z_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while Z sweeps
 
-  optics:                                         # where the light goes: light sources → sample → detectors
+  optics:                                         # where the light goes: light sources → specimen → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
     # Rule 2: what a part does to the light is in parts, not here.
     # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
@@ -115,13 +118,13 @@ rig:
 
     left_tunable_lens:  {to: positive_galvo}      # the wire lens_left drives it
     positive_galvo:     {to: left_focus}          # the wire galvo_positive drives it (its arm: to check)
-    left_focus:         {to: sample}              # a focus stage: a profile sets it in props
+    left_focus:         {to: specimen}            # a focus stage: a profile sets it in props
 
     right_tunable_lens: {to: negative_galvo}      # the wire lens_right drives it
     negative_galvo:     {to: right_focus}         # the wire galvo_negative drives it
-    right_focus:        {to: sample}
+    right_focus:        {to: specimen}
 
-    sample:             {to: objective}
+    specimen:           {to: objective}
     objective:          {to: camera_focus}
     camera_focus:       {to: fw_emission}         # a focus stage: a profile sets it in props
 

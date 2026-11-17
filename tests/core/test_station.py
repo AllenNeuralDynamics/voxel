@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -5,13 +6,15 @@ from uuid import UUID
 
 import pytest
 from vxlib.problems import Problems
+from vxlib.reactivity import Cell
 
 from vxl import system as system_module
+from vxl.core.feed import StationFeed
 from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import InstrumentConfig
 from vxl.core.instrument.state import InstrumentState
-from vxl.core.station import Station, StationConfig
-from vxl.core.views import StationStatus
+from vxl.core.station import SessionInfo, SessionView, Station, StationConfig, StationStatus, StationView
+from vxl.preview import PreviewEmission, PreviewLayer
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
@@ -45,10 +48,10 @@ _TEMPLATE: dict[str, Any] = {
                 for axis in "xyz"
             },
         },
-        "stage": {"x": "x_axis", "y": "y_axis", "z": "z_axis"},
+        "stage": {"x": {"device": "x_axis"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}},
         "optics": {
-            "laser": {"to": "sample"},
-            "sample": {"to": "camera"},
+            "laser": {"to": "specimen"},
+            "specimen": {"to": "camera"},
             "camera": {"width": {"y": 1}, "height": {"x": -1}},
         },
     },
@@ -99,7 +102,7 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
     view = state.session.instrument
     assert set(view.device_views) == {"camera", "laser", "x_axis", "y_axis", "z_axis"}
     assert view.activities == ()
-    written = (await station.feed.snapshot()).model_dump(mode="json")
+    written = (await StationFeed(station.config.info, station.view).snapshot()).model_dump(mode="json")
     assert written["session"]["instrument"]["config"]["target"].endswith("._Kind")
 
     async with station.instrument(info.id) as instrument:
@@ -113,7 +116,10 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
 
 
 async def test_a_session_that_fails_to_open_leaves_the_station_idle(station: Station) -> None:
-    rig = {**_TEMPLATE["rig"], "stage": {"x": "camera", "y": "y_axis", "z": "z_axis"}}
+    rig = {
+        **_TEMPLATE["rig"],
+        "stage": {"x": {"device": "camera"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}},
+    }
     await station.create_instrument("bench", {"rig": rig, "default": _TEMPLATE["default"]})
 
     with pytest.raises(Exception, match="not a linear_axis device"):
@@ -122,3 +128,39 @@ async def test_a_session_that_fails_to_open_leaves_the_station_idle(station: Sta
     state = station.view.value
     assert state.status is StationStatus.IDLE
     assert state.error is not None
+
+
+def _active(session: str) -> StationView:
+    """An active station view whose session has only an identity: the feed reads no more of it."""
+    info = SessionInfo(id=UUID(int=int(session)), instrument_name="bench")
+    return StationView(status=StationStatus.ACTIVE, session=SessionView.model_construct(info=info))
+
+
+@pytest.mark.parametrize(("then", "delivered"), [(_active("1"), 1), (_active("2"), 0), (StationView(), 0)])
+async def test_the_feed_drops_queued_frames_when_the_session_changes(then: StationView, delivered: int) -> None:
+    station = Cell(_active("1"))
+    feed = StationFeed(StationConfig(id=UUID(int=0), name="scope").info, station)
+    frames: list[PreviewEmission] = []
+
+    async def keep(frame: PreviewEmission) -> None:
+        frames.append(frame)
+
+    feed.frames.subscribe(keep)
+
+    await feed.publish_preview(("camera", PreviewLayer.OVERVIEW, b"frame", None))
+    await station.set(then)  # before the feed delivers the queued frame
+    await asyncio.sleep(0.05)
+
+    assert len(frames) == delivered
+    await feed.close()
+
+
+async def test_the_feed_ends_every_connection_when_the_station_closes(station: Station) -> None:
+    feed = StationFeed(station.config.info, station.view)
+
+    async with feed.connect() as connection:
+        await station.close()
+        async with asyncio.timeout(1):
+            seen = [view async for view in connection]
+
+    assert all(view.status is StationStatus.CLOSED for view in seen)

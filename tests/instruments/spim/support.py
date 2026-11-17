@@ -39,15 +39,15 @@ _CONFIG: dict[str, Any] = {
     },
     "optics": {
         "laser": {"to": "galvo"},
-        "galvo": {"to": "sample"},
-        "sample": {"to": "objective"},
+        "galvo": {"to": "specimen"},
+        "specimen": {"to": "objective"},
         "objective": {"to": "fw"},
         "fw": {
             "to": "camera",
         },
         "camera": {"width": {"y": 1}, "height": {"x": -1}},
     },
-    "stage": {"x": "x_axis", "y": "y_axis", "z": "z_axis"},
+    "stage": {"x": {"device": "x_axis"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}},
     "scan": {"axis": "z", "motion": "step", "pacer": "ao_main"},
     "default": {
         "task": {
