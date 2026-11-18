@@ -353,7 +353,7 @@ export interface TaskPatch {
 // ---- preview control payloads ----
 
 /** Visible region in normalized [0, 1] coordinates (stage-normalized when sent from the client). */
-export interface PreviewViewport {
+export interface LiveViewport {
   x: number;
   y: number;
   w: number;
@@ -563,9 +563,9 @@ export interface StationInfo {
 
 export interface RealtimeDiscovery {
   state_websocket_url: string;
-  preview_websocket_url: string;
+  live_websocket_url: string;
   log_websocket_url: string;
-  preview_protocol_version: number;
+  live_protocol_version: number;
 }
 
 /** Bounded resources used to initialize one selected station UI. */
@@ -768,10 +768,10 @@ export interface LogEntry {
   exception: LogException | null;
 }
 
-export interface PreviewViewportUpdate {
-  action: 'preview.viewport.update';
+export interface LiveViewportUpdate {
+  action: 'live.viewport.update';
   session_id: string;
-  viewport: PreviewViewport;
+  viewport: LiveViewport;
 }
 
 /** Per-axis display sign: +1 if increasing the stage coordinate goes in the canonical screen direction,

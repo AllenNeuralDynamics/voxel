@@ -400,7 +400,7 @@ class HAL:
             unsub()
         self._props_unsubs = []
         try:
-            await asyncio.gather(*(camera.close_preview_updates() for camera in self._cameras.values()))
+            await asyncio.gather(*(camera.close_live_updates() for camera in self._cameras.values()))
         finally:
             try:
                 await self._rig.close()

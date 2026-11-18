@@ -186,7 +186,7 @@ class Station:
                 self._session_teardowns.append(instrument.planned_volumes.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.default.subscribe(self._refresh_session_view))
                 self._session_teardowns.append(instrument.device_props_updates.subscribe(self._refresh_session_view))
-                self._session_teardowns.append(instrument.preview.subscribe(self._feed.publish_preview))
+                self._session_teardowns.append(instrument.preview.subscribe(self._feed.publish_live))
                 session_view = self._build_session_view(instrument)
             except BaseException as launch_error:
                 await self._teardown_failed_launch(instrument, launch_error)

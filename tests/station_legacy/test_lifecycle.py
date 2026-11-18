@@ -17,8 +17,8 @@ from vxl.instrument import (
     InstrumentConfig,
     InstrumentState,
 )
-from vxl.preview import PreviewLayer, PreviewSourceEmission, VoxelPreviewPacket
-from vxl.preview.protocol import StagePosition
+from vxl.live import LiveLayer, LiveSourceEmission, VoxelLivePacket
+from vxl.live.protocol import StagePosition
 from vxl.station_legacy.models import StationStatus
 from vxl.station_legacy.station import Station, StationConfig
 
@@ -43,7 +43,7 @@ class FakeInstrument:
         self.device_props: dict[str, PropModels] = {}
         self.remote_stores = {}
         self.device_props_updates = Emitter[tuple[str, PropModels]]()
-        self.preview = Emitter[PreviewSourceEmission]()
+        self.preview = Emitter[LiveSourceEmission]()
         self.stream_revision = Cell(0)
         self.config = config
         self.hardware_config = config.hal
@@ -173,15 +173,15 @@ async def test_session_open_cleanup_failure_faults_the_station(station: Station,
 async def test_close_failure_faults_station_and_retains_session_identity(
     station: Station, instrument: FakeInstrument
 ) -> None:
-    delivered: list[tuple[str, PreviewLayer, bytes]] = []
+    delivered: list[tuple[str, LiveLayer, bytes]] = []
     unsubscribe = station.feed.frames.subscribe(delivered.append)
     session = await station.open_session("instrument")
     await instrument.stream_revision.set(1)
     state_view = await station.feed.snapshot()
     position = StagePosition(x=1, y=2, z=3)
-    await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"VXPS", position))
+    await instrument.preview.emit(("gfp", LiveLayer.OVERVIEW, b"VXLF", position))
     await asyncio.sleep(0)
-    frame = VoxelPreviewPacket.from_packed(delivered[-1][2])
+    frame = VoxelLivePacket.from_packed(delivered[-1][2])
     assert frame.header.seq == 0
     assert frame.header.state_cursor == state_view.cursor
     assert frame.header.position_um == position
@@ -197,7 +197,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(
     assert snapshot.session.info.instrument_name == session.instrument_name
     assert snapshot.session.instrument.stream_revision == 1
     assert snapshot.error == "OSError: close failed"
-    await instrument.preview.emit(("gfp", PreviewLayer.OVERVIEW, b"ignored", None))
+    await instrument.preview.emit(("gfp", LiveLayer.OVERVIEW, b"ignored", None))
     assert len(delivered) == 1
     unsubscribe()
 

@@ -26,7 +26,7 @@ Each camera capture can produce two independently replaceable layers:
 | Layer | Camera topic | Instrument emitter | Station delivery | Browser delivery | Source region |
 | --- | --- | --- | --- | --- | --- |
 | `overview` | `preview` | `Instrument.preview` | `StationFeed.frames` | dedicated preview WebSocket | Full sensor, up to 2048 pixels wide |
-| `viewport` | `preview_viewport` | `Instrument.preview` | `StationFeed.frames` | dedicated preview WebSocket | Current viewport plus overscan, up to 2048 pixels wide |
+| `viewport` | `live_viewport` | `Instrument.preview` | `StationFeed.frames` | dedicated preview WebSocket | Current viewport plus overscan, up to 2048 pixels wide |
 
 The overview stays at a constant maximum width regardless of zoom. At the full viewport there is no separate
 viewport layer to generate.
@@ -34,7 +34,7 @@ viewport layer to generate.
 ## Viewport coordinates
 
 The UI viewport is normalized to the stage view. The `Instrument` transforms it into each camera's sensor
-coordinates, accounting for camera rotation, before calling `PreviewGenerator.set_viewport()`.
+coordinates, accounting for camera rotation, before calling `LiveGenerator.set_viewport()`.
 
 For a viewport layer, the generator expands that sensor-space viewport by `OVERSCAN_MARGIN`, currently 5% on
 each side, and clamps it to the sensor. `source_rect_px` records the actual integer sensor footprint represented
@@ -46,7 +46,7 @@ sensor pixels are not lost.
 
 ## Source-frame construction
 
-`PreviewFrame.from_source()` performs the complete sensor-frame transformation:
+`LiveFrame.from_source()` performs the complete sensor-frame transformation:
 
 1. Resolve the normalized viewport to `source_rect_px` and crop the sensor array.
 2. Keep native pixels if the crop fits the target width; otherwise resize to the exact target width while
@@ -67,7 +67,7 @@ Every source frame is independently decodable:
 9-byte prefix | MessagePack source header | Zstandard payload
 ```
 
-The prefix contains the `VXPS` magic, framing version, and MessagePack header length. The source header contains:
+The prefix contains the `VXLF` magic, framing version, and MessagePack header length. The source header contains:
 
 - source schema version and encoding identifier
 - `camera_id`, `source_stream_id`, `frame_idx`, and `layer`
@@ -78,31 +78,31 @@ The prefix contains the `VXPS` magic, framing version, and MessagePack header le
 
 It intentionally excludes `channel_id`, histograms, levels, color maps, and display state.
 
-`VoxelPreviewPacket` wraps that complete source packet without parsing or modifying it:
+`VoxelLivePacket` wraps that complete source packet without parsing or modifying it:
 
 ```text
-9-byte prefix | MessagePack delivery header | complete VXPS source packet
+9-byte prefix | MessagePack delivery header | complete VXLF source packet
 ```
 
-The `VXPD` delivery header contains `delivery_schema_version`, `channel_id`, `seq`, `state_cursor`,
+The `VXLP` delivery header contains `delivery_schema_version`, `channel_id`, `seq`, `state_cursor`,
 `stamped_at_unix_us`, and `frame_byte_length`. `state_cursor` contains the `StationFeed` stream ID and sequence.
 It identifies the latest materialized station state when `StationFeed` wrapped the camera frame; the timestamp
 records when that association was made. The delivery `seq` increases across wrapped frames. Sequence gaps are
 expected when latest-only queues replace frames. Camera-owned fields such as `layer` are not duplicated in this
 header.
 
-VXPD also carries nullable `position_um: {x, y, z}` from Instrument's cached stage readback when a source capture
+VXLP also carries nullable `position_um: {x, y, z}` from Instrument's cached stage readback when a source capture
 was first observed. This is not synchronized exposure-time positioning. Instrument retains the latest 16 observed
 frame positions per camera, reusing them for overview and regenerated viewport packets even after preview stops.
 Unknown axes, older uncached frames, and frames first observed while idle have no position. Stream resets and
-instrument close clear these associations. The camera-owned VXPS packet and delivery `state_cursor` are unchanged.
+instrument close clear these associations. The camera-owned VXLF packet and delivery `state_cursor` are unchanged.
 
 The browser stage view keeps one image per visible channel, placed using its overview's `position_um` and the
 physical FOV recorded when that overview was accepted. Stopping preview preserves those images; stage movement
 does not reposition them. Restart/reset clears them through the stream revision. Frames without a
 known position remain usable in the FOV view but are not placed on the stage.
 
-`StationFeed.frames` emits the packed `VXPD` packets. Qt subscribes in process, while the web adapter forwards them
+`StationFeed.frames` emits the packed `VXLP` packets. Qt subscribes in process, while the web adapter forwards them
 over the dedicated preview WebSocket. Consumers correlate `state_cursor` with the reliable station-state stream,
 use the session identity and `stream_revision` to invalidate old display generations, and reject stale or
 out-of-order frames.
@@ -112,7 +112,7 @@ and composition behavior; it never implies that the represented rectangle covers
 
 ## Scheduling and backpressure
 
-`PreviewGenerator.submit_frame()` is synchronous and non-blocking. It caches the latest raw frame, then
+`LiveGenerator.submit_frame()` is synchronous and non-blocking. It caches the latest raw frame, then
 schedules layer generation on separate single-worker executors:
 
 - The overview lane is skip-if-busy. If an overview is already being generated, the next overview is dropped
@@ -129,7 +129,7 @@ best achievable preview rate without allowing generation or transport queues to 
 viewport layer from the cached raw frame. The controller admits that requested result while rejecting unrelated
 late preview work after streaming has stopped.
 
-`PreviewHealth` owns generation and publication counters and timing. `snapshot()` returns the current values and
+`LiveHealth` owns generation and publication counters and timing. `snapshot()` returns the current values and
 resets them for the next reporting interval.
 
 ## Stream lifecycle
@@ -137,7 +137,7 @@ resets them for the next reporting interval.
 `source_stream_id` identifies pixels that belong to one camera preview stream. Overview and viewport frames from
 the same stream share it; `frame_idx` identifies the source capture within that stream.
 
-`PreviewGenerator.reset_stream()` cancels pending work, clears the cached raw frame, and creates a new
+`LiveGenerator.reset_stream()` cancels pending work, clears the cached raw frame, and creates a new
 `source_stream_id`. The camera controller resets the stream when previewing starts and when an acquisition stack
 opens. Profile changes also ask each active camera to reset its stream before new settings are applied, preventing
 cached pixels from the old profile from being regenerated under the new one.
@@ -154,7 +154,7 @@ The generator's operational API is deliberately small:
 
 ## Consumers
 
-Qt subscribes to `StationFeed.frames`, decodes each `VoxelPreviewPacket` away from the UI thread, and composites
+Qt subscribes to `StationFeed.frames`, decodes each `VoxelLivePacket` away from the UI thread, and composites
 the overview and viewport layers as grayscale intensity images. The web client receives the same delivery packets
 over the dedicated preview WebSocket, decodes Zstandard in a worker, and uploads the shuffled byte planes to shared
 WebGPU textures. Both consumers place every layer from `source_rect_px`, correlate frames with station state,

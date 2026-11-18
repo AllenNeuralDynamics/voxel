@@ -3,11 +3,11 @@ import { decodeMsgpack } from '$lib/core/utils/msgpack';
 const PREFIX_BYTES = 9;
 const MAX_HEADER_BYTES = 64 * 1024;
 
-export const PREVIEW_PROTOCOL_VERSION = 1;
+export const LIVE_PROTOCOL_VERSION = 1;
 const SOURCE_PROTOCOL_VERSION = 1;
-export const PREVIEW_ENCODING = 'u16-zstd-byte-shuffle-v1' as const;
+export const LIVE_ENCODING = 'u16-zstd-byte-shuffle-v1' as const;
 
-export type PreviewLayer = 'overview' | 'viewport';
+export type LiveLayer = 'overview' | 'viewport';
 export type ValidBits = 8 | 10 | 12 | 14 | 16;
 
 export interface SourceRectPx {
@@ -17,11 +17,11 @@ export interface SourceRectPx {
   height: number;
 }
 
-export interface PreviewSourceHeader {
+export interface LiveSourceHeader {
   source_schema_version: 1;
   camera_id: string;
   source_stream_id: string;
-  layer: PreviewLayer;
+  layer: LiveLayer;
   frame_idx: number;
   captured_at_unix_us: number | null;
   width: number;
@@ -30,11 +30,11 @@ export interface PreviewSourceHeader {
   sensor_height: number;
   source_rect_px: SourceRectPx;
   valid_bits: ValidBits;
-  encoding: typeof PREVIEW_ENCODING;
+  encoding: typeof LIVE_ENCODING;
   uncompressed_byte_length: number;
 }
 
-export interface VoxelPreviewHeader {
+export interface VoxelLiveHeader {
   delivery_schema_version: 1;
   channel_id: string;
   seq: number;
@@ -57,28 +57,28 @@ export interface StreamCursor {
   seq: number;
 }
 
-export interface ParsedPreviewPacket {
-  delivery: VoxelPreviewHeader;
-  source: PreviewSourceHeader;
+export interface ParsedLivePacket {
+  delivery: VoxelLiveHeader;
+  source: LiveSourceHeader;
   payload: Uint8Array;
 }
 
-export interface DecodedPreviewFrame {
-  delivery: VoxelPreviewHeader;
-  source: PreviewSourceHeader;
+export interface DecodedLiveFrame {
+  delivery: VoxelLiveHeader;
+  source: LiveSourceHeader;
   shuffled: ArrayBuffer;
   histogram: number[] | null;
   decode_ms: number;
 }
 
-export type PreviewWorkerCommand =
+export type LiveWorkerCommand =
   | { type: 'configure'; websocketUrl: string; protocolVersion: number; visible: boolean }
   | { type: 'visibility'; visible: boolean }
   | { type: 'flush' }
   | { type: 'close' };
 
-export type PreviewWorkerEvent =
-  | { type: 'frame'; frame: DecodedPreviewFrame }
+export type LiveWorkerEvent =
+  | { type: 'frame'; frame: DecodedLiveFrame }
   | { type: 'state'; state: 'connecting' | 'connected' | 'disconnected' }
   | { type: 'error'; message: string };
 
@@ -123,7 +123,7 @@ function validateCursor(cursor: StreamCursor | undefined, field: string): void {
   nonnegativeInteger(cursor.seq, `${field}.seq`);
 }
 
-function validateDelivery(header: VoxelPreviewHeader, actualFrameLength: number): void {
+function validateDelivery(header: VoxelLiveHeader, actualFrameLength: number): void {
   if (header.delivery_schema_version !== 1) throw new Error('unsupported preview delivery schema version');
   if (!header.channel_id) throw new Error('preview delivery channel must not be empty');
   nonnegativeInteger(header.seq, 'seq');
@@ -139,7 +139,7 @@ function validateDelivery(header: VoxelPreviewHeader, actualFrameLength: number)
   }
 }
 
-function validateSource(header: PreviewSourceHeader): void {
+function validateSource(header: LiveSourceHeader): void {
   if (header.source_schema_version !== 1) throw new Error('unsupported preview source schema version');
   if (!header.camera_id || !header.source_stream_id)
     throw new Error('preview source identity fields must not be empty');
@@ -151,7 +151,7 @@ function validateSource(header: PreviewSourceHeader): void {
   positiveInteger(header.sensor_width, 'sensor_width');
   positiveInteger(header.sensor_height, 'sensor_height');
   if (![8, 10, 12, 14, 16].includes(header.valid_bits)) throw new Error(`unsupported valid_bits: ${header.valid_bits}`);
-  if (header.encoding !== PREVIEW_ENCODING) throw new Error(`unsupported preview encoding: ${header.encoding}`);
+  if (header.encoding !== LIVE_ENCODING) throw new Error(`unsupported preview encoding: ${header.encoding}`);
   positiveInteger(header.uncompressed_byte_length, 'uncompressed_byte_length');
   if (header.uncompressed_byte_length !== header.width * header.height * 2) {
     throw new Error('preview uncompressed byte length does not match its image dimensions');
@@ -168,29 +168,24 @@ function validateSource(header: PreviewSourceHeader): void {
 }
 
 /** Parse the control-owned delivery envelope and camera-owned source frame without decompressing its payload. */
-export function parsePreviewPacket(data: ArrayBuffer): ParsedPreviewPacket {
+export function parseLivePacket(data: ArrayBuffer): ParsedLivePacket {
   const packet = new Uint8Array(data);
-  const deliveryPrefix = parsePrefix(packet, 'VXPD', 'preview delivery', PREVIEW_PROTOCOL_VERSION);
-  const wireDelivery = decodeHeader<Omit<VoxelPreviewHeader, 'delivery_cursor'>>(
+  const deliveryPrefix = parsePrefix(packet, 'VXLP', 'live packet', LIVE_PROTOCOL_VERSION);
+  const wireDelivery = decodeHeader<Omit<VoxelLiveHeader, 'delivery_cursor'>>(
     packet,
     deliveryPrefix.headerStart,
     deliveryPrefix.bodyStart,
-    'preview delivery'
+    'live packet'
   );
-  const delivery: VoxelPreviewHeader = {
+  const delivery: VoxelLiveHeader = {
     ...wireDelivery,
     delivery_cursor: { stream_id: wireDelivery.state_cursor.stream_id, seq: wireDelivery.seq }
   };
   const frame = packet.subarray(deliveryPrefix.bodyStart);
   validateDelivery(delivery, frame.byteLength);
 
-  const sourcePrefix = parsePrefix(frame, 'VXPS', 'preview source', SOURCE_PROTOCOL_VERSION);
-  const source = decodeHeader<PreviewSourceHeader>(
-    frame,
-    sourcePrefix.headerStart,
-    sourcePrefix.bodyStart,
-    'preview source'
-  );
+  const sourcePrefix = parsePrefix(frame, 'VXLF', 'live frame', SOURCE_PROTOCOL_VERSION);
+  const source = decodeHeader<LiveSourceHeader>(frame, sourcePrefix.headerStart, sourcePrefix.bodyStart, 'live frame');
   validateSource(source);
   return { delivery, source, payload: frame.subarray(sourcePrefix.bodyStart) };
 }

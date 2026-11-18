@@ -1,8 +1,8 @@
-import type { ColormapCatalog, PreviewViewport } from '$lib/core/model/types';
+import type { ColormapCatalog, LiveViewport } from '$lib/core/model/types';
 import { getWebGPUDevice } from '$lib/core/utils/wgpu';
 
 import PREVIEW_SHADER from './preview.wgsl?raw';
-import type { DecodedPreviewFrame, PreviewSourceHeader } from './protocol';
+import type { DecodedLiveFrame, LiveSourceHeader } from './protocol';
 
 const PREVIEW_UNIFORM_FLOATS = 36;
 const PREVIEW_UNIFORM_BYTES = PREVIEW_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT;
@@ -72,11 +72,11 @@ function packPreviewUniforms(value: PreviewShaderUniforms): Float32Array {
   ]);
 }
 
-export function isFullViewport(viewport: PreviewViewport): boolean {
+export function isFullViewport(viewport: LiveViewport): boolean {
   return viewport.x === 0 && viewport.y === 0 && viewport.w === 1 && viewport.h === 1;
 }
 
-function toSensorViewport(viewport: PreviewViewport, rotationDeg: number): PreviewViewport {
+function toSensorViewport(viewport: LiveViewport, rotationDeg: number): LiveViewport {
   switch (((Math.round(rotationDeg / 90) % 4) + 4) % 4) {
     case 1:
       return { x: viewport.y, y: 1 - viewport.x - viewport.w, w: viewport.h, h: viewport.w };
@@ -90,14 +90,14 @@ function toSensorViewport(viewport: PreviewViewport, rotationDeg: number): Previ
 }
 
 /** The part of the shown image that a normalized sensor rectangle covers, after the channel's rotation. */
-export function toDisplayViewport(sensorRect: PreviewViewport, rotationDeg: number): PreviewViewport {
+export function toDisplayViewport(sensorRect: LiveViewport, rotationDeg: number): LiveViewport {
   return toSensorViewport(sensorRect, -rotationDeg);
 }
 
 /** Whether a cached viewport frame can completely cover the currently requested normalized viewport. */
 export function viewportFrameCovers(
-  header: PreviewSourceHeader | null | undefined,
-  viewport: PreviewViewport,
+  header: LiveSourceHeader | null | undefined,
+  viewport: LiveViewport,
   rotationDeg = 0
 ): boolean {
   if (!header || header.layer !== 'viewport' || isFullViewport(viewport)) return false;
@@ -145,7 +145,7 @@ export function colormapGradient(stops: string[]): string {
   return `linear-gradient(to right, ${normalizeColormapStops(stops).join(', ')})`;
 }
 
-export interface PreviewRenderChannel {
+export interface LiveRenderChannel {
   name?: string;
   visible: boolean;
   rotationDeg: number;
@@ -159,7 +159,7 @@ export interface PreviewRenderChannel {
 interface TexturePlanes {
   low: GPUTexture;
   high: GPUTexture;
-  header: PreviewSourceHeader;
+  header: LiveSourceHeader;
   deliveryStreamId: string;
   deliverySeq: number;
 }
@@ -183,10 +183,10 @@ interface Resources {
   fallback: GPUTexture;
 }
 
-const FULL_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
+const FULL_VIEWPORT: LiveViewport = { x: 0, y: 0, w: 1, h: 1 };
 
 /** Shared raw-frame GPU storage and renderer. Individual canvases only own their WebGPU context. */
-export class PreviewGpuRenderer {
+export class LiveGpuRenderer {
   readonly #channels = new Map<string, GpuChannel>();
   readonly #contexts = new WeakMap<HTMLCanvasElement, GPUCanvasContext>();
   readonly #errorHandler: (message: string) => void;
@@ -198,7 +198,7 @@ export class PreviewGpuRenderer {
     this.#resourcesPromise = this.#createResources();
   }
 
-  async upload(frame: DecodedPreviewFrame): Promise<boolean> {
+  async upload(frame: DecodedLiveFrame): Promise<boolean> {
     const generation = this.#generation;
     const resources = await this.#resourcesPromise;
     if (generation !== this.#generation) return false;
@@ -235,8 +235,8 @@ export class PreviewGpuRenderer {
 
   async render(
     canvas: HTMLCanvasElement,
-    channels: readonly PreviewRenderChannel[],
-    viewport: PreviewViewport,
+    channels: readonly LiveRenderChannel[],
+    viewport: LiveViewport,
     catalog: ColormapCatalog
   ): Promise<void> {
     await this.#render(canvas, channels, viewport, catalog);
@@ -244,7 +244,7 @@ export class PreviewGpuRenderer {
 
   async renderFull(
     canvas: HTMLCanvasElement,
-    channels: readonly PreviewRenderChannel[],
+    channels: readonly LiveRenderChannel[],
     catalog: ColormapCatalog,
     channelName?: string
   ): Promise<void> {
@@ -253,8 +253,8 @@ export class PreviewGpuRenderer {
 
   async #render(
     canvas: HTMLCanvasElement,
-    channels: readonly PreviewRenderChannel[],
-    viewport: PreviewViewport,
+    channels: readonly LiveRenderChannel[],
+    viewport: LiveViewport,
     catalog: ColormapCatalog,
     channelName?: string
   ): Promise<void> {
@@ -408,7 +408,7 @@ export class PreviewGpuRenderer {
     return channel;
   }
 
-  #uploadPlanes(device: GPUDevice, frame: DecodedPreviewFrame): TexturePlanes {
+  #uploadPlanes(device: GPUDevice, frame: DecodedLiveFrame): TexturePlanes {
     const { source: header, shuffled } = frame;
     const pixels = header.width * header.height;
     const bytes = new Uint8Array(shuffled);
@@ -475,7 +475,7 @@ function normalizedQuarterTurns(degrees: number): number {
   return ((Math.round(degrees / 90) % 4) + 4) % 4;
 }
 
-function normalizedRect(header?: PreviewSourceHeader): [number, number, number, number] {
+function normalizedRect(header?: LiveSourceHeader): [number, number, number, number] {
   if (!header) return [0, 0, 1, 1];
   const rect = header.source_rect_px;
   return [
@@ -487,7 +487,7 @@ function normalizedRect(header?: PreviewSourceHeader): [number, number, number, 
 }
 
 /** Bounding-box extents across visible channels in stage orientation. */
-export function channelBoundingBox(channels: readonly PreviewRenderChannel[]): { maxW: number; maxH: number } {
+export function channelBoundingBox(channels: readonly LiveRenderChannel[]): { maxW: number; maxH: number } {
   let maxW = 0;
   let maxH = 0;
   for (const channel of channels) {

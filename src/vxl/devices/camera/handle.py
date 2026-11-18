@@ -12,7 +12,7 @@ from vxlib.vector import Vec2D
 
 from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
 from vxl.devices.camera.roi import AreaROI
-from vxl.preview import PreviewViewport
+from vxl.live import LiveViewport
 
 _DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
@@ -24,13 +24,13 @@ class CameraHandle(DeviceHandle[Camera]):
     Works with both local and remote cameras - the transport handles
     the communication details.
 
-    Viewport updates are coalesced: ``camera.preview_viewport.update(v)`` collapses rapid
+    Viewport updates are coalesced: ``camera.live_viewport.update(v)`` collapses rapid
     updates to the latest with one RPC in flight.
     """
 
     def __init__(self, adapter: Adapter[Camera]) -> None:
         super().__init__(adapter)
-        self.preview_viewport: Coalescer[PreviewViewport] = Coalescer(drain=self._set_preview_viewport)
+        self.live_viewport: Coalescer[LiveViewport] = Coalescer(drain=self._set_live_viewport)
         self.roi: PropView[AreaROI] = self.props.view("roi", AreaROI.model_validate)
         self.frame_area_um: PropView[Vec2D] = self.props.view("frame_area_um", Vec2D.parse)
         self.sensor: PropView[CameraSensor] = self.props.view("sensor", CameraSensor.model_validate)
@@ -61,20 +61,20 @@ class CameraHandle(DeviceHandle[Camera]):
         """Stop camera preview mode."""
         await self.call("stop_preview")
 
-    async def close_preview_updates(self) -> None:
+    async def close_live_updates(self) -> None:
         """Stop and await the handle-owned preview update workers."""
-        await self.preview_viewport.close()
+        await self.live_viewport.close()
 
-    async def reset_preview_stream(self) -> str:
+    async def reset_live_stream(self) -> str:
         """End the current preview source stream and return its replacement identity."""
-        result = await self.call("reset_preview_stream")
+        result = await self.call("reset_live_stream")
         if not isinstance(result, str):
             raise RuntimeError(f"{self.uid} returned an invalid preview source-stream identity")
         return result
 
-    async def _set_preview_viewport(self, viewport: PreviewViewport) -> None:
-        """Apply a preview viewport to the camera — drain for ``preview_viewport``."""
-        await self.call("update_preview_viewport", viewport)
+    async def _set_live_viewport(self, viewport: LiveViewport) -> None:
+        """Apply a preview viewport to the camera — drain for ``live_viewport``."""
+        await self.call("update_live_viewport", viewport)
 
     async def check_writable(self, storage: StorageSpec) -> StorageStatus:
         """Preflight: prove this camera's node can write ``storage``. Raises if not. Returns the

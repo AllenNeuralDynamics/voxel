@@ -1,7 +1,7 @@
 <script lang="ts">
   import { prefersReducedMotion } from 'svelte/motion';
 
-  import type { ColormapCatalog, PreviewViewport } from '$lib/core/model/types';
+  import type { ColormapCatalog, LiveViewport } from '$lib/core/model/types';
   import { prefs } from '$lib/core/prefs';
   import { Button, RadioBar } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
@@ -11,7 +11,7 @@
 
   import { FRAME_HISTORY_MS, frameRate } from './arrivals';
   import { isFullViewport, resolveColormapColor, toDisplayViewport, viewportFrameCovers } from './render';
-  import type { PreviewChannel, PreviewFrameMetadata, PreviewSession } from './session.svelte';
+  import type { PreviewChannel, LiveFrameMetadata, PreviewSession } from './session.svelte';
 
   interface Props {
     previewer: PreviewSession | null;
@@ -26,10 +26,10 @@
     /** Width over height of the camera image, as the preview shows it. */
     aspect: number;
     /** The detail frame, when it covers the view. Otherwise the view shows the overview. */
-    detailFrame: PreviewFrameMetadata | null;
+    detailFrame: LiveFrameMetadata | null;
     /** Parts of the shown image, from 0 to 1. `view` is null while the view shows the whole image. */
-    detail: PreviewViewport | null;
-    view: PreviewViewport | null;
+    detail: LiveViewport | null;
+    view: LiveViewport | null;
   }
 
   /** The time spans of a lane, in ms. The session keeps arrivals for the longest. */
@@ -107,7 +107,7 @@
     return rate < 9.5 ? rate.toFixed(1) : String(Math.round(rate));
   }
 
-  function imageMap(channel: PreviewChannel, viewport: PreviewViewport): ImageMap {
+  function imageMap(channel: PreviewChannel, viewport: LiveViewport): ImageMap {
     const turned = Math.abs(Math.round(channel.rotationDeg / 90)) % 2 === 1;
     const width = channel.sensorWidth || 1;
     const height = channel.sensorHeight || 1;
@@ -121,7 +121,7 @@
     };
   }
 
-  function imagePart(frame: PreviewFrameMetadata): PreviewViewport {
+  function imagePart(frame: LiveFrameMetadata): LiveViewport {
     const rect = frame.source_rect_px;
     return {
       x: rect.x / frame.sensor_width,
@@ -132,12 +132,12 @@
   }
 
   /** The part of the camera image that the frame shows, in camera pixels. */
-  function cameraSize(frame: PreviewFrameMetadata): string {
+  function cameraSize(frame: LiveFrameMetadata): string {
     return `${frame.source_rect_px.width} × ${frame.source_rect_px.height}`;
   }
 
   /** The frame that the preview sent, in its own pixels. */
-  function previewSize(frame: PreviewFrameMetadata): string {
+  function previewSize(frame: LiveFrameMetadata): string {
     return `${frame.width} × ${frame.height}`;
   }
 </script>
@@ -156,7 +156,7 @@
   </svg>
 {/snippet}
 
-{#snippet sizes(frame: PreviewFrameMetadata)}
+{#snippet sizes(frame: LiveFrameMetadata)}
   {@const title = `${cameraSize(frame)} camera pixels, sent as ${previewSize(frame)}`}
   <dd class="camera-size px-2 text-right whitespace-nowrap text-fg" aria-hidden="true" {title}>{cameraSize(frame)}</dd>
   <dd class="size-arrow text-fg-faint" aria-hidden="true" {title}>→</dd>

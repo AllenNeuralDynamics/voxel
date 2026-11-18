@@ -1,12 +1,12 @@
 /// <reference lib="webworker" />
 
 import {
-  type DecodedPreviewFrame,
-  type ParsedPreviewPacket,
-  parsePreviewPacket,
-  PREVIEW_PROTOCOL_VERSION,
-  type PreviewWorkerCommand,
-  type PreviewWorkerEvent
+  type DecodedLiveFrame,
+  type ParsedLivePacket,
+  parseLivePacket,
+  LIVE_PROTOCOL_VERSION,
+  type LiveWorkerCommand,
+  type LiveWorkerEvent
 } from './protocol';
 
 const scope = self as DedicatedWorkerGlobalScope;
@@ -26,15 +26,15 @@ let draining = false;
 let nativeZstdSupport: boolean | null = null;
 let wasmInitialization: Promise<typeof import('@bokuweb/zstd-wasm')> | null = null;
 
-const pending = new Map<string, ParsedPreviewPacket>();
+const pending = new Map<string, ParsedLivePacket>();
 const latestSeen = new Map<string, number>();
 const histogramTimes = new Map<string, number>();
 
-function post(event: PreviewWorkerEvent, transfer: Transferable[] = []): void {
+function post(event: LiveWorkerEvent, transfer: Transferable[] = []): void {
   scope.postMessage(event, transfer);
 }
 
-function packetKey(packet: ParsedPreviewPacket): string {
+function packetKey(packet: ParsedLivePacket): string {
   return `${packet.delivery.channel_id}:${packet.source.layer}`;
 }
 
@@ -75,7 +75,7 @@ function scheduleReconnect(): void {
 
 function connect(): void {
   if (closed || !visible || !websocketUrl || socket) return;
-  if (protocolVersion !== PREVIEW_PROTOCOL_VERSION) {
+  if (protocolVersion !== LIVE_PROTOCOL_VERSION) {
     post({ type: 'error', message: `Unsupported preview protocol version ${protocolVersion}.` });
     return;
   }
@@ -91,7 +91,7 @@ function connect(): void {
   next.onmessage = (event) => {
     try {
       if (!(event.data instanceof ArrayBuffer)) throw new Error('Preview service sent a non-binary message.');
-      const packet = parsePreviewPacket(event.data);
+      const packet = parseLivePacket(event.data);
       const key = packetKey(packet);
       const previous = latestSeen.get(key) ?? -1;
       if (packet.delivery.delivery_cursor.seq <= previous) return;
@@ -143,7 +143,7 @@ async function decompressZstd(payload: Uint8Array): Promise<ArrayBuffer> {
   return await new Response(stream).arrayBuffer();
 }
 
-function histogramFor(frame: ParsedPreviewPacket, shuffled: ArrayBuffer): number[] | null {
+function histogramFor(frame: ParsedLivePacket, shuffled: ArrayBuffer): number[] | null {
   if (frame.source.layer !== 'overview') return null;
   const identity = `${frame.delivery.delivery_cursor.stream_id}:${frame.delivery.channel_id}`;
   const now = performance.now();
@@ -168,7 +168,7 @@ async function drain(): Promise<void> {
   draining = true;
   try {
     while (pending.size > 0) {
-      const entry = pending.entries().next().value as [string, ParsedPreviewPacket] | undefined;
+      const entry = pending.entries().next().value as [string, ParsedLivePacket] | undefined;
       if (!entry) break;
       const [key, packet] = entry;
       pending.delete(key);
@@ -182,7 +182,7 @@ async function drain(): Promise<void> {
       // If a newer packet for this key arrived while decoding, skip the stale upload as well as queued stale work.
       if ((pending.get(key)?.delivery.delivery_cursor.seq ?? -1) > packet.delivery.delivery_cursor.seq) continue;
 
-      const frame: DecodedPreviewFrame = {
+      const frame: DecodedLiveFrame = {
         delivery: packet.delivery,
         source: packet.source,
         histogram: histogramFor(packet, shuffled),
@@ -199,7 +199,7 @@ async function drain(): Promise<void> {
   }
 }
 
-scope.onmessage = (event: MessageEvent<PreviewWorkerCommand>) => {
+scope.onmessage = (event: MessageEvent<LiveWorkerCommand>) => {
   const command = event.data;
   switch (command.type) {
     case 'configure':

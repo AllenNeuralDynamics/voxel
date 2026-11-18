@@ -80,7 +80,7 @@ The TypeScript definitions in [`src/lib/core/model/types.ts`](src/lib/core/model
 by `vxl.web`. They are not generated, so a backend wire-model change must update both sides in the same change.
 
 Preview framing has an additional versioned contract implemented in
-[`src/lib/features/preview/protocol.ts`](src/lib/features/preview/protocol.ts) and its Python counterpart under `vxl.preview`. A protocol
+[`src/lib/features/preview/protocol.ts`](src/lib/features/preview/protocol.ts) and its Python counterpart under `vxl.live`. A protocol
 change must update the producer, parser, advertised version, and decoder worker together. Preview decoding uses
 MessagePack metadata and Zstandard-compressed 16-bit image data.
 

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 from vxlib.reactivity import Emitter
 
-from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewSourceEmission, StreamCursor, VoxelPreviewPacket
+from vxl.live import LatestFrameQueue, LiveEmission, LiveSourceEmission, StreamCursor, VoxelLivePacket
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -131,7 +131,7 @@ class StationFeed:
         self._stream_id = uuid.uuid4().hex
         self._seq = 0
         self._frame_seq = 0
-        self._frames = Emitter[PreviewEmission]()
+        self._frames = Emitter[LiveEmission]()
         self._frame_queue = LatestFrameQueue()
         self._frame_task: asyncio.Task[None] | None = None
         self._update_buffer_size = update_buffer_size
@@ -141,7 +141,7 @@ class StationFeed:
         self._unsubscribe = source.subscribe(self._on_station_view)
 
     @property
-    def frames(self) -> "Subscribable[PreviewEmission]":
+    def frames(self) -> "Subscribable[LiveEmission]":
         """Lossy preview packets stamped against the reliable station-state timeline."""
         return self._frames
 
@@ -152,7 +152,7 @@ class StationFeed:
             self._frame_task.cancel()
             self._frame_task = None
 
-    async def publish_preview(self, emission: PreviewSourceEmission) -> None:
+    async def publish_live(self, emission: LiveSourceEmission) -> None:
         """Stamp and enqueue one source frame from the active station session."""
         channel_id, layer, frame, position = emission
         async with self._lock:
@@ -164,7 +164,7 @@ class StationFeed:
                 return
             frame_seq = self._frame_seq
             self._frame_seq += 1
-            packet = VoxelPreviewPacket.wrap(
+            packet = VoxelLivePacket.wrap(
                 frame,
                 channel_id=channel_id,
                 seq=frame_seq,

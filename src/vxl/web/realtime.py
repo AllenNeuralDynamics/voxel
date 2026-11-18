@@ -11,7 +11,7 @@ from rigup.node._broadcast import pack, unpack
 from vxl_records import LogEntry
 from vxlib.schema import FrozenModel
 
-from vxl.preview import LatestFrameQueue, PreviewEmission, PreviewKey, PreviewViewport
+from vxl.live import LatestFrameQueue, LiveEmission, LiveKey, LiveViewport
 from vxl.station_legacy.errors import StationFeedLaggedError
 from vxl.station_legacy.feed import StationFeedConnection
 from vxl.station_legacy.models import StationFeedView, StationState
@@ -23,12 +23,12 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class PreviewViewportUpdate(FrozenModel):
+class LiveViewportUpdate(FrozenModel):
     """Latest requested preview viewport for one expected instrument session."""
 
-    action: Literal["preview.viewport.update"]
+    action: Literal["live.viewport.update"]
     session_id: UUID
-    viewport: PreviewViewport
+    viewport: LiveViewport
 
 
 class _PreviewClient:
@@ -36,7 +36,7 @@ class _PreviewClient:
         self._websocket = websocket
         self._queue = LatestFrameQueue()
 
-    def publish(self, key: PreviewKey, packet: bytes) -> None:
+    def publish(self, key: LiveKey, packet: bytes) -> None:
         self._queue.put(key, packet)
 
     def clear(self) -> None:
@@ -115,7 +115,7 @@ class Realtime:
         self._log_clients: set[_LogClient] = set()
         self._preview_identity = self._get_preview_identity(station.state.value)
         self._teardowns: list[Teardown] = [
-            station.feed.frames.subscribe(self._publish_preview),
+            station.feed.frames.subscribe(self._publish_live),
             station.state.subscribe(self._on_station_state),
             station.records.logs.subscribe(self._publish_log),
         ]
@@ -205,7 +205,7 @@ class Realtime:
                 log.warning("Ignoring a non-binary station control message")
                 continue
             try:
-                update = PreviewViewportUpdate.model_validate(unpack(payload))
+                update = LiveViewportUpdate.model_validate(unpack(payload))
             except Exception as error:
                 log.warning("Ignoring an invalid preview viewport message: %s", error)
                 continue
@@ -220,7 +220,7 @@ class Realtime:
         with suppress(Exception):
             await websocket.close()
 
-    def _publish_preview(self, emission: PreviewEmission) -> None:
+    def _publish_live(self, emission: LiveEmission) -> None:
         channel_id, layer, packet = emission
         key = (channel_id, layer)
         for client in tuple(self._preview_clients):
@@ -245,4 +245,4 @@ class Realtime:
         return state.session.info.id, state.session.instrument.stream_revision
 
 
-__all__ = ["PreviewViewportUpdate", "Realtime"]
+__all__ = ["LiveViewportUpdate", "Realtime"]

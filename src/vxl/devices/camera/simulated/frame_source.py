@@ -15,7 +15,7 @@ from vxlib.schema import FrozenModel, SparseModel
 from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera.roi import AreaROI
-from vxl.preview import ValidBits
+from vxl.live import ValidBits
 from vxl.system import System
 
 DEFAULT_REFERENCE_PATH = Path(__file__).with_name("default_reference.png")

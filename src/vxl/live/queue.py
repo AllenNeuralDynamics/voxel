@@ -3,7 +3,7 @@
 import asyncio
 from collections import OrderedDict
 
-from .protocol import PreviewKey
+from .protocol import LiveKey
 
 
 class LatestFrameQueue:
@@ -15,15 +15,15 @@ class LatestFrameQueue:
     """
 
     def __init__(self) -> None:
-        self._items: OrderedDict[PreviewKey, bytes] = OrderedDict()
+        self._items: OrderedDict[LiveKey, bytes] = OrderedDict()
         self._ready = asyncio.Event()
 
-    def put(self, key: PreviewKey, frame: bytes) -> None:
+    def put(self, key: LiveKey, frame: bytes) -> None:
         """Insert or replace the pending frame for ``key`` without waiting."""
         self._items[key] = frame
         self._ready.set()
 
-    async def get(self) -> tuple[PreviewKey, bytes]:
+    async def get(self) -> tuple[LiveKey, bytes]:
         """Wait for and remove the oldest pending key and its latest frame."""
         while not self._items:
             self._ready.clear()

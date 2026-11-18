@@ -36,9 +36,9 @@ from vxl.devices.camera import CameraHandle, CaptureState
 from vxl.devices.camera.roi import AreaROI
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
+from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
+from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
-from vxl.preview import PreviewLayer, PreviewSourceEmission, PreviewViewport, preview_source_header
-from vxl.preview.protocol import StagePosition
 from vxl.system import Remote, System, remote_store_fingerprint
 
 from .config import (
@@ -183,11 +183,11 @@ class Instrument:
         self._preview_unsubs: list[Teardown] = []
         self._device_unsubs: list[Teardown] = []
         self._device_props_updates = Emitter[tuple[str, PropModels]]()
-        self._preview = Emitter[PreviewSourceEmission]()
+        self._preview = Emitter[LiveSourceEmission]()
         self._stream_revision = Cell(0)
         self._preview_source_ids: dict[str, str] = {}
         self._preview_positions: dict[str, dict[int, StagePosition | None]] = {}
-        self._viewport = PreviewViewport()
+        self._viewport = LiveViewport()
         self._activity = Cell[Activity](IdleActivity())
         self._busy = Derived(self._activity, fn=lambda activity: isinstance(activity, CaptureActivity))
         self._lock = asyncio.Lock()  # Serializes the hardware-driving state machine(s)
@@ -276,7 +276,7 @@ class Instrument:
         return self._history.state
 
     @property
-    def preview(self) -> Subscribable[PreviewSourceEmission]:
+    def preview(self) -> Subscribable[LiveSourceEmission]:
         """Mapped preview frames emitted by the instrument."""
         return self._preview
 
@@ -394,7 +394,7 @@ class Instrument:
             if previewing and self._preview_channels.value:
                 await self._start_preview()
 
-    def update_viewport(self, viewport: PreviewViewport | None = None) -> None:
+    def update_viewport(self, viewport: LiveViewport | None = None) -> None:
         """Update the active cameras' viewport, or reapply it when omitted."""
         self._viewport = viewport if viewport is not None else self._viewport
         self._apply_viewport(self.active_channels)
@@ -1109,28 +1109,28 @@ class Instrument:
         self._preview_positions.clear()
         await self._stream_revision.set(self._stream_revision.value + 1)
         cameras = {channel.camera.uid: channel.camera for channel in self.active_channels.values()}
-        source_ids = await asyncio.gather(*(camera.reset_preview_stream() for camera in cameras.values()))
+        source_ids = await asyncio.gather(*(camera.reset_live_stream() for camera in cameras.values()))
         self._preview_source_ids = dict(zip(cameras, source_ids, strict=True))
 
     def _apply_viewport(self, channels: Mapping[str, Channel]) -> None:
         for ch_id, ch in channels.items():
             rot = self._hal.topology.detection[self._channel_config(ch_id).detection].rotation_deg
-            ch.camera.preview_viewport.update(self._viewport.to_sensor_space(rot) if rot else self._viewport)
+            ch.camera.live_viewport.update(self._viewport.to_sensor_space(rot) if rot else self._viewport)
 
     async def _subscribe_camera(self, cam_id: str, camera: CameraHandle) -> None:
         async def forward_overview(frame: bytes) -> None:
-            await self._emit_preview_frame(cam_id, PreviewLayer.OVERVIEW, frame)
+            await self._emit_preview_frame(cam_id, LiveLayer.OVERVIEW, frame)
 
         async def forward_viewport(frame: bytes) -> None:
-            await self._emit_preview_frame(cam_id, PreviewLayer.VIEWPORT, frame)
+            await self._emit_preview_frame(cam_id, LiveLayer.VIEWPORT, frame)
 
-        self._preview_unsubs.append(camera.subscribe("preview", forward_overview))
-        self._preview_unsubs.append(camera.subscribe("preview_viewport", forward_viewport))
+        self._preview_unsubs.append(camera.subscribe("live", forward_overview))
+        self._preview_unsubs.append(camera.subscribe("live_viewport", forward_viewport))
 
-    async def _emit_preview_frame(self, camera_id: str, layer: PreviewLayer, frame: bytes) -> None:
+    async def _emit_preview_frame(self, camera_id: str, layer: LiveLayer, frame: bytes) -> None:
         """Reject stale camera streams, then map one packed source frame onto its active channel."""
         try:
-            source = preview_source_header(frame)
+            source = live_source_header(frame)
         except ValueError:
             logger.warning("Dropping invalid preview source packet from %s", camera_id, exc_info=True)
             return

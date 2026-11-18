@@ -12,7 +12,7 @@ from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel
 
 from vxl.instrument import Activity, Bounds, InstrumentConfig, InstrumentState
-from vxl.preview import StreamCursor
+from vxl.live import StreamCursor
 from vxl.station_legacy.config import StationInfo
 from vxl.system import Remote
 

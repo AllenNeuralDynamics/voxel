@@ -11,16 +11,16 @@ from numcodecs import Zstd
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 from vxlib.schema import FrozenModel, SparseModel
 
-SOURCE_MAGIC = b"VXPS"
+SOURCE_MAGIC = b"VXLF"
 SOURCE_FRAMING_VERSION = 1
 SOURCE_SCHEMA_VERSION = 1
 SOURCE_ENCODING = "u16-zstd-byte-shuffle-v1"
 SOURCE_PREFIX = Struct(">4sBI")
 MAX_SOURCE_HEADER_BYTES = 64 * 1024
 
-DELIVERY_MAGIC = b"VXPD"
-VOXEL_PREVIEW_FRAMING_VERSION = 1
-VOXEL_PREVIEW_SCHEMA_VERSION = 1
+DELIVERY_MAGIC = b"VXLP"
+VOXEL_LIVE_FRAMING_VERSION = 1
+VOXEL_LIVE_SCHEMA_VERSION = 1
 DELIVERY_PREFIX = Struct(">4sBI")
 MAX_DELIVERY_HEADER_BYTES = 64 * 1024
 
@@ -66,7 +66,7 @@ def byte_unshuffle_u16(shuffled: bytes | bytearray | memoryview, *, width: int, 
     return interleaved.view("<u2").reshape(height, width).astype(np.uint16, copy=False)
 
 
-class PreviewViewport(FrozenModel):
+class LiveViewport(FrozenModel):
     """Visible region in normalized coordinates [0, 1].
 
     When sent from the frontend, coordinates are stage-normalized.
@@ -89,7 +89,7 @@ class PreviewViewport(FrozenModel):
     def needs_adjustment(self) -> bool:
         return self.w < 1.0 or self.h < 1.0
 
-    def to_sensor_space(self, rotation_deg: int) -> "PreviewViewport":
+    def to_sensor_space(self, rotation_deg: int) -> "LiveViewport":
         """Inverse-rotate a stage-normalized viewport into sensor-normalized coords.
 
         For 0°/180° the footprint shape is unchanged (only origin flips).
@@ -99,14 +99,14 @@ class PreviewViewport(FrozenModel):
         if r == 0:
             return self
         if r == 90:
-            return PreviewViewport(x=self.y, y=1 - self.x - self.w, w=self.h, h=self.w)
+            return LiveViewport(x=self.y, y=1 - self.x - self.w, w=self.h, h=self.w)
         if r == 180:
-            return PreviewViewport(x=1 - self.x - self.w, y=1 - self.y - self.h, w=self.w, h=self.h)
+            return LiveViewport(x=1 - self.x - self.w, y=1 - self.y - self.h, w=self.w, h=self.h)
         if r == 270:
-            return PreviewViewport(x=1 - self.y - self.h, y=self.x, w=self.h, h=self.w)
+            return LiveViewport(x=1 - self.y - self.h, y=self.x, w=self.h, h=self.w)
         return self
 
-    def expanded(self, margin: float) -> "PreviewViewport":
+    def expanded(self, margin: float) -> "LiveViewport":
         """Grow the rect by `margin` (fraction of each axis) about its center, clamped to [0, 1]."""
         if margin <= 0.0:
             return self
@@ -116,10 +116,10 @@ class PreviewViewport(FrozenModel):
         cy = self.y + self.h / 2.0
         nx = max(0.0, min(cx - nw / 2.0, 1.0 - nw))
         ny = max(0.0, min(cy - nh / 2.0, 1.0 - nh))
-        return PreviewViewport(x=nx, y=ny, w=nw, h=nh)
+        return LiveViewport(x=nx, y=ny, w=nw, h=nh)
 
 
-class PreviewLayer(StrEnum):
+class LiveLayer(StrEnum):
     """Independently replaceable image layers derived from one camera capture."""
 
     OVERVIEW = "overview"
@@ -134,9 +134,9 @@ class StagePosition(FrozenModel):
     z: FiniteFloat
 
 
-type PreviewKey = tuple[str, PreviewLayer]
-type PreviewSourceEmission = tuple[str, PreviewLayer, bytes, StagePosition | None]
-type PreviewEmission = tuple[str, PreviewLayer, bytes]
+type LiveKey = tuple[str, LiveLayer]
+type LiveSourceEmission = tuple[str, LiveLayer, bytes, StagePosition | None]
+type LiveEmission = tuple[str, LiveLayer, bytes]
 
 
 class SourceRectPx(FrozenModel):
@@ -148,13 +148,13 @@ class SourceRectPx(FrozenModel):
     height: int = Field(gt=0)
 
 
-class PreviewSourceHeader(SparseModel):
+class LiveSourceHeader(SparseModel):
     """Immutable source metadata supplied by a camera node."""
 
     source_schema_version: Literal[1] = SOURCE_SCHEMA_VERSION
     camera_id: str = Field(min_length=1)
     source_stream_id: str = Field(min_length=1)
-    layer: PreviewLayer
+    layer: LiveLayer
     frame_idx: int = Field(ge=0)
     captured_at_unix_us: int | None = Field(default=None, ge=0)
     width: int = Field(gt=0)
@@ -181,7 +181,7 @@ class PreviewSourceHeader(SparseModel):
 
 def _parse_preview_source(
     packed: bytes | bytearray | memoryview,
-) -> tuple[memoryview, PreviewSourceHeader, int]:
+) -> tuple[memoryview, LiveSourceHeader, int]:
     packet = memoryview(packed)
     if len(packet) < SOURCE_PREFIX.size:
         raise ValueError("preview source packet is truncated before its prefix")
@@ -202,11 +202,11 @@ def _parse_preview_source(
         raise ValueError("invalid preview source MessagePack header") from exc
     if not isinstance(unpacked, dict):
         raise ValueError("preview source header must be a MessagePack map")
-    return packet, PreviewSourceHeader.model_validate(unpacked), payload_offset
+    return packet, LiveSourceHeader.model_validate(unpacked), payload_offset
 
 
-def preview_source_header(packed: bytes | bytearray | memoryview) -> PreviewSourceHeader:
-    """Parse and validate only the VXPS header without copying its compressed payload."""
+def live_source_header(packed: bytes | bytearray | memoryview) -> LiveSourceHeader:
+    """Parse and validate only the VXLF header without copying its compressed payload."""
     return _parse_preview_source(packed)[1]
 
 
@@ -217,10 +217,10 @@ class StreamCursor(FrozenModel):
     seq: int = Field(ge=0)
 
 
-class VoxelPreviewHeader(FrozenModel):
+class VoxelLiveHeader(FrozenModel):
     """Voxel delivery ordering and authoritative application-state association."""
 
-    delivery_schema_version: Literal[1] = VOXEL_PREVIEW_SCHEMA_VERSION
+    delivery_schema_version: Literal[1] = VOXEL_LIVE_SCHEMA_VERSION
     channel_id: str = Field(min_length=1)
     seq: int = Field(ge=0)
     state_cursor: StreamCursor
@@ -230,10 +230,10 @@ class VoxelPreviewHeader(FrozenModel):
 
 
 @dataclass(frozen=True)
-class PreviewFrame:
+class LiveFrame:
     """Camera-owned source header plus an opaque shuffled Zstandard payload."""
 
-    header: PreviewSourceHeader
+    header: LiveSourceHeader
     payload: bytes
 
     @classmethod
@@ -243,9 +243,9 @@ class PreviewFrame:
         *,
         camera_id: str,
         source_stream_id: str,
-        layer: PreviewLayer,
+        layer: LiveLayer,
         frame_idx: int,
-        viewport: PreviewViewport,
+        viewport: LiveViewport,
         target_width: int,
         valid_bits: ValidBits,
         captured_at_unix_us: int | None = None,
@@ -274,7 +274,7 @@ class PreviewFrame:
             frame = crop
 
         shuffled = byte_shuffle_u16(frame, valid_bits=valid_bits)
-        header = PreviewSourceHeader(
+        header = LiveSourceHeader(
             camera_id=camera_id,
             source_stream_id=source_stream_id,
             layer=layer,
@@ -317,10 +317,10 @@ class PreviewFrame:
 
 
 @dataclass(frozen=True)
-class VoxelPreviewPacket:
-    """Voxel delivery header plus an opaque packed VXPS frame."""
+class VoxelLivePacket:
+    """Voxel delivery header plus an opaque packed VXLF frame."""
 
-    header: VoxelPreviewHeader
+    header: VoxelLiveHeader
     frame: bytes
 
     def __post_init__(self) -> None:
@@ -338,10 +338,10 @@ class VoxelPreviewPacket:
         stamped_at_unix_us: int,
         position_um: StagePosition | None = None,
     ) -> Self:
-        """Wrap an already-packed VXPS frame without parsing or copying its payload twice."""
+        """Wrap an already-packed VXLF frame without parsing or copying its payload twice."""
         packed_frame = bytes(frame)
         return cls(
-            header=VoxelPreviewHeader(
+            header=VoxelLiveHeader(
                 channel_id=channel_id,
                 seq=seq,
                 state_cursor=state_cursor,
@@ -354,14 +354,14 @@ class VoxelPreviewPacket:
 
     @classmethod
     def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
-        """Parse Voxel delivery framing while leaving the VXPS frame opaque."""
+        """Parse Voxel delivery framing while leaving the VXLF frame opaque."""
         packet = memoryview(packed)
         if len(packet) < DELIVERY_PREFIX.size:
             raise ValueError("Voxel preview packet is truncated before its prefix")
         magic, framing_version, header_length = DELIVERY_PREFIX.unpack_from(packet)
         if magic != DELIVERY_MAGIC:
             raise ValueError("invalid Voxel preview magic")
-        if framing_version != VOXEL_PREVIEW_FRAMING_VERSION:
+        if framing_version != VOXEL_LIVE_FRAMING_VERSION:
             raise ValueError(f"unsupported Voxel preview framing version: {framing_version}")
         if not 0 < header_length <= MAX_DELIVERY_HEADER_BYTES:
             raise ValueError(f"invalid station preview header length: {header_length}")
@@ -376,13 +376,13 @@ class VoxelPreviewPacket:
         if not isinstance(unpacked, dict):
             raise ValueError("Voxel preview header must be a MessagePack map")
         return cls(
-            header=VoxelPreviewHeader.model_validate(unpacked),
+            header=VoxelLiveHeader.model_validate(unpacked),
             frame=bytes(packet[frame_offset:]),
         )
 
     def pack(self) -> bytes:
-        """Serialize the Voxel delivery header and unchanged VXPS frame."""
+        """Serialize the Voxel delivery header and unchanged VXLF frame."""
         header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
         if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
             raise ValueError(f"Voxel preview header is too large: {len(header)} bytes")
-        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, VOXEL_PREVIEW_FRAMING_VERSION, len(header)) + header + self.frame
+        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, VOXEL_LIVE_FRAMING_VERSION, len(header)) + header + self.frame

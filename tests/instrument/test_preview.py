@@ -5,8 +5,8 @@ import pytest
 from rigup.device import NotObservedError
 
 from vxl.instrument import IdleActivity, Instrument, OperationRejectedError, PreviewActivity
-from vxl.preview import PreviewFrame, PreviewLayer, PreviewSourceEmission, PreviewViewport
-from vxl.preview.protocol import StagePosition
+from vxl.live import LiveFrame, LiveLayer, LiveSourceEmission, LiveViewport
+from vxl.live.protocol import StagePosition
 
 
 @pytest.fixture
@@ -180,39 +180,39 @@ async def test_preview_channels_restart_preview_and_reset_with_the_profile(opene
 
 async def test_preview_rejects_stale_source_generation(opened_instrument: Instrument) -> None:
     instrument = opened_instrument
-    source_frames: list[PreviewSourceEmission] = []
+    source_frames: list[LiveSourceEmission] = []
     unsub = instrument.preview.subscribe(source_frames.append)
     try:
-        source_packet = PreviewFrame.from_source(
+        source_packet = LiveFrame.from_source(
             np.zeros((8, 8), dtype=np.uint16),
             camera_id="camera_1",
             source_stream_id=instrument._preview_source_ids["camera_1"],
-            layer=PreviewLayer.OVERVIEW,
+            layer=LiveLayer.OVERVIEW,
             frame_idx=0,
-            viewport=PreviewViewport(),
+            viewport=LiveViewport(),
             target_width=8,
             valid_bits=16,
         ).pack()
-        await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
-        assert source_frames[-1] == ("gfp", PreviewLayer.OVERVIEW, source_packet, None)
+        await instrument._emit_preview_frame("camera_1", LiveLayer.OVERVIEW, source_packet)
+        assert source_frames[-1] == ("gfp", LiveLayer.OVERVIEW, source_packet, None)
 
         stream_revision = instrument.stream_revision.value
         await instrument.set_active_profile("single_rfp")
         assert instrument.stream_revision.value == stream_revision + 1
-        await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
+        await instrument._emit_preview_frame("camera_1", LiveLayer.OVERVIEW, source_packet)
         assert len(source_frames) == 1
-        source_packet = PreviewFrame.from_source(
+        source_packet = LiveFrame.from_source(
             np.zeros((8, 8), dtype=np.uint16),
             camera_id="camera_1",
             source_stream_id=instrument._preview_source_ids["camera_1"],
-            layer=PreviewLayer.OVERVIEW,
+            layer=LiveLayer.OVERVIEW,
             frame_idx=0,
-            viewport=PreviewViewport(),
+            viewport=LiveViewport(),
             target_width=8,
             valid_bits=16,
         ).pack()
-        await instrument._emit_preview_frame("camera_1", PreviewLayer.OVERVIEW, source_packet)
-        assert source_frames[-1] == ("rfp", PreviewLayer.OVERVIEW, source_packet, None)
+        await instrument._emit_preview_frame("camera_1", LiveLayer.OVERVIEW, source_packet)
+        assert source_frames[-1] == ("rfp", LiveLayer.OVERVIEW, source_packet, None)
     finally:
         unsub()
 
@@ -225,17 +225,17 @@ async def test_preview_position_survives_stop_but_not_stream_reset(
     samples = [SimpleNamespace(value=value) for value in (10.0, 20.0, 30.0)]
     for axis, sample in zip((stage.x, stage.y, stage.z), samples, strict=True):
         monkeypatch.setattr(axis, "position", sample)
-    delivered: list[PreviewSourceEmission] = []
+    delivered: list[LiveSourceEmission] = []
     unsub = instrument.preview.subscribe(delivered.append)
 
-    async def emit(frame_idx: int, layer: PreviewLayer = PreviewLayer.VIEWPORT) -> None:
-        packet = PreviewFrame.from_source(
+    async def emit(frame_idx: int, layer: LiveLayer = LiveLayer.VIEWPORT) -> None:
+        packet = LiveFrame.from_source(
             np.zeros((8, 8), dtype=np.uint16),
             camera_id="camera_1",
             source_stream_id=instrument._preview_source_ids["camera_1"],
             layer=layer,
             frame_idx=frame_idx,
-            viewport=PreviewViewport(),
+            viewport=LiveViewport(),
             target_width=8,
             valid_bits=16,
         ).pack()
@@ -243,7 +243,7 @@ async def test_preview_position_survives_stop_but_not_stream_reset(
 
     try:
         await instrument._activity.set(PreviewActivity(channels=tuple(instrument.active_channels)))
-        await emit(3, PreviewLayer.OVERVIEW)
+        await emit(3, LiveLayer.OVERVIEW)
         assert delivered[-1][3] == StagePosition(x=10, y=20, z=30)
         await instrument.stop_preview()
         samples[0].value = 99.0

@@ -14,7 +14,7 @@ from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import InstrumentConfig
 from vxl.core.instrument.state import InstrumentState
 from vxl.core.station import SessionInfo, SessionView, Station, StationConfig, StationStatus, StationView
-from vxl.preview import PreviewEmission, PreviewLayer
+from vxl.live import LiveEmission, LiveLayer
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
@@ -140,14 +140,14 @@ def _active(session: str) -> StationView:
 async def test_the_feed_drops_queued_frames_when_the_session_changes(then: StationView, delivered: int) -> None:
     station = Cell(_active("1"))
     feed = StationFeed(StationConfig(id=UUID(int=0), name="scope").info, station)
-    frames: list[PreviewEmission] = []
+    frames: list[LiveEmission] = []
 
-    async def keep(frame: PreviewEmission) -> None:
+    async def keep(frame: LiveEmission) -> None:
         frames.append(frame)
 
     feed.frames.subscribe(keep)
 
-    await feed.publish_preview(("camera", PreviewLayer.OVERVIEW, b"frame", None))
+    await feed.publish_live(("camera", LiveLayer.OVERVIEW, b"frame", None))
     await station.set(then)  # before the feed delivers the queued frame
     await asyncio.sleep(0.05)
 

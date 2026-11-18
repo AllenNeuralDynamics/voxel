@@ -6,8 +6,8 @@ from collections.abc import Callable
 import numpy as np
 from ome_zarr_writer import FrameLease
 
-from vxl.preview import LatestFrameQueue, PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport
-from vxl.preview.generator import RENDER_CAP
+from vxl.live import LatestFrameQueue, LiveFrame, LiveGenerator, LiveLayer, LiveViewport
+from vxl.live.generator import RENDER_CAP
 
 
 def _frame(w: int = 2000, h: int = 1600) -> np.ndarray:
@@ -15,29 +15,29 @@ def _frame(w: int = 2000, h: int = 1600) -> np.ndarray:
     return rng.integers(0, 65535, size=(h, w), dtype=np.uint16)
 
 
-def _discard(_frame: PreviewFrame) -> None:
+def _discard(_frame: LiveFrame) -> None:
     pass
 
 
-def _gen(sink: Callable[[PreviewFrame], None] = _discard, **kwargs) -> PreviewGenerator:
+def _gen(sink: Callable[[LiveFrame], None] = _discard, **kwargs) -> LiveGenerator:
     kwargs.setdefault("uid", "camera")
-    return PreviewGenerator(sink=sink, **kwargs)
+    return LiveGenerator(sink=sink, **kwargs)
 
 
 def test_expanded_grows_and_clamps() -> None:
-    ex = PreviewViewport(x=0.4, y=0.4, w=0.2, h=0.2).expanded(0.25)
+    ex = LiveViewport(x=0.4, y=0.4, w=0.2, h=0.2).expanded(0.25)
     assert ex.w > 0.2
     assert ex.h > 0.2
     assert ex.w <= 1.0
     assert ex.h <= 1.0
     assert ex.x >= 0.0
     assert ex.x + ex.w <= 1.0 + 1e-9
-    assert PreviewViewport().expanded(0.25).w == 1.0  # a full viewport stays full
+    assert LiveViewport().expanded(0.25).w == 1.0  # a full viewport stays full
 
 
 async def test_viewport_emitted_when_zoomed() -> None:
-    captured: list[PreviewFrame] = []
-    gen = _gen(sink=captured.append, viewport=PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5))
+    captured: list[LiveFrame] = []
+    gen = _gen(sink=captured.append, viewport=LiveViewport(x=0.25, y=0.25, w=0.5, h=0.5))
     try:
         gen.submit_frame(_frame(), 1)
         assert gen._viewport_task is not None
@@ -45,15 +45,15 @@ async def test_viewport_emitted_when_zoomed() -> None:
     finally:
         gen.close()
 
-    view = next(frame for frame in captured if frame.header.layer is PreviewLayer.VIEWPORT)
-    assert view.header.layer is PreviewLayer.VIEWPORT
+    view = next(frame for frame in captured if frame.header.layer is LiveLayer.VIEWPORT)
+    assert view.header.layer is LiveLayer.VIEWPORT
     assert view.header.source_rect_px.width > 1000  # includes overscan beyond the requested half-sensor viewport
     assert view.header.width <= RENDER_CAP
     assert view.decode().shape == (view.header.height, view.header.width)
 
 
 async def test_no_viewport_frame_at_full_viewport() -> None:
-    captured: list[PreviewFrame] = []
+    captured: list[LiveFrame] = []
     gen = _gen(sink=captured.append)
     try:
         gen.submit_frame(_frame(), 1)
@@ -63,13 +63,13 @@ async def test_no_viewport_frame_at_full_viewport() -> None:
     finally:
         gen.close()
 
-    assert all(frame.header.layer is not PreviewLayer.VIEWPORT for frame in captured)
+    assert all(frame.header.layer is not LiveLayer.VIEWPORT for frame in captured)
 
 
 async def test_latest_frame_queue_replaces_only_the_matching_pending_stream() -> None:
     queue = LatestFrameQueue()
-    overview = ("488", PreviewLayer.OVERVIEW)
-    viewport = ("488", PreviewLayer.VIEWPORT)
+    overview = ("488", LiveLayer.OVERVIEW)
+    viewport = ("488", LiveLayer.VIEWPORT)
 
     queue.put(overview, b"sending")
     assert await queue.get() == (overview, b"sending")
@@ -83,14 +83,14 @@ async def test_latest_frame_queue_replaces_only_the_matching_pending_stream() ->
 
 
 async def test_overview_and_viewport_share_capture_identity_and_resize_exactly() -> None:
-    captured: list[PreviewFrame] = []
+    captured: list[LiveFrame] = []
     released: list[bool] = []
     frame = _frame(w=230, h=180)
     gen = _gen(
         sink=captured.append,
         uid="camera-1",
         target_width=204,
-        viewport=PreviewViewport(x=0.25, y=0.25, w=0.5, h=0.5),
+        viewport=LiveViewport(x=0.25, y=0.25, w=0.5, h=0.5),
     )
     try:
         gen.submit_frame(FrameLease(frame, lambda: released.append(True)), 42)
@@ -103,8 +103,8 @@ async def test_overview_and_viewport_share_capture_identity_and_resize_exactly()
 
     assert released == [True]
     by_layer = {source.header.layer: source for source in captured}
-    overview = by_layer[PreviewLayer.OVERVIEW]
-    viewport = by_layer[PreviewLayer.VIEWPORT]
+    overview = by_layer[LiveLayer.OVERVIEW]
+    viewport = by_layer[LiveLayer.VIEWPORT]
     assert overview.header.camera_id == viewport.header.camera_id == "camera-1"
     assert overview.header.source_stream_id == viewport.header.source_stream_id
     assert overview.header.frame_idx == viewport.header.frame_idx == 42
@@ -113,7 +113,7 @@ async def test_overview_and_viewport_share_capture_identity_and_resize_exactly()
 
 
 async def test_reset_stream_changes_capture_identity() -> None:
-    captured: list[PreviewFrame] = []
+    captured: list[LiveFrame] = []
     gen = _gen(sink=captured.append, uid="camera-1")
     try:
         gen.submit_frame(_frame(w=32, h=24), 0)

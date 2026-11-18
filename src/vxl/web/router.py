@@ -36,8 +36,8 @@ from vxl.instrument.config import (
     TaskPatch,
     WriterPatch,
 )
+from vxl.live.protocol import VOXEL_LIVE_FRAMING_VERSION
 from vxl.metadata import resolve_metadata_class
-from vxl.preview.protocol import VOXEL_PREVIEW_FRAMING_VERSION
 from vxl.station_legacy.models import SessionInfo, StationFeedView, StationInfo
 from vxl.station_legacy.station import Station
 from vxl.station_legacy.templates import InstrumentTemplates
@@ -83,9 +83,9 @@ InstrumentDep = Annotated[Instrument, Depends(_get_instrument)]
 
 class RealtimeDiscovery(BaseModel):
     state_websocket_url: AnyWebsocketUrl
-    preview_websocket_url: AnyWebsocketUrl
+    live_websocket_url: AnyWebsocketUrl
     log_websocket_url: AnyWebsocketUrl
-    preview_protocol_version: int = Field(ge=1)
+    live_protocol_version: int = Field(ge=1)
 
 
 class StationDiscovery(BaseModel):
@@ -201,13 +201,13 @@ async def get_discovery(
             state_websocket_url=AnyWebsocketUrl(
                 str(request.url_for("station_state_websocket", station_id=str(station_id)))
             ),
-            preview_websocket_url=AnyWebsocketUrl(
+            live_websocket_url=AnyWebsocketUrl(
                 str(request.url_for("station_preview_websocket", station_id=str(station_id)))
             ),
             log_websocket_url=AnyWebsocketUrl(
                 str(request.url_for("station_logs_websocket", station_id=str(station_id)))
             ),
-            preview_protocol_version=VOXEL_PREVIEW_FRAMING_VERSION,
+            live_protocol_version=VOXEL_LIVE_FRAMING_VERSION,
         ),
     )
 

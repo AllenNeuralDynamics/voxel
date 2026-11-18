@@ -11,7 +11,7 @@ from uuid import uuid4
 import numpy as np
 from ome_zarr_writer import FrameLease
 
-from .protocol import PreviewFrame, PreviewLayer, PreviewViewport, ValidBits
+from .protocol import LiveFrame, LiveLayer, LiveViewport, ValidBits
 
 OVERVIEW_WIDTH = 2048  # overview output width (the overview is the main view)
 RENDER_CAP = 2048  # max width of a single coherent viewport-image render (rendered on demand, not per frame)
@@ -21,7 +21,7 @@ OVERSCAN_MARGIN = 0.05
 
 
 @dataclass(slots=True)
-class PreviewHealth:
+class LiveHealth:
     frames: int = 0
     overviews_generated: int = 0
     overview_busy_drops: int = 0
@@ -51,7 +51,7 @@ class PreviewHealth:
     def record_publish_drop(self) -> None:
         self.publish_busy_drops += 1
 
-    def snapshot(self) -> "PreviewHealth":
+    def snapshot(self) -> "LiveHealth":
         snapshot = replace(self)
         self.frames = 0
         self.overviews_generated = 0
@@ -63,11 +63,11 @@ class PreviewHealth:
         return snapshot
 
 
-type _OverviewFuture = asyncio.Future[PreviewFrame]
-type _Sink = Callable[[PreviewFrame], None]
+type _OverviewFuture = asyncio.Future[LiveFrame]
+type _Sink = Callable[[LiveFrame], None]
 
 
-class _PreviewSource:
+class _LiveSource:
     """One full-resolution source whose final release closes an optional writer lease."""
 
     def __init__(self, frame: np.ndarray | FrameLease) -> None:
@@ -76,7 +76,7 @@ class _PreviewSource:
         self._references = 1
         self._lock = threading.Lock()
 
-    def retain(self) -> "_PreviewSource":
+    def retain(self) -> "_LiveSource":
         with self._lock:
             if self._references <= 0:
                 raise RuntimeError("preview source is closed")
@@ -95,7 +95,7 @@ class _PreviewSource:
             lease.close()
 
 
-class PreviewGenerator:
+class LiveGenerator:
     """Generates the overview frame and the zoomed viewport image from raw camera frames.
 
     The overview is always generated at `target_width`. The viewport image is one coherent crop
@@ -107,29 +107,29 @@ class PreviewGenerator:
         sink: _Sink,
         uid: str,
         *,
-        viewport: PreviewViewport | None = None,
+        viewport: LiveViewport | None = None,
         target_width: int = OVERVIEW_WIDTH,
     ) -> None:
         self._camera_id = uid
         self._sink = sink
         self._target_width: int = target_width
-        self._viewport = viewport or PreviewViewport()
-        self._log = logging.getLogger(f"{self._camera_id}.PreviewGenerator")
+        self._viewport = viewport or LiveViewport()
+        self._log = logging.getLogger(f"{self._camera_id}.LiveGenerator")
 
         self._frame_idx: int = 0
         self._source_stream_id = uuid4().hex
         self._work_epoch = 0
-        self._current_source: _PreviewSource | None = None
+        self._current_source: _LiveSource | None = None
         self._current_valid_bits: ValidBits = 16
 
         self._viewport_task: asyncio.Task[None] | None = None
         self._overview_future: _OverviewFuture | None = None
         self._overview_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewOverview")
-        self._viewport_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PreviewViewport")
+        self._viewport_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="LiveViewport")
 
-        self.health = PreviewHealth()
+        self.health = LiveHealth()
 
-    def set_viewport(self, viewport: PreviewViewport, *, regenerate: bool = False) -> asyncio.Task[None] | None:
+    def set_viewport(self, viewport: LiveViewport, *, regenerate: bool = False) -> asyncio.Task[None] | None:
         self._viewport = viewport
         if regenerate and self._current_source is not None:
             return self._schedule_viewport(
@@ -149,7 +149,7 @@ class PreviewGenerator:
         frame's preview rather than queueing. Returns immediately so callers
         (preview loop, acquisition grab loop) are not gated by preview work.
         """
-        source = _PreviewSource(frame)
+        source = _LiveSource(frame)
         previous = self._current_source
         self._frame_idx = idx
         self._current_source = source
@@ -172,13 +172,13 @@ class PreviewGenerator:
             overview_source = source.retain()
             concurrent_future = self._overview_executor.submit(
                 partial(
-                    PreviewFrame.from_source,
+                    LiveFrame.from_source,
                     overview_source.array,
                     camera_id=self._camera_id,
                     source_stream_id=source_stream_id,
-                    layer=PreviewLayer.OVERVIEW,
+                    layer=LiveLayer.OVERVIEW,
                     frame_idx=idx,
-                    viewport=PreviewViewport(),
+                    viewport=LiveViewport(),
                     target_width=self._target_width,
                     valid_bits=valid_bits,
                 ),
@@ -234,9 +234,9 @@ class PreviewGenerator:
 
     def _schedule_viewport(
         self,
-        source: _PreviewSource,
+        source: _LiveSource,
         frame_idx: int,
-        viewport: PreviewViewport,
+        viewport: LiveViewport,
         *,
         valid_bits: ValidBits,
         source_stream_id: str,
@@ -251,11 +251,11 @@ class PreviewGenerator:
         viewport_source = source.retain()
         concurrent_future = self._viewport_executor.submit(
             partial(
-                PreviewFrame.from_source,
+                LiveFrame.from_source,
                 viewport_source.array,
                 camera_id=self._camera_id,
                 source_stream_id=source_stream_id,
-                layer=PreviewLayer.VIEWPORT,
+                layer=LiveLayer.VIEWPORT,
                 frame_idx=frame_idx,
                 viewport=render_viewport,
                 target_width=RENDER_CAP,

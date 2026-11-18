@@ -27,9 +27,9 @@ export class Station {
     metadata_schemas: {},
     realtime: {
       state_websocket_url: '',
-      preview_websocket_url: '',
+      live_websocket_url: '',
       log_websocket_url: '',
-      preview_protocol_version: 1
+      live_protocol_version: 1
     }
   });
   /** Persisted acquisition manifests from the catalog, newest first. */

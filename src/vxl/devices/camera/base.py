@@ -40,7 +40,7 @@ from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.base import DeviceType
 from vxl.devices.camera.roi import AreaROI, ROIGrid
-from vxl.preview import PreviewFrame, PreviewGenerator, PreviewLayer, PreviewViewport, ValidBits
+from vxl.live import LiveFrame, LiveGenerator, LiveLayer, LiveViewport, ValidBits
 from vxl.system import System, remote_store_fingerprint
 
 log = logging.getLogger(__name__)
@@ -130,18 +130,18 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
-        self._previewer = PreviewGenerator(sink=self._on_preview_frame, uid=device.uid)
+        self._live = LiveGenerator(sink=self._on_live_frame, uid=device.uid)
         self._writer: OMEZarrWriter | None = None
         self._task: asyncio.Task[None] | None = None
         self._task_kind: Literal["batch", "close"] | None = None
-        self._publish_tasks: dict[PreviewLayer, asyncio.Task[None]] = {}
+        self._publish_tasks: dict[LiveLayer, asyncio.Task[None]] = {}
         # Preview-publish counters (best-effort publish is skip-if-busy); reported per stack.
         self._ram = self._system.ram
         self._ram.reserve(self.device.uid, weight=1.0)
 
     async def close(self) -> None:
         self._publish_fn = None
-        self._previewer.close()
+        self._live.close()
         for task in self._publish_tasks.values():
             task.cancel()
         self._publish_tasks.clear()
@@ -166,31 +166,31 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
     def writer_metrics(self) -> list[BatchMetrics]:
         return self._writer.batches if self._writer else []
 
-    def _on_preview_frame(self, frame: PreviewFrame) -> None:
+    def _on_live_frame(self, frame: LiveFrame) -> None:
         task = self._publish_tasks.get(frame.header.layer)
         if task is not None and not task.done():
-            self._previewer.health.record_publish_drop()  # Gate 2 drop: prior publish still in flight
+            self._live.health.record_publish_drop()  # Gate 2 drop: prior publish still in flight
             return
-        self._previewer.health.record_publish()
-        self._publish_tasks[frame.header.layer] = asyncio.create_task(self._publish_preview(frame))
+        self._live.health.record_publish()
+        self._publish_tasks[frame.header.layer] = asyncio.create_task(self._publish_live(frame))
 
-    async def _publish_preview(self, frame: PreviewFrame) -> None:
-        topic = "preview" if frame.header.layer is PreviewLayer.OVERVIEW else "preview_viewport"
+    async def _publish_live(self, frame: LiveFrame) -> None:
+        topic = "live" if frame.header.layer is LiveLayer.OVERVIEW else "live_viewport"
         with suppress(RuntimeError):
             await self.publish(topic, frame.pack())
 
     @action()
-    async def update_preview_viewport(self, viewport: PreviewViewport):
-        task = self._previewer.set_viewport(
+    async def update_live_viewport(self, viewport: LiveViewport):
+        task = self._live.set_viewport(
             viewport,
             regenerate=self._mode is CameraMode.IDLE,
         )
         await task if task is not None else None
 
     @action()
-    async def reset_preview_stream(self) -> str:
+    async def reset_live_stream(self) -> str:
         """Discard pending preview work and return the new source-stream identity."""
-        return self._previewer.reset_stream()
+        return self._live.reset_stream()
 
     @action()
     async def start_preview(
@@ -209,10 +209,10 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
 
         self._mode = CameraMode.PREVIEW
         self._frame_idx = 0
-        self._previewer.reset_stream()
+        self._live.reset_stream()
         self._preview_task = asyncio.create_task(self._preview_loop())
 
-        return "preview"
+        return "live"
 
     def _valid_bits(self) -> ValidBits:
         return PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))]
@@ -223,7 +223,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
                 frame, valid_bits = await self._run(lambda: (self.device.grab_frame_owned(), self._valid_bits()))
                 if self._mode != CameraMode.PREVIEW:
                     break
-                self._previewer.submit_frame(frame, idx=self._frame_idx, valid_bits=valid_bits)
+                self._live.submit_frame(frame, idx=self._frame_idx, valid_bits=valid_bits)
                 self._frame_idx += 1
         except asyncio.CancelledError:
             pass
@@ -240,7 +240,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         if self._preview_task:
             await self._preview_task
             self._preview_task = None
-        self._previewer.cancel_pending()
+        self._live.cancel_pending()
         await self._run(self.device.stop)
         await self._run(self.device.free_buffer)
 
@@ -295,7 +295,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
 
         self._mode = CameraMode.ACQUISITION
         self._frame_idx = 0
-        self._previewer.reset_stream()
+        self._live.reset_stream()
         self._task = None
         self._task_kind = None
 
@@ -391,7 +391,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         owned but poisoned until preview releases its readers; the next stack or :meth:`release_writer`
         then replaces it safely.
         """
-        self._previewer.cancel_pending()
+        self._live.cancel_pending()
         try:
             if self._writer is not None:
                 await self._run(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
@@ -401,7 +401,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         log.info("Stack closed for %s", self.device.uid)
         # Preview health for the stack: how many frames got an overview vs were dropped (best-effort),
         # overview gen-time, and publish drops. overview_busy_drops climbing means gen can't hold 6fps.
-        pv = self._previewer.health.snapshot()
+        pv = self._live.health.snapshot()
         log.info(
             "Preview health %s: frames=%d overview_gen=%d overview_busy_drops=%d "
             "gen_ms(avg=%.1f max=%.1f) | publish_sent=%d publish_busy_drops=%d",
@@ -427,8 +427,8 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         if self._task is not None and not self._task.done():
             raise RuntimeError("Cannot release writer while a capture task is in progress.")
         if self._writer is not None:
-            self._previewer.cancel_pending()
-            self._previewer.clear_frame()
+            self._live.cancel_pending()
+            self._live.clear_frame()
             await self._run(self._writer.close)
             self._writer = None
             log.info("Writer ring released for %s", self.device.uid)
@@ -481,7 +481,7 @@ class CameraController(DeviceController["Camera"], streaming={"fast": 0.5}):
         for _ in range(num_frames):
             frame = await self._capture_into_writer(writer)
             try:
-                self._previewer.submit_frame(
+                self._live.submit_frame(
                     frame,
                     self._frame_idx,
                     valid_bits=valid_bits,

@@ -6,35 +6,35 @@ import msgpack
 import numpy as np
 import pytest
 
-from vxl.preview.protocol import (
+from vxl.live.protocol import (
     DELIVERY_MAGIC,
     DELIVERY_PREFIX,
     SOURCE_FRAMING_VERSION,
     SOURCE_MAGIC,
     SOURCE_PREFIX,
-    VOXEL_PREVIEW_FRAMING_VERSION,
-    PreviewFrame,
-    PreviewLayer,
-    PreviewSourceHeader,
-    PreviewViewport,
+    VOXEL_LIVE_FRAMING_VERSION,
+    LiveFrame,
+    LiveLayer,
+    LiveSourceHeader,
+    LiveViewport,
     SourceRectPx,
     StagePosition,
     StreamCursor,
     ValidBits,
-    VoxelPreviewPacket,
+    VoxelLivePacket,
     byte_shuffle_u16,
     byte_unshuffle_u16,
 )
 
 
-def _source_frame(frame: np.ndarray, *, valid_bits: ValidBits = 16) -> PreviewFrame:
-    return PreviewFrame.from_source(
+def _source_frame(frame: np.ndarray, *, valid_bits: ValidBits = 16) -> LiveFrame:
+    return LiveFrame.from_source(
         frame,
         camera_id="camera-1",
         source_stream_id="stream-1",
-        layer=PreviewLayer.OVERVIEW,
+        layer=LiveLayer.OVERVIEW,
         frame_idx=7,
-        viewport=PreviewViewport(),
+        viewport=LiveViewport(),
         target_width=frame.shape[1],
         valid_bits=valid_bits,
     )
@@ -59,7 +59,7 @@ def test_round_trip_pixel_formats(
     frame = np.resize(values, (3, 5))
 
     source = _source_frame(frame, valid_bits=valid_bits)
-    parsed = PreviewFrame.from_packed(source.pack())
+    parsed = LiveFrame.from_packed(source.pack())
     decoded = parsed.decode()
 
     assert decoded.dtype == np.uint16
@@ -97,7 +97,7 @@ def test_packet_header_contains_only_source_owned_metadata() -> None:
 @pytest.mark.parametrize("position", [None, StagePosition(x=1, y=-2, z=3.5)])
 def test_delivery_packet_wraps_frame_without_modifying_it(position: StagePosition | None) -> None:
     frame = _source_frame(np.arange(12, dtype=np.uint16).reshape(3, 4)).pack()
-    delivery = VoxelPreviewPacket.wrap(
+    delivery = VoxelLivePacket.wrap(
         frame,
         channel_id="channel-1",
         seq=9,
@@ -108,9 +108,9 @@ def test_delivery_packet_wraps_frame_without_modifying_it(position: StagePositio
 
     packed = delivery.pack()
     magic, version, _header_length = DELIVERY_PREFIX.unpack_from(packed)
-    parsed = VoxelPreviewPacket.from_packed(packed)
+    parsed = VoxelLivePacket.from_packed(packed)
 
-    assert (magic, version) == (DELIVERY_MAGIC, VOXEL_PREVIEW_FRAMING_VERSION)
+    assert (magic, version) == (DELIVERY_MAGIC, VOXEL_LIVE_FRAMING_VERSION)
     assert parsed.header.channel_id == "channel-1"
     assert parsed.header.seq == 9
     assert parsed.header.state_cursor == StreamCursor(stream_id="state-1", seq=17)
@@ -118,7 +118,7 @@ def test_delivery_packet_wraps_frame_without_modifying_it(position: StagePositio
     assert parsed.header.position_um == position
     assert parsed.header.model_dump()["position_um"] == (position.model_dump() if position else None)
     assert parsed.frame == frame
-    assert PreviewFrame.from_packed(parsed.frame).header.camera_id == "camera-1"
+    assert LiveFrame.from_packed(parsed.frame).header.camera_id == "camera-1"
 
 
 @pytest.mark.parametrize(
@@ -138,16 +138,16 @@ def test_invalid_framing_and_payload_are_rejected() -> None:
     packed = _source_frame(np.arange(12, dtype=np.uint16).reshape(3, 4)).pack()
 
     with pytest.raises(ValueError, match="prefix"):
-        PreviewFrame.from_packed(packed[:4])
+        LiveFrame.from_packed(packed[:4])
     with pytest.raises(ValueError, match="magic"):
-        PreviewFrame.from_packed(b"NOPE" + packed[4:])
+        LiveFrame.from_packed(b"NOPE" + packed[4:])
     with pytest.raises(ValueError, match="framing version"):
-        PreviewFrame.from_packed(packed[:4] + bytes([99]) + packed[5:])
+        LiveFrame.from_packed(packed[:4] + bytes([99]) + packed[5:])
     with pytest.raises(ValueError, match="payload"):
-        PreviewFrame.from_packed(packed[: -len(PreviewFrame.from_packed(packed).payload)])
+        LiveFrame.from_packed(packed[: -len(LiveFrame.from_packed(packed).payload)])
 
-    parsed = PreviewFrame.from_packed(packed)
-    corrupt = PreviewFrame(
+    parsed = LiveFrame.from_packed(packed)
+    corrupt = LiveFrame(
         header=deepcopy(parsed.header),
         payload=parsed.payload[:-1] + bytes([parsed.payload[-1] ^ 1]),
     )
@@ -157,10 +157,10 @@ def test_invalid_framing_and_payload_are_rejected() -> None:
 
 def test_source_rect_must_fit_sensor() -> None:
     with pytest.raises(ValueError, match="extends beyond"):
-        PreviewSourceHeader(
+        LiveSourceHeader(
             camera_id="camera-1",
             source_stream_id="stream-1",
-            layer=PreviewLayer.VIEWPORT,
+            layer=LiveLayer.VIEWPORT,
             frame_idx=0,
             width=4,
             height=3,

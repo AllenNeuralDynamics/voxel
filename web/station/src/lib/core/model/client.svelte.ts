@@ -3,7 +3,7 @@ import { SvelteSet, SvelteURL } from 'svelte/reactivity';
 
 import { decodeMsgpack, encodeMsgpack } from '$lib/core/utils/msgpack';
 
-import type { PreviewViewportUpdate, StationFeedView } from './types';
+import type { LiveViewportUpdate, StationFeedView } from './types';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
 export type Unsub = () => void;
@@ -160,7 +160,7 @@ export class Client {
     this.#clearReconnectTimer();
   }
 
-  sendViewport(update: PreviewViewportUpdate): void {
+  sendViewport(update: LiveViewportUpdate): void {
     if (this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(encodeMsgpack(update));
   }
 

@@ -11,7 +11,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPixmap, QResizeEvent, QWheelEvent
 from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-from vxl.preview import PreviewViewport
+from vxl.live import LiveViewport
 from vxl.qt.ui.assets import VOXEL_LOGO
 from vxl.qt.ui.kit import Colors
 
@@ -90,7 +90,7 @@ class PreviewPanel(QWidget):
         self._is_panning = False
         self._pan_start_x = 0.0
         self._pan_start_y = 0.0
-        self._pan_start_viewport = PreviewViewport()
+        self._pan_start_viewport = LiveViewport()
 
         # Throttle feeding the viewport back to the cameras: leading + trailing, so pan/zoom
         # streams mid-gesture (at most one send per PAN_ZOOM_STREAM_MS) and always sends the last value.
@@ -109,7 +109,7 @@ class PreviewPanel(QWidget):
         self._load_default_image()
 
     @property
-    def viewport(self) -> PreviewViewport:
+    def viewport(self) -> LiveViewport:
         """Current viewport state."""
         return self._store.viewport
 
@@ -120,7 +120,7 @@ class PreviewPanel(QWidget):
 
     def reset_viewport(self) -> None:
         """Reset pan/zoom to show the full image."""
-        self._store.set_viewport(PreviewViewport())
+        self._store.set_viewport(LiveViewport())
         self._schedule_viewport_changed()
 
     # ── Interaction ────────────────────────────────────────────────
@@ -147,7 +147,7 @@ class PreviewPanel(QWidget):
         dy = ((event.position().y() - self._pan_start_y) / height) * vp.h
         new_x = clamp_top_left(self._pan_start_viewport.x - dx, vp.w)
         new_y = clamp_top_left(self._pan_start_viewport.y - dy, vp.h)
-        self._store.set_viewport(PreviewViewport(x=new_x, y=new_y, w=vp.w, h=vp.h))
+        self._store.set_viewport(LiveViewport(x=new_x, y=new_y, w=vp.w, h=vp.h))
         self._schedule_viewport_changed()
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
@@ -189,7 +189,7 @@ class PreviewPanel(QWidget):
         new_y = clamp_top_left(sensor_y - mouse_y * new_h, new_h)
 
         self._store.set_interacting(True)
-        self._store.set_viewport(PreviewViewport(x=new_x, y=new_y, w=new_w, h=new_h))
+        self._store.set_viewport(LiveViewport(x=new_x, y=new_y, w=new_w, h=new_h))
         self._store.set_interacting(False)
         self._schedule_viewport_changed()
         event.accept()
@@ -238,7 +238,7 @@ class PreviewPanel(QWidget):
         cv_w: int,
         cv_h: int,
         channels: list[ChannelData],
-        vp: PreviewViewport,
+        vp: LiveViewport,
         max_w: int,
         max_h: int,
         smooth: bool,

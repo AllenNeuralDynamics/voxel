@@ -7,7 +7,7 @@ import {
   type ColormapCatalog,
   type DetectionAssemblyConfig,
   type InstrumentStatus,
-  type PreviewViewport,
+  type LiveViewport,
   type StreamCursor
 } from '$lib/core/model/types';
 import { clampTopLeft } from '$lib/core/utils/vec';
@@ -17,9 +17,9 @@ import { NumericModel } from '@voxel/kit/models';
 import { pref } from '@voxel/kit/pref';
 
 import { FRAME_HISTORY_MS } from './arrivals';
-import type { DecodedPreviewFrame, PreviewLayer, PreviewSourceHeader, StagePosition } from './protocol';
-import { channelBoundingBox, PreviewGpuRenderer } from './render';
-import { PreviewStream } from './stream';
+import type { DecodedLiveFrame, LiveLayer, LiveSourceHeader, StagePosition } from './protocol';
+import { channelBoundingBox, LiveGpuRenderer } from './render';
+import { LiveStream } from './stream';
 
 export interface AutoLevelsPreference {
   lowPercentile: number;
@@ -124,11 +124,11 @@ function resolveColormap(preference: string, config: ChannelConfig | undefined):
   return preference === AUTO_COLORMAP ? emissionToPreviewColor(config?.emission) : preference;
 }
 
-function isViewportEqual(a: PreviewViewport, b: PreviewViewport): boolean {
+function isViewportEqual(a: LiveViewport, b: LiveViewport): boolean {
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
-export const DEFAULT_VIEWPORT: PreviewViewport = { x: 0, y: 0, w: 1, h: 1 };
+export const DEFAULT_VIEWPORT: LiveViewport = { x: 0, y: 0, w: 1, h: 1 };
 const MAX_CHANNELS = 4;
 const PREFERENCE_SAVE_DELAY_MS = 200;
 const VIEWPORT_UPDATE_INTERVAL_MS = 500;
@@ -143,7 +143,7 @@ export function wheelZoomFactor(e: WheelEvent): number {
   return Math.exp(dy * WHEEL_ZOOM_SPEED);
 }
 
-export interface PreviewFrameMetadata extends PreviewSourceHeader {
+export interface LiveFrameMetadata extends LiveSourceHeader {
   position_um: StagePosition | null;
   fov: readonly [number, number] | null;
 }
@@ -165,15 +165,15 @@ export class PreviewChannel {
   sensorWidth = $state(0);
   sensorHeight = $state(0);
   /** Current overview metadata. Pixel planes live only in the shared GPU store. */
-  overviewFrame: PreviewFrameMetadata | null = $state<PreviewFrameMetadata | null>(null);
+  overviewFrame: LiveFrameMetadata | null = $state<LiveFrameMetadata | null>(null);
   /** Current coherent detail metadata. Geometry always comes from source_rect_px. */
-  viewportFrame: PreviewFrameMetadata | null = $state<PreviewFrameMetadata | null>(null);
+  viewportFrame: LiveFrameMetadata | null = $state<LiveFrameMetadata | null>(null);
   /** When each frame of the last FRAME_HISTORY_MS was shown, oldest first. Not reactive, so a fast stream does not re-render. */
-  readonly arrivals: Record<PreviewLayer, number[]> = { overview: [], viewport: [] };
+  readonly arrivals: Record<LiveLayer, number[]> = { overview: [], viewport: [] };
 
   constructor(public readonly idx: number) {}
 
-  recordArrival(layer: PreviewLayer): void {
+  recordArrival(layer: LiveLayer): void {
     const at = performance.now();
     const times = this.arrivals[layer];
     times.push(at);
@@ -201,7 +201,7 @@ export class PreviewSession {
   readonly catalog: ColormapCatalog;
   redrawGeneration = $state(0);
   error = $state<string | null>(null);
-  viewport = $state<PreviewViewport>({ ...DEFAULT_VIEWPORT });
+  viewport = $state<LiveViewport>({ ...DEFAULT_VIEWPORT });
 
   readonly zoomModel = new NumericModel(1, { min: 1, max: 100, step: 0.1, home: 1, onPatch: (v) => this.setZoom(v) });
   readonly panXModel = new NumericModel(0, { min: 0, max: 1, step: 0.01, home: 0, onPatch: (v) => this.setPanX(v) });
@@ -212,8 +212,8 @@ export class PreviewSession {
   readonly #instrumentId: string;
   readonly #sessionId: string;
   readonly #instrumentBase: string;
-  readonly #renderer: PreviewGpuRenderer;
-  readonly #stream: PreviewStream;
+  readonly #renderer: LiveGpuRenderer;
+  readonly #stream: LiveStream;
   readonly #preferenceStore = pref<StoredPreviewPreferences>('preview:channels', {});
   #displayAspect = 1;
   #fov = $state.raw<[number, number] | null>(null);
@@ -249,12 +249,12 @@ export class PreviewSession {
       sessionId
     )}/instrument`;
     this.channels = Array.from({ length: MAX_CHANNELS }, (_, index) => new PreviewChannel(index));
-    this.#renderer = new PreviewGpuRenderer((message) => (this.error = message));
+    this.#renderer = new LiveGpuRenderer((message) => (this.error = message));
     this.#streamRevision = initialStatus.stream_revision;
     this.#previewStateCursor = initialStateCursor;
     this.#latestStateCursor = initialStateCursor;
     this.#activeProfileId = initialStatus.active_profile_id;
-    this.#stream = new PreviewStream(
+    this.#stream = new LiveStream(
       websocketUrl,
       protocolVersion,
       (frame) => void this.#handleFrame(frame),
@@ -386,7 +386,7 @@ export class PreviewSession {
     if (redraw) this.redrawGeneration++;
   }
 
-  setViewport(value: PreviewViewport): void {
+  setViewport(value: LiveViewport): void {
     if (isViewportEqual(this.viewport, value)) return;
     this.#applyViewport(value);
     this.#queueViewportUpdate(this.viewport);
@@ -434,11 +434,11 @@ export class PreviewSession {
     this.setViewport({ ...this.viewport, y: value });
   }
 
-  #zoomExtent(viewport: PreviewViewport): number {
+  #zoomExtent(viewport: LiveViewport): number {
     return this.#displayAspect >= this.boundingBoxAspect ? viewport.h : viewport.w;
   }
 
-  #applyViewport(value: PreviewViewport): void {
+  #applyViewport(value: LiveViewport): void {
     this.viewport = value;
     this.zoomModel.value = 1 / this.#zoomExtent(value);
     this.panXModel.value = value.x;
@@ -446,11 +446,11 @@ export class PreviewSession {
     this.redrawGeneration++;
   }
 
-  #queueViewportUpdate(viewport: PreviewViewport): void {
+  #queueViewportUpdate(viewport: LiveViewport): void {
     if (this.#viewportUpdateTimer !== null) clearTimeout(this.#viewportUpdateTimer);
     const now = Date.now();
     const send = () =>
-      this.#client.sendViewport({ action: 'preview.viewport.update', session_id: this.#sessionId, viewport });
+      this.#client.sendViewport({ action: 'live.viewport.update', session_id: this.#sessionId, viewport });
     if (now - this.#viewportLastSent >= VIEWPORT_UPDATE_INTERVAL_MS) {
       this.#viewportLastSent = now;
       send();
@@ -612,7 +612,7 @@ export class PreviewSession {
     this.redrawGeneration++;
   };
 
-  async #handleFrame(frame: DecodedPreviewFrame): Promise<void> {
+  async #handleFrame(frame: DecodedLiveFrame): Promise<void> {
     if (
       frame.delivery.state_cursor.stream_id !== this.#previewStateCursor.stream_id ||
       frame.delivery.state_cursor.seq < this.#previewStateCursor.seq ||

@@ -14,27 +14,27 @@ from PySide6.QtGui import QImage
 from vxlib.lifecycle import Teardown
 
 from vxl.instrument import Instrument
-from vxl.preview import (
-    PreviewFrame,
-    PreviewLayer,
-    PreviewSourceHeader,
-    PreviewViewport,
-    VoxelPreviewHeader,
-    VoxelPreviewPacket,
+from vxl.live import (
+    LiveFrame,
+    LiveLayer,
+    LiveSourceHeader,
+    LiveViewport,
+    VoxelLiveHeader,
+    VoxelLivePacket,
 )
 from vxl.station_legacy.feed import StationFeed
 from vxl.station_legacy.models import StationFeedView, StreamCursor
 
 log = logging.getLogger(__name__)
 
-type _FrameKey = tuple[str, PreviewLayer]
+type _FrameKey = tuple[str, LiveLayer]
 type _QueuedFrame = tuple[bytes, int, int]
 
 
-def _decode_image(data: bytes) -> tuple[VoxelPreviewHeader, PreviewSourceHeader, QImage]:
+def _decode_image(data: bytes) -> tuple[VoxelLiveHeader, LiveSourceHeader, QImage]:
     """Decode a delivered raw frame to a display-scaled grayscale image."""
-    delivery = VoxelPreviewPacket.from_packed(data)
-    source = PreviewFrame.from_packed(delivery.frame)
+    delivery = VoxelLivePacket.from_packed(data)
+    source = LiveFrame.from_packed(delivery.frame)
     pixels = source.decode()
     if source.header.valid_bits < 16:
         maximum = (1 << source.header.valid_bits) - 1
@@ -61,7 +61,7 @@ class ChannelData:
     rotation_deg: int = 0
     source_stream_id: str = ""
     viewport_frame: QImage | None = None  # latest coherent viewport image; None at full viewport
-    viewport_rect: PreviewViewport | None = None  # sensor-normalized region covered, including overscan
+    viewport_rect: LiveViewport | None = None  # sensor-normalized region covered, including overscan
     viewport_frame_idx: int = -1  # for latest-wins
 
 
@@ -75,7 +75,7 @@ class PreviewStore(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._channels: dict[str, ChannelData] = {}
-        self._viewport = PreviewViewport()
+        self._viewport = LiveViewport()
         self._is_interacting = False
         self._instrument: Instrument | None = None
         self._session_identity: tuple[object, int] | None = None
@@ -89,7 +89,7 @@ class PreviewStore(QObject):
         self._decode_tasks: dict[_FrameKey, asyncio.Task[None]] = {}
 
     @property
-    def viewport(self) -> PreviewViewport:
+    def viewport(self) -> LiveViewport:
         """Current target viewport state."""
         return self._viewport
 
@@ -110,7 +110,7 @@ class PreviewStore(QObject):
             self._channels[channel] = data
         return data
 
-    def set_frame(self, channel: str, frame: QImage, header: PreviewSourceHeader, rotation_deg: int) -> None:
+    def set_frame(self, channel: str, frame: QImage, header: LiveSourceHeader, rotation_deg: int) -> None:
         """Store the overview backdrop for a channel, preserving any tile overlay."""
         data = self._channel(channel)
         if data.source_stream_id != header.source_stream_id:
@@ -125,7 +125,7 @@ class PreviewStore(QObject):
         self.frame_received.emit(channel)
         self.composite_updated.emit()
 
-    def set_viewport_frame(self, channel: str, header: PreviewSourceHeader, image: QImage) -> None:
+    def set_viewport_frame(self, channel: str, header: LiveSourceHeader, image: QImage) -> None:
         """Store the latest coherent viewport image + its sensor-normalized rect (latest-wins by frame index)."""
         data = self._channel(channel)
         if data.source_stream_id != header.source_stream_id:
@@ -135,7 +135,7 @@ class PreviewStore(QObject):
             return
         data.viewport_frame = image
         rect = header.source_rect_px
-        data.viewport_rect = PreviewViewport(
+        data.viewport_rect = LiveViewport(
             x=rect.x / header.sensor_width,
             y=rect.y / header.sensor_height,
             w=rect.width / header.sensor_width,
@@ -148,7 +148,7 @@ class PreviewStore(QObject):
         """Consume Station preview frames and correlate them with complete feed views."""
         self._instrument = instrument
         self.apply_view(initial)
-        unsubscribe = feed.frames.subscribe(self._on_preview_frame)
+        unsubscribe = feed.frames.subscribe(self._on_live_frame)
 
         def teardown() -> None:
             unsubscribe()
@@ -180,7 +180,7 @@ class PreviewStore(QObject):
         self._decode_tasks.clear()
         self.clear_frames()
 
-    def _on_preview_frame(self, update: tuple[str, PreviewLayer, bytes]) -> None:
+    def _on_live_frame(self, update: tuple[str, LiveLayer, bytes]) -> None:
         channel, layer, packet = update
         key = (channel, layer)
         self._next_frame_token += 1
@@ -231,7 +231,7 @@ class PreviewStore(QObject):
                 if delivery.seq <= previous_sequence:
                     continue
                 self._last_delivery_sequences[key] = delivery.seq
-                if layer is PreviewLayer.OVERVIEW:
+                if layer is LiveLayer.OVERVIEW:
                     self.set_frame(channel, image, header, self._rotation_for(channel))
                 else:
                     self.set_viewport_frame(channel, header, image)
@@ -250,7 +250,7 @@ class PreviewStore(QObject):
         detection = self._instrument.hardware_config.detection.get(channel_config.detection)
         return detection.rotation_deg if detection else 0
 
-    def set_viewport(self, viewport: PreviewViewport) -> None:
+    def set_viewport(self, viewport: LiveViewport) -> None:
         """Update the target viewport state."""
         self._viewport = viewport
         self.viewport_changed.emit(viewport.x, viewport.y, viewport.w, viewport.h)
@@ -276,6 +276,6 @@ class PreviewStore(QObject):
     def reset(self) -> None:
         """Clear all state including viewport."""
         self._channels.clear()
-        self._viewport = PreviewViewport()
+        self._viewport = LiveViewport()
         self._is_interacting = False
         self.composite_updated.emit()

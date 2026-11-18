@@ -167,7 +167,7 @@ class HAL:
         self._stage = None
         self.routing.clear()
         self._device_interfaces = {}
-        await asyncio.gather(*(camera.close_preview_updates() for camera in self.cameras.values()))
+        await asyncio.gather(*(camera.close_live_updates() for camera in self.cameras.values()))
         self.cameras.clear()
         self.lasers.clear()
         self.continuous_axes.clear()
