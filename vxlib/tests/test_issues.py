@@ -1,8 +1,9 @@
+from datetime import UTC, datetime
 from typing import Self
 
 import pytest
 from pydantic import BaseModel, ValidationError, model_validator
-from vxlib.problems import Problem, Problems
+from vxlib.issues import Alert, Issue, Problem, Problems
 
 
 class _Rig(BaseModel, frozen=True):
@@ -77,3 +78,20 @@ def test_assignments_names_each_missing_and_each_unexpected_key():
         ("stage.missing", ("x",)),
         ("stage.unexpected", ("z",)),
     ]
+
+
+def test_a_problem_is_an_issue_that_is_always_an_error() -> None:
+    problem = Problem(code="rig.x", msg="wrong", loc=("devices", "camera"))
+    assert isinstance(problem, Issue)
+    assert problem.level == "error"
+    with pytest.raises(ValidationError):
+        Problem.model_validate({"code": "rig.x", "msg": "wrong", "level": "warning"})
+
+
+def test_an_alert_is_an_issue_that_started_at_a_time() -> None:
+    since = datetime(2026, 11, 17, 10, 42, tzinfo=UTC)
+    alert = Alert(
+        code="camera.no_frames", level="error", msg="Camera sends no frames.", loc=("devices", "camera"), since=since
+    )
+    assert isinstance(alert, Issue)
+    assert alert.since == since

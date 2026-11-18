@@ -2,7 +2,7 @@
 
 import logging
 
-from vxlib.problems import Problem
+from vxlib.issues import Problem
 
 from rigup.component import Part
 from rigup.config import NodeConfig, RigConfig

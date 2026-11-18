@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 
 from vxl._utils.files import load_yaml
 from vxl.instruments.spim.config import SPIMConfig

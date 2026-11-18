@@ -21,7 +21,7 @@ from pydantic import (
     model_validator,
 )
 from rigup.config import RigConfig
-from vxlib.problems import KeyPath, Problem, Problems
+from vxlib.issues import KeyPath, Problem, Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Quantity, Time, Voltage
 from vxlib.vector import Span, Vec3D

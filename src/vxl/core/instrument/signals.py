@@ -6,7 +6,7 @@ from itertools import pairwise
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import Field, model_validator
-from vxlib.problems import KeyPath, Problems
+from vxlib.issues import KeyPath, Problems
 from vxlib.schema import FrozenModel
 from vxlib.units import Angle, Frequency, Percent, Quantity, Time, Voltage
 from vxlib.vector import Span

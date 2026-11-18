@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from rigup.activity import ActivityBusyError, ActivityInfo
 from vxl_records import SQLiteRecords
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 
 from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.base import Instrument

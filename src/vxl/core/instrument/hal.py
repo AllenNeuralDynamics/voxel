@@ -11,7 +11,7 @@ from rigup.device.handle import PropModels
 from rigup.device.results import PropModel
 from rigup.rig import Rig
 from vxlib.asyncio import gather_all
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity

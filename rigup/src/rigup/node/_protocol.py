@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
-from vxlib.problems import Problem
+from vxlib.issues import Problem
 
 from rigup.config import DeviceConfig, Parts
 from rigup.device.interface import DeviceInterface

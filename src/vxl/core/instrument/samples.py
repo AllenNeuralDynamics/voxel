@@ -7,7 +7,7 @@ from itertools import pairwise
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 from vxlib.vector import Span
 
 from vxl.core.instrument.config import AnalogWire, DigitalWire, WireConfig, WireName

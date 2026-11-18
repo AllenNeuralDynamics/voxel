@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal, Self, TypedDict
 import numpy as np
 from pydantic import Field, field_validator, model_validator
 from scipy.spatial import ConvexHull as _Hull
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier, repeated
 from vxlib.units import Portion
 from vxlib.vector import Span

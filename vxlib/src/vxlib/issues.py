@@ -1,11 +1,15 @@
-"""Problems of a setup: each with a stable code, a message, and the place in the setup's data that it is about.
+"""Issues: what is wrong, each with a stable code, a level, a message, and the place in the data that it is about.
+
+A :class:`Problem` is wrong in a setup's data and refuses what it belongs to, such as opening an instrument or an
+edit. An :class:`Alert` is wrong in a running instrument now, and ends by itself when the state changes back.
 
 A check collects problems and returns them, or raises them as 1 pydantic ``ValidationError`` from a validator. The 2
 forms convert into each other: :meth:`Problems.raise_if_any` and :meth:`Problems.from_validation`.
 """
 
 from collections.abc import Collection
-from typing import LiteralString, Self, cast
+from datetime import datetime
+from typing import Literal, LiteralString, Self, cast
 
 from pydantic import BaseModel, ValidationError
 from pydantic_core import InitErrorDetails, PydanticCustomError
@@ -16,22 +20,41 @@ type KeyPath = tuple[str | int, ...]
 """The keys that lead to a value in nested data, such as ``("nodes", "detection", "devices", "camera")``."""
 
 
-class Problem(BaseModel, frozen=True):
-    """1 problem of a setup. ``loc`` is where it belongs: the value at fault for a problem in a file, the entry of the
-    thing involved for a problem found later, such as a device that does not answer, or empty when it is about
-    nothing in the data. ``detail`` holds more for a person who looks closer, such as the traceback of a driver that
-    failed. A check gives ``loc`` from the object it checks; each parent check puts its own key in front, with
-    :meth:`Problems.under`."""
+type Level = Literal["error", "warning"]
+"""How bad an issue is."""
+
+
+class Issue(BaseModel, frozen=True):
+    """Something that is wrong. ``code`` names its kind, ``level`` says how bad it is, and ``loc`` is where it
+    belongs: the value at fault in a file, the entry of the thing involved, such as a device that does not answer, or
+    empty when it is about nothing in the data. ``detail`` holds more for a person who looks closer, such as the
+    traceback of a driver that failed."""
 
     code: str
+    level: Level
     msg: str
     loc: KeyPath = ()
     detail: str | None = None
+
+
+class Problem(Issue, frozen=True):
+    """Something wrong in a setup's data. It is always an error, and it refuses what it belongs to, such as opening an
+    instrument or an edit. A check gives ``loc`` from the object it checks; each parent check puts its own key in
+    front, with :meth:`Problems.under`."""
+
+    level: Literal["error"] = "error"
 
     @classmethod
     def not_configured(cls, label: str, name: str, *, code: str, loc: KeyPath) -> Self:
         """The problem of a name that the setup does not define."""
         return cls(code=code, msg=f"{label} '{name}' is not configured.", loc=loc)
+
+
+class Alert(Issue, frozen=True):
+    """Something wrong with a running instrument now. It became true at ``since``, and it ends by itself when the state
+    changes back. Its code and ``loc`` stay the same while it lasts."""
+
+    since: datetime
 
 
 class Problems(list[Problem]):
@@ -95,4 +118,4 @@ class Problems(list[Problem]):
         return "; ".join(found.msg for found in self)
 
 
-__all__ = ["KeyPath", "Problem", "Problems"]
+__all__ = ["Alert", "Issue", "KeyPath", "Level", "Problem", "Problems"]

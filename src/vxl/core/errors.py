@@ -3,7 +3,7 @@ called."""
 
 from collections.abc import Iterable
 
-from vxlib.problems import Problem, Problems
+from vxlib.issues import Problem, Problems
 
 
 class VoxelError(Exception):

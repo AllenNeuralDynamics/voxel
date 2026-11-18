@@ -13,7 +13,7 @@ from pydantic import (
     SerializationInfo,
     model_validator,
 )
-from vxlib.problems import KeyPath, Problems
+from vxlib.issues import KeyPath, Problems
 from vxlib.schema import identifier
 
 from .build import BuildConfig, dependencies, import_class

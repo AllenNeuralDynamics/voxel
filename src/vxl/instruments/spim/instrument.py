@@ -8,7 +8,7 @@ from pydantic import PositiveFloat
 from rigup.activity import Activity, ActivityInfo
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 
 from vxl.core.errors import RejectedError

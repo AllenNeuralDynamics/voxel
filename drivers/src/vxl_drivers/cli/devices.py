@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 from rigup.device import Device, DeviceController
-from vxlib.problems import Problem
+from vxlib.issues import Problem
 
 from rigup import build_objects
 from vxl.hal.rig_config import DeviceConfig, RigConfig

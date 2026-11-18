@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from rigup.build import import_class
 from vxl_records import VoxelRecords
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 
 from vxl._utils.files import load_yaml, update_yaml
 from vxl.core.errors import RejectedError, StartupError

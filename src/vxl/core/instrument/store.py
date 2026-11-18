@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from vxlib.history import Change
-from vxlib.problems import KeyPath, Problems
+from vxlib.issues import KeyPath, Problems
 from vxlib.reactivity import Cell, Readable, Subscribable
 
 from vxl._utils.files import atomic_write, update_yaml

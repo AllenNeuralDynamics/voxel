@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Emitter
 
 from vxl import system as system_module

@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from rigup.device.results import CommandRequest
-from vxlib.problems import Problems
+from vxlib.issues import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Quantity
 

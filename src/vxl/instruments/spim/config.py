@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Literal, Self
 
 from pydantic import Field, PositiveFloat, model_validator
-from vxlib.problems import Problem, Problems
+from vxlib.issues import Problem, Problems
 from vxlib.schema import FrozenModel
 from vxlib.units import Portion
 

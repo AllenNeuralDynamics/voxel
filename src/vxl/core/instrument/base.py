@@ -16,7 +16,7 @@ from rigup.device.results import PropResults
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.history import HistoryState, UndoHistory
-from vxlib.problems import KeyPath, Problems
+from vxlib.issues import KeyPath, Problems
 from vxlib.reactivity import Cell, Computed, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity

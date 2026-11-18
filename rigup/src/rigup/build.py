@@ -13,7 +13,7 @@ from types import UnionType
 from typing import Any, Literal, Union, cast, get_args, get_origin, get_type_hints, is_protocol
 
 from pydantic import BaseModel, ConfigDict, Field
-from vxlib.problems import Problem
+from vxlib.issues import Problem
 
 logger = logging.getLogger(__name__)
 

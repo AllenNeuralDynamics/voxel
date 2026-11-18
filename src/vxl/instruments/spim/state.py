@@ -5,7 +5,7 @@ from typing import Annotated, TypedDict
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
 from pydantic import Field, field_validator
-from vxlib.problems import Problem, Problems
+from vxlib.issues import Problem, Problems
 from vxlib.schema import repeated
 
 from vxl.core.instrument.config import (

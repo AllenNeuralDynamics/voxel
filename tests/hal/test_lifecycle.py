@@ -5,7 +5,7 @@ import pytest
 from rigup.device import DeviceHandle, DeviceInterface, Result
 from rigup.device.handle import Adapter, DeviceProps
 from rigup.device.results import PropModel, PropResults
-from vxlib.problems import Problem
+from vxlib.issues import Problem
 
 from vxl.hal.core import HAL
 from vxl.hal.errors import HALStartupError
