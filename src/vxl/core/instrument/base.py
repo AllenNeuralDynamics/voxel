@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 from collections.abc import AsyncGenerator, Collection, Hashable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -10,18 +11,21 @@ from pydantic import SerializeAsAny, ValidationError
 from rigup.activity import ActivityInfo, ActivityScheduler, Resource
 from rigup.build import dependencies
 from rigup.device import Result
+from rigup.device.handle import NotObservedError
 from rigup.device.results import PropResults
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.history import HistoryState, UndoHistory
 from vxlib.problems import KeyPath, Problems
-from vxlib.reactivity import Cell, Computed, Readable
+from vxlib.reactivity import Cell, Computed, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
 
 from vxl.core.errors import RejectedError, StartupError
 from vxl.core.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
+from vxl.core.instrument.geometry import Transform
 from vxl.core.instrument.hal import HAL, DeviceView
+from vxl.core.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
 from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
 from vxl.core.instrument.state import (
@@ -38,6 +42,8 @@ from vxl.core.instrument.store import InstrumentStore, Merge, StateValues
 from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
+from vxl.live import LiveSourceEmission, LiveViewport
+from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
 from vxl.system import Remote, System, remote_store_fingerprint
 
@@ -50,9 +56,9 @@ logger = logging.getLogger(__name__)
 
 class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     """The open instrument as a screen sees it: its ``rig.yaml``, its saved state and default state, the next edit to
-    undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, and the object
-    stores that every camera can write to. ``config`` and the states keep every field of the kind of instrument. A
-    kind with more to show adds fields in its own class."""
+    undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, the object
+    stores that every camera can write to, and the live image. ``config`` and the states keep every field of the kind
+    of instrument. A kind with more to show adds fields in its own class."""
 
     config: SerializeAsAny[C]
     state: SerializeAsAny[S]
@@ -63,6 +69,7 @@ class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     activities: tuple[ActivityInfo, ...]
     device_views: dict[DeviceUid, DeviceView]
     remote_stores: dict[str, Remote]
+    live: LiveView
 
 
 class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = InstrumentView[C, S]]:
@@ -110,6 +117,11 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._history = UndoHistory()
         self._active_profile = Cell[ProfileId](next(iter(self._store.value.profiles)))
         self._power_mode = Cell[PowerMode]("dim")
+        self._live_frames = Emitter[LiveSourceEmission]()
+        self._live_view = Cell(LiveView())
+        self._live: LiveRelay | None = None
+        self._planes: Computed[tuple[Plane, ...]] | None = None
+        self._boxes: dict[DeviceUid, Box | None] = {}
         self._view: Computed[V] | None = None
 
     @property
@@ -130,6 +142,22 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             )
         return self._view
 
+    @property
+    def live(self) -> Subscribable[LiveSourceEmission]:
+        """Each live frame of every camera, unopened: its camera, layer, packed bytes, and the stage position for it."""
+        return self._live_frames
+
+    async def update_viewport(self, cameras: Collection[DeviceUid], box: Box | None) -> None:
+        """Zoom the live image of ``cameras`` to ``box``, a box in their shared plane in µm from the stage position;
+        ``None`` shows each whole picture. Each camera keeps its part of the box until the next zoom, also after new
+        streams or new planes. Refused when the cameras do not lie in 1 plane. It changes only what the live image
+        shows, so it waits for no command and restarts no activity: the latest zoom wins."""
+        planes = self._live_view.value.planes
+        if not any(set(cameras) <= plane.pictures.keys() for plane in planes):
+            raise RejectedError(f"{', '.join(sorted(cameras))} do not lie in 1 plane")
+        self._boxes.update(dict.fromkeys(cameras, box))
+        self._apply_boxes(cameras)
+
     # === Open, close, stop ===
 
     async def open(self) -> None:
@@ -141,6 +169,16 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if problems := await self._open_problems():
                 await self._hal.close()
                 raise StartupError(problems)
+            self._live = LiveRelay(self._hal.area_cameras, self._cached_stage, self._live_frames)
+            self._live.start()
+            hal = self._hal
+            triggers = [
+                self._active_profile,
+                *(view for camera in hal.area_cameras.values() for view in (camera.sensor, camera.roi)),
+                *(router.state for router in hal.routers.values()),
+            ]
+            self._planes = Computed(*triggers, fn=self._work_out_planes)
+            self._planes.subscribe(self._on_planes)
             await self._apply_profile(self._active_profile.value)
 
     async def close(self) -> None:
@@ -149,6 +187,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             try:
                 await self._end_activities()
             finally:
+                if self._planes is not None:
+                    self._planes.close()
+                    self._planes = None
+                self._boxes.clear()
+                if self._live is not None:
+                    self._live.stop()
+                    self._live = None
                 await self._remote_stores.set({})
                 await self._history.clear()
                 await self._hal.close()
@@ -359,13 +404,15 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             "activities": self._scheduler.activities,
             "device_views": self._hal.device_views,
             "remote_stores": self._remote_stores,
+            "live": self._live_view,
         }
 
     async def _apply_profile(self, profile_id: ProfileId) -> None:
         """Set the devices to a saved profile, in order: every light dark, device positions (the instrument's at the
-        stage's position, then the profile's own), device properties, camera regions, setup commands, each generator's
-        cycle on its own clock, then what controls each laser and modulator, and its power. Make it the active profile
-        when every step succeeds. A power that a device cannot do is refused before any device changes."""
+        stage's position, then the profile's own), device properties, setup commands, each generator's cycle on its own
+        clock, then what controls each laser and modulator, and its power. Make it the active profile when every step
+        succeeds, and end every live stream: older frames are no longer valid. A power that a device cannot do is
+        refused before any device changes."""
         state = self._store.value
         profile = state.profiles[profile_id]
         hal = self._hal
@@ -396,6 +443,67 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         await gather_all(*loads, message="timelines")
         await self._apply_light(profile)
         await self._active_profile.set(profile_id)
+        await self._reset_live(())
+
+    async def _reset_live(self, cameras: Collection[DeviceUid]) -> None:
+        """Start a new live stream on each of ``cameras`` and end every other: older frames are no longer valid."""
+        if self._live is None:
+            return
+        await self._live.reset({uid: self._hal.area_cameras[uid] for uid in cameras})
+        planes = () if self._planes is None else self._planes.value
+        await self._live_view.set(LiveView(stream_revision=self._live_view.value.stream_revision + 1, planes=planes))
+        self._apply_boxes(self._boxes)
+
+    async def _on_planes(self, _planes: tuple[Plane, ...]) -> None:
+        """The pictures moved: frames from before are no longer valid, so each camera that has a stream gets a new
+        one."""
+        await self._reset_live(() if self._live is None else self._live.streaming)
+
+    def _work_out_planes(self) -> tuple[Plane, ...]:
+        """The planes of the active profile's cameras, with each router where it last said it is, or where the
+        profile puts it while it has not said or is between slots. A camera that no light path reaches, whose paths
+        disagree on the magnification, or that has not reported its sensor and region yet has no picture."""
+        hal, profile = self._hal, self._store.value.profiles[self._active_profile.value]
+        positions: dict[str, AxisPosition] = dict(profile.positions)
+        for uid, router in hal.routers.items():
+            try:
+                labels = {str(slot): label for slot, label in router.props.cache["labels"].value.items()}
+                slot = labels.get(str(router.state.value.position))
+            except (KeyError, NotObservedError):
+                continue
+            if slot is not None:
+                positions[uid] = slot
+        frames: dict[DeviceUid, Transform] = {}
+        for camera in profile.lights():
+            try:
+                axes = self._config.camera_axes(camera, positions)
+                sensor, roi = hal.area_cameras[camera].sensor.value, hal.area_cameras[camera].roi.value
+            except (KeyError, ValueError, NotObservedError):
+                continue
+            frames[camera] = Transform.frame(axes, sensor, roi)  # binning changes a pixel's size, not the place
+        return planes_of(frames)
+
+    def _apply_boxes(self, cameras: Collection[DeviceUid]) -> None:
+        """Send each of ``cameras`` its part of its last box. A camera that its box does not touch is left as it is."""
+        pictures = {
+            camera: picture for plane in self._live_view.value.planes for camera, picture in plane.pictures.items()
+        }
+        for camera in cameras:
+            if camera not in pictures or camera not in self._boxes:
+                continue
+            box = self._boxes[camera]
+            viewport = LiveViewport() if box is None else pictures[camera].viewport(box)
+            if viewport is not None:
+                self._hal.area_cameras[camera].live_viewport.update(viewport)
+
+    def _cached_stage(self) -> StagePosition | None:
+        """Where the stage last said it is, without asking it, so a frame never waits for the stage. ``None`` while
+        an axis has not said yet."""
+        try:
+            at = [self._hal.stage[axis].position.value for axis in ("x", "y", "z")]
+        except NotObservedError:
+            return None
+        return StagePosition(x=at[0], y=at[1], z=at[2]) if all(math.isfinite(value) for value in at) else None
 
     def _profile_requires(self, profile_id: ProfileId) -> set[Resource]:
         """What applying a profile touches: the active profile, the devices it uses, the devices the instrument sets,

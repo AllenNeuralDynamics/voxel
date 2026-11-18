@@ -14,8 +14,8 @@ from vxlib.vector import IVec2D, Vec2D, Vec3D
 
 from tests.instruments.spim.support import load_file
 from vxl.core.instrument.config import Detector
+from vxl.core.instrument.geometry import Transform
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.instruments.spim.geometry import Transform, frame_transform
 from vxl.instruments.spim.plan import _light
 
 _FILES = Path("tests/instruments/spim/files")
@@ -108,6 +108,11 @@ def panels(frames: Mapping[str, Transform]) -> list[Panel]:
     return found
 
 
+def _axes(detector: Detector, magnification: float) -> tuple[Vec3D, Vec3D]:
+    width, height = detector.sides()
+    return width / magnification, height / magnification
+
+
 def _array(vector: Vec3D) -> np.ndarray:
     return np.array([vector.x, vector.y, vector.z])
 
@@ -152,19 +157,15 @@ def main() -> None:
     big = CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=2048, y=2048))
     small = CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=1024, y=1024))
     frames = {
-        "camera_1": frame_transform(
-            Detector(width={"x": 1}, height={"y": 1}),
+        "camera_1": Transform.frame(
+            _axes(Detector(width={"x": 1}, height={"y": 1}), 10),
             big,
             AreaROI(x=0, y=0, w=2048, h=2048),
-            binning=1,
-            magnification=10,
         ),
-        "camera_2": frame_transform(
-            Detector(width={"x": -1}, height={"y": 1}),
+        "camera_2": Transform.frame(
+            _axes(Detector(width={"x": -1}, height={"y": 1}), 10),
             small,
             AreaROI(x=0, y=0, w=1024, h=1024),
-            binning=1,
-            magnification=10,
         ),
     }
     _show(

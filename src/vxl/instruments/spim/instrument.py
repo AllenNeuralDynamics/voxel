@@ -191,11 +191,11 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         return tuple(camera for camera in channels if camera in chosen) or (next(iter(channels)),)
 
     async def _begin_preview(self) -> None:
-        """Start the preview's devices, in order: the scan axis disarmed when it scans, the chosen channels' cameras,
-        the light of their lasers, every generator of the profile. Then hold the active profile, those devices, and
-        every device on a path that the lasers' light can take, so a change to one of them lights the sample again. A
-        laser whose light has no way to the sample now stays off, and the preview runs without it. When a step fails,
-        turn every light off and stop what started."""
+        """Start the preview's devices, in order: the scan axis disarmed when it scans, the chosen channels' cameras
+        with a new live stream each, the light of their lasers, every generator of the profile. Then hold the active
+        profile, those devices, and every device on a path that the lasers' light can take, so a change to one of them
+        lights the sample again. A laser whose light has no way to the sample now stays off, and the preview runs
+        without it. When a step fails, turn every light off and stop what started."""
         hal = self._hal
         profile = self._store.value.profiles[self._active_profile.value]
         cameras = self._preview_channels.value
@@ -207,6 +207,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
             await axis.halt()
         try:
             await gather_all(*(hal.area_cameras[c].start_preview() for c in cameras), message="cameras")
+            await self._reset_live(cameras)  # a camera starts a new stream when it starts; frames before the light drop
             lit = await hal.lights_on(sources)
             await gather_all(*(hal.signal_generators[g].start() for g in generators), message="generators")
         except BaseException:

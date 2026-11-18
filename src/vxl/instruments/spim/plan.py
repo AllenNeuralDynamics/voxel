@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from vxlib.vector import Span, Vec3D
 
 from vxl.core.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
+from vxl.core.instrument.geometry import AxisRun, Transform
 from vxl.core.instrument.state import ProfileId
 from vxl.devices.camera import AreaROI, CameraSensor
 
 from .config import Scan, SPIMConfig, SPIMProfile
-from .geometry import AxisRun, Transform, footprint, frame_transform
 from .state import SPIMState
 from .task import ExplicitPoints, Grid, Region, Task, TaskDefaults, TaskId
 
@@ -45,7 +45,7 @@ def plan_task(
     region, scan = task.region, config.scan
 
     middle = state.positions_at({axis: region.extent(axis).middle for axis in Stage.axes()}, {})
-    seen = [footprint(_light(config, state.profiles[p], middle, sensors)[1]) for p in task.profiles]
+    seen = [_footprint(_light(config, state.profiles[p], middle, sensors)[1]) for p in task.profiles]
     tile: dict[SpecimenAxis, Span] = {
         axis: min((s[axis] for s in seen), key=lambda s: s.length) for axis in Stage.axes()
     }
@@ -65,7 +65,7 @@ def plan_task(
         run = AxisRun(scan.axis, span.low, profile.spacing, count, _sweep_speed(scan, profile, profile_id))
         at = {**stage, scan.axis: span.low}
         start = Vec3D(z=at["z"], y=at["y"], x=at["x"])
-        transforms = {camera: frame.scanned(start, run) for camera, frame in frames.items()}
+        transforms = {camera: run.transform(frame, start) for camera, frame in frames.items()}
         return Volume(task.id, profile_id, start, run, positions, transforms)
 
     if task.iteration == "position_major":
@@ -83,7 +83,6 @@ def _light(
     frame at stage position 0. Raise ``ValueError`` when a camera gets no light, or the paths from the sample to it
     do not agree on 1 magnification."""
     chosen = {**picks, **profile.positions}
-    detectors = config.optics.detectors()
     positions: dict[DeviceUid, AxisPosition] = {}
     frames: dict[DeviceUid, Transform] = {}
     for camera, light in profile.lights().items():
@@ -91,20 +90,22 @@ def _light(
         seen = config.optics.paths_to(camera, chosen)
         if not lit or not seen:
             raise ValueError(f"No light reaches '{camera}' with {chosen}.")
-        found = {config.magnification(path, chosen) for path in seen}
-        magnification = found.pop() if len(found) == 1 else None
-        if magnification is None:
-            raise ValueError(f"The light paths from the sample to '{camera}' do not give 1 magnification.")
         on_paths = {node for path in (*lit, *seen) for node in path.nodes}
         positions.update({node: value for node, value in chosen.items() if node in on_paths})
-        frames[camera] = frame_transform(
-            detectors[camera],
+        region = profile.fov.get(camera, AreaROI(x=0, y=0, w=sensors[camera].size_px.x, h=sensors[camera].size_px.y))
+        frames[camera] = Transform.frame(
+            config.camera_axes(camera, chosen),
             sensors[camera],
-            profile.fov.get(camera, AreaROI(x=0, y=0, w=sensors[camera].size_px.x, h=sensors[camera].size_px.y)),
+            region,
             binning=_binning(profile.props.get(camera, {})),
-            magnification=magnification,
         )
     return positions, frames
+
+
+def _footprint(frames: Mapping[DeviceUid, Transform]) -> dict[SpecimenAxis, Span]:
+    """The span on each axis that some camera sees, around the stage position."""
+    seen = [frame.bounds() for frame in frames.values()]
+    return {axis: Span(min(s[axis].low for s in seen), max(s[axis].high for s in seen)) for axis in ("z", "y", "x")}
 
 
 def _sweep_speed(scan: Scan, profile: SPIMProfile, profile_id: ProfileId) -> float | None:

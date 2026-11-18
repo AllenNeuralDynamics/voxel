@@ -194,6 +194,22 @@ class Vec3D:
     def __repr__(self) -> str:
         return f"{type(self).__name__}(z={self.z}, y={self.y}, x={self.x})"
 
+    def dot(self, other: Self) -> float:
+        """The dot product with ``other``."""
+        return self.z * other.z + self.y * other.y + self.x * other.x
+
+    def cross(self, other: Self) -> Self:
+        """The cross product with ``other``, in x, y, z handedness."""
+        return type(self)(
+            x=self.y * other.z - self.z * other.y,
+            y=self.z * other.x - self.x * other.z,
+            z=self.x * other.y - self.y * other.x,
+        )
+
+    def length(self) -> float:
+        """The length of the vector."""
+        return math.sqrt(self.dot(self))
+
     @classmethod
     def parse(cls, v: object) -> Self:
         """Parse from a map of finite numbers with exactly the keys x, y, z."""

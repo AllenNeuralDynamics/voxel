@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 from vxlib.problems import Problems
-from vxlib.reactivity import Cell
+from vxlib.reactivity import Cell, Emitter
 
 from vxl import system as system_module
 from vxl.core.feed import StationFeed
@@ -14,7 +14,7 @@ from vxl.core.instrument.base import Instrument
 from vxl.core.instrument.config import InstrumentConfig
 from vxl.core.instrument.state import InstrumentState
 from vxl.core.station import SessionInfo, SessionView, Station, StationConfig, StationStatus, StationView
-from vxl.live import LiveEmission, LiveLayer
+from vxl.live import LiveEmission, LiveLayer, LiveSourceEmission
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
@@ -98,7 +98,7 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
     view = state.session.instrument
     assert set(view.device_views) == {"camera", "laser", "x_axis", "y_axis", "z_axis"}
     assert view.activities == ()
-    written = (await StationFeed(station.config.info, station.view).snapshot()).model_dump(mode="json")
+    written = (await StationFeed(station.config.info, station.view, station.live).snapshot()).model_dump(mode="json")
     assert written["session"]["instrument"]["config"]["target"].endswith("._Kind")
 
     async with station.instrument(info.id) as instrument:
@@ -134,8 +134,8 @@ def _active(session: str) -> StationView:
 
 @pytest.mark.parametrize(("then", "delivered"), [(_active("1"), 1), (_active("2"), 0), (StationView(), 0)])
 async def test_the_feed_drops_queued_frames_when_the_session_changes(then: StationView, delivered: int) -> None:
-    station = Cell(_active("1"))
-    feed = StationFeed(StationConfig(id=UUID(int=0), name="scope").info, station)
+    station, live = Cell(_active("1")), Emitter[LiveSourceEmission]()
+    feed = StationFeed(StationConfig(id=UUID(int=0), name="scope").info, station, live)
     frames: list[LiveEmission] = []
 
     async def keep(frame: LiveEmission) -> None:
@@ -143,7 +143,7 @@ async def test_the_feed_drops_queued_frames_when_the_session_changes(then: Stati
 
     feed.frames.subscribe(keep)
 
-    await feed.publish_live(("camera", LiveLayer.OVERVIEW, b"frame", None))
+    await live.emit(("camera", LiveLayer.OVERVIEW, b"frame", None))  # the feed takes the frames it is given
     await station.set(then)  # before the feed delivers the queued frame
     await asyncio.sleep(0.05)
 
@@ -152,7 +152,7 @@ async def test_the_feed_drops_queued_frames_when_the_session_changes(then: Stati
 
 
 async def test_the_feed_ends_every_connection_when_the_station_closes(station: Station) -> None:
-    feed = StationFeed(station.config.info, station.view)
+    feed = StationFeed(station.config.info, station.view, station.live)
 
     async with feed.connect() as connection:
         await station.close()

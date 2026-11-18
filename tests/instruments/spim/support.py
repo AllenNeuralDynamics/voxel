@@ -227,3 +227,22 @@ def simulated(data: dict[str, Any]) -> dict[str, Any]:
         },
     }
     return data
+
+
+def objective_turret(data: dict[str, Any]) -> dict[str, Any]:
+    """Add to simulated ``data`` an objective turret between the specimen and the filter wheel: ``low`` holds the 5x
+    objective, ``high`` a 10x one. Profile ``gfp`` puts it at ``low``."""
+    data["parts"]["objective_10x"] = {"target": "vxl.parts.Objective", "magnification": 10}
+    data["optics"]["specimen"] = {"to": "turret"}
+    data["optics"]["turret"] = {"to": {"low": "objective", "high": "objective_10x"}}
+    data["optics"]["objective_10x"] = {"to": "fw"}
+    data["devices"]["turret"] = {
+        "target": "vxl.devices.axes.discrete.mapped.OwnedMappedDiscreteAxis",
+        "init": {
+            "axis": {"target": _SIMULATED_AXIS, "init": {"lower_limit": 0, "upper_limit": 100}},
+            "slots": {"0": {"label": "low", "position": 0}, "1": {"label": "high", "position": 10}},
+            "tolerance": 1,
+        },
+    }
+    profile(data)["positions"]["turret"] = "low"
+    return data

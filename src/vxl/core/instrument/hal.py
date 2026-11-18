@@ -61,10 +61,10 @@ class DeviceView(FrozenModel):
 
 class HAL:
     """The rig of 1 instrument. Once open, :meth:`device` gives the handle of a device by name, of the class its kind
-    has, such as :class:`AreaCameraHandle`. ``stage``, ``area_cameras``, ``line_cameras`` and ``signal_generators`` hold
-    the same handles by role, each of the class that its role needs: the checks at open prove it. The lasers, the
-    modulators and the shutters are not public: the HAL sets their powers and what controls them, lights the specimen,
-    and makes it dark."""
+    has, such as :class:`AreaCameraHandle`. ``stage``, ``area_cameras``, ``line_cameras``, ``routers`` and
+    ``signal_generators`` hold the same handles by role, each of the class that its role needs: the checks at open prove
+    it. The lasers, the modulators and the shutters are not public: the HAL sets their powers and what controls them,
+    lights the specimen, and makes it dark."""
 
     def __init__(self, config: InstrumentConfig) -> None:
         self._config = config
@@ -73,6 +73,7 @@ class HAL:
         self._stage: dict[SpecimenAxis, LinearAxisHandle] = {}
         self._area_cameras: dict[DeviceUid, AreaCameraHandle] = {}
         self._line_cameras: dict[DeviceUid, LineCameraHandle] = {}
+        self._routers: dict[DeviceUid, DiscreteAxisHandle] = {}
         self._lasers: dict[DeviceUid, LaserHandle] = {}
         self._signal_generators: dict[DeviceUid, GeneratorHandle] = {}
         self._modulators: dict[DeviceUid, ModulatorHandle] = {}
@@ -161,6 +162,11 @@ class HAL:
         return self._line_cameras
 
     @property
+    def routers(self) -> Mapping[DeviceUid, DiscreteAxisHandle]:
+        """Each device that sends the light a different way at each of its positions."""
+        return self._routers
+
+    @property
     def signal_generators(self) -> Mapping[DeviceUid, GeneratorHandle]:
         return self._signal_generators
 
@@ -177,10 +183,9 @@ class HAL:
         """Where each device that sends the light a different way is now, by its slot's label: ``None`` while it is at
         no slot. Reads each device's state."""
         positions: dict[DeviceUid, str | None] = {}
-        for uid in self._config.optics.routers():
-            if isinstance(axis := self._devices.get(uid), DiscreteAxisHandle):
-                labels = {str(slot): label for slot, label in axis.props.cache["labels"].value.items()}
-                positions[uid] = labels.get(str((await axis.state.get()).position))
+        for uid, axis in self._routers.items():
+            labels = {str(slot): label for slot, label in axis.props.cache["labels"].value.items()}
+            positions[uid] = labels.get(str((await axis.state.get()).position))
         return positions
 
     async def light_power_ranges(self) -> dict[DeviceUid, tuple[Quantity, Quantity]]:
@@ -300,6 +305,10 @@ class HAL:
         }
         self._area_cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, AreaCameraHandle)}
         self._line_cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, LineCameraHandle)}
+        routers = self._config.optics.routers()
+        self._routers = {
+            uid: handle for uid, handle in handles.items() if uid in routers and isinstance(handle, DiscreteAxisHandle)
+        }
         self._lasers = {uid: handle for uid, handle in handles.items() if isinstance(handle, LaserHandle)}
         self._signal_generators = {
             uid: handle for uid, handle in sorted(handles.items()) if isinstance(handle, GeneratorHandle)
@@ -421,6 +430,7 @@ class HAL:
                     self._stage,
                     self._area_cameras,
                     self._line_cameras,
+                    self._routers,
                     self._lasers,
                     self._modulators,
                     self._shutters,

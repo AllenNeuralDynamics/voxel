@@ -25,9 +25,10 @@ from vxl.instruments.spim.config import SPIMConfig
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMState, WriterFields
 from vxl.instruments.spim.task import Task, TaskFields
+from vxl.live import LiveSourceEmission, LiveViewport, live_source_header
 from vxl.system import System
 
-from .support import codes, load, simulated, sweep_x, template, two_arms, two_cameras
+from .support import codes, load, objective_turret, simulated, sweep_x, template, two_arms, two_cameras
 
 
 def test_new_ids_are_26_safe_characters_and_differ() -> None:
@@ -744,3 +745,91 @@ async def test_a_line_camera_stops_the_opening(config_data: dict[str, Any], tmp_
     assert [(p.code, p.loc) for p in caught.value.problems] == [
         ("spim.camera.not_area", ("profiles", "gfp", "channels", "camera"))
     ]
+
+
+async def test_live_frames_come_with_their_stage_position_and_old_streams_drop(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    microscope = _microscope(two_cameras(simulated(config_data)), tmp_path)
+    seen: list[tuple[str, str, int, object]] = []
+    both_cameras, zoomed = asyncio.Event(), asyncio.Event()
+
+    async def take(emission: LiveSourceEmission) -> None:
+        camera, layer, frame, position = emission
+        seen.append((camera, layer.value, live_source_header(frame).frame_idx, position))
+        if {entry[0] for entry in seen} == {"camera", "camera_2"}:
+            both_cameras.set()
+        if layer.value == "viewport":
+            zoomed.set()
+
+    microscope.live.subscribe(take)
+    await microscope.open()
+    try:
+        await microscope.set_preview_channels(["camera", "camera_2"])
+        revision = microscope.view.value.live.stream_revision
+        await microscope.start_preview()
+        async with asyncio.timeout(5):
+            await both_cameras.wait()
+        await microscope.stop_preview()
+        assert microscope.view.value.live.stream_revision == revision + 1
+        assert all(position is not None for *_, position in seen)
+
+        last = max((entry for entry in seen if entry[0] == "camera"), key=lambda entry: entry[2])
+        seen.clear()
+        microscope._hal.area_cameras["camera"].live_viewport.update(LiveViewport(x=0.25, y=0.25, w=0.5, h=0.5))
+        async with asyncio.timeout(5):
+            await zoomed.wait()
+        assert seen[-1] == ("camera", "viewport", last[2], last[3])  # a zoom of the stopped image keeps its place
+
+        seen.clear()
+        await microscope.select_profile("rfp")
+        assert microscope.view.value.live.stream_revision == revision + 2
+        microscope._hal.area_cameras["camera"].live_viewport.update(LiveViewport(x=0.0, y=0.0, w=0.5, h=0.5))
+        await asyncio.sleep(0.3)
+        assert seen == []  # the old stream ended with the profile change
+    finally:
+        await microscope.close()
+
+
+async def test_the_planes_follow_a_hand_moved_objective_and_a_zoom_keeps_its_box(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    microscope = _microscope(objective_turret(simulated(config_data)), tmp_path)
+    zoomed: list[int] = []
+    new_zoom = asyncio.Event()
+
+    async def take(emission: LiveSourceEmission) -> None:
+        _, layer, frame, _ = emission
+        if layer.value == "viewport":
+            zoomed.append(live_source_header(frame).source_rect_px.width)
+            new_zoom.set()
+
+    def width() -> float:
+        (plane,) = microscope.view.value.live.planes
+        return plane.pictures["camera"].height[0]  # the camera is turned: its height runs along the plane's right
+
+    microscope.live.subscribe(take)
+    await microscope.open()
+    try:
+        assert width() == pytest.approx(-2662.4)  # 2048 px of 6.5 µm behind 5x
+        await microscope.start_preview()
+        await microscope.update_viewport(["camera"], (-250.0, -250.0, 500.0, 500.0))
+        async with asyncio.timeout(5):
+            await new_zoom.wait()
+        at_5x, revision = zoomed[-1], microscope.view.value.live.stream_revision
+
+        new_zoom.clear()
+        await microscope.execute_device_command("turret", "move_to", ["high"])
+        async with asyncio.timeout(5):
+            while width() != pytest.approx(-1331.2):
+                await new_zoom.wait()
+                new_zoom.clear()
+        assert microscope.view.value.live.stream_revision > revision
+        async with asyncio.timeout(5):
+            await new_zoom.wait()
+        assert zoomed[-1] == pytest.approx(2 * at_5x, rel=0.1)  # the same box covers twice the sensor at 10x
+
+        with pytest.raises(RejectedError, match="1 plane"):
+            await microscope.update_viewport(["laser"], None)
+    finally:
+        await microscope.close()

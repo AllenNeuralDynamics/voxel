@@ -49,3 +49,8 @@ def test_vectors_are_built_with_named_components() -> None:
         Vec2D(1.0, 2.0)  # pyright: ignore[reportCallIssue]
     with pytest.raises(ValueError, match="non-negative"):
         UIVec3D(x=1, y=-1, z=0)
+
+
+def test_a_3d_vector_has_a_dot_product_a_cross_product_and_a_length() -> None:
+    x, y = Vec3D(x=1.0, y=0.0, z=0.0), Vec3D(x=0.0, y=1.0, z=0.0)
+    assert (x.dot(y), x.cross(y), Vec3D(x=3.0, y=4.0, z=0.0).length()) == (0.0, Vec3D(x=0.0, y=0.0, z=1.0), 5.0)

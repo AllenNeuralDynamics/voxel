@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator, model_validator
 from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
 from vxl_records import SQLiteRecords, VoxelRecords
-from vxlib.reactivity import Cell, Readable
+from vxlib.reactivity import Cell, Emitter, Readable
 from vxlib.schema import FrozenModel, check_identifier
 
 from vxl import system
@@ -19,6 +19,7 @@ from vxl._utils.files import save_yaml
 from vxl.core.errors import BusyError, RejectedError, StationNotConfiguredError
 from vxl.core.instrument.base import Instrument, InstrumentView
 from vxl.core.instrument.folder import InstrumentFolder
+from vxl.live import LiveSourceEmission
 from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
 from vxl.system import System
 
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from vxlib.lifecycle import Teardown
+    from vxlib.reactivity import Subscribable
 
 
 type AnyInstrument = Instrument[Any, Any]
@@ -212,6 +214,7 @@ class Station:
         self._session_info: SessionInfo | None = None
         self._session_teardowns: list[Teardown] = []
         self._view = Cell(StationView())
+        self._live = Emitter[LiveSourceEmission]()
         self._lifecycle_lock = asyncio.Lock()
         self._leases_released = asyncio.Condition(self._lifecycle_lock)
         self._instrument_leases: set[asyncio.Task[object]] = set()
@@ -231,6 +234,11 @@ class Station:
     def view(self) -> Readable[StationView]:
         """The live station as a screen sees it."""
         return self._view
+
+    @property
+    def live(self) -> Subscribable[LiveSourceEmission]:
+        """Each live frame of the open instrument, unopened, as :attr:`Instrument.live` gives it."""
+        return self._live
 
     @property
     def instruments_dir(self) -> Path:
@@ -310,6 +318,7 @@ class Station:
                     instrument_name=instrument_name,
                 )
                 self._session_teardowns.append(instrument.view.subscribe(self._refresh_session_view))
+                self._session_teardowns.append(instrument.live.subscribe(self._live.emit))
                 session_view = self._build_session_view(instrument)
             except BaseException as launch_error:
                 await self._teardown_failed_launch(instrument, launch_error)

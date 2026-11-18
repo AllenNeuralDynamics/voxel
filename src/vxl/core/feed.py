@@ -121,6 +121,7 @@ class StationFeed:
         self,
         station: "StationInfo",
         source: "Readable[StationView]",
+        live: "Subscribable[LiveSourceEmission]",
         *,
         update_buffer_size: int = 64,
     ) -> None:
@@ -139,6 +140,7 @@ class StationFeed:
         self._lock = asyncio.Lock()
         self._closed = False
         self._unsubscribe = source.subscribe(self._on_station_view)
+        self._unsubscribe_live = live.subscribe(self.publish_live)
 
     @property
     def frames(self) -> "Subscribable[LiveEmission]":
@@ -225,6 +227,7 @@ class StationFeed:
     async def close(self) -> None:
         """Close the feed and end all active connection iterators."""
         self._unsubscribe()
+        self._unsubscribe_live()
         async with self._lock:
             if self._closed:
                 return

@@ -554,6 +554,19 @@ class InstrumentConfig(RigConfig, frozen=True):
         found = [part.magnification for part in self._parts_on(path, positions) if isinstance(part, Objective)]
         return math.prod(found) if found else None
 
+    def camera_axes(self, camera: DeviceUid, positions: Mapping[str, AxisPosition]) -> tuple[Vec3D, Vec3D]:
+        """Where 1 µm along ``camera``'s sensor width and height lands in the specimen, with each device in
+        ``positions`` at its position there: the detector's sides divided by the magnification. Raise ``ValueError``
+        when no light path reaches the camera, or its paths do not agree on 1 magnification."""
+        paths = self.optics.paths_to(camera, positions)
+        if not paths:
+            raise ValueError(f"No light goes from the specimen to '{camera}' with {dict(positions)}.")
+        found = {self.magnification(path, positions) for path in paths}
+        if len(found) != 1 or (magnification := found.pop()) is None:
+            raise ValueError(f"The light paths from the specimen to '{camera}' do not give 1 magnification.")
+        width, height = self.optics.detectors()[camera].sides()
+        return width / magnification, height / magnification
+
     def band(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> tuple[float | None, float | None] | None:
         """The wavelengths, in nm, that the parts on ``path`` let through, with each device in ``positions`` at its
         position there: ``None`` when no part gives a band."""
