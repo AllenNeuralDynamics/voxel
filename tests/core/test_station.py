@@ -96,7 +96,7 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
     assert state.status is StationStatus.ACTIVE
     assert state.session is not None
     view = state.session.instrument
-    assert set(view.device_views) == {"camera", "laser", "x_axis", "y_axis", "z_axis"}
+    assert set(view.devices) == {"camera", "laser", "x_axis", "y_axis", "z_axis"}
     assert view.activities == ()
     written = (await StationFeed(station.config.info, station.view, station.live).snapshot()).model_dump(mode="json")
     assert written["session"]["instrument"]["config"]["target"].endswith("._Kind")
@@ -105,7 +105,7 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
         await instrument.set_device_properties("camera", {"exposure_time_ms": 12.5})
     session = station.view.value.session
     assert session is not None
-    assert session.instrument.device_views["camera"].props["exposure_time_ms"].value == 12.5
+    assert session.instrument.devices["camera"].props["exposure_time_ms"].value == 12.5
 
     await station.close_session(info.id)
     assert station.view.value.status is StationStatus.IDLE

@@ -67,7 +67,7 @@ class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     active_profile: ProfileId
     power_mode: PowerMode
     activities: tuple[ActivityInfo, ...]
-    device_views: dict[DeviceUid, DeviceView]
+    devices: dict[DeviceUid, DeviceView]
     remote_stores: dict[str, Remote]
     live: LiveView
 
@@ -169,6 +169,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if problems := await self._open_problems():
                 await self._hal.close()
                 raise StartupError(problems)
+            # Read each stage axis once, so the first live frames already have a position: until a streamed
+            # position arrives, an axis that is not read has none. An axis that fails stays unknown.
+            await asyncio.gather(*(axis.position.get() for axis in self._hal.stage.values()), return_exceptions=True)
             self._live = LiveRelay(self._hal.area_cameras, self._cached_stage, self._live_frames)
             self._live.start()
             hal = self._hal
@@ -402,7 +405,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             "active_profile": self._active_profile,
             "power_mode": self._power_mode,
             "activities": self._scheduler.activities,
-            "device_views": self._hal.device_views,
+            "devices": self._hal.device_views,
             "remote_stores": self._remote_stores,
             "live": self._live_view,
         }

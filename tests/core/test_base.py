@@ -91,7 +91,7 @@ async def instrument(tmp_path: Path) -> AsyncIterator[_Bench]:
 
 
 async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
-    views = instrument.view.value.device_views
+    views = instrument.view.value.devices
     kinds = {uid: view.interface.kind for uid, view in views.items()}
 
     assert set(kinds) == set(_RIG["devices"])
@@ -101,19 +101,19 @@ async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
 
 async def test_a_property_set_is_written_and_shown(instrument: _Bench) -> None:
     sent: list[Mapping[str, DeviceView]] = []
-    instrument.view.subscribe(lambda view: sent.append(view.device_views))
+    instrument.view.subscribe(lambda view: sent.append(view.devices))
 
     results = await instrument.set_device_properties("camera", {"exposure_time_ms": 12.5})
 
     assert results.ok["exposure_time_ms"].value == 12.5
     assert sent
-    assert instrument.view.value.device_views["camera"].props["exposure_time_ms"].value == 12.5
+    assert instrument.view.value.devices["camera"].props["exposure_time_ms"].value == 12.5
 
 
 async def test_the_views_are_empty_after_close(instrument: _Bench) -> None:
     await instrument.close()
 
-    assert instrument.view.value.device_views == {}
+    assert instrument.view.value.devices == {}
 
 
 async def test_a_device_command_runs(instrument: _Bench) -> None:
