@@ -81,7 +81,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         with them when they differ."""
         async with self._scheduler.run("set the preview channels", requires=()):
             profile_id = self._active_profile.value
-            known = self._store.value.profiles[profile_id].channels
+            known = self._store.value.profiles[profile_id].lights()
             if not channels:
                 raise RejectedError("A preview needs at least 1 channel")
             if unknown := sorted(set(channels) - set(known)):
@@ -105,7 +105,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 raise RejectedError(f"'{camera}' is not a camera")
             applied = await (handle.reset_roi() if region is None else handle.update_roi(region))
             active = self._active_profile.value
-            if camera in self._store.value.profiles[active].channels:
+            if camera in self._store.value.profiles[active].lights():
                 await self._store.update({("profiles", active, "fov", camera): ABSENT if region is None else applied})
             return applied
 
@@ -165,7 +165,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         """Also each channel camera that is not an area camera: SPIM images with area cameras only."""
         problems = await super()._open_problems()
         for profile_id, profile in self._store.value.profiles.items():
-            for camera in sorted(profile.channels.keys() & self._hal.line_cameras.keys()):
+            for camera in sorted(profile.lights().keys() & self._hal.line_cameras.keys()):
                 msg = f"'{camera}' is a line camera; SPIM needs area cameras."
                 problems.add("spim.camera.not_area", msg, "profiles", profile_id, "channels", camera)
         return problems
@@ -178,7 +178,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
             cameras[camera].reset_roi()
             if (region := profile.fov.get(camera)) is None
             else cameras[camera].update_roi(region)
-            for camera in profile.channels
+            for camera in profile.lights()
         )
         await gather_all(*regions, message="camera regions")
         await self._preview_channels.set(self._preview_choice(profile_id))
@@ -186,7 +186,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     def _preview_choice(self, profile_id: ProfileId) -> tuple[DeviceUid, ...]:
         """The channels a preview of a profile shows: those it chose that it still has, in its order, or else its
         first channel."""
-        channels = self._store.value.profiles[profile_id].channels
+        channels = self._store.value.profiles[profile_id].lights()
         chosen = self._preview_choices.get(profile_id, frozenset())
         return tuple(camera for camera in channels if camera in chosen) or (next(iter(channels)),)
 
@@ -200,7 +200,8 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         profile = self._store.value.profiles[self._active_profile.value]
         cameras = self._preview_channels.value
         generators = tuple(profile.timelines)
-        sources = dict.fromkeys(profile.channels[c].illumination for c in cameras)
+        lights = profile.lights()
+        sources = dict.fromkeys(lights[c] for c in cameras)
         axis = hal.stage[self._config.scan.axis]
         if await axis.scan_state.get() != "idle":
             await axis.halt()

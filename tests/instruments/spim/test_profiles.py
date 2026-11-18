@@ -9,7 +9,8 @@ type Change = Callable[[dict[str, Any]], Any]
 
 
 def _channel(data: dict[str, Any]) -> dict[str, Any]:
-    return profile(data)["channels"]["camera"]
+    """The cameras of channel ``gfp``, each with its light."""
+    return profile(data)["channels"]["gfp"]
 
 
 def _messages(data: dict[str, Any], code: str) -> list[str]:
@@ -32,14 +33,15 @@ def _unlit_laser(data: dict[str, Any]) -> None:
     hal["devices"]["laser_2"] = {"target": "builtins.object"}
     hal["parts"]["dump"] = {"kind": "beam_dump"}
     hal["optics"].update(laser_2={"to": "dump"}, dump={"to": "camera"})
-    _channel(data)["illumination"] = "laser_2"
+    _channel(data)["camera"] = "laser_2"
 
 
 @pytest.mark.parametrize(
     ("change", "code"),
     [
-        (lambda d: profile(d)["channels"].update(fw=_channel(d)), "profile.channel.not_detector"),
-        (lambda d: _channel(d).update(illumination="galvo"), "profile.channel.not_source"),
+        (lambda d: _channel(d).update(fw="laser"), "profile.channel.not_detector"),
+        (lambda d: profile(d)["channels"].update(rfp={"camera": "laser"}), "profile.channel.camera_repeated"),
+        (lambda d: _channel(d).update(camera="galvo"), "profile.channel.not_source"),
         (_unlit_laser, "profile.channel.no_path"),
         (_second_camera, "profile.channel.dark"),
         (lambda d: profile(d)["positions"].update(camera="x"), "profile.position.unexpected"),

@@ -31,11 +31,11 @@ PropertyName = Annotated[str, Field(min_length=1)]
 """The name of a property that a device class declares, such as ``exposure_time_ms``."""
 
 
-class Channel(FrozenModel):
-    """What 1 camera images in a profile: its light source."""
+ChannelName = Annotated[str, identifier("Channel name")]
+"""The name of a channel of a profile, such as ``gfp``: what its cameras image."""
 
-    illumination: DeviceUid
-    label: str | None = None
+type ChannelCameras = Annotated[dict[DeviceUid, DeviceUid], Field(min_length=1)]
+"""The cameras of 1 channel, each with the light it uses."""
 
 
 type PowerMode = Literal["full", "dim"]
@@ -98,12 +98,12 @@ class Power(FrozenModel):
 
 
 class Profile(FrozenModel):
-    """What is on at the same moment, and all that it needs to run. ``channels`` has 1 entry for each camera that is
-    on. ``positions`` gives the position of each device that this profile sets, ``power`` the power of each laser and
-    modulator that software sets, and ``timelines`` what each signal generator plays. A kind of instrument adds its
-    own fields in a subclass."""
+    """What is on at the same moment, and all that it needs to run. ``channels`` names each channel, with its cameras
+    and the light each uses; a camera is in at most 1 channel. ``positions`` gives the position of each device that
+    this profile sets, ``power`` the power of each laser and modulator that software sets, and ``timelines`` what each
+    signal generator plays. A kind of instrument adds its own fields in a subclass."""
 
-    channels: dict[DeviceUid, Channel] = Field(min_length=1)
+    channels: dict[ChannelName, ChannelCameras] = Field(min_length=1)
     positions: dict[DeviceUid, AxisPosition] = Field(default_factory=dict)
     power: dict[DeviceUid, Power] = Field(default_factory=dict)
     props: dict[DeviceUid, dict[PropertyName, Any]] = Field(default_factory=dict)
@@ -112,13 +112,17 @@ class Profile(FrozenModel):
     desc: str = ""
     label: str | None = None
 
+    def lights(self) -> dict[DeviceUid, DeviceUid]:
+        """Each camera of the profile, with the light it uses."""
+        return {camera: light for cameras in self.channels.values() for camera, light in cameras.items()}
+
     def live_inputs(self, config: InstrumentConfig) -> dict[PinRef, Wire]:
         """Each pin that gets a signal in this profile, with the wire that feeds it: a wire of a generator that has a
         signal in its timeline, and each wire of a camera of this profile or of a stage axis, which make their own
         pulses."""
         played = {generator: set(timeline.signals) for generator, timeline in self.timelines.items()}
         found: dict[PinRef, Wire] = {}
-        for sender in (*played, *self.channels, *config.stage.devices().values()):
+        for sender in (*played, *self.lights(), *config.stage.devices().values()):
             for name, wire in config.wiring.outputs(sender).items():
                 if sender not in played or name in played[sender]:
                     found.update(dict.fromkeys(wire.to, Wire(sender, name, wire)))
@@ -128,9 +132,9 @@ class Profile(FrozenModel):
         """Every node on the light paths of the channels, on both sides of the specimen, with each device at any
         position."""
         nodes: set[str] = set()
-        for camera, channel in self.channels.items():
+        for camera, light in self.lights().items():
             optics = config.optics
-            for path in (*optics.paths_from(channel.illumination, {}), *optics.paths_to(camera, {})):
+            for path in (*optics.paths_from(light, {}), *optics.paths_to(camera, {})):
                 nodes.update(path.nodes)
         return nodes
 
@@ -200,43 +204,46 @@ class Profile(FrozenModel):
         return problems
 
     def _channel_problems(self, config: InstrumentConfig) -> Problems:
-        """The problems of the channels: each names a camera and a light source, and the light can go from the
-        source to the specimen and from the specimen to the camera, with each device at any position."""
+        """The problems of the channels: a camera is in at most 1 channel, each names a camera and a light source,
+        and the light can go from the source to the specimen and from the specimen to the camera, with each device at
+        any position."""
         cameras, sources = config.optics.detectors(), config.optics.sources()
         problems = Problems()
-        for camera, channel in self.channels.items():
-            if camera not in cameras:
-                msg = f"'{camera}' is not a detector of 'optics': a detector gives 'width' and 'height'."
-                problems.add("profile.channel.not_detector", msg, "channels", camera)
-            elif channel.illumination not in sources:
-                msg = f"'{channel.illumination}' is not a light source: a node of 'optics' sends light to it."
-                problems.add(
-                    "profile.channel.not_source",
-                    msg,
-                    "channels",
-                    camera,
-                    "illumination",
-                )
-            elif not config.optics.paths_from(channel.illumination, {}):
-                msg = f"No light path goes from '{channel.illumination}' to the specimen."
-                problems.add("profile.channel.no_path", msg, "channels", camera)
-            elif not config.optics.paths_to(camera, {}):
-                msg = f"No light path goes from the specimen to '{camera}'."
-                problems.add("profile.channel.no_path", msg, "channels", camera)
+        seen: set[DeviceUid] = set()
+        for name, channel in self.channels.items():
+            for camera, light in channel.items():
+                where = ("channels", name, camera)
+                if camera in seen:
+                    msg = f"'{camera}' is in more than 1 channel: image another channel on it in another profile."
+                    problems.add("profile.channel.camera_repeated", msg, *where)
+                elif camera not in cameras:
+                    msg = f"'{camera}' is not a detector of 'optics': a detector gives 'width' and 'height'."
+                    problems.add("profile.channel.not_detector", msg, *where)
+                elif light not in sources:
+                    msg = f"'{light}' is not a light source: a node of 'optics' sends light to it."
+                    problems.add("profile.channel.not_source", msg, *where)
+                elif not config.optics.paths_from(light, {}):
+                    msg = f"No light path goes from '{light}' to the specimen."
+                    problems.add("profile.channel.no_path", msg, *where)
+                elif not config.optics.paths_to(camera, {}):
+                    msg = f"No light path goes from the specimen to '{camera}'."
+                    problems.add("profile.channel.no_path", msg, *where)
+                seen.add(camera)
         return problems
 
     def _dark_problems(self, config: InstrumentConfig) -> Problems:
         """Each camera that gets no light with the positions of this profile. A device that this profile does not
         set can be at any position: the instrument can set it."""
         problems = Problems()
-        for camera, channel in self.channels.items():
-            if not config.optics.paths_from(channel.illumination, self.positions):
-                msg = f"No light of '{channel.illumination}' reaches the specimen with {self._given()}."
-            elif not config.optics.paths_to(camera, self.positions):
-                msg = f"No light goes from the specimen to '{camera}' with {self._given()}."
-            else:
-                continue
-            problems.add("profile.channel.dark", msg, "channels", camera)
+        for name, channel in self.channels.items():
+            for camera, light in channel.items():
+                if not config.optics.paths_from(light, self.positions):
+                    msg = f"No light of '{light}' reaches the specimen with {self._given()}."
+                elif not config.optics.paths_to(camera, self.positions):
+                    msg = f"No light goes from the specimen to '{camera}' with {self._given()}."
+                else:
+                    continue
+                problems.add("profile.channel.dark", msg, "channels", name, camera)
         return problems
 
     def _timeline_problems(self, config: InstrumentConfig) -> Problems:
@@ -258,12 +265,10 @@ class Profile(FrozenModel):
 
 
 class ProfileDetails(TypedDict, total=False):
-    """The names and notes of a profile, each one optional. ``channel_labels`` gives the label of each camera's
-    channel."""
+    """The names and notes of a profile, each one optional."""
 
     label: str | None
     desc: str
-    channel_labels: dict[DeviceUid, str | None]
 
 
 class StageFollowRule(FrozenModel):
@@ -401,7 +406,7 @@ class InstrumentState(BaseModel, frozen=True):
         for profile_id, profile in self.profiles.items():
             messages: dict[DeviceUid, str] = {}
             for held in self._held_positions():
-                for camera in profile.channels:
+                for camera in profile.lights():
                     where = {**held, **profile.positions}
                     found = [config.magnification(path, where) for path in config.optics.paths_to(camera, where)]
                     given = sorted({magnification for magnification in found if magnification is not None})
@@ -412,8 +417,9 @@ class InstrumentState(BaseModel, frozen=True):
                     else:
                         continue
                     messages.setdefault(camera, msg)
+            names = {camera: name for name, channel in profile.channels.items() for camera in channel}
             for camera, msg in messages.items():
-                problems.add("profile.channel.magnification", msg, profile_id, "channels", camera)
+                problems.add("profile.channel.magnification", msg, profile_id, "channels", names[camera], camera)
         return problems
 
     def _held_positions(self) -> list[dict[DeviceUid, AxisPosition]]:

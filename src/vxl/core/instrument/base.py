@@ -263,10 +263,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if unknown := sorted(details.keys() - ProfileDetails.__annotations__.keys()):
                 raise RejectedError(f"An edit cannot change {unknown} of a profile")
             path = ("profiles", profile_id)
-            channel_labels = details.pop("channel_labels", {})
-            values: dict[KeyPath, Any] = {(*path, name): value for name, value in details.items()}
-            values |= {(*path, "channels", camera, "label"): label for camera, label in channel_labels.items()}
-            await edit.record(values)
+            await edit.record({(*path, name): value for name, value in details.items()})
 
     async def set_position_rule(
         self,
@@ -515,7 +512,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     def _profile_devices(self, profile: Profile) -> set[DeviceUid]:
         """The devices that a profile uses: those on its light paths, and those it sets."""
         on_paths = profile.path_nodes(self._config) & set(self._config.all_devices)
-        named = (profile.channels, profile.positions, profile.props, profile.setup, profile.timelines)
+        named = (profile.lights(), profile.positions, profile.props, profile.setup, profile.timelines)
         return on_paths.union(*named)
 
     async def _open_problems(self) -> Problems:

@@ -111,8 +111,8 @@ default:
   profiles:                                       # a profile is a mini instrument: what is on at the same moment, and all it needs to run
     gfp:
       label: GFP
-      channels:                                   # 1 entry for each camera that is on: its light. Each camera reads its whole sensor: no fov
-        camera: {illumination: laser_488}                                        # the height is about 800 µm: 565 µm deep and 565 µm along X
+      channels:                                   # each channel: its cameras, each with its light. Each camera reads its whole sensor: no fov
+        gfp: {camera: laser_488}                  # the height is about 800 µm: 565 µm deep and 565 µm along X
       positions: {fw_emission: BP525}             # the devices that this profile sets, 1 value each
       power:                                      # the power of each laser and modulator that software sets
         laser_488: {full: 50 mW}
@@ -129,7 +129,7 @@ default:
     cy5:                                          # real profiles differ in focus, timing and signal size. Here they share values only because this is an example
       label: Cy5
       channels:
-        camera: {illumination: laser_638}
+        cy5: {camera: laser_638}
       positions: {fw_emission: LP650}
       power:                                      # the power of each laser and modulator that software sets
         laser_638: {full: 50 mW}

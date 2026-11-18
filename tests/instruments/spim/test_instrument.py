@@ -267,11 +267,10 @@ def _task(microscope: Microscope, task_id: str) -> Task:
 async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope: Microscope) -> None:
     await microscope.update_writer_settings(shard_z_chunks=4, target_shard_gb=2.0)
     await microscope.set_spacing("gfp", 2.5)
-    await microscope.update_profile_details("gfp", label="GFP", desc="green", channel_labels={"camera": "green"})
+    await microscope.update_profile_details("gfp", label="GFP", desc="green")
     state = microscope.view.value.state
     assert (state.writer.shard_z_chunks, state.profiles["gfp"].spacing) == (4, 2.5)
     assert (state.profiles["gfp"].label, state.profiles["gfp"].desc) == ("GFP", "green")
-    assert state.profiles["gfp"].channels["camera"].label == "green"
 
     for _ in range(3):
         await microscope.undo()
@@ -289,12 +288,6 @@ async def test_a_spacing_edit_is_refused_at_its_path(
         await microscope.set_spacing(profile_id, spacing)
     assert [problem.loc for problem in caught.value.problems] == [loc]
     assert microscope.view.value.history.undo_label is None
-
-
-async def test_a_channel_label_for_a_camera_not_in_the_profile_is_refused(microscope: Microscope) -> None:
-    with pytest.raises(RejectedError) as caught:
-        await microscope.update_profile_details("gfp", channel_labels={"laser": "blue"})
-    assert [problem.loc for problem in caught.value.problems] == [("profiles", "gfp", "channels", "laser", "label")]
 
 
 @pytest.mark.parametrize("name", ["props", "spacing", "spcing"])

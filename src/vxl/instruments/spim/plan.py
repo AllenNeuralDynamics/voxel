@@ -86,8 +86,8 @@ def _light(
     detectors = config.optics.detectors()
     positions: dict[DeviceUid, AxisPosition] = {}
     frames: dict[DeviceUid, Transform] = {}
-    for camera, channel in profile.channels.items():
-        lit = config.optics.paths_from(channel.illumination, chosen)
+    for camera, light in profile.lights().items():
+        lit = config.optics.paths_from(light, chosen)
         seen = config.optics.paths_to(camera, chosen)
         if not lit or not seen:
             raise ValueError(f"No light reaches '{camera}' with {chosen}.")

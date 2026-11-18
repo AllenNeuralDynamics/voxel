@@ -103,7 +103,7 @@ class SPIMProfile(Profile):
         if not isinstance(config, SPIMConfig):
             raise TypeError(f"a SPIMProfile is for a SPIMConfig, not a {type(config).__name__}")
         problems = super().problems(config)
-        for camera in self.fov.keys() - self.channels.keys():
+        for camera in self.fov.keys() - self.lights().keys():
             msg = f"'{camera}' has a region in 'fov' but is not a channel of the profile."
             problems.add("profile.fov.not_channel", msg, "fov", camera)
         if not self._channel_problems(config):  # a wrong channel would repeat as the problems of the chain
@@ -116,7 +116,7 @@ class SPIMProfile(Profile):
         first one that reaches it. A starter never waits, an axis that sweeps never waits, and with ``software`` the
         program moves the axis. A wire to any other device, such as a laser's gate, starts nothing."""
         by_program = config.scan.pacer == SOFTWARE
-        waiting = {*self.channels, *self.timelines}
+        waiting = {*self.lights(), *self.timelines}
         if config.scan.motion == "step" and not by_program:
             waiting.add(config.stage.device(config.scan.axis))
         starters = tuple(sorted(self.timelines)) if by_program else (config.scan.pacer,)

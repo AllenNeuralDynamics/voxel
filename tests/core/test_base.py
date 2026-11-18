@@ -54,7 +54,7 @@ _RIG: dict[str, Any] = {
     },
 }
 
-_DEFAULT: dict[str, Any] = {"profiles": {"main": {"channels": {"camera": {"illumination": "laser_488"}}}}}
+_DEFAULT: dict[str, Any] = {"profiles": {"main": {"channels": {"main": {"camera": "laser_488"}}}}}
 
 
 class _State(InstrumentState, frozen=True):

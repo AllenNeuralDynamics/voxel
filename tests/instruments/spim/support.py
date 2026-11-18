@@ -60,7 +60,7 @@ _CONFIG: dict[str, Any] = {
         },
         "profiles": {
             "gfp": {
-                "channels": {"camera": {"illumination": "laser"}},
+                "channels": {"gfp": {"camera": "laser"}},
                 "positions": {"fw": "GFP"},
                 "timelines": {
                     "ao_main": {
@@ -182,7 +182,7 @@ def two_cameras(data: dict[str, Any]) -> dict[str, Any]:
     data["optics"]["camera_2"] = copy.deepcopy(data["optics"]["camera"])
     data["wiring"]["ao_main"]["camera_2_trigger"] = {"pin": "ao4", "to": ["camera_2/trigger_in"], **_DIGITAL}
     gfp = profile(data)
-    gfp["channels"]["camera_2"] = copy.deepcopy(gfp["channels"]["camera"])
+    gfp["channels"]["gfp"]["camera_2"] = gfp["channels"]["gfp"]["camera"]
     signals = gfp["timelines"]["ao_main"]["signals"]
     signals["camera_2_trigger"] = copy.deepcopy(signals["camera_trigger"])
     data["default"]["profiles"]["rfp"] = copy.deepcopy(gfp)
