@@ -9,8 +9,7 @@ from rigup.device import action, fact, query, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
-from vxl.devices.light.base import ControlMode
-from vxl.devices.light.laser import Laser
+from vxl.devices.light import ControlMode, Laser
 from vxl_drivers.serial import SerialTransport
 
 DEFAULT_BAUD = 9600

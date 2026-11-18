@@ -12,7 +12,7 @@ from rigup.rig import Rig
 from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
-from vxl.devices.camera import CameraHandle
+from vxl.devices.camera import AreaCameraHandle
 from vxl.devices.daq.clocked import SignalGeneratorHandle
 
 from .errors import HALError, HALStartupError, Violation, ViolationLoc
@@ -104,7 +104,7 @@ class HAL:
         self._topology = topology
         self._rig = Rig(topology.to_rig(), name)
 
-        self.cameras: dict[str, CameraHandle] = {}
+        self.cameras: dict[str, AreaCameraHandle] = {}
         self.lasers: dict[str, DeviceHandle] = {}
         self.continuous_axes: dict[str, ContinuousAxisHandle] = {}
         self.discrete_axes: dict[str, DiscreteAxisHandle] = {}
@@ -212,8 +212,8 @@ class HAL:
             self._device_interfaces[uid] = interface
 
             match interface.kind:
-                case "camera":
-                    self.cameras[uid] = CameraHandle.wrap(handle)
+                case "area_camera":
+                    self.cameras[uid] = AreaCameraHandle.wrap(handle)
                 case "signal_generator":
                     self.signal_generators[uid] = SignalGeneratorHandle.wrap(handle)
                 case "laser_legacy":

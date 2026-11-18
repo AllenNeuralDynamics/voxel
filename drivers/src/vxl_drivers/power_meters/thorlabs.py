@@ -37,7 +37,7 @@ import pyvisa
 from pyvisa.resources import MessageBasedResource
 from rigup.device import fact, integer, number, stream
 
-from vxl.devices.light.meter import PowerMeter
+from vxl.devices.light import PowerMeter
 
 _OVERFLOW = 1e30  # SCPI instruments may encode invalid or overflow results as large finite sentinels
 

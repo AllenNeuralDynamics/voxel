@@ -21,8 +21,7 @@ from pydantic import Field, FiniteFloat, model_validator
 from vxlib.calibration import CalibrationModel, PiecewiseLinearCalibration, PolynomialCalibration
 from vxlib.schema import FrozenModel
 
-from vxl.devices.light.laser import Laser
-from vxl.devices.light.meter import PowerMeter
+from vxl.devices.light import Laser, PowerMeter
 from vxl_drivers.modulators.mpds.hub import InputMode, MPDSHub
 from vxl_drivers.modulators.mpds.settings import MPDSCalibration, MPDSSettings
 

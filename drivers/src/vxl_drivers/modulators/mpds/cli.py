@@ -34,8 +34,7 @@ from rigup.device import Device
 from vxlib.schema import FrozenModel
 
 from rigup import BuildConfig
-from vxl.devices.light.laser import Laser
-from vxl.devices.light.meter import PowerMeter
+from vxl.devices.light import Laser, PowerMeter
 from vxl_drivers.modulators.mpds.calibration import SweepConfig, SweepResult, collect, fit_settings, save_plot
 from vxl_drivers.modulators.mpds.hub import MPDSHub
 from vxl_drivers.modulators.mpds.settings import MPDSSettings

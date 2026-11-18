@@ -10,8 +10,7 @@ from rigup.device import stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
-from vxl.devices.light.base import ControlMode
-from vxl.devices.light.laser import Laser
+from vxl.devices.light import ControlMode, Laser
 
 
 class GenesisMXLaser(Laser):

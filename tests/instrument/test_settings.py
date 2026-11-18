@@ -1,6 +1,6 @@
 import pytest
 
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentState, InstrumentStore
 from vxl.instrument.errors import SettingsPersistenceError, StartupError
 

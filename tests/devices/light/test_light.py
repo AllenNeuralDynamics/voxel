@@ -5,8 +5,7 @@ from rigup.config import DeviceConfig
 from rigup.node import LocalNode
 from vxlib.vector import Span
 
-from vxl.devices.light.laser import LaserHandle
-from vxl.devices.light.modulator import ModulatorHandle
+from vxl.devices.light import LaserHandle, ModulatorHandle
 
 _SIMULATED = "vxl.devices.light.simulated"
 

@@ -43,6 +43,7 @@ from vxl.system import Remote, System, remote_store_fingerprint
 
 if TYPE_CHECKING:
     from vxl.core.instrument.folder import InstrumentFolder
+    from vxl.devices.camera import CameraHandle
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run("open the instrument", requires=()):
             await self._hal.open()
             await self._discover_remote_stores()
-            if problems := await self._axis_position_problems():
+            if problems := await self._open_problems():
                 await self._hal.close()
                 raise StartupError(problems)
             await self._apply_profile(self._active_profile.value)
@@ -387,8 +388,6 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             results = await hal.device(device).props.set(**props)
             if failed := sorted(name for name, result in results.results.items() if not result.is_ok):
                 raise RejectedError(f"'{device}' refused the properties {failed} of profile '{profile_id}'")
-        regions = (hal.cameras[camera].update_roi(channel.fov) for camera, channel in profile.channels.items())
-        await gather_all(*regions, message="camera regions")
         for device, commands in profile.setup.items():
             if not (await hal.device(device).run_commands(commands)).is_ok:
                 raise RejectedError(f"The setup commands of profile '{profile_id}' failed on '{device}'")
@@ -519,6 +518,10 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         named = (profile.channels, profile.positions, profile.props, profile.setup, profile.timelines)
         return on_paths.union(*named)
 
+    async def _open_problems(self) -> Problems:
+        """The problems that an open finds once the devices answer. An instrument adds its own to these."""
+        return await self._axis_position_problems()
+
     async def _axis_position_problems(self) -> Problems:
         """The saved positions that their device cannot take: a name that is not one of a discrete axis's slots, or a
         position for a device that is not an axis of that kind."""
@@ -557,7 +560,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     async def _discover_remote_stores(self) -> None:
         """Keep each object store that every camera's computer has with the same connection as this computer."""
         local = self._system.remotes
-        cameras = self._hal.cameras
+        cameras: dict[DeviceUid, CameraHandle[Any]] = {**self._hal.area_cameras, **self._hal.line_cameras}
         reported = await asyncio.gather(
             *(camera.remote_stores() for camera in cameras.values()), return_exceptions=True
         )

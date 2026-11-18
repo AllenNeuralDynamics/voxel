@@ -4,8 +4,7 @@ import pytest
 from vxlib.vector import IVec2D, Vec2D, Vec3D
 
 from vxl.core.instrument.config import Detector
-from vxl.devices.camera import CameraSensor
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.instruments.spim.geometry import AxisRun, frame_transform
 
 _EXASPIM = Detector(width={"y": 1}, height={"x": -1})

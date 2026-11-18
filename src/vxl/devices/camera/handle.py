@@ -10,16 +10,30 @@ from vxl_records import DatasetLocation, StorageSpec
 from vxlib.coalescer import Coalescer
 from vxlib.vector import Vec2D
 
+from vxl.devices.camera.area import AreaCamera, AreaROI
 from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
-from vxl.devices.camera.roi import AreaROI
 from vxl.live import LiveViewport
 
 _DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
 
 
-class CameraHandle(DeviceHandle[Camera]):
-    """Camera handle with typed methods for preview operations.
+class CameraHandle[D: Camera](DeviceHandle[D]):
+    """Any camera's handle: its node's storage."""
+
+    async def check_writable(self, storage: StorageSpec) -> StorageStatus:
+        """Preflight: prove this camera's node can write ``storage``. Raises if not. Returns the
+        node's storage status (host, resolved root, free bytes)."""
+        result = await self.call("check_writable", storage=storage)
+        return StorageStatus.model_validate(result)
+
+    async def remote_stores(self) -> dict[str, str]:
+        """Return this camera host's configured object stores as name-to-fingerprint mappings."""
+        return _REMOTE_STORES_ADAPTER.validate_python(await self.call("remote_stores"))
+
+
+class AreaCameraHandle(CameraHandle[AreaCamera]):
+    """Area camera handle with typed methods for preview operations.
 
     Works with both local and remote cameras - the transport handles
     the communication details.
@@ -28,7 +42,7 @@ class CameraHandle(DeviceHandle[Camera]):
     updates to the latest with one RPC in flight.
     """
 
-    def __init__(self, adapter: Adapter[Camera]) -> None:
+    def __init__(self, adapter: Adapter[AreaCamera]) -> None:
         super().__init__(adapter)
         self.live_viewport: Coalescer[LiveViewport] = Coalescer(drain=self._set_live_viewport)
         self.roi: PropView[AreaROI] = self.props.view("roi", AreaROI.model_validate)
@@ -75,16 +89,6 @@ class CameraHandle(DeviceHandle[Camera]):
     async def _set_live_viewport(self, viewport: LiveViewport) -> None:
         """Apply a preview viewport to the camera — drain for ``live_viewport``."""
         await self.call("update_live_viewport", viewport)
-
-    async def check_writable(self, storage: StorageSpec) -> StorageStatus:
-        """Preflight: prove this camera's node can write ``storage``. Raises if not. Returns the
-        node's storage status (host, resolved root, free bytes)."""
-        result = await self.call("check_writable", storage=storage)
-        return StorageStatus.model_validate(result)
-
-    async def remote_stores(self) -> dict[str, str]:
-        """Return this camera host's configured object stores as name-to-fingerprint mappings."""
-        return _REMOTE_STORES_ADAPTER.validate_python(await self.call("remote_stores"))
 
     async def open_stack(
         self,

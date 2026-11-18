@@ -9,7 +9,7 @@ from vxlib.vector import Span, Vec3D
 
 from vxl.core.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
 from vxl.core.instrument.state import ProfileId
-from vxl.devices.camera import CameraSensor
+from vxl.devices.camera import AreaROI, CameraSensor
 
 from .config import Scan, SPIMConfig, SPIMProfile
 from .geometry import AxisRun, Transform, footprint, frame_transform
@@ -100,7 +100,7 @@ def _light(
         frames[camera] = frame_transform(
             detectors[camera],
             sensors[camera],
-            channel.fov,
+            profile.fov.get(camera, AreaROI(x=0, y=0, w=sensors[camera].size_px.x, h=sensors[camera].size_px.y)),
             binning=_binning(profile.props.get(camera, {})),
             magnification=magnification,
         )

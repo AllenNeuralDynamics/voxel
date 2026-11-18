@@ -32,8 +32,7 @@ from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Re
 from vxlib.schema import FrozenModel
 
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
-from vxl.devices.camera import CameraHandle, CaptureState
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaCameraHandle, AreaROI, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import HAL, HardwareTopology
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
@@ -142,7 +141,7 @@ class Channel:
     """
 
     uid: str
-    camera: CameraHandle
+    camera: AreaCameraHandle
     laser: DeviceHandle
 
     async def prepare_laser(self) -> None:
@@ -1117,7 +1116,7 @@ class Instrument:
             rot = self._hal.topology.detection[self._channel_config(ch_id).detection].rotation_deg
             ch.camera.live_viewport.update(self._viewport.to_sensor_space(rot) if rot else self._viewport)
 
-    async def _subscribe_camera(self, cam_id: str, camera: CameraHandle) -> None:
+    async def _subscribe_camera(self, cam_id: str, camera: AreaCameraHandle) -> None:
         async def forward_overview(frame: bytes) -> None:
             await self._emit_preview_frame(cam_id, LiveLayer.OVERVIEW, frame)
 

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from vxl.devices.camera.roi import AreaROI, IntRange, LineROI, ROIGrid
+from vxl.devices.camera import AreaROI, IntRange, ROIGrid
 
 
 def test_snap_aligns_the_size_then_the_offset() -> None:
@@ -12,7 +12,5 @@ def test_snap_aligns_the_size_then_the_offset() -> None:
 def test_a_region_needs_a_size_and_no_negative_offset() -> None:
     with pytest.raises(ValidationError):
         AreaROI(x=0, y=0, w=0, h=10)
-    with pytest.raises(ValidationError):
-        LineROI(x=-1, w=10)
     with pytest.raises(ValidationError):
         AreaROI.model_validate({"x": 0, "w": 10, "h": 10})

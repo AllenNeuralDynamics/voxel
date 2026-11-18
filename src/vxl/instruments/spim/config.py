@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, Self
 
-from pydantic import PositiveFloat, model_validator
+from pydantic import Field, PositiveFloat, model_validator
 from vxlib.problems import Problem, Problems
 from vxlib.schema import FrozenModel
 from vxlib.units import Portion
@@ -18,6 +18,7 @@ from vxl.core.instrument.config import (
     Wire,
 )
 from vxl.core.instrument.state import Profile
+from vxl.devices.camera import AreaROI
 
 SOFTWARE = "software"
 """The pacer of a capture that the program runs frame by frame."""
@@ -92,14 +93,19 @@ class SPIMConfig(InstrumentConfig, frozen=True):
 
 
 class SPIMProfile(Profile):
-    """The profile of a SPIM instrument. ``spacing`` gives the µm between frames along the scan axis."""
+    """The profile of a SPIM instrument. ``spacing`` gives the µm between frames along the scan axis. ``fov`` gives
+    the sensor region that a channel's camera reads out; a camera that it leaves out reads its whole sensor."""
 
     spacing: PositiveFloat
+    fov: dict[DeviceUid, AreaROI] = Field(default_factory=dict)
 
     def problems(self, config: InstrumentConfig) -> Problems:
         if not isinstance(config, SPIMConfig):
             raise TypeError(f"a SPIMProfile is for a SPIMConfig, not a {type(config).__name__}")
         problems = super().problems(config)
+        for camera in self.fov.keys() - self.channels.keys():
+            msg = f"'{camera}' has a region in 'fov' but is not a channel of the profile."
+            problems.add("profile.fov.not_channel", msg, "fov", camera)
         if not self._channel_problems(config):  # a wrong channel would repeat as the problems of the chain
             problems += self._chain_problems(config)
         return problems

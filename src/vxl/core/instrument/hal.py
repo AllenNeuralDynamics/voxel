@@ -23,11 +23,9 @@ from vxl.devices.axes.continuous.linear import LinearAxisHandle
 from vxl.devices.axes.continuous.rotation import RotationAxisHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.base import Pin
-from vxl.devices.camera import CameraHandle
-from vxl.devices.light.base import ControlMode, DimmableHandle
-from vxl.devices.light.laser import LaserHandle
-from vxl.devices.light.modulator import ModulatorHandle
-from vxl.devices.light.shutter import ShutterHandle
+from vxl.devices.camera import AreaCameraHandle
+from vxl.devices.camera.line import LineCameraHandle
+from vxl.devices.light import ControlMode, DimmableHandle, LaserHandle, ModulatorHandle, ShutterHandle
 from vxl.devices.node import NodeMonitorHandle
 from vxl.devices.signals.generator.handle import GeneratorHandle
 
@@ -40,7 +38,8 @@ _PINS = TypeAdapter(list[Pin])
 
 
 _HANDLES: dict[str, type[DeviceHandle[Any]]] = {
-    "camera": CameraHandle,
+    "area_camera": AreaCameraHandle,
+    "line_camera": LineCameraHandle,
     "continuous_axis": ContinuousAxisHandle,
     "discrete_axis": DiscreteAxisHandle,
     "generator": GeneratorHandle,
@@ -62,16 +61,18 @@ class DeviceView(FrozenModel):
 
 class HAL:
     """The rig of 1 instrument. Once open, :meth:`device` gives the handle of a device by name, of the class its kind
-    has, such as :class:`CameraHandle`. ``stage``, ``cameras`` and ``signal_generators`` hold the same handles by role,
-    each of the class that its role needs: the checks at open prove it. The lasers, the modulators and the shutters are
-    not public: the HAL sets their powers and what controls them, lights the specimen, and makes it dark."""
+    has, such as :class:`AreaCameraHandle`. ``stage``, ``area_cameras``, ``line_cameras`` and ``signal_generators`` hold
+    the same handles by role, each of the class that its role needs: the checks at open prove it. The lasers, the
+    modulators and the shutters are not public: the HAL sets their powers and what controls them, lights the specimen,
+    and makes it dark."""
 
     def __init__(self, config: InstrumentConfig) -> None:
         self._config = config
         self._rig = Rig(config, config.name)
         self._devices: dict[DeviceUid, DeviceHandle[Any]] = {}
         self._stage: dict[SpecimenAxis, LinearAxisHandle] = {}
-        self._cameras: dict[DeviceUid, CameraHandle] = {}
+        self._area_cameras: dict[DeviceUid, AreaCameraHandle] = {}
+        self._line_cameras: dict[DeviceUid, LineCameraHandle] = {}
         self._lasers: dict[DeviceUid, LaserHandle] = {}
         self._signal_generators: dict[DeviceUid, GeneratorHandle] = {}
         self._modulators: dict[DeviceUid, ModulatorHandle] = {}
@@ -152,8 +153,12 @@ class HAL:
         return self._stage
 
     @property
-    def cameras(self) -> Mapping[DeviceUid, CameraHandle]:
-        return self._cameras
+    def area_cameras(self) -> Mapping[DeviceUid, AreaCameraHandle]:
+        return self._area_cameras
+
+    @property
+    def line_cameras(self) -> Mapping[DeviceUid, LineCameraHandle]:
+        return self._line_cameras
 
     @property
     def signal_generators(self) -> Mapping[DeviceUid, GeneratorHandle]:
@@ -293,7 +298,8 @@ class HAL:
             for axis, uid in self._config.stage.devices().items()
             if isinstance(handle := handles.get(uid), LinearAxisHandle)
         }
-        self._cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, CameraHandle)}
+        self._area_cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, AreaCameraHandle)}
+        self._line_cameras = {uid: handle for uid, handle in handles.items() if isinstance(handle, LineCameraHandle)}
         self._lasers = {uid: handle for uid, handle in handles.items() if isinstance(handle, LaserHandle)}
         self._signal_generators = {
             uid: handle for uid, handle in sorted(handles.items()) if isinstance(handle, GeneratorHandle)
@@ -306,17 +312,22 @@ class HAL:
         """Each device whose role needs another kind of device. A device with 2 roles is checked for each. A device that
         did not build or answer has its own problem already."""
         config = self._config
+        cameras = ("area_camera", "line_camera")
         needs = [
-            *((uid, "linear_axis") for uid in config.stage.devices().values()),
-            *((uid, "camera") for uid in config.optics.detectors()),
-            *((uid, "laser") for uid in config.optics.sources() if uid in config.all_devices),
-            *((uid, "discrete_axis") for uid in config.optics.routers() if uid in config.all_devices),
+            *((uid, "linear_axis", ("linear_axis",)) for uid in config.stage.devices().values()),
+            *((uid, "camera", cameras) for uid in config.optics.detectors()),
+            *((uid, "laser", ("laser",)) for uid in config.optics.sources() if uid in config.all_devices),
+            *(
+                (uid, "discrete_axis", ("discrete_axis",))
+                for uid in config.optics.routers()
+                if uid in config.all_devices
+            ),
         ]
         problems = Problems()
-        for uid, needed in dict.fromkeys(needs):
-            if (interface := interfaces.get(uid)) is not None and interface.kind != needed:
-                msg = f"'{uid}' is not a {needed} device: it is a {interface.kind} device."
-                problems.add(f"rig.device.not_{needed}", msg, *config.component_location(uid))
+        for uid, role, kinds in dict.fromkeys(needs):
+            if (interface := interfaces.get(uid)) is not None and interface.kind not in kinds:
+                msg = f"'{uid}' is not a {' or '.join(kinds)} device: it is a {interface.kind} device."
+                problems.add(f"rig.device.not_{role}", msg, *config.component_location(uid))
         return problems
 
     def _autosave_problems(self, interfaces: Mapping[DeviceUid, DeviceInterface]) -> Problems:
@@ -335,7 +346,7 @@ class HAL:
 
     async def _camera_geometry_problems(self) -> Problems:
         """Read each camera's sensor: a camera whose sensor cannot be read is a problem."""
-        cameras = list(self._cameras.items())
+        cameras = list(self._area_cameras.items())
         results = await asyncio.gather(*(camera.sensor.get() for _, camera in cameras), return_exceptions=True)
         problems = Problems()
         for (uid, _), result in zip(cameras, results, strict=True):
@@ -400,7 +411,7 @@ class HAL:
             unsub()
         self._props_unsubs = []
         try:
-            await asyncio.gather(*(camera.close_live_updates() for camera in self._cameras.values()))
+            await asyncio.gather(*(camera.close_live_updates() for camera in self._area_cameras.values()))
         finally:
             try:
                 await self._rig.close()
@@ -408,7 +419,8 @@ class HAL:
                 for found in (
                     self._devices,
                     self._stage,
-                    self._cameras,
+                    self._area_cameras,
+                    self._line_cameras,
                     self._lasers,
                     self._modulators,
                     self._shutters,

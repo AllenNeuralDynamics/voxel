@@ -14,8 +14,7 @@ from vxlib.vector import IVec2D, Vec2D, Vec3D
 
 from tests.instruments.spim.support import load_file
 from vxl.core.instrument.config import Detector
-from vxl.devices.camera import CameraSensor
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.instruments.spim.geometry import Transform, frame_transform
 from vxl.instruments.spim.plan import _light
 

@@ -11,7 +11,7 @@
 #   rig.scan       the axis, its motion, and the pacer. The rest of the chain follows from the wires.
 #   default        positions and profiles: no imaging wrapper, no channel map, no instrument-level props.
 #   positions      a plain position, or the rule by which a device follows the stage.
-#   a profile      channels by camera (with fov), positions, props, timelines and spacing.
+#   a profile      channels by camera, fov for a camera that reads less than its sensor, positions, props, timelines, spacing.
 #   a timeline     only the wires it plays. A wire with no signal stays at rest: off for a digital wire, park for an analog wire.
 
 rig:
@@ -166,8 +166,8 @@ default:
   profiles:                                       # a profile is a mini instrument: what is on at the same moment, and all it needs to run
     gfp:
       label: GFP
-      channels:                                   # 1 entry for each camera that is on: its light and the region it reads out
-        camera: {illumination: laser_488, fov: {x: 0, y: 0, w: 14192, h: 10640}}
+      channels:                                   # 1 entry for each camera that is on: its light. Each camera reads its whole sensor: no fov
+        camera: {illumination: laser_488}
       positions: {fw_emission: BP525}             # the devices that this profile sets, 1 value each
       power:                                      # the power of each laser and modulator that software sets
         laser_488: {full: 100 mW, dim: 10 mW}
@@ -188,7 +188,7 @@ default:
     rfp:                                          # real profiles differ in focus, timing and signal size. Here they share values only because this is an example
       label: RFP
       channels:
-        camera: {illumination: laser_561, fov: {x: 0, y: 0, w: 14192, h: 10640}}
+        camera: {illumination: laser_561}
       positions: {fw_emission: BP600}
       power:                                      # the power of each laser and modulator that software sets
         laser_561: {full: 100 mW, dim: 10 mW}
@@ -209,7 +209,7 @@ default:
     cy5:
       label: Cy5
       channels:
-        camera: {illumination: laser_640, fov: {x: 0, y: 0, w: 14192, h: 10640}}
+        camera: {illumination: laser_640}
       positions: {fw_emission: BP700}
       power:                                      # the power of each laser and modulator that software sets
         laser_640: {full: 100 mW, dim: 10 mW}

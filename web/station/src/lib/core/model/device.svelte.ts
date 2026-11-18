@@ -552,7 +552,7 @@ export function createDevice(
   assignment: DeviceRoleAssignment
 ): DeviceHandle {
   switch (snapshot.interface?.kind) {
-    case 'camera':
+    case 'area_camera':
       return new CameraHandle(client, base, snapshot, disabled, assignment);
     case 'laser_legacy':
       return new LaserHandle(client, base, snapshot, disabled, assignment);

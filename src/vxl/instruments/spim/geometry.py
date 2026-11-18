@@ -13,8 +13,7 @@ import numpy as np
 from vxlib.vector import Span, Vec3D
 
 from vxl.core.instrument.config import Detector, DeviceUid, SpecimenAxis
-from vxl.devices.camera import CameraSensor
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI, CameraSensor
 
 
 @dataclass(frozen=True)

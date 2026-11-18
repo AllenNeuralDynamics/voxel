@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI
 
 
 def test_sensor_roi_rejects_unknown_fields() -> None:

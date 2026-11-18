@@ -60,7 +60,7 @@ _CONFIG: dict[str, Any] = {
         },
         "profiles": {
             "gfp": {
-                "channels": {"camera": {"illumination": "laser", "fov": {"x": 0, "y": 0, "w": 2048, "h": 2048}}},
+                "channels": {"camera": {"illumination": "laser"}},
                 "positions": {"fw": "GFP"},
                 "timelines": {
                     "ao_main": {

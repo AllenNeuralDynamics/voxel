@@ -6,8 +6,7 @@ from rigup.device import fact
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
-from vxl.devices.light.base import ControlMode
-from vxl.devices.light.modulator import Modulator
+from vxl.devices.light import ControlMode, Modulator
 from vxl_drivers.modulators.mpds.hub import InputMode, MPDSHub
 from vxl_drivers.modulators.mpds.settings import MPDSSettings
 

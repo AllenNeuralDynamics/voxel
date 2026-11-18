@@ -28,8 +28,17 @@ from rigup.device import choice, integer, number
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
+from vxl.devices.camera import (
+    AreaCamera,
+    AreaROI,
+    CameraSensor,
+    IntRange,
+    PixelFormat,
+    ROIGrid,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=1.0, x=1.0)
 
@@ -127,7 +136,7 @@ class ExposureTime(MinMaxIncProp):
 
 
 @final
-class VieworksCamera(Camera):
+class VieworksCamera(AreaCamera):
     BUFFER_SIZE_MB = 4096  # 4 GB
 
     def __init__(

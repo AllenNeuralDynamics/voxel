@@ -8,13 +8,15 @@ from pydantic import PositiveFloat
 from rigup.activity import Activity, ActivityInfo
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
+from vxlib.problems import Problems
 from vxlib.reactivity import Cell, Readable
 
 from vxl.core.errors import RejectedError
 from vxl.core.instrument.base import Instrument, InstrumentView
 from vxl.core.instrument.config import DeviceUid
 from vxl.core.instrument.state import ProfileId
-from vxl.devices.camera.roi import AreaROI
+from vxl.core.instrument.store import ABSENT
+from vxl.devices.camera import AreaROI
 from vxl.system import System
 
 from .config import SPIMConfig
@@ -95,16 +97,16 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
 
     async def set_camera_region(self, camera: DeviceUid, region: AreaROI | None) -> AreaROI:
         """Set a camera's region, or its full frame when ``region`` is ``None``, and give back the region the camera
-        applied after snapping it to its grid. Save that region into the active profile when the camera is one of its
-        channels. A save cannot be undone."""
+        applied after snapping it to its grid. When the camera is a channel of the active profile, save that region
+        as its ``fov`` there, or drop its ``fov`` for the full frame. A save cannot be undone."""
         async with self._scheduler.run("set a camera region", requires={camera, self._store}):
-            handle = self._hal.cameras.get(camera)
+            handle = self._hal.area_cameras.get(camera)
             if handle is None:
                 raise RejectedError(f"'{camera}' is not a camera")
             applied = await (handle.reset_roi() if region is None else handle.update_roi(region))
             active = self._active_profile.value
             if camera in self._store.value.profiles[active].channels:
-                await self._store.update({("profiles", active, "channels", camera, "fov"): applied})
+                await self._store.update({("profiles", active, "fov", camera): ABSENT if region is None else applied})
             return applied
 
     async def update_writer_settings(self, **fields: Unpack[WriterFields]) -> None:
@@ -159,8 +161,26 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 raise RejectedError("The new order must name each task of the plan 1 time")
             await edit.record({("plan",): [tasks[task_id] for task_id in task_ids]})
 
+    async def _open_problems(self) -> Problems:
+        """Also each channel camera that is not an area camera: SPIM images with area cameras only."""
+        problems = await super()._open_problems()
+        for profile_id, profile in self._store.value.profiles.items():
+            for camera in sorted(profile.channels.keys() & self._hal.line_cameras.keys()):
+                msg = f"'{camera}' is a line camera; SPIM needs area cameras."
+                problems.add("spim.camera.not_area", msg, "profiles", profile_id, "channels", camera)
+        return problems
+
     async def _apply_profile(self, profile_id: ProfileId) -> None:
+        """Apply the profile as the base does, then each channel camera's region: its ``fov``, or its whole sensor."""
         await super()._apply_profile(profile_id)
+        profile, cameras = self._store.value.profiles[profile_id], self._hal.area_cameras
+        regions = (
+            cameras[camera].reset_roi()
+            if (region := profile.fov.get(camera)) is None
+            else cameras[camera].update_roi(region)
+            for camera in profile.channels
+        )
+        await gather_all(*regions, message="camera regions")
         await self._preview_channels.set(self._preview_choice(profile_id))
 
     def _preview_choice(self, profile_id: ProfileId) -> tuple[DeviceUid, ...]:
@@ -185,7 +205,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         if await axis.scan_state.get() != "idle":
             await axis.halt()
         try:
-            await gather_all(*(hal.cameras[c].start_preview() for c in cameras), message="cameras")
+            await gather_all(*(hal.area_cameras[c].start_preview() for c in cameras), message="cameras")
             lit = await hal.lights_on(sources)
             await gather_all(*(hal.signal_generators[g].start() for g in generators), message="generators")
         except BaseException:
@@ -222,7 +242,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         steps = (
             ((hal.lights_off(),), "lights off"),
             ((hal.signal_generators[g].stop() for g in generators), "generators"),
-            ((hal.cameras[c].stop_preview() for c in cameras), "cameras"),
+            ((hal.area_cameras[c].stop_preview() for c in cameras), "cameras"),
         )
         failures: list[BaseException] = []
         for calls, message in steps:

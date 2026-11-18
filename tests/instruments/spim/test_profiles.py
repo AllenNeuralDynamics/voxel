@@ -43,6 +43,7 @@ def _unlit_laser(data: dict[str, Any]) -> None:
         (_unlit_laser, "profile.channel.no_path"),
         (_second_camera, "profile.channel.dark"),
         (lambda d: profile(d)["positions"].update(camera="x"), "profile.position.unexpected"),
+        (lambda d: profile(d).update(fov={"fw": {"x": 0, "y": 0, "w": 64, "h": 64}}), "profile.fov.not_channel"),
         (lambda d: profile(d).update(setup={"x_axis": []}), "profile.setup_inactive"),
         (
             lambda d: profile(d)["timelines"].update(camera=profile(d)["timelines"]["ao_main"]),

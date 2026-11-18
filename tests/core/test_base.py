@@ -54,11 +54,7 @@ _RIG: dict[str, Any] = {
     },
 }
 
-_DEFAULT: dict[str, Any] = {
-    "profiles": {
-        "main": {"channels": {"camera": {"illumination": "laser_488", "fov": {"x": 0, "y": 0, "w": 64, "h": 64}}}}
-    }
-}
+_DEFAULT: dict[str, Any] = {"profiles": {"main": {"channels": {"camera": {"illumination": "laser_488"}}}}}
 
 
 class _State(InstrumentState, frozen=True):
@@ -99,7 +95,7 @@ async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
     kinds = {uid: view.interface.kind for uid, view in views.items()}
 
     assert set(kinds) == set(_RIG["devices"])
-    assert (kinds["camera"], kinds["laser_488"], kinds["x_axis"]) == ("camera", "laser", "linear_axis")
+    assert (kinds["camera"], kinds["laser_488"], kinds["x_axis"]) == ("area_camera", "laser", "linear_axis")
     assert views["laser_488"].props
 
 

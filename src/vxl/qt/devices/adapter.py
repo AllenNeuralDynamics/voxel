@@ -273,7 +273,7 @@ class DevicesStore(QObject):
 
     def get_cameras(self) -> dict[str, DeviceHandleQt]:
         """Get all camera device adapters."""
-        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "camera"}
+        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "area_camera"}
 
     def get_filter_wheels(self) -> dict[str, DeviceHandleQt]:
         """Get all filter wheel device adapters."""

@@ -55,11 +55,7 @@ _TEMPLATE: dict[str, Any] = {
             "camera": {"width": {"y": 1}, "height": {"x": -1}},
         },
     },
-    "default": {
-        "profiles": {
-            "main": {"channels": {"camera": {"illumination": "laser", "fov": {"x": 0, "y": 0, "w": 64, "h": 64}}}}
-        }
-    },
+    "default": {"profiles": {"main": {"channels": {"camera": {"illumination": "laser"}}}}},
 }
 
 

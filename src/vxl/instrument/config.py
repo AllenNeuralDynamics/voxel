@@ -9,7 +9,7 @@ from rigup.device.results import CommandRequest
 from vxlib.schema import FrozenModel, identifier
 
 from vxl._utils.color import Color
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI
 from vxl.devices.daq.clocked import Signals
 from vxl.hal import DiscreteAxisPositions, HardwareTopology
 from vxl.hal.topology import SelectRoutingDefinition, SplitRoutingDefinition

@@ -8,8 +8,17 @@ from rigup.device import action, choice, failsafe, integer, number, stream
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
+from vxl.devices.camera import (
+    AreaCamera,
+    AreaROI,
+    CameraSensor,
+    IntRange,
+    PixelFormat,
+    ROIGrid,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
 
 from .sdk.dcam import DCAM_IDSTR, DCAMERR, DCAMPROP_ATTR, Dcam, Dcamapi
 from .sdk.dcamapi4 import DCAMCAP_TRANSFERINFO
@@ -69,7 +78,7 @@ def _get_dcamapi() -> Dcamapi:
     return Dcamapi()
 
 
-class HamamatsuCamera(Camera):
+class HamamatsuCamera(AreaCamera):
     """Hamamatsu camera driver using DCAM SDK.
 
     Supports Hamamatsu sCMOS cameras like ORCA-Flash and ORCA-Fusion.

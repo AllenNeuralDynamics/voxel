@@ -23,7 +23,6 @@ from vxl.core.instrument.config import (
 )
 from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
-from vxl.devices.camera.roi import AreaROI
 from vxl.metadata import ExperimentMetadata, MetadataCls
 
 ProfileId = Annotated[str, identifier("Profile id")]
@@ -33,10 +32,9 @@ PropertyName = Annotated[str, Field(min_length=1)]
 
 
 class Channel(FrozenModel):
-    """What 1 camera images in a profile: its light source, and the sensor region that the camera reads out."""
+    """What 1 camera images in a profile: its light source."""
 
     illumination: DeviceUid
-    fov: AreaROI
     label: str | None = None
 
 

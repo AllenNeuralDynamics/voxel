@@ -8,8 +8,17 @@ import pco  # pyright: ignore[reportMissingImports]
 from rigup.device import action, choice, failsafe, integer, number, stream
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.devices.camera.base import Camera, CameraSensor, PixelFormat, StreamInfo, TriggerMode, TriggerPolarity
-from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
+from vxl.devices.camera import (
+    AreaCamera,
+    AreaROI,
+    CameraSensor,
+    IntRange,
+    PixelFormat,
+    ROIGrid,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
 
 DEFAULT_PIXEL_SIZE_UM = Vec2D(y=6.5, x=6.5)
 
@@ -42,7 +51,7 @@ _READOUT_MODE_MAP: dict[str, int] = {
 }
 
 
-class PCOCamera(Camera):
+class PCOCamera(AreaCamera):
     """PCO camera driver using pco SDK.
 
     Supports PCO sCMOS cameras including Edge series.

@@ -42,7 +42,7 @@ class _FakeRig:
         self.build_errors.clear()
 
 
-def _handle(uid: str, device_type: str = "camera", *, properties=None, property_error=None, interface_error=None):
+def _handle(uid: str, device_type: str = "area_camera", *, properties=None, property_error=None, interface_error=None):
     adapter = Mock(spec=Adapter)
     adapter.uid = uid
     adapter.cached_interface = AsyncMock(

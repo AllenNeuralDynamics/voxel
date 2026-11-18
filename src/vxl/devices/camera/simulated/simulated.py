@@ -7,23 +7,23 @@ from typing import ClassVar, cast, final
 import numpy as np
 from rigup.device import choice, integer, number
 
+from vxl.devices.camera.area import AreaCamera, AreaROI, ROIGrid
 from vxl.devices.camera.base import (
     BINNING_OPTIONS,
     PIXEL_FMT_TO_DTYPE,
     PIXEL_FMT_TO_VALID_BITS,
-    Camera,
     CameraSensor,
+    IntRange,
     PixelFormat,
     StreamInfo,
     TriggerMode,
     TriggerPolarity,
 )
-from vxl.devices.camera.roi import AreaROI, IntRange, ROIGrid
 from vxl.devices.camera.simulated.frame_source import FrameSource, FrameSourceConfig, create_frame_source
 
 
 @final
-class SimulatedCamera(Camera):
+class SimulatedCamera(AreaCamera):
     """Frame simulator with configurable synthetic buffer telemetry.
 
     Buffer occupancy walks by at most one frame per update interval while streaming.

@@ -1,0 +1,719 @@
+"""An area camera: the device that reads out a rectangle of its sensor, and the controller that runs it."""
+
+import asyncio
+import logging
+import time
+from abc import abstractmethod
+from collections.abc import Mapping
+from contextlib import suppress
+from pathlib import PurePosixPath
+from typing import Literal, cast
+
+import numpy as np
+from ome_zarr_writer import (
+    FrameLease,
+    OMEZarrWriter,
+    UIVec3D,
+    UVec3D,
+    WriterConfig,
+    WriterSettings,
+)
+from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
+from ome_zarr_writer.writer import BatchMetrics
+from pydantic import BaseModel, Field
+from rigup.device import (
+    StreamTier,
+    action,
+    choice,
+    fact,
+    failsafe,
+    integer,
+    number,
+    query,
+    stream,
+)
+from vxl_records import DatasetLocation, StorageSpec
+from vxlib.dtype import Dtype
+from vxlib.schema import FrozenModel
+from vxlib.vector import IVec2D, Vec2D
+
+from vxl.devices.base import DeviceType
+from vxl.devices.camera.base import (
+    BINNING_OPTIONS,
+    PIXEL_FMT_TO_DTYPE,
+    PIXEL_FMT_TO_VALID_BITS,
+    Camera,
+    CameraController,
+    CameraMode,
+    CameraSensor,
+    CaptureState,
+    IntRange,
+    PixelFormat,
+    StreamInfo,
+    TriggerMode,
+    TriggerPolarity,
+)
+from vxl.live import LiveFrame, LiveGenerator, LiveLayer, LiveViewport, ValidBits
+from vxl.system import System
+
+log = logging.getLogger(__name__)
+
+
+class ROIGrid(BaseModel):
+    """Hardware constraints for sensor ROI, one range per axis.
+
+    Each axis describes valid sizes (width/height) with min, max, and step.
+    Offset constraints are derived: min=0, max=axis.max - snapped_size, same step.
+    """
+
+    h: IntRange  # horizontal: valid widths
+    v: IntRange  # vertical: valid heights
+
+
+def _snap(value: int, r: IntRange) -> int:
+    value = max(r.min, min(value, r.max))
+    remainder = (value - r.min) % r.step
+    if remainder != 0:
+        value = value - remainder if remainder < r.step / 2 else value + (r.step - remainder)
+    return min(value, r.max)
+
+
+class AreaROI(FrozenModel):
+    """The region of an area camera's sensor that is read out."""
+
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    w: int = Field(gt=0)
+    h: int = Field(gt=0)
+
+    def snap(self, grid: ROIGrid) -> "AreaROI":
+        """Return a new region clamped and aligned to the given grid.
+
+        Snaps size first, then derives offset bounds from the snapped size.
+        """
+        w = _snap(self.w, grid.h)
+        h = _snap(self.h, grid.v)
+        x = _snap(self.x, IntRange(min=0, max=grid.h.max - w, step=grid.h.step))
+        y = _snap(self.y, IntRange(min=0, max=grid.v.max - h, step=grid.v.step))
+        return AreaROI(x=x, y=y, w=w, h=h)
+
+
+class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.5}):
+    def __init__(
+        self,
+        device: "AreaCamera",
+        *,
+        streaming: Mapping[StreamTier, float] | None = None,
+        system: System | None = None,
+    ):
+        super().__init__(device, streaming=streaming, system=system)
+        self._mode = CameraMode.IDLE
+        self._preview_task: asyncio.Task | None = None
+        self._frame_idx = 0
+        self._live = LiveGenerator(sink=self._on_live_frame, uid=device.uid)
+        self._writer: OMEZarrWriter | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._task_kind: Literal["batch", "close"] | None = None
+        self._publish_tasks: dict[LiveLayer, asyncio.Task[None]] = {}
+        # Preview-publish counters (best-effort publish is skip-if-busy); reported per stack.
+        self._ram = self._system.ram
+        self._ram.reserve(self.device.uid, weight=1.0)
+
+    async def close(self) -> None:
+        self._publish_fn = None
+        self._live.close()
+        for task in self._publish_tasks.values():
+            task.cancel()
+        self._publish_tasks.clear()
+        if self._writer is not None:  # free the reusable ring (its slots' workers + shared memory)
+            await self._run(self._writer.close)
+            self._writer = None
+        self._ram.release(self.device.uid)
+        await super().close()
+
+    @query()
+    def ram_budget_bytes(self) -> int:
+        """Return this camera's current share of the host RAM budget."""
+        return self._ram.reserved(self.device.uid)
+
+    @property
+    @stream(label="Camera Mode")
+    def mode(self) -> CameraMode:
+        return self._mode
+
+    @property
+    @stream("fast")
+    def writer_metrics(self) -> list[BatchMetrics]:
+        return self._writer.batches if self._writer else []
+
+    def _on_live_frame(self, frame: LiveFrame) -> None:
+        task = self._publish_tasks.get(frame.header.layer)
+        if task is not None and not task.done():
+            self._live.health.record_publish_drop()  # Gate 2 drop: prior publish still in flight
+            return
+        self._live.health.record_publish()
+        self._publish_tasks[frame.header.layer] = asyncio.create_task(self._publish_live(frame))
+
+    async def _publish_live(self, frame: LiveFrame) -> None:
+        topic = "live" if frame.header.layer is LiveLayer.OVERVIEW else "live_viewport"
+        with suppress(RuntimeError):
+            await self.publish(topic, frame.pack())
+
+    @action()
+    async def update_live_viewport(self, viewport: LiveViewport):
+        task = self._live.set_viewport(
+            viewport,
+            regenerate=self._mode is CameraMode.IDLE,
+        )
+        await task if task is not None else None
+
+    @action()
+    async def reset_live_stream(self) -> str:
+        """Discard pending preview work and return the new source-stream identity."""
+        return self._live.reset_stream()
+
+    @action()
+    async def start_preview(
+        self,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> str:
+        """Start preview mode. Returns topic name where frames will be published."""
+        if self._mode != CameraMode.IDLE:
+            raise RuntimeError(f"Cannot start preview: camera in {self._mode} mode")
+
+        # start() lazily allocates the buffer, configures the trigger, and begins (frame_count=None → infinite).
+        await self._run(
+            lambda: self.device.start(frame_count=None, trigger_mode=trigger_mode, trigger_polarity=trigger_polarity)
+        )
+
+        self._mode = CameraMode.PREVIEW
+        self._frame_idx = 0
+        self._live.reset_stream()
+        self._preview_task = asyncio.create_task(self._preview_loop())
+
+        return "live"
+
+    def _valid_bits(self) -> ValidBits:
+        return PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.device.pixel_format))]
+
+    async def _preview_loop(self):
+        try:
+            while self._mode == CameraMode.PREVIEW:
+                frame, valid_bits = await self._run(lambda: (self.device.grab_frame_owned(), self._valid_bits()))
+                if self._mode != CameraMode.PREVIEW:
+                    break
+                self._live.submit_frame(frame, idx=self._frame_idx, valid_bits=valid_bits)
+                self._frame_idx += 1
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            self.log.exception("Preview loop error")
+            self._mode = CameraMode.IDLE
+
+    @failsafe()
+    async def stop_preview(self):
+        if self._mode != CameraMode.PREVIEW:
+            return
+
+        self._mode = CameraMode.IDLE
+        if self._preview_task:
+            await self._preview_task
+            self._preview_task = None
+        self._live.cancel_pending()
+        await self._run(self.device.stop)
+        await self._run(self.device.free_buffer)
+
+    @action()
+    async def open_stack(
+        self,
+        *,
+        num_frames: int,
+        z_step: float,
+        magnification: float,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
+        settings: WriterSettings,
+    ) -> DatasetLocation:
+        """Prepare the camera + writer for a stack and return its durable dataset location.
+
+        ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
+        under it (e.g. ``task/profile/channel``); the node resolves it against its :class:`System` and
+        the writer names it ``<subpath>.ome.zarr``. ``num_frames``/``z_step`` are the volume's
+        geometry; ``magnification`` converts the sensor-space ``effective_pixel_size_um`` into the
+        sample-space lateral voxel size. ``settings`` are the broadcast output-format knobs. The
+        returned location describes the destination while it is being written; OME-Zarr metadata is
+        authoritative for dataset geometry. The trigger is configured per-batch in ``begin_batch``.
+        """
+        if self._mode != CameraMode.IDLE:  # a stack already open (or previewing) → mode is not IDLE
+            raise RuntimeError(f"Cannot open stack: camera in {self._mode} mode")
+
+        self._mode = CameraMode.ACQUISITION
+        self._frame_idx = 0
+        self._live.reset_stream()
+        self._task = None
+        self._task_kind = None
+
+        # Allocate buffers eagerly (after ROI is set), so every batch's start() is fast.
+        _t = time.perf_counter()
+        await self._run(self.device.allocate_buffer)
+        log.info("allocate_buffer for %s took %.1fs", self.device.uid, time.perf_counter() - _t)
+
+        # Resolve the logical StorageSpec to a concrete omezarr Storage, then build the writer config:
+        # the broadcast `settings` (knobs) + this camera's geometry (frame size, voxel size from
+        # z_step + magnification) + dtype from the device's pixel format. Where/how to write lives on
+        # the Storage; the config is purely the dataset spec.
+        dest = self._system.resolve_storage(storage, subpath)
+        frame, eff_px, dtype = await self._run(
+            lambda: (
+                self.device.frame_size_px,
+                self.device.effective_pixel_size_um(magnification),
+                self.device.pixel_type,
+            )
+        )
+        cfg = WriterConfig(
+            **settings.model_dump(),
+            volume_shape=UIVec3D(z=num_frames, y=frame.y, x=frame.x),
+            voxel_size=UVec3D(z=z_step, y=eff_px.y, x=eff_px.x),
+            dtype=dtype,
+        )
+
+        # The coordinator persists across volumes so its ring is reused. Ring sizing happens inside
+        # begin_stack via `_size_ring`, and only when it actually (re)allocates — reusing a ring
+        # allocates nothing, so there is no RAM budget to check.
+        if self._writer is None:
+            self._writer = OMEZarrWriter()
+        _t = time.perf_counter()
+        self._writer.begin_stack(cfg, dest, sizer=self._size_ring)
+        log.info(
+            "OMEZarrWriter begin_stack for %s took %.1fs",
+            self.device.uid,
+            time.perf_counter() - _t,
+        )
+
+        log.info(
+            "Stack init for %s → %s: batch_z=%d",
+            self.device.uid,
+            self._writer.target,
+            cfg.batch_z,
+        )
+        target = self._writer.target
+        if target is None:
+            raise RuntimeError("writer did not expose a dataset target")
+        return self._system.describe_dataset_location(storage, target)
+
+    def _size_ring(self, config: WriterConfig) -> int:
+        """Choose the depth of a ring the writer is about to allocate.
+
+        Called by ``begin_stack`` only on the allocating path, and only after the previous ring has been
+        released — so the RAM share read here is not depressed by memory this camera is giving back.
+        Refuses below ``MIN_SLOTS``: a single slot would serialize collect against flush.
+        """
+        budget = self.ram_budget_bytes()
+        available = System.available_ram_bytes()
+        slots = slots_for_budget(
+            config.batch_shape,
+            config.max_level,
+            config.dtype,
+            budget_bytes=budget,
+            available_bytes=available,
+            label=self.device.uid,
+        )
+        log.info(
+            "Sizing ring for %s: %d slots (%.2f GB/slot peak, %.2f GB share, %.2f GB free)",
+            self.device.uid,
+            slots,
+            per_slot_bytes(config.batch_shape, config.max_level, config.dtype) / 1e9,
+            budget / 1e9,
+            available / 1e9,
+        )
+        return slots
+
+    @action()
+    async def close_stack(self) -> None:
+        """Drain and close the writer in the background, then disarm the camera. Returns immediately;
+        poll :meth:`capture_state` until ``CLOSED``. Draining/uploading can take a while, so it runs
+        off the RPC path rather than blocking the call."""
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("Capture task already in progress.")
+        self._task = asyncio.create_task(self._close_stack())
+        self._task_kind = "close"
+
+    async def _close_stack(self) -> None:
+        """Flush and close the writer, then reset the camera to a reusable IDLE state.
+
+        The camera is always reset even if ``writer.end_stack()`` raises. A failed writer ring remains
+        owned but poisoned until preview releases its readers; the next stack or :meth:`release_writer`
+        then replaces it safely.
+        """
+        self._live.cancel_pending()
+        try:
+            if self._writer is not None:
+                await self._run(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
+        finally:
+            await self._run(self.device.free_buffer)
+            self._mode = CameraMode.IDLE
+        log.info("Stack closed for %s", self.device.uid)
+        # Preview health for the stack: how many frames got an overview vs were dropped (best-effort),
+        # overview gen-time, and publish drops. overview_busy_drops climbing means gen can't hold 6fps.
+        pv = self._live.health.snapshot()
+        log.info(
+            "Preview health %s: frames=%d overview_gen=%d overview_busy_drops=%d "
+            "gen_ms(avg=%.1f max=%.1f) | publish_sent=%d publish_busy_drops=%d",
+            self.device.uid,
+            pv.frames,
+            pv.overviews_generated,
+            pv.overview_busy_drops,
+            pv.generation_ms_average,
+            pv.generation_ms_max,
+            pv.publish_sent,
+            pv.publish_busy_drops,
+        )
+
+    @action()
+    async def release_writer(self) -> None:
+        """Free the reusable writer ring (its worker processes + shared memory) while keeping the
+        controller alive for preview / the next acquisition, which re-allocates the ring cold.
+
+        The ring is otherwise held from the first ``open_stack`` until ``close``; releasing it here
+        (e.g. once an acquisition run ends) avoids holding ~hundreds of GB resident while idle. No-op
+        if a capture task is still active — freeing a ring mid-flush would corrupt in-flight writes.
+        """
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("Cannot release writer while a capture task is in progress.")
+        if self._writer is not None:
+            self._live.cancel_pending()
+            self._live.clear_frame()
+            await self._run(self._writer.close)
+            self._writer = None
+            log.info("Writer ring released for %s", self.device.uid)
+
+    @property
+    @stream("fast")
+    def ready_for_batch(self) -> bool:
+        """Whether the writer has at least one free slot to accept the next batch.
+
+        True when no stack is initialized, or when at least one ring-buffer slot
+        is IDLE.
+        """
+        return self._writer is None or self._writer.ready_for_batch
+
+    @action()
+    async def begin_batch(
+        self,
+        num_frames: int,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> None:
+        """Arm the trigger for ``num_frames`` frames and start grabbing them in the background.
+
+        Waits for a free writer slot, then arms the camera before returning — so the caller can start
+        the AO/triggers as soon as this resolves. Poll :meth:`capture_state` for completion; frame and
+        pipeline progress stream via ``writer_metrics``. Must call ``open_stack`` first.
+        """
+        if self._writer is None:
+            raise RuntimeError("No stack open. Call open_stack() first.")
+        if self._mode != CameraMode.ACQUISITION:
+            raise RuntimeError(f"Cannot capture batch: camera in {self._mode} mode")
+        if self._task is not None and not self._task.done():
+            raise RuntimeError("Capture task already in progress.")
+        writer = self._writer
+        while True:  # wait for a free ring slot before arming (a prior batch may still be flushing)
+            if writer.ready_for_batch:
+                break
+            await asyncio.sleep(0.005)
+        await self._run(
+            lambda: self.device.start(
+                frame_count=num_frames, trigger_mode=trigger_mode, trigger_polarity=trigger_polarity
+            )
+        )
+        self._task = asyncio.create_task(self._collect_batch(num_frames, writer))
+        self._task_kind = "batch"
+
+    async def _collect_batch(self, num_frames: int, writer: OMEZarrWriter) -> None:
+        """Grab ``num_frames`` frames into the writer, then stop the camera."""
+        valid_bits = await self._run(self._valid_bits)
+        for _ in range(num_frames):
+            frame = await self._capture_into_writer(writer)
+            try:
+                self._live.submit_frame(
+                    frame,
+                    self._frame_idx,
+                    valid_bits=valid_bits,
+                )
+            except Exception:
+                frame.close()
+                raise
+            self._frame_idx += 1
+        await self._run(self.device.stop)
+
+    async def _capture_into_writer(self, writer: OMEZarrWriter) -> FrameLease:
+        """Fill and commit one writer frame as one serialized, cancellation-safe device transaction."""
+
+        def _grab() -> FrameLease:
+            with writer.new_frame() as frame:
+                self.device.grab_frame(out=frame)
+            return writer.latest_frame()
+
+        task = asyncio.create_task(self._run(_grab))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # run_in_executor work cannot be stopped once running. Wait for the transaction to settle so
+            # its destination is not reused mid-write, then release a committed frame nobody will consume.
+            with suppress(Exception):
+                frame = await task
+                frame.close()
+            raise
+
+    @query()
+    async def capture_state(self) -> CaptureState:
+        """Lifecycle of the most recent :meth:`begin_batch`/:meth:`close_stack` task. Non-mutating: the
+        terminal state persists until the next task starts. Raises if the task failed."""
+        task = self._task
+        if task is None:
+            return CaptureState.IDLE
+        if not task.done():
+            return CaptureState.COLLECTING if self._task_kind == "batch" else CaptureState.CLOSING
+        if (exc := task.exception()) is not None:
+            raise RuntimeError(f"Capture task failed: {exc}")
+        return CaptureState.DONE if self._task_kind == "batch" else CaptureState.CLOSED
+
+
+class AreaCamera(Camera, kind=DeviceType.AREA_CAMERA, controller=AreaCameraController):
+    trigger_mode: TriggerMode = TriggerMode.OFF
+    trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE
+
+    _buffer_allocated = False
+
+    @property
+    @fact()
+    @abstractmethod
+    def sensor(self) -> CameraSensor:
+        """The size of the sensor, and of 1 pixel on it."""
+
+    @choice(options=list(PIXEL_FMT_TO_DTYPE.keys()))
+    @stream()
+    @abstractmethod
+    def pixel_format(self) -> PixelFormat:
+        """Get the pixel format of the camera."""
+
+    @pixel_format.setter
+    @abstractmethod
+    def pixel_format(self, pixel_format: str) -> None:
+        """Set the pixel format of the camera."""
+
+    @property
+    @stream()
+    def pixel_type(self) -> Dtype:
+        """Get the pixel type of the camera."""
+        return PIXEL_FMT_TO_DTYPE[cast("PixelFormat", str(self.pixel_format))]
+
+    @integer(options=BINNING_OPTIONS)
+    @stream()
+    @abstractmethod
+    def binning(self) -> int:
+        """Get the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
+
+    @binning.setter
+    @abstractmethod
+    def binning(self, binning: int) -> None:
+        """Set the binning mode of the camera. Integer value, e.g. 2 is 2x2 binning."""
+
+    @number()
+    @stream(label="Exposure Time", units="ms")
+    @abstractmethod
+    def exposure_time_ms(self) -> float:
+        """Get the exposure time of the camera in ms."""
+
+    @exposure_time_ms.setter
+    @abstractmethod
+    def exposure_time_ms(self, exposure_time_ms: float) -> None:
+        """Set the exposure time of the camera in ms."""
+
+    @number()
+    @stream(label="Frame Rate", units="Hz")
+    @abstractmethod
+    def frame_rate_hz(self) -> float:
+        """Get the frame rate of the camera in Hz."""
+
+    @frame_rate_hz.setter
+    @abstractmethod
+    def frame_rate_hz(self, value: float) -> None:
+        """Set the frame rate of the camera in Hz."""
+
+    # ==================== Sensor ROI ====================
+
+    @abstractmethod
+    def _get_roi(self) -> AreaROI:
+        """Read the current ROI from hardware in sensor pixel coordinates."""
+
+    @abstractmethod
+    def _set_roi(self, roi: AreaROI) -> None:
+        """Apply ROI to hardware. Values are pre-snapped by update_roi."""
+
+    @property
+    @stream(label="ROI Grid")
+    @abstractmethod
+    def roi_grid(self) -> ROIGrid:
+        """Hardware constraints for the sensor ROI.
+
+        Returns the valid size ranges (min/max/step) for each axis.
+        These are dynamic — they may change with binning mode.
+        """
+
+    @property
+    @stream(label="Sensor ROI")
+    def roi(self) -> AreaROI:
+        """Current sensor ROI in physical sensor pixels (pre-binning)."""
+        return self._get_roi()
+
+    @action(label="Update ROI")
+    def update_roi(self, roi: AreaROI, *, snap: bool = True) -> AreaROI:
+        """Set sensor ROI. Returns the actual applied ROI.
+
+        Args:
+            roi: Desired ROI in physical sensor pixels (pre-binning).
+            snap: If True (default), clamp and align to hardware grid.
+                  If False, raise ValueError if ROI doesn't conform.
+        """
+        grid = self.roi_grid
+        snapped = roi.snap(grid)
+        if not snap and roi != snapped:
+            raise ValueError(f"ROI {roi} does not conform to grid {grid}; nearest valid ROI is {snapped}")
+        self._set_roi(snapped)
+        return self._get_roi()
+
+    @action(label="Reset ROI")
+    def reset_roi(self) -> AreaROI:
+        """Reset the sensor ROI to the full sensor."""
+        return self.update_roi(AreaROI(x=0, y=0, w=self.sensor.size_px.x, h=self.sensor.size_px.y))
+
+    @property
+    @stream(label="Frame Size", units="px")
+    def frame_size_px(self) -> IVec2D:
+        """Get the image size in pixels (post-binning frame coordinates)."""
+        roi = self.roi
+        b = int(self.binning)
+        return IVec2D(y=roi.h // b, x=roi.w // b)
+
+    @property
+    @stream(label="Frame Size", units="MB")
+    def frame_size_mb(self) -> float:
+        """Get the size of the camera image in MB."""
+        return (self.frame_size_px.x * self.frame_size_px.y * self.pixel_type.itemsize) / 1_000_000
+
+    @property
+    @stream(label="Frame Area", units="µm")
+    def frame_area_um(self) -> Vec2D:
+        """Get the physical frame size in micrometers."""
+        roi, pixel = self.roi, self.sensor.pixel_um
+        return Vec2D(x=roi.w * pixel.x, y=roi.h * pixel.y)
+
+    @property
+    @stream("fast")
+    @abstractmethod
+    def stream_info(self) -> StreamInfo | None:
+        """Return a dictionary of the acquisition state or None if not acquiring.
+
+        - Frame Index - frame number of the acquisition
+        - Input Buffer Size - number of free frames in buffer
+        - Output Buffer Size - number of frames to grab from buffer
+        - Dropped Frames - number of dropped frames
+        - Data Rate [MB/s] - data rate of acquisition
+        - Frame Rate [fps] - frames per second of acquisition
+        """
+
+    def effective_pixel_size_um(self, magnification: float = 1.0) -> Vec2D:
+        """Physical size of each output pixel in µm, accounting for binning."""
+        b = int(self.binning)
+        pixel = self.sensor.pixel_um
+        return Vec2D(x=pixel.x * b, y=pixel.y * b) / magnification
+
+    @abstractmethod
+    def _configure_trigger_mode(self, mode: TriggerMode) -> None:
+        """Configure the trigger mode of the camera."""
+
+    @abstractmethod
+    def _configure_trigger_polarity(self, polarity: TriggerPolarity) -> None:
+        """Configure the trigger polarity of the camera."""
+
+    @abstractmethod
+    def _start(self, frame_count: int | None = None) -> None:
+        """Begin acquiring ``frame_count`` frames (None = until stopped). Driver primitive for start()."""
+
+    @abstractmethod
+    def _allocate_buffer(self) -> None:
+        """Allocate capture buffers. Driver primitive for allocate_buffer()."""
+
+    def _free_buffer(self) -> None:
+        """Release capture buffers. Override if the driver needs explicit cleanup."""
+
+    def allocate_buffer(self) -> None:
+        """Allocate capture buffers (releasing any existing first)."""
+        self.free_buffer()
+        self._allocate_buffer()
+        self._buffer_allocated = True
+
+    def free_buffer(self) -> None:
+        """Release capture buffers."""
+        self._free_buffer()
+        self._buffer_allocated = False
+
+    def start(
+        self,
+        frame_count: int | None = None,
+        trigger_mode: TriggerMode = TriggerMode.ON,
+        trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
+    ) -> None:
+        """Start the camera to acquire a certain number of frames.
+
+        If frame number is not specified, acquires infinitely until stopped.
+        Initializes the camera buffer.
+
+        Arguments:
+            frame_count: The number of frames to acquire. If None, acquires indefinitely until stopped.
+            trigger_mode: The trigger mode to use. Defaults to TriggerMode.ON.
+            trigger_polarity: The trigger polarity to use. Defaults to None.
+        """
+        if not self._buffer_allocated:
+            self.allocate_buffer()
+        self.trigger_mode = trigger_mode
+        self.trigger_polarity = trigger_polarity
+        self._configure_trigger_mode(self.trigger_mode)
+        self._configure_trigger_polarity(self.trigger_polarity)
+        self._start(frame_count)
+
+    def grab_frame(self, *, out: np.ndarray) -> None:
+        """Populate a validated caller-owned frame destination."""
+        expected_shape = (self.frame_size_px.y, self.frame_size_px.x)
+        expected_dtype = np.dtype(self.pixel_type.dtype)
+        if out.shape != expected_shape:
+            raise ValueError(f"Frame destination shape {out.shape} does not match {expected_shape}")
+        if out.dtype != expected_dtype:
+            raise TypeError(f"Frame destination dtype {out.dtype} does not match {expected_dtype}")
+        if not out.flags.c_contiguous:
+            raise ValueError("Frame destination must be C-contiguous")
+        if not out.flags.writeable:
+            raise ValueError("Frame destination must be writable")
+        if not out.dtype.isnative:
+            raise ValueError("Frame destination must use native byte order")
+        self._grab_frame(out)
+
+    def grab_frame_owned(self) -> np.ndarray:
+        """Allocate, populate, and return one independently owned frame."""
+        size = self.frame_size_px
+        frame = np.empty((size.y, size.x), dtype=self.pixel_type.dtype)
+        self.grab_frame(out=frame)
+        return frame
+
+    @abstractmethod
+    def _grab_frame(self, out: np.ndarray) -> None:
+        """Driver primitive that fills a validated destination completely or raises."""
+
+    @abstractmethod
+    def stop(self) -> None:
+        """Stop the camera."""
+
+
+__all__ = ["AreaCamera", "AreaCameraController", "AreaROI", "ROIGrid"]

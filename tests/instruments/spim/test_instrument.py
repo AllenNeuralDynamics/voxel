@@ -19,7 +19,7 @@ from vxl.core.instrument.samples import render
 from vxl.core.instrument.signals import Timeline
 from vxl.core.instrument.state import StageFollowRule
 from vxl.core.instrument.store import ABSENT, InstrumentStore, Merge
-from vxl.devices.camera.roi import AreaROI
+from vxl.devices.camera import AreaROI
 from vxl.devices.signals.generator.base import OwnClock
 from vxl.instruments.spim.config import SPIMConfig
 from vxl.instruments.spim.instrument import Microscope
@@ -461,11 +461,11 @@ async def test_an_edit_that_is_not_kept_is_not_saved(
 
 async def test_a_camera_region_is_saved_as_the_camera_snapped_it(opened: Microscope) -> None:
     applied = await opened.set_camera_region("camera", AreaROI(x=3, y=5, w=1001, h=999))
-    assert opened.view.value.state.profiles["gfp"].channels["camera"].fov == applied
+    assert opened.view.value.state.profiles["gfp"].fov["camera"] == applied
 
     full = await opened.set_camera_region("camera", None)
     assert (full.w, full.h) == (2048, 2048)
-    assert opened.view.value.state.profiles["gfp"].channels["camera"].fov == full
+    assert "camera" not in opened.view.value.state.profiles["gfp"].fov
 
 
 async def test_device_first_edits_are_refused_during_a_capture(opened: Microscope) -> None:
@@ -625,7 +625,7 @@ async def _live(microscope: Microscope) -> dict[str, object]:
     """What a preview has started: each camera's mode, if the laser is on, the generator's state, the activities."""
     hal = microscope._hal
     return {
-        "cameras": {uid: (await camera.props.get_value("mode")) for uid, camera in hal.cameras.items()},
+        "cameras": {uid: (await camera.props.get_value("mode")) for uid, camera in hal.area_cameras.items()},
         "laser": await hal.device("laser").props.get_value("is_on"),
         "generator": await hal.signal_generators["ao_main"].state.get(),
         "activities": [activity.kind for activity in microscope.view.value.activities],
@@ -739,3 +739,15 @@ async def test_each_profile_keeps_its_preview_channels(config_data: dict[str, An
             await microscope.set_preview_channels(["laser"])
     finally:
         await microscope.close()
+
+
+async def test_a_line_camera_stops_the_opening(config_data: dict[str, Any], tmp_path: Path) -> None:
+    data = simulated(config_data)
+    data["devices"]["camera"] = {"target": "vxl.devices.camera.line.LineCamera"}
+    del data["autosave"]["camera"]  # a line camera has no exposure to save yet
+    microscope = _microscope(data, tmp_path)
+    with pytest.raises(StartupError) as caught:
+        await microscope.open()
+    assert [(p.code, p.loc) for p in caught.value.problems] == [
+        ("spim.camera.not_area", ("profiles", "gfp", "channels", "camera"))
+    ]

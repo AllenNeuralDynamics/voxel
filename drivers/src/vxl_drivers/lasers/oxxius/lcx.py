@@ -8,9 +8,7 @@ from rigup.device import stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
-from vxl.devices.light.base import ControlMode
-from vxl.devices.light.laser import Laser
-from vxl.devices.light.modulator import Modulator
+from vxl.devices.light import ControlMode, Laser, Modulator
 from vxl_drivers.lasers.oxxius.hub import Cmd, OxxiusCommunicationError, OxxiusHub, Query
 
 
