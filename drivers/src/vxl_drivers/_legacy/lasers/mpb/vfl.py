@@ -21,7 +21,7 @@ References:
 
 from enum import StrEnum
 
-from rigup.device import action, choice, fact, number, query, stream
+from rigup.interface import action, choice, fact, number, query, stream
 
 from vxl_drivers._legacy.lasers.base import Laser
 from vxl_drivers.serial import SerialTransport

@@ -4,10 +4,9 @@ import logging
 from pydantic import BaseModel
 
 from rigup.build import BuildObjectsResult, build_objects_async
+from rigup.device import DeviceInterface, PropResults, Results
 from rigup.device.controller import DeviceController, PublishBytesFn, PublishTypedFn
 from rigup.device.device import Device
-from rigup.device.interface import DeviceInterface
-from rigup.device.results import PropResults, Results
 from rigup.node._base import close_each
 from rigup.node._broadcast import pack
 from rigup.node._logs import NodeLogHandler

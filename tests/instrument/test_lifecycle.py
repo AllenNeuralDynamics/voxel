@@ -5,9 +5,8 @@ from pathlib import PurePosixPath
 from types import SimpleNamespace
 
 import pytest
-from rigup.device import DeviceInterface
+from rigup.device import DeviceInterface, OperationRequest
 from rigup.device.handle import PropModels
-from rigup.device.results import OperationRequest
 from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 

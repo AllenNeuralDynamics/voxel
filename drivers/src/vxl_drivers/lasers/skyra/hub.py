@@ -6,7 +6,8 @@ from contextlib import contextmanager
 from math import isfinite
 from time import monotonic, sleep
 
-from rigup.device import Device, action, fact, stream
+from rigup.device import Device
+from rigup.interface import action, fact, stream
 from serial import SerialException
 
 from vxl_drivers.serial import SerialTransport

@@ -8,7 +8,8 @@ from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
-from rigup.device import Device, action, choice, failsafe, integer, number, query, stream
+from rigup.device import Device
+from rigup.interface import action, choice, failsafe, integer, number, query, stream
 
 
 class Hardware:

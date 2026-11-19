@@ -7,8 +7,7 @@ from pydantic import BaseModel, Field
 from vxlib.issues import Problem
 
 from rigup.config import DeviceConfig, Parts
-from rigup.device.interface import DeviceInterface
-from rigup.device.results import OperationRequest
+from rigup.device import DeviceInterface, OperationRequest
 from rigup.transport import TransportClient, TransportServer
 
 

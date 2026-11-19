@@ -8,7 +8,8 @@ from contextlib import suppress
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
-from rigup.device import Device, DeviceController, StreamTier, action, fact, failsafe, stream
+from rigup.device import Device, DeviceController
+from rigup.interface import StreamTier, action, fact, failsafe, stream
 from vxlib.schema import FrozenModel
 from vxlib.units import Frequency
 from vxlib.vector import Span

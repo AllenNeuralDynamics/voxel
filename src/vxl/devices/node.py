@@ -8,8 +8,9 @@ import sys
 
 import psutil
 from pydantic import TypeAdapter
-from rigup.device import Device, DeviceController, DeviceHandle, fact, stream
+from rigup.device import Device, DeviceController, DeviceHandle
 from rigup.device.handle import Adapter, PropView
+from rigup.interface import fact, stream
 
 from vxl.system import ProcessEntry, System, remote_store_fingerprint
 

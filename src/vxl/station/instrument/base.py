@@ -12,10 +12,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast, get_args, get_or
 from pydantic import SerializeAsAny, ValidationError
 from rigup.activity import ActivityInfo, ActivityScheduler, Resource
 from rigup.build import dependencies
-from rigup.device import OperationParamsError, Result, collect_operations
+from rigup.device import PropResults, Result
 from rigup.device.handle import NotObservedError
-from rigup.device.results import PropResults
-from rigup.interface import OperationInfo, action, failsafe
+from rigup.interface import OperationInfo, OperationParamsError, action, bind_operations, failsafe, query
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.history import Change, HistoryState, UndoHistory
@@ -29,7 +28,7 @@ from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
 from vxl.live import LiveSourceEmission, LiveViewport
 from vxl.live.protocol import StagePosition
-from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
 from vxl.station.instrument.geometry import Transform
@@ -124,7 +123,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._scheduler = ActivityScheduler(self._devices_resource_map(config))
         self._remote_stores = Cell[dict[str, Remote]]({})
         self._history = UndoHistory()
-        self._operations = collect_operations(self)
+        self._operations = bind_operations(self)
         self._active_profile = Cell[ProfileId](next(iter(self._store.value.profiles)))
         self._power_mode = Cell[PowerMode]("dim")
         self._live_frames = Emitter[LiveSourceEmission]()
@@ -277,6 +276,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run("move the stage", requires={stage.device(axis) for axis in moves}):
             await asyncio.gather(*(self._hal.stage[axis].move_to(value, wait=wait) for axis, value in moves.items()))
 
+    @query(on="stage", verb="position")
     async def stage_position(self) -> dict[SpecimenAxis, float]:
         """Where the stage is, in micrometers, by specimen axis."""
         stage = self._hal.stage
@@ -285,6 +285,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     # === Profiles ===
 
+    @action(on="profiles", key="profile_id", verb="select")
     async def select_profile(self, profile_id: ProfileId) -> None:
         """Set the devices to a profile, and make it the active one. When a step fails, the active profile stays as it
         was."""
@@ -298,6 +299,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run("apply the profile", requires=self._profile_requires(profile_id)):
             await self._apply_profile(profile_id)
 
+    @action(on="generators", key="generator", verb="set_timeline")
     async def set_generator_timeline(self, generator: DeviceUid, timeline: Timeline) -> None:
         """Load a timeline into a signal generator, and save it into the active profile. Then set what controls each
         laser and modulator, as the timelines now say. The profile's checks run first, so a timeline that does not fit
@@ -330,12 +332,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 raise NotFoundError(str(problems), problems)
             await edit.record({("profiles", profile_id, name): value for name, value in fields.items()})
 
+    @action(on="positions", key="device_id", verb="set")
     async def set_position_rule(
         self,
         device_id: DeviceUid,
         rule: PositionRule,
         *,
-        edit_id: Hashable | None = None,
+        edit_id: str | None = None,
     ) -> None:
         """Set how a device gets its position for every profile: always 1 position, or by following the stage."""
         async with self._state_edit("Set position rule", edit_id=edit_id) as edit:
@@ -343,27 +346,32 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     # === Light ===
 
+    @action(on="lights", key="device", verb="set_power")
     async def set_power(self, device: DeviceUid, value: float) -> None:
         """Set the full power of a laser or a modulator in the active profile, in the device's own unit, and save it.
         When the profile has 1 power for each position of a device, set the one for the position it is at now."""
         await self._edit_power("full", device, value)
 
+    @action(on="lights", key="device", verb="set_dim_power")
     async def set_dim_power(self, device: DeviceUid, value: float) -> None:
         """Set the dim power of a laser or a modulator in the active profile, as :meth:`set_power` does."""
         await self._edit_power("dim", device, value)
 
+    @action(on="lights", verb="set_power_mode")
     async def set_power_mode(self, mode: PowerMode) -> None:
         """Use the full or the dim powers. A running preview changes at once."""
         async with self._scheduler.run("set the power mode", requires=()):
             await self._apply_powers(self._store.value.profiles[self._active_profile.value], mode)
             await self._power_mode.set(mode)
 
+    @failsafe(on="lights", verb="off")
     async def lights_off(self) -> None:
         """Make every light dark: no light reaches the sample, and a laser whose light something after it stops stays
         on. A running preview goes dark and keeps running."""
         async with self._scheduler.run("turn the lights off", requires=()):
             await self._hal.lights_off()
 
+    @failsafe(on="lasers", verb="off")
     async def lasers_off(self) -> None:
         """Turn off every laser and modulator, and close every shutter. A running preview goes dark and keeps
         running."""
@@ -372,18 +380,21 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     # === Saved state ===
 
-    async def update_metadata(self, **fields: Any) -> None:
+    @action(on="metadata", verb="update")
+    async def update_metadata(self, fields: dict[str, Any]) -> None:
         """Change fields of the specimen metadata, checked against its form."""
         async with self._state_edit("Update metadata") as edit:
             await edit.record({("metadata",): {**self._store.value.metadata, **fields}})
 
-    async def set_metadata_class(self, cls: type[ExperimentMetadata] | str) -> None:
-        """Change the form of the specimen metadata, and keep the metadata that fits it."""
+    @action(on="metadata", verb="set_form")
+    async def set_metadata_class(self, cls: MetadataCls) -> None:
+        """Change the form of the specimen metadata, a class or its dotted path, and keep the metadata that fits it."""
         form = resolve_metadata_class(cls) if isinstance(cls, str) else cls
         async with self._state_edit("Change the metadata form") as edit:
             await edit.record({("metadata_cls",): form, ("metadata",): self._fit_metadata(form)})
 
-    async def restore_default_state(self, fields: Collection[str] | None = None) -> None:
+    @action(on="defaults", verb="restore")
+    async def restore_default_state(self, fields: Sequence[str] | None = None) -> None:
         """Set the given fields of the state back to the default state, or each field that can be a default. A restored
         metadata form keeps the metadata that fits it."""
         async with self._state_edit("Restore the default state") as edit:
@@ -392,7 +403,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 values["metadata",] = self._fit_metadata(values["metadata_cls",])
             await edit.record(values)
 
-    async def save_as_default_state(self, fields: Collection[str] | None = None) -> None:
+    @action(on="defaults", verb="save")
+    async def save_as_default_state(self, fields: Sequence[str] | None = None) -> None:
         """Save the given fields of the state as the default state, or each field that can be a default."""
         async with self._scheduler.run("save the default state", requires={self._store}):
             await self._store.save_as_default_state(fields)

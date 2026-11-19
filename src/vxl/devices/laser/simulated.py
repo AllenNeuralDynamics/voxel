@@ -4,7 +4,7 @@ from math import isfinite
 from random import gauss
 from time import monotonic, sleep
 
-from rigup.device import number
+from rigup.interface import number
 
 from .base import Laser
 from .source import ModulationMode

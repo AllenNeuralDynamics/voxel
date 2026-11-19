@@ -8,8 +8,7 @@ from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
-from rigup.device import read_class
-from rigup.interface import OperationInfo, field_hints, fields_of
+from rigup.interface import OperationInfo, field_hints, fields_of, operations_of
 from vxlib.schema import FrozenModel, Key, key_field
 
 from vxl.station.instrument.config import InstrumentId
@@ -106,7 +105,7 @@ def route_of(info: OperationInfo, state: type[BaseModel]) -> tuple[str, str]:
 def check_operations(kind: type, state: type[BaseModel]) -> dict[str, OperationInfo]:
     """The operations of ``kind``, checked: each declaration against the method (rigup), each ``create``, ``update`` and
     ``delete`` against ``state``, and no 2 operations on 1 route. Raise ``TypeError`` naming what does not fit."""
-    operations = read_class(kind).operations
+    operations = operations_of(kind)
     taken: dict[tuple[str, str], str] = {}
     for name, found in operations.items():
         info = found.info

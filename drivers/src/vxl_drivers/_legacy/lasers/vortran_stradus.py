@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from rigup.device import choice, number, query, stream
+from rigup.interface import choice, number, query, stream
 from vortran_laser import BoolVal
 from vortran_laser import StradusLaser as StradusDriver
 

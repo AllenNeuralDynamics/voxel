@@ -5,7 +5,7 @@ from enum import StrEnum
 
 import numpy as np
 import pco  # pyright: ignore[reportMissingImports]
-from rigup.device import action, choice, failsafe, integer, number, stream
+from rigup.interface import action, choice, failsafe, integer, number, stream
 from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera import (

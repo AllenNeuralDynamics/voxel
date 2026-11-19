@@ -5,7 +5,7 @@ from random import randint
 from typing import ClassVar, cast, final
 
 import numpy as np
-from rigup.device import choice, integer, number
+from rigup.interface import choice, integer, number
 
 from vxl.devices.camera.area import AreaCamera, AreaROI, ROIGrid
 from vxl.devices.camera.base import (

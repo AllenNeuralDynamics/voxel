@@ -5,8 +5,9 @@ from abc import abstractmethod
 from typing import ClassVar, Literal
 
 from pydantic import TypeAdapter
-from rigup.device import Device, DeviceHandle, action, fact, failsafe, stream
+from rigup.device import Device, DeviceHandle
 from rigup.device.handle import Adapter, PropView
+from rigup.interface import action, fact, failsafe, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

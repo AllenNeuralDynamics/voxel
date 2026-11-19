@@ -7,12 +7,12 @@ from itertools import pairwise, product
 from typing import Annotated, Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
-from rigup.device.results import OperationRequest
+from rigup.device import OperationRequest
 from vxlib.issues import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Quantity
 
-from vxl.metadata import ExperimentMetadata, MetadataCls
+from vxl.metadata import ExperimentMetadata, MetadataCls, get_path_from_class
 from vxl.station.instrument.config import (
     AxisPosition,
     DeviceUid,
@@ -316,7 +316,7 @@ class InstrumentState(BaseModel, frozen=True):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    metadata_cls: MetadataCls = ExperimentMetadata
+    metadata_cls: MetadataCls = Field(default=get_path_from_class(ExperimentMetadata), validate_default=True)
     metadata: Annotated[dict[str, Any], NotDefault] = Field(default_factory=dict, validate_default=True)
     profiles: Mapping[ProfileId, Profile] = Field(min_length=1)
     positions: dict[DeviceUid, PositionRule] = Field(default_factory=dict)

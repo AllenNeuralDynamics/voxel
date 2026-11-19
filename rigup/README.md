@@ -29,7 +29,8 @@ declared with `@query`, `@action` or `@failsafe` become part of its public inter
 add limits: every write is fitted to them, and every read carries them, such as `laser.power.maximum`.
 
 ```python
-from rigup.device import Device, action, fact, number, stream
+from rigup.device import Device
+from rigup.interface import action, fact, number, stream
 
 
 class Laser(Device, kind="laser"):

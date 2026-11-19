@@ -5,8 +5,9 @@ from typing import Literal
 
 import numpy as np
 from pydantic import TypeAdapter
-from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, fact, failsafe, query, stream
+from rigup.device import Device, DeviceController, DeviceHandle
 from rigup.device.handle import Adapter, PropView
+from rigup.interface import StreamTier, action, fact, failsafe, query, stream
 from vxlib.quantity import QuantityRange, VoltageRange
 
 from vxl.devices.base import DeviceType

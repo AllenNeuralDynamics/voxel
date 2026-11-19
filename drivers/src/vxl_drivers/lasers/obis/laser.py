@@ -5,7 +5,7 @@ from math import isfinite
 from time import monotonic, sleep
 from typing import ClassVar, TypedDict
 
-from rigup.device import fact, stream
+from rigup.interface import fact, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

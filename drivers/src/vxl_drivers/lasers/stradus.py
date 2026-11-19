@@ -5,7 +5,7 @@ from math import isfinite
 from time import monotonic, sleep
 from typing import ClassVar
 
-from rigup.device import fact, query, stream
+from rigup.interface import fact, query, stream
 from serial import Serial, SerialException
 from vxlib.vector import Span
 

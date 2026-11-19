@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 
-from rigup.device import action, failsafe, number, stream
+from rigup.interface import action, failsafe, number, stream
 
 from .source import LaserSource, ModulationMode
 

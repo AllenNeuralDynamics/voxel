@@ -6,7 +6,7 @@ from typing import ClassVar
 
 from coherent_lasers.genesis_mx.commands import OperationModes
 from coherent_lasers.genesis_mx.driver import GenesisMX
-from rigup.device import stream
+from rigup.interface import stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

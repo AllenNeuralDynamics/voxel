@@ -21,17 +21,7 @@ from ome_zarr_writer import (
 from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
 from pydantic import BaseModel, Field
-from rigup.device import (
-    StreamTier,
-    action,
-    choice,
-    fact,
-    failsafe,
-    integer,
-    number,
-    query,
-    stream,
-)
+from rigup.interface import StreamTier, action, choice, fact, failsafe, integer, number, query, stream
 from vxl_records import DatasetLocation, StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel

@@ -2,7 +2,8 @@
 
 import threading
 
-from rigup.device import Device, fact, stream
+from rigup.device import Device
+from rigup.interface import fact, stream
 
 from vxl_drivers.lasers.obis.link import ObisError, ObisLink
 

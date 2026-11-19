@@ -3,7 +3,7 @@
 import math
 import time
 
-from rigup.device import action, choice, fact, failsafe, number, stream
+from rigup.interface import action, choice, fact, failsafe, number, stream
 from vxl_drivers.axes.mmc._cmds import (
     ENCODER_TYPE_FROM_WIRE,
     ENCODER_TYPE_TO_WIRE,

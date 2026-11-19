@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from rigup.device import fact
+from rigup.interface import fact
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator
-from rigup.device import action, fact, failsafe, query, stream
+from rigup.interface import action, fact, failsafe, query, stream
 from vxlib.schema import check_identifier
 
 from rigup import RigComponent

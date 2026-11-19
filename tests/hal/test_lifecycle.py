@@ -2,9 +2,8 @@ from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from rigup.device import DeviceHandle, DeviceInterface, Result
+from rigup.device import DeviceHandle, DeviceInterface, PropModel, PropResults, Result
 from rigup.device.handle import Adapter, DeviceProps
-from rigup.device.results import PropModel, PropResults
 from vxlib.issues import Problem
 
 from vxl.hal.core import HAL

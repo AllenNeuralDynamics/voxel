@@ -30,12 +30,28 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
     "remove_tasks": {"task_ids": ["b"]},
     "update_profile": {"profile_id": "gfp", "spacing": 2.5, "label": "GFP"},
     "update_writer_settings": {"shard_z_chunks": 4},
+    "select_profile": {"profile_id": "gfp"},
     "apply_profile": {},
+    "set_generator_timeline": lambda m: {
+        "generator": "ao_main",
+        "timeline": m.view.value.state.profiles["gfp"].timelines["ao_main"].model_dump(mode="json"),
+    },
+    "set_power_mode": {"mode": "full"},
+    "set_power": {"device": "laser", "value": 50.0},
+    "set_dim_power": {"device": "laser", "value": 5.0},
+    "stage_position": {},
+    "set_position_rule": {"device_id": "fw", "rule": "GFP"},
+    "update_metadata": {"fields": {"notes": "left hemisphere"}},
+    "set_metadata_class": {"cls": "vxl.metadata.ExperimentMetadata"},
+    "save_as_default_state": {"fields": ["writer"]},
+    "restore_default_state": {"fields": ["writer"]},
     "move_stage": {"x": 10.0, "wait": True},
     "set_preview_channels": {"channels": ["camera"]},
     "set_camera_region": {"camera": "camera", "region": None},
     "start_preview": {},
     "stop_preview": {},
+    "lights_off": {},
+    "lasers_off": {},
     "undo": {},
     "redo": {},
     "stop": {},
@@ -43,12 +59,15 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
 """1 valid call of each operation, in the order they run; a function builds arguments that need the instrument."""
 
 
-_EDITS = {"reorder_tasks", "remove_tasks"}
+_EDITS = {"reorder_tasks", "remove_tasks", "set_position_rule", "update_metadata"}
 """Actions that edit the saved state, and so must be 1 undo step too."""
 
 
 @pytest.fixture
 async def opened(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterator[Microscope]:
+    """An open microscope on simulated devices. Its profile leaves the filter wheel to the instrument, so a position
+    rule can set it."""
+    del config_data["default"]["profiles"]["gfp"]["positions"]
     folder = InstrumentFolder.create(template(simulated(config_data)), "left", tmp_path)
     records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)

@@ -5,8 +5,7 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
-from rigup.device import DeviceInterface
-from rigup.device.results import PropModel
+from rigup.device import DeviceInterface, PropModel
 from vxl_records import PlannedVolume
 from vxlib.history import HistoryState
 from vxlib.schema import FrozenModel

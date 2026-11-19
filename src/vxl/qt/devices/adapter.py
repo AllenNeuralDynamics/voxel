@@ -10,8 +10,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from rigup.device import DeviceInterface
-    from rigup.device.results import PropModel
+    from rigup.device import DeviceInterface, PropModel
 
     from vxl.instrument import Instrument
     from vxl.station_legacy.models import SessionView

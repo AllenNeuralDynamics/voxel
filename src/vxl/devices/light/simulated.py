@@ -3,7 +3,7 @@
 from math import isfinite
 from typing import ClassVar
 
-from rigup.device import number, stream
+from rigup.interface import number, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

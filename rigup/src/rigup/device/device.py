@@ -8,8 +8,8 @@ from typing import Any, ClassVar
 
 from rigup.interface import StreamTier
 
+from ._checks import check_device_class, check_pairing
 from ._loop import owners, thread_checked
-from ._spec import check_class, check_pairing
 from .controller import DeviceController
 
 
@@ -36,7 +36,7 @@ class Device[T: StrEnum]:
                 continue  # a Device base wrapped its own members; a mixin's are wrapped here
             if (checked := thread_checked(name, vars(owner)[name])) is not None:
                 setattr(cls, name, checked)
-        check_class(cls)
+        check_device_class(cls)
         if controller is not None:
             with contextlib.suppress(NameError):
                 check_pairing(cls, controller)

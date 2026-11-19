@@ -24,7 +24,7 @@ from egrabber import (
     StreamModule,
     ct,
 )
-from rigup.device import choice, integer, number
+from rigup.interface import choice, integer, number
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 

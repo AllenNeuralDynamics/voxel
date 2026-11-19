@@ -6,7 +6,7 @@ from time import monotonic, sleep
 from typing import Any, ClassVar, Never
 
 from numpy.polynomial import Polynomial
-from rigup.device import fact, stream
+from rigup.interface import fact, stream
 from vxlib.calibration import CalibrationModel, PiecewiseLinearCalibration, calibration_adapter
 from vxlib.vector import Span
 

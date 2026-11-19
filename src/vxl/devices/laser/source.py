@@ -3,7 +3,8 @@
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-from rigup.device import Device, action, choice, fact, failsafe, number, stream
+from rigup.device import Device
+from rigup.interface import action, choice, fact, failsafe, number, stream
 
 
 class ModulationMode(StrEnum):

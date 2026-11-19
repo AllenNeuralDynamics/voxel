@@ -2,7 +2,8 @@
 
 from abc import abstractmethod
 
-from rigup.device import Device, number, stream
+from rigup.device import Device
+from rigup.interface import number, stream
 
 
 class PowerMeter(Device, kind="power_meter"):

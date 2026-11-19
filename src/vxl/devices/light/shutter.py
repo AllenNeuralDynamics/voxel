@@ -3,8 +3,9 @@
 from abc import abstractmethod
 
 from pydantic import TypeAdapter
-from rigup.device import Device, DeviceHandle, action, failsafe, stream
+from rigup.device import Device, DeviceHandle
 from rigup.device.handle import Adapter, PropView
+from rigup.interface import action, failsafe, stream
 
 
 class Shutter(Device, kind="shutter"):

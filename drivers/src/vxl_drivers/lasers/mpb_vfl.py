@@ -5,7 +5,7 @@ from math import isfinite
 from time import monotonic, sleep
 from typing import ClassVar
 
-from rigup.device import action, fact, query, stream
+from rigup.interface import action, fact, query, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

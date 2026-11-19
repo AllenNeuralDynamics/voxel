@@ -11,7 +11,7 @@ import weakref
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, Literal, cast
 
-from .limits import Limited
+from rigup.interface.limits import Limited
 
 log = logging.getLogger(__name__)
 

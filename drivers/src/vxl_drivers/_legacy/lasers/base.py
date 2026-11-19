@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
-from rigup.device import Device, action, fact, failsafe, number, stream
+from rigup.device import Device
+from rigup.interface import action, fact, failsafe, number, stream
 
 
 class Laser(Device, kind="laser_archived"):

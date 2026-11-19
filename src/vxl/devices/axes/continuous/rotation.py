@@ -4,7 +4,7 @@ reads 370°, and a move goes to the angle it is given, the long way round if nee
 from abc import abstractmethod
 from typing import ClassVar
 
-from rigup.device import fact
+from rigup.interface import fact
 from vxlib.vector import Span
 
 from vxl.devices.base import DeviceType

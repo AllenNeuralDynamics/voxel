@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
-from rigup.device import Device, DeviceController, StreamTier, query
+from rigup.device import Device, DeviceController
+from rigup.interface import StreamTier, query
 from vxl_records import StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel

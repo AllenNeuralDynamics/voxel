@@ -7,8 +7,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from pydantic import AnyWebsocketUrl, BaseModel, Field, ValidationError
-from rigup.device import Result
-from rigup.device.results import PropResults
+from rigup.device import PropResults, Result
 from vxl_records import (
     AcquisitionManifest,
     LogEntry,

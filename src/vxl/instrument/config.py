@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
 from pydantic import Field, ValidationInfo, field_validator, model_validator
-from rigup.device.results import OperationRequest
+from rigup.device import OperationRequest
 from vxlib.schema import FrozenModel, identifier
 
 from vxl._utils.color import Color

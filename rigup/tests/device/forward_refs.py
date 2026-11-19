@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 from pydantic import BaseModel
-from rigup.device import Device, action, integer, query, stream
+from rigup.device import Device
+from rigup.interface import action, integer, query, stream
 
 EPOCH = datetime.datetime(2000, 1, 1, tzinfo=datetime.UTC)
 

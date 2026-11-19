@@ -1,4 +1,6 @@
-"""Wire models for property values, operation requests and results."""
+"""The device protocol: what a client asks a device and gets back. A request runs an operation, a result carries its
+value or its error, property values carry their limits, and :class:`DeviceInterface` tells a client what it may ask.
+The node protocol (``rigup.node``) carries these models between processes."""
 
 import dataclasses
 import logging
@@ -7,7 +9,8 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from .limits import ChoiceValue, IntegerValue, NumberValue
+from rigup.interface import OperationInfo, PropInfo, StreamTier
+from rigup.interface.limits import ChoiceValue, IntegerValue, NumberValue
 
 logger = logging.getLogger("rigup")
 
@@ -157,3 +160,13 @@ class Results[V](BaseModel):
 
 class PropResults(Results[PropModel]):
     """Property results, concrete so ``PropModel`` values deserialize."""
+
+
+class DeviceInterface(BaseModel):
+    """A built device with its controller. ``streaming`` gives the seconds between sends for each stream tier."""
+
+    uid: str
+    kind: str
+    streaming: dict[StreamTier, float] = Field(default_factory=dict)
+    operations: dict[str, OperationInfo] = Field(default_factory=dict)
+    props: dict[str, PropInfo] = Field(default_factory=dict)

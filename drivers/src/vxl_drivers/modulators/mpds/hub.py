@@ -9,7 +9,8 @@ from time import sleep
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
-from rigup.device import Device, action, fact, query, stream
+from rigup.device import Device
+from rigup.interface import action, fact, query, stream
 from serial import SerialException
 
 from vxl_drivers.serial import SerialTransport

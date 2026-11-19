@@ -6,9 +6,8 @@ from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter
-from rigup.device import DeviceHandle, DeviceInterface
+from rigup.device import DeviceHandle, DeviceInterface, PropModel
 from rigup.device.handle import PropModels
-from rigup.device.results import PropModel
 from rigup.rig import Rig
 from vxlib.asyncio import gather_all
 from vxlib.issues import Problems

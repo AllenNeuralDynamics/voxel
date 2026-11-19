@@ -4,7 +4,7 @@ from math import isclose, isfinite
 from time import monotonic, sleep
 from typing import ClassVar
 
-from rigup.device import stream
+from rigup.interface import stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin

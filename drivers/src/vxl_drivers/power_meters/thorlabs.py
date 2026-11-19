@@ -35,7 +35,7 @@ from typing import override
 
 import pyvisa
 from pyvisa.resources import MessageBasedResource
-from rigup.device import fact, integer, number, stream
+from rigup.interface import fact, integer, number, stream
 
 from vxl.devices.light import PowerMeter
 

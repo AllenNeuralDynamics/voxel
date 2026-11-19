@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from rigup.build import BuildConfig, dependencies
 from rigup.config import NodeConfig, RigConfig
-from rigup.device.results import OperationRequest
+from rigup.device import OperationRequest
 from rigup.node._protocol import BuildDevicesRequest
 
 from rigup import Part

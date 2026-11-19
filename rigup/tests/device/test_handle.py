@@ -3,8 +3,9 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from rigup.device import Device, DeviceController, DeviceHandle, NotObservedError, number, stream
+from rigup.device import Device, DeviceController, DeviceHandle, NotObservedError
 from rigup.device.handle import Adapter, PropModels
+from rigup.interface import number, stream
 from rigup.node import LocalAdapter
 from rigup_fakes import MockDevice
 from vxlib.reactivity import ReactiveQuery

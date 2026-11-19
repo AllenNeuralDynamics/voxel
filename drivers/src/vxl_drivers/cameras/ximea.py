@@ -6,7 +6,7 @@ from contextlib import suppress
 from typing import Any
 
 import numpy as np
-from rigup.device import action, choice, failsafe, integer, number, stream
+from rigup.interface import action, choice, failsafe, integer, number, stream
 from vxlib.vector import IVec2D, Vec2D
 from ximea_python import xiapi
 from ximea_python.xidefs import XI_BIT_DEPTH, XI_DOWNSAMPLING_VALUE

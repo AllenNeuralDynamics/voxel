@@ -10,10 +10,9 @@ from pydantic import BaseModel
 from vxlib.lifecycle import Teardown
 from vxlib.reactivity import Subscribable
 
+from ._protocol import DeviceInterface, OperationRequest, PropModel, PropResults, Result, Results
 from .controller import StreamCallback
 from .device import Device
-from .interface import DeviceInterface
-from .results import OperationRequest, PropModel, PropResults, Result, Results
 
 type PropCallback[T] = Callable[[T], Awaitable[None] | None]
 type PropParser[T] = Callable[[object], T]

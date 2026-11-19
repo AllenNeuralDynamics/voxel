@@ -6,7 +6,8 @@ from enum import StrEnum
 from math import isclose, isfinite
 from typing import Literal
 
-from rigup.device import Device, fact, stream
+from rigup.device import Device
+from rigup.interface import fact, stream
 from serial import SerialException
 
 from vxl_drivers.serial import SerialTransport

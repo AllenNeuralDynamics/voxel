@@ -5,8 +5,17 @@ from typing import Annotated, Any, NotRequired, TypedDict, Unpack
 
 import pytest
 from pydantic import BaseModel
-from rigup.device import collect_operations, read_class
-from rigup.interface import OperationInfo, action, create, delete, failsafe, query, update
+from rigup.interface import (
+    OperationInfo,
+    action,
+    bind_operations,
+    create,
+    delete,
+    failsafe,
+    operations_of,
+    query,
+    update,
+)
 from vxlib.schema import Key
 
 
@@ -53,7 +62,7 @@ class Store:
 
 
 def test_declarations_name_their_intent_resource_key_and_verb() -> None:
-    found = {name: spec.info for name, spec in read_class(Store).operations.items()}
+    found = {name: spec.info for name, spec in operations_of(Store).items()}
 
     assert {name: (i.intent, i.resource, i.key, i.verb) for name, i in found.items()} == {
         "add": ("create", "items", None, None),
@@ -67,7 +76,7 @@ def test_declarations_name_their_intent_resource_key_and_verb() -> None:
 
 def test_an_update_gets_only_the_fields_that_were_sent() -> None:
     store = Store()
-    edit = collect_operations(store)["edit"]
+    edit = bind_operations(store)["edit"]
 
     edit(item_id="a", name="first")
     edit(item_id="a")
@@ -112,14 +121,11 @@ def test_a_declaration_that_breaks_a_rule_fails_when_the_class_is_read(
     method: Callable[..., Any], message: str
 ) -> None:
     with pytest.raises(TypeError, match=message.replace("[", r"\[").replace("*", r"\*")):
-        read_class(_kind(method))
+        operations_of(_kind(method))
 
 
 def test_a_required_qualifier_inside_the_fields_is_understood() -> None:
-    assert (
-        "name"
-        in read_class(_kind(update("items", key="item_id")(_qualified))).operations["x"].info.params["properties"]
-    )
+    assert "name" in operations_of(_kind(update("items", key="item_id")(_qualified)))["x"].info.params["properties"]
 
 
 def test_a_key_that_is_not_an_argument_fails_at_the_decorator() -> None:
@@ -137,7 +143,7 @@ def test_an_override_cannot_change_what_an_operation_does() -> None:
         def go(self) -> None: ...
 
     with pytest.raises(TypeError, match="is declared @action\\(on='preview', verb='begin'\\), but Base says"):
-        read_class(Changed)
+        operations_of(Changed)
 
 
 @pytest.mark.parametrize(

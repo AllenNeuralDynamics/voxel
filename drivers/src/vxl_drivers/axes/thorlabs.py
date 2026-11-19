@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from time import monotonic, sleep
 
 from pylablib.devices.Thorlabs import MFF
-from rigup.device import integer, stream
+from rigup.interface import integer, stream
 
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotContent
 

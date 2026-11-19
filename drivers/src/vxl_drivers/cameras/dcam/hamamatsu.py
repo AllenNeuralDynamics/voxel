@@ -4,7 +4,7 @@ import time
 from collections.abc import Mapping
 
 import numpy as np
-from rigup.device import action, choice, failsafe, integer, number, stream
+from rigup.interface import action, choice, failsafe, integer, number, stream
 from vxl_drivers.utils import thread_safe_singleton
 from vxlib.vector import IVec2D, Vec2D
 

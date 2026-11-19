@@ -11,13 +11,11 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from .device import Device
 
-from rigup.interface import StreamTier
+from rigup.interface import Operation, OperationParamsError, StreamTier, bind_operations, describe_properties
 
+from ._checks import check_device_class, check_pairing
 from ._loop import DeviceLoop, take
-from ._operation import Operation, OperationParamsError
-from ._spec import check_class, check_pairing, collect_operations, collect_properties
-from .interface import DeviceInterface
-from .results import OperationRequest, PropModel, PropResults, Result, Results
+from ._protocol import DeviceInterface, OperationRequest, PropModel, PropResults, Result, Results
 
 # Typed events let subscribers receive the model and serialize on demand; schemaless streams go out as raw bytes.
 type PublishTypedFn = Callable[[str, BaseModel], Awaitable[None]]
@@ -39,7 +37,7 @@ class DeviceController[D: "Device"]:
     def __init_subclass__(cls, *, streaming: Mapping[StreamTier, float] | None = None, **kwargs: Any) -> None:
         """Accept ``streaming`` in the class line to override the default interval of the tiers it names."""
         super().__init_subclass__(**kwargs)
-        check_class(cls)
+        check_device_class(cls)
         if streaming is not None:
             cls.__default_streaming = {**cls.__default_streaming, **streaming}
 
@@ -58,11 +56,11 @@ class DeviceController[D: "Device"]:
             raise
         self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
 
-        device_operations = collect_operations(device)
+        device_operations = bind_operations(device)
         self._device_operations = set(device_operations)
-        self._device_props = collect_properties(device)
-        own_operations = collect_operations(self)
-        self._ctrl_props = collect_properties(self)
+        self._device_props = describe_properties(device)
+        own_operations = bind_operations(self)
+        self._ctrl_props = describe_properties(self)
         self._operations: dict[str, Operation] = {**device_operations, **own_operations}
         all_properties = {**self._device_props, **self._ctrl_props}
 

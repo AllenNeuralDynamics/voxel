@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 from rigup.config import RigConfig
-from rigup.device import StreamTier
+from rigup.interface import StreamTier
 from rigup.rig import Rig
 
 from vxl.devices.node import NodeMonitor, NodeMonitorHandle

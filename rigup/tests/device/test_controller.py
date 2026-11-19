@@ -6,7 +6,8 @@ from typing import Annotated, Any, Literal
 import pytest
 from forward_refs import FD
 from pydantic import Field
-from rigup.device import Device, DeviceController, action, fact, integer, number, query, stream
+from rigup.device import Device, DeviceController
+from rigup.interface import action, fact, integer, number, query, stream
 from rigup_fakes import MockDevice
 
 type Take = Callable[[Device], DeviceController[Any]]

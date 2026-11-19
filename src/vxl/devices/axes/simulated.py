@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from threading import Event, Thread
 from typing import Any
 
-from rigup.device import number
+from rigup.interface import number
 
 from vxl.devices.axes.continuous_legacy import (
     ContinuousAxis,

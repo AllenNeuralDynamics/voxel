@@ -14,8 +14,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 from rich.text import Text
-from rigup.device import DeviceController
-from rigup.device.results import PropModel
+from rigup.device import DeviceController, PropModel
 from rigup.interface import OperationInfo, PropInfo
 from ruamel.yaml import YAML
 

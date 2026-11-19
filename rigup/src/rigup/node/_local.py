@@ -8,11 +8,10 @@ from vxlib.lifecycle import Teardown
 
 from rigup.build import BuildObjectsResult, build_objects_async
 from rigup.component import Part
+from rigup.device import DeviceInterface, OperationRequest, PropResults, Result, Results
 from rigup.device.controller import DeviceController, StreamCallback
 from rigup.device.device import Device
 from rigup.device.handle import Adapter, DeviceHandle
-from rigup.device.interface import DeviceInterface
-from rigup.device.results import OperationRequest, PropResults, Result, Results
 from rigup.node._broadcast import TopicDispatcher
 
 from ._base import DevicesBuildResult, DevicesConfig, Node, close_each, first_read

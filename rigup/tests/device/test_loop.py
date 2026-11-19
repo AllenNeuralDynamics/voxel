@@ -4,8 +4,9 @@ import time
 from collections.abc import AsyncIterator, Callable
 
 import pytest
-from rigup.device import Device, DeviceController, action
+from rigup.device import Device, DeviceController
 from rigup.device import _loop as loop
+from rigup.interface import action
 from rigup_fakes import Probe
 
 

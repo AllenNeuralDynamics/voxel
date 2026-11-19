@@ -8,7 +8,8 @@ from enum import StrEnum
 from typing import Literal
 
 from rigup.component import Part, RigComponent
-from rigup.device import Device, action, fact, failsafe, number, query, stream
+from rigup.device import Device
+from rigup.interface import action, fact, failsafe, number, query, stream
 
 
 class MockState(StrEnum):

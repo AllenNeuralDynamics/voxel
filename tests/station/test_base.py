@@ -7,6 +7,7 @@ from rigup.activity import ActivityBusyError, ActivityInfo
 from vxl_records import SQLiteRecords
 from vxlib.issues import Problems
 
+from vxl.instruments.basic import BasicInstrument
 from vxl.metadata import ExperimentMetadata
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.base import Instrument
@@ -215,7 +216,7 @@ class _LabMetadata(ExperimentMetadata):
 
 
 async def test_a_metadata_edit_can_be_undone_and_redone(instrument: _Bench) -> None:
-    await instrument.update_metadata(notes="left hemisphere")
+    await instrument.update_metadata({"notes": "left hemisphere"})
     assert instrument.view.value.state.metadata["notes"] == "left hemisphere"
     assert instrument.view.value.history.undo_label == "Update metadata"
 
@@ -227,14 +228,14 @@ async def test_a_metadata_edit_can_be_undone_and_redone(instrument: _Bench) -> N
 
 async def test_metadata_that_does_not_fit_its_form_is_rejected_at_its_field(instrument: _Bench) -> None:
     with pytest.raises(RejectedError) as caught:
-        await instrument.update_metadata(weight=12)
+        await instrument.update_metadata({"weight": 12})
 
     assert [problem.loc for problem in caught.value.problems] == [("metadata", "weight")]
     assert instrument.view.value.history.undo_label is None
 
 
 async def test_changing_the_metadata_form_keeps_what_fits_and_can_be_undone(instrument: _Bench) -> None:
-    await instrument.update_metadata(notes="left hemisphere")
+    await instrument.update_metadata({"notes": "left hemisphere"})
 
     await instrument.set_metadata_class(_LabMetadata)
     assert instrument.view.value.state.metadata == {"notes": "left hemisphere", "operator": ""}
@@ -260,10 +261,10 @@ async def test_the_default_state_is_saved_and_restored(instrument: _Bench) -> No
 
 
 async def test_restoring_the_metadata_form_keeps_the_metadata_that_fits(instrument: _Bench) -> None:
-    await instrument.update_metadata(notes="left hemisphere")
+    await instrument.update_metadata({"notes": "left hemisphere"})
     await instrument.save_as_default_state()
     await instrument.set_metadata_class(_LabMetadata)
-    await instrument.update_metadata(operator="ana")
+    await instrument.update_metadata({"operator": "ana"})
 
     await instrument.restore_default_state()
     assert instrument.view.value.state.metadata_cls is ExperimentMetadata
@@ -279,7 +280,7 @@ async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Ben
         await scheduler.start(ActivityInfo(kind="capture"), {instrument._store})
 
     with pytest.raises(ActivityBusyError, match="Unable to update metadata while capture is running"):
-        await instrument.update_metadata(notes="left hemisphere")
+        await instrument.update_metadata({"notes": "left hemisphere"})
 
 
 def _main(instrument: _Bench) -> tuple[str | None, str]:
@@ -321,3 +322,53 @@ async def test_an_edit_inside_an_edit_that_is_refused_puts_back_the_outer_change
 async def test_a_device_that_does_not_exist_is_not_found(instrument: _Bench) -> None:
     with pytest.raises(NotFoundError, match="Device 'nope' not found"):
         await instrument.set_device_properties("nope", {"power": 1.0})
+
+
+_BASIC_RIG: dict[str, Any] = {
+    **_RIG,
+    "parts": {"objective": {"target": "vxl.parts.Objective", "magnification": 10}},
+    "optics": {
+        "laser_488": {"to": "specimen"},
+        "specimen": {"to": "objective"},
+        "objective": {"to": "camera"},
+        "camera": {"width": {"y": 1}, "height": {"x": -1}},
+    },
+}
+"""The bench rig with an objective, so the base state's rules hold: each camera's path has a magnification."""
+
+
+def _basic(tmp_path: Path) -> BasicInstrument:
+    """A basic instrument on the bench rig with an objective, with the base state and its rules, not opened."""
+    state = InstrumentState.model_validate(_DEFAULT)
+    folder = InstrumentFolder(tmp_path, BasicInstrument, bench(_BASIC_RIG), state, None, Problems())
+    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
+    return BasicInstrument(folder, records=records, system=system)
+
+
+def test_a_basic_instrument_offers_the_base_operations_and_its_profile_update() -> None:
+    assert set(BasicInstrument.operations) == set(_Bench.operations) | {"update_profile"}
+    update = BasicInstrument.operations["update_profile"]
+    assert (update.intent, update.resource, update.key) == ("update", "profiles", "profile_id")
+    assert set(update.params["properties"]) == {"profile_id", "label", "desc"}
+
+
+async def test_a_basic_instrument_updates_a_profile_as_1_undo_step(tmp_path: Path) -> None:
+    basic = _basic(tmp_path)
+
+    await basic.execute("update_profile", {"profile_id": "main", "label": "Main", "desc": "the only profile"})
+    profile = basic.view.value.state.profiles["main"]
+    assert (profile.label, profile.desc) == ("Main", "the only profile")
+
+    await basic.execute("undo", {})
+    profile = basic.view.value.state.profiles["main"]
+    assert (profile.label, profile.desc) == (None, "")
+
+
+async def test_a_basic_instrument_refuses_unknown_profiles_and_fields(tmp_path: Path) -> None:
+    basic = _basic(tmp_path)
+
+    with pytest.raises(NotFoundError, match="No profile 'other'"):
+        await basic.execute("update_profile", {"profile_id": "other", "label": "x"})
+    with pytest.raises(RejectedError, match="spacing"):
+        await basic.execute("update_profile", {"profile_id": "main", "spacing": 2.0})

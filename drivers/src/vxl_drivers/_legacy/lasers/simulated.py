@@ -2,7 +2,7 @@ import math
 import random
 import time
 
-from rigup.device import fact, number
+from rigup.interface import fact, number
 
 from vxl_drivers._legacy.aotf.base import AOTF
 from vxl_drivers._legacy.lasers.base import Laser

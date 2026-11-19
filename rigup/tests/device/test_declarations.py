@@ -3,7 +3,8 @@ from typing import Annotated, Any, Literal, cast
 
 import pytest
 from pydantic import Field
-from rigup.device import Device, DeviceController, action, fact, failsafe, number, query, stream
+from rigup.device import Device, DeviceController
+from rigup.interface import action, fact, failsafe, number, query, stream
 
 
 class LaserBase(Device, ABC, kind="laser"):

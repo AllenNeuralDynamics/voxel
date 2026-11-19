@@ -1,0 +1,78 @@
+"""The public interface of a device or of anything else that offers operations: how a class declares the operations
+a client may call and the properties it may read, how rigup reads and checks those declarations, and how clients see
+them. :mod:`.operations` and :mod:`.properties` each cover 1 kind of member; :mod:`.limits` gives properties whose
+values carry live limits. Undeclared members are not part of the interface."""
+
+from ._shared import AttributeInfo, InterfaceError, declaration_of
+from .limits import ChoiceValue, IntegerValue, Limited, NumberValue, choice, integer, number
+from .operations import (
+    DeclaredOperation,
+    Intent,
+    Operation,
+    OperationDeclaration,
+    OperationInfo,
+    OperationParamsError,
+    action,
+    bind_operations,
+    check_signature,
+    create,
+    delete,
+    failsafe,
+    field_hints,
+    fields_of,
+    operations_of,
+    params_model,
+    query,
+    update,
+)
+from .properties import (
+    DeclaredProperty,
+    PropDeclaration,
+    PropInfo,
+    StreamTier,
+    Units,
+    describe_properties,
+    fact,
+    properties_of,
+    stream,
+)
+
+__all__ = [
+    "AttributeInfo",
+    "ChoiceValue",
+    "DeclaredOperation",
+    "DeclaredProperty",
+    "IntegerValue",
+    "Intent",
+    "InterfaceError",
+    "Limited",
+    "NumberValue",
+    "Operation",
+    "OperationDeclaration",
+    "OperationInfo",
+    "OperationParamsError",
+    "PropDeclaration",
+    "PropInfo",
+    "StreamTier",
+    "Units",
+    "action",
+    "bind_operations",
+    "check_signature",
+    "choice",
+    "create",
+    "declaration_of",
+    "delete",
+    "describe_properties",
+    "fact",
+    "failsafe",
+    "field_hints",
+    "fields_of",
+    "integer",
+    "number",
+    "operations_of",
+    "params_model",
+    "properties_of",
+    "query",
+    "stream",
+    "update",
+]

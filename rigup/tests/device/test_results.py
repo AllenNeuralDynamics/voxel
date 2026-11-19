@@ -3,8 +3,7 @@ from typing import NamedTuple
 
 import pytest
 from pydantic import TypeAdapter
-from rigup.device import Result
-from rigup.device.results import PropModel, PropResults, Results
+from rigup.device import PropModel, PropResults, Result, Results
 
 BATCH_JSON = '{"results":{"0:update_roi":{"ok":true,"value":{"x":0,"y":0,"w":4000,"h":2048}}}}'
 

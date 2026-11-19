@@ -6,9 +6,9 @@ from collections.abc import Callable
 
 import pytest
 from pydantic import BaseModel
-from rigup.device import Device, choice, integer, number
-from rigup.device.limits import ChoiceValue, NumberValue
-from rigup.device.results import PropModel
+from rigup.device import Device, PropModel
+from rigup.interface import choice, integer, number
+from rigup.interface.limits import ChoiceValue, NumberValue
 from rigup_fakes import write
 
 

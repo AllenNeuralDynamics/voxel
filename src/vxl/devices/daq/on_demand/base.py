@@ -4,7 +4,8 @@ from abc import abstractmethod
 from collections.abc import Mapping
 
 import numpy as np
-from rigup.device import Device, DeviceController, DeviceHandle, StreamTier, action, fact, failsafe
+from rigup.device import Device, DeviceController, DeviceHandle
+from rigup.interface import StreamTier, action, fact, failsafe
 from vxlib.quantity import VoltageRange
 
 from vxl.devices.base import DeviceType

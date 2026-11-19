@@ -9,8 +9,9 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Literal, Self
 
 from pydantic import Field, PositiveFloat, TypeAdapter, model_validator
-from rigup.device import Device, DeviceController, DeviceHandle, action, fact, failsafe, number, query, stream
+from rigup.device import Device, DeviceController, DeviceHandle
 from rigup.device.handle import Adapter, PropView
+from rigup.interface import action, fact, failsafe, number, query, stream
 from vxlib.schema import FrozenModel
 from vxlib.vector import Span
 

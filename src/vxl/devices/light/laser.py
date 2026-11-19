@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 
-from rigup.device import fact
+from rigup.interface import fact
 
 from .base import Dimmable, DimmableHandle
 

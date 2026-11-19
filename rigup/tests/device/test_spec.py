@@ -3,7 +3,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pytest
 from forward_refs import FD
-from rigup.device import Device, DeviceController, DeviceInterface, action, failsafe, number, query, stream
+from rigup.device import Device, DeviceController, DeviceInterface
+from rigup.interface import action, failsafe, number, query, stream
 from rigup_fakes import subclass
 
 

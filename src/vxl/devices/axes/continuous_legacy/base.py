@@ -6,7 +6,8 @@ from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
-from rigup.device import DeviceController, StreamTier, action, fact, failsafe, number, query, stream
+from rigup.device import DeviceController
+from rigup.interface import StreamTier, action, fact, failsafe, number, query, stream
 
 from vxl.devices.axes.base import Axis
 from vxl.devices.base import DeviceType

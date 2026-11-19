@@ -13,9 +13,8 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, ValidationError
-from rigup.device import DeviceHandle, DeviceInterface, NotObservedError, Result
+from rigup.device import DeviceHandle, DeviceInterface, NotObservedError, PropResults, Result
 from rigup.device.handle import PropModels
-from rigup.device.results import PropResults
 from vxl_records import (
     AcquisitionManifest,
     AcquisitionOrigin,

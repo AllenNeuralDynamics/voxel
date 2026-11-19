@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from enum import StrEnum
 
-from rigup.device import Device, action, fact, query, stream
+from rigup.device import Device
+from rigup.interface import action, fact, query, stream
 
 
 class ChannelCollisionError(Exception):
