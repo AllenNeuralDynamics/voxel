@@ -29,6 +29,9 @@ hal:
     acs:
       target: seqsweep.devices.scan_controller.acs.AcsController  # TODO: driver not written yet; simulated setup is in ../seqsweep_simulated
       init:
+        communication_option: ethernet_tcp
+        address: 10.0.0.100
+        port: 701
         gate_outputs:
           laser_532: OUT0
         axis_x: 0
