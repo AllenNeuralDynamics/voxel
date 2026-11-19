@@ -8,7 +8,7 @@ from vxlib.issues import Problem
 
 from rigup.config import DeviceConfig, Parts
 from rigup.device.interface import DeviceInterface
-from rigup.device.results import CommandRequest
+from rigup.device.results import OperationRequest
 from rigup.transport import TransportClient, TransportServer
 
 
@@ -26,7 +26,7 @@ class Action(StrEnum):
     CLOSE_ALL_DEVICES = "close_all_devices"
 
     GET_INTERFACE = "get_interface"
-    RUN_COMMANDS = "run_commands"
+    EXECUTE = "execute"
     GET_PROPS = "get_props"
     SET_PROPS = "set_props"
 
@@ -92,9 +92,9 @@ class GetInterfaceRequest(BaseModel):
     uid: str
 
 
-class RunCommandsRequest(BaseModel):
+class ExecuteRequest(BaseModel):
     uid: str
-    commands: list[CommandRequest]
+    operations: list[OperationRequest]
 
 
 class GetPropsRequest(BaseModel):
@@ -202,8 +202,8 @@ async def call[Resp: BaseModel](
     Raises ``TransportError`` if the remote handler failed or is missing, and ``TimeoutError`` on timeout.
     """
     key = action.value if isinstance(action, Action) else action
-    # Values with no JSON form, such as a PurePath command argument, go as strings; the receiver
-    # coerces them back from the command's signature.
+    # Values with no JSON form, such as a PurePath operation argument, go as strings; the receiver
+    # coerces them back from the operation's signature.
     payload = request.model_dump_json(fallback=str).encode()
     if isinstance(transport, TransportServer):
         response_bytes = await transport.push_request(key, payload, timeout_s=timeout_s)
@@ -232,6 +232,7 @@ __all__ = [
     "DeviceErrorPayload",
     "Dispatcher",
     "Empty",
+    "ExecuteRequest",
     "GetConfigResponse",
     "GetInterfaceRequest",
     "GetPropsRequest",
@@ -243,7 +244,6 @@ __all__ = [
     "ReleaseRequest",
     "ReleaseResponse",
     "RequestHandlerFn",
-    "RunCommandsRequest",
     "SetPropsRequest",
     "ShutdownPayload",
     "bind",

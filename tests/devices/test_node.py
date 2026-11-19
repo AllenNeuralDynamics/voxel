@@ -34,7 +34,7 @@ async def test_each_monitor_reports_its_own_process_and_the_shared_machine(rig: 
     here, there = (NodeMonitorHandle.wrap(rig.devices[uid]) for uid in ("monitor", "cam_monitor"))
 
     assert (await here.interface()).kind == "node_monitor"
-    assert (await here.interface()).commands == {}
+    assert (await here.interface()).operations == {}
     assert here.pid.value != there.pid.value
     assert here.hostname.value == there.hostname.value == System.hostname()
     assert here.cpu_count.value == there.cpu_count.value

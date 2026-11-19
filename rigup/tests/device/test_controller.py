@@ -131,7 +131,7 @@ async def test_a_command_runs_with_valid_arguments(take: Take) -> None:
     laser = Laser()
     controller = take(laser)
 
-    result = await controller.execute_command("ramp", target=40.0, mode="pulsed")
+    result = await controller.execute("ramp", target=40.0, mode="pulsed")
 
     assert result.unwrap() == 40.0
     assert laser.calls == [(40.0, 1.0, "pulsed")]
@@ -144,7 +144,7 @@ async def test_a_command_is_checked_against_the_base_declaration(take: Take, arg
     laser = Laser()
     controller = take(laser)
 
-    result = await controller.execute_command("ramp", **arguments)
+    result = await controller.execute("ramp", **arguments)
 
     assert not result
     assert laser.calls == []
@@ -166,7 +166,7 @@ async def test_a_command_coerces_lax_arguments_by_design(
     counter = Counter()
     controller = take(counter)
 
-    result = await controller.execute_command("go", **arguments)
+    result = await controller.execute("go", **arguments)
 
     assert result
     assert counter.got == [got]
@@ -181,7 +181,7 @@ async def test_a_command_refuses_bad_arguments(take: Take, args: tuple[Any, ...]
     counter = Counter()
     controller = take(counter)
 
-    result = await controller.execute_command("go", *args, **kwargs)
+    result = await controller.execute("go", *args, **kwargs)
 
     assert not result
     assert counter.got == []
@@ -190,7 +190,7 @@ async def test_a_command_refuses_bad_arguments(take: Take, args: tuple[Any, ...]
 async def test_a_command_that_raises_becomes_an_error_result(take: Take) -> None:
     controller = take(MockDevice("mock"))
 
-    result = await controller.execute_command("fail")
+    result = await controller.execute("fail")
 
     assert not result
     assert "intentional failure" in result.model_dump_json()
@@ -199,7 +199,7 @@ async def test_a_command_that_raises_becomes_an_error_result(take: Take) -> None
 async def test_a_command_with_forward_referenced_types_accepts_wire_values(take: Take) -> None:
     controller = take(FD())
 
-    result = await controller.execute_command("misc", p="/x", c="red", lit="b", raw="abc", td={"k": "3"}, dc={"z": 1})
+    result = await controller.execute("misc", p="/x", c="red", lit="b", raw="abc", td={"k": "3"}, dc={"z": 1})
 
     assert result
 
@@ -243,7 +243,7 @@ async def test_get_props_reports_an_unknown_property_as_an_error(take: Take) -> 
 
 
 @pytest.mark.parametrize(
-    "read", [lambda mixed: mixed.hello(), lambda mixed: mixed.mix], ids=["mixin-command", "mixin-property"]
+    "read", [lambda mixed: mixed.hello(), lambda mixed: mixed.mix], ids=["mixin-operation", "mixin-property"]
 )
 async def test_a_mixin_member_is_refused_from_another_thread(take: Take, read: Callable[[Mixed], object]) -> None:
     mixed = Mixed("mixed")

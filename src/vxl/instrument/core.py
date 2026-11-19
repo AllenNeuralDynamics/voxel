@@ -423,7 +423,7 @@ class Instrument:
         """Execute a user command; persist applied ROIs for active-profile cameras."""
         async with self._lock:
             self._ensure_not_busy("execute a device command")
-            result = await self._device(device_id).run_command(command, *args, **dict(kwargs or {}))
+            result = await self._device(device_id).execute(command, *args, **dict(kwargs or {}))
             if (
                 result.is_ok
                 and command in {"update_roi", "reset_roi"}
@@ -895,7 +895,7 @@ class Instrument:
                     )
                     continue
                 for index, command in enumerate(commands):
-                    if command.attr not in interface.commands:
+                    if command.attr not in interface.operations:
                         violations.append(
                             Violation(
                                 code="imaging.profile.setup.command_missing",
@@ -1241,7 +1241,7 @@ class Instrument:
 
     async def _run_setup_commands(self) -> None:
         for device_id, commands in self.active_profile.setup.items():
-            result = await self._hal.devices[device_id].run_commands(commands)
+            result = await self._hal.devices[device_id].execute_many(commands)
             if not result.is_ok:
                 failed = sorted(name for name, command_result in result.results.items() if not command_result.is_ok)
                 raise OperationRejectedError(f"Setup commands {failed} failed for device '{device_id}'")

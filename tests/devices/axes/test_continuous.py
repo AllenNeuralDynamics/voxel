@@ -37,7 +37,7 @@ async def test_each_kind_shows_its_unit_and_limits_across_a_rig_node() -> None:
 
 async def _call(axis: ContinuousAxisNewController, command: str, *args: object) -> object:
     """Run a command on the axis's own thread, as a rig does, and raise its error."""
-    return (await axis.execute_command(command, *args)).unwrap()
+    return (await axis.execute(command, *args)).unwrap()
 
 
 def _linear() -> LinearAxisController:

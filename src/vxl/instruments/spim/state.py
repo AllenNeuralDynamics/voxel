@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Annotated, TypedDict
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
-from pydantic import Field, field_validator
+from pydantic import Field, PositiveFloat, field_validator
 from vxlib.issues import Problem, Problems
 from vxlib.schema import repeated
 
@@ -12,7 +12,7 @@ from vxl.station.instrument.config import (
     InstrumentConfig,
     NotDefault,
 )
-from vxl.station.instrument.state import InstrumentState, ProfileId, StageFollowRule
+from vxl.station.instrument.state import InstrumentState, ProfileFields, ProfileId, StageFollowRule
 
 from .config import SPIMConfig, SPIMProfile
 from .task import Task, TaskDefaults
@@ -27,6 +27,12 @@ class WriterFields(TypedDict, total=False):
     compression: Compression
     downscale_type: DownscaleType
     target_shard_gb: float
+
+
+class SPIMProfileFields(ProfileFields, total=False):
+    """The fields of a SPIM profile that an update may change, each one optional."""
+
+    spacing: PositiveFloat
 
 
 class SPIMState(InstrumentState, frozen=True):

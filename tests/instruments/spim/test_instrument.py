@@ -14,12 +14,12 @@ from vxl_records import SQLiteRecords
 from vxl._utils.files import load_yaml
 from vxl.devices.camera import AreaROI
 from vxl.devices.signals.generator.base import OwnClock
-from vxl.instruments.spim.config import SPIMConfig
+from vxl.instruments.spim.config import SPIMConfig, SPIMProfile
 from vxl.instruments.spim.instrument import Microscope
-from vxl.instruments.spim.state import SPIMState, WriterFields
+from vxl.instruments.spim.state import SPIMProfileFields, SPIMState, WriterFields
 from vxl.instruments.spim.task import Task, TaskFields
 from vxl.live import LiveSourceEmission, LiveViewport, live_source_header
-from vxl.station.errors import RejectedError, StartupError
+from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import new_instrument_id
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.station.instrument.samples import render
@@ -267,8 +267,8 @@ def _task(microscope: Microscope, task_id: str) -> Task:
 
 async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope: Microscope) -> None:
     await microscope.update_writer_settings(shard_z_chunks=4, target_shard_gb=2.0)
-    await microscope.set_spacing("gfp", 2.5)
-    await microscope.update_profile_details("gfp", label="GFP", desc="green")
+    await microscope.update_profile("gfp", spacing=2.5)
+    await microscope.update_profile("gfp", label="GFP", desc="green")
     state = microscope.view.value.state
     assert (state.writer.shard_z_chunks, state.profiles["gfp"].spacing) == (4, 2.5)
     assert (state.profiles["gfp"].label, state.profiles["gfp"].desc) == ("GFP", "green")
@@ -280,25 +280,34 @@ async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope:
 
 @pytest.mark.parametrize(
     ("profile_id", "spacing", "loc"),
-    [("rfp", 2.0, ("profiles", "rfp", "spacing")), ("gfp", -1, ("profiles", "gfp", "spacing"))],
+    [("rfp", 2.0, ("profiles", "rfp")), ("gfp", -1, ("profiles", "gfp", "spacing"))],
 )
 async def test_a_spacing_edit_is_refused_at_its_path(
     microscope: Microscope, profile_id: str, spacing: float, loc: tuple[str, ...]
 ) -> None:
     with pytest.raises(RejectedError) as caught:
-        await microscope.set_spacing(profile_id, spacing)
+        await microscope.update_profile(profile_id, spacing=spacing)
     assert [problem.loc for problem in caught.value.problems] == [loc]
     assert microscope.view.value.history.undo_label is None
 
 
-@pytest.mark.parametrize("name", ["props", "spacing", "spcing"])
-async def test_profile_details_cannot_change_other_fields(microscope: Microscope, name: str) -> None:
+@pytest.mark.parametrize("name", ["props", "channels", "spcing"])
+async def test_a_profile_update_cannot_change_other_fields(microscope: Microscope, name: str) -> None:
     untyped: dict[str, Any] = {name: {}}  # what a caller with no types can send
     with pytest.raises(RejectedError, match=f"cannot change \\['{name}'\\] of a profile"):
-        await microscope.update_profile_details("gfp", **untyped)
+        await microscope.update_profile("gfp", **untyped)
 
 
-@pytest.mark.parametrize(("fields", "model"), [(TaskFields, Task), (WriterFields, WriterSettings)])
+async def test_an_update_of_a_missing_profile_is_not_found(microscope: Microscope) -> None:
+    with pytest.raises(NotFoundError):
+        await microscope.update_profile("rfp", label="red")
+    with pytest.raises(NotFoundError, match="No profile 'rfp'"):
+        await microscope.select_profile("rfp")
+
+
+@pytest.mark.parametrize(
+    ("fields", "model"), [(TaskFields, Task), (WriterFields, WriterSettings), (SPIMProfileFields, SPIMProfile)]
+)
 def test_each_field_list_names_fields_of_its_model(fields: type, model: type[BaseModel]) -> None:
     assert fields.__annotations__.keys() <= model.model_fields.keys()
 
@@ -341,9 +350,9 @@ async def test_task_edits_that_name_unknown_tasks_are_refused(microscope: Micros
 
     with pytest.raises(RejectedError, match="task ids must be unique"):
         await microscope.add_task(_task(microscope, "a"))
-    with pytest.raises(RejectedError, match="No task 'z'"):
+    with pytest.raises(NotFoundError, match="No task 'z'"):
         await microscope.update_task("z", iteration="profile_major")
-    with pytest.raises(RejectedError, match="No task 'z'"):
+    with pytest.raises(NotFoundError, match="No task 'z'"):
         await microscope.remove_tasks(["a", "z"])
     with pytest.raises(RejectedError, match="each task of the plan 1 time"):
         await microscope.reorder_tasks(["a", "a"])

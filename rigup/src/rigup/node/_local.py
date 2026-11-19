@@ -12,7 +12,7 @@ from rigup.device.controller import DeviceController, StreamCallback
 from rigup.device.device import Device
 from rigup.device.handle import Adapter, DeviceHandle
 from rigup.device.interface import DeviceInterface
-from rigup.device.results import CommandRequest, PropResults, Result, Results
+from rigup.device.results import OperationRequest, PropResults, Result, Results
 from rigup.node._broadcast import TopicDispatcher
 
 from ._base import DevicesBuildResult, DevicesConfig, Node, close_each, first_read
@@ -49,11 +49,11 @@ class LocalAdapter[D: Device](Adapter[D]):
     async def interface(self) -> DeviceInterface:
         return self._controller.interface
 
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
-        return await self._controller.execute_command(command, *args, **kwargs)
+    async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result:
+        return await self._controller.execute(operation, *args, **kwargs)
 
-    async def run_commands(self, commands: list[CommandRequest]) -> Results:
-        return await self._controller.execute_commands(commands)
+    async def execute_many(self, operations: list[OperationRequest]) -> Results:
+        return await self._controller.execute_many(operations)
 
     async def get_props(self, *props: str) -> PropResults:
         return await self._controller.get_props(*props)

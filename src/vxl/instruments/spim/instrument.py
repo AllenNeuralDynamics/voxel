@@ -1,18 +1,18 @@
 import logging
-from collections.abc import AsyncGenerator, Collection, Hashable, Sequence
+from collections.abc import AsyncGenerator, Hashable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Unpack
 
-from pydantic import PositiveFloat
 from rigup.activity import Activity, ActivityInfo
+from rigup.interface import action, create, failsafe, update
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 
 from vxl.devices.camera import AreaROI
-from vxl.station.errors import RejectedError
+from vxl.station.errors import NotFoundError, RejectedError
 from vxl.station.instrument.base import Instrument, InstrumentView
 from vxl.station.instrument.config import DeviceUid
 from vxl.station.instrument.state import ProfileId
@@ -20,7 +20,7 @@ from vxl.station.instrument.store import ABSENT
 from vxl.system import System
 
 from .config import SPIMConfig
-from .state import SPIMState, WriterFields
+from .state import SPIMProfileFields, SPIMState, WriterFields
 from .task import Task, TaskFields, TaskId
 
 if TYPE_CHECKING:
@@ -65,18 +65,21 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         self._preview_channels = Cell[tuple[DeviceUid, ...]](self._preview_choice(self._active_profile.value))
         self._preview: _Preview | None = None
 
+    @action(on="preview", verb="start")
     async def start_preview(self) -> None:
         """Start a preview of the active profile's chosen channels. Do nothing when a preview runs."""
         async with self._scheduler.run("start a preview", requires=()):
             if self._preview is None:
                 await self._begin_preview()
 
+    @failsafe(on="preview", verb="stop")
     async def stop_preview(self) -> None:
         """Stop the preview. Do nothing when none runs."""
         async with self._scheduler.run("stop the preview", requires=()):
             await self._end_preview()
 
-    async def set_preview_channels(self, channels: Collection[DeviceUid]) -> None:
+    @action(on="preview", verb="set_channels")
+    async def set_preview_channels(self, channels: list[DeviceUid]) -> None:
         """Choose the channels, by camera, that a preview of the active profile shows. A running preview restarts
         with them when they differ."""
         async with self._scheduler.run("set the preview channels", requires=()):
@@ -95,6 +98,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
             if running:
                 await self._begin_preview()
 
+    @action(on="cameras", key="camera", verb="set_region")
     async def set_camera_region(self, camera: DeviceUid, region: AreaROI | None) -> AreaROI:
         """Set a camera's region, or its full frame when ``region`` is ``None``, and give back the region the camera
         applied after snapping it to its grid. When the camera is a channel of the active profile, save that region
@@ -109,6 +113,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 await self._store.update({("profiles", active, "fov", camera): ABSENT if region is None else applied})
             return applied
 
+    @update("writer")
     async def update_writer_settings(self, **fields: Unpack[WriterFields]) -> None:
         """Change fields of the writer settings."""
         async with self._state_edit("Update writer settings") as edit:
@@ -116,16 +121,18 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 raise RejectedError(f"An edit cannot change {unknown} of the writer settings")
             await edit.record({("writer", name): value for name, value in fields.items()})
 
-    async def set_spacing(self, profile_id: ProfileId, spacing: PositiveFloat) -> None:
-        """Set the µm between frames along the scan axis in a profile."""
-        async with self._state_edit("Set spacing") as edit:
-            await edit.record({("profiles", profile_id, "spacing"): spacing})
+    @update("profiles", key="profile_id")
+    async def update_profile(self, profile_id: ProfileId, **fields: Unpack[SPIMProfileFields]) -> None:
+        """Change the spacing, label or notes of a profile, as 1 edit."""
+        await self._update_profile(profile_id, fields, SPIMProfileFields)
 
+    @create("plan")
     async def add_task(self, task: Task) -> None:
         """Add a task at the end of the plan."""
         async with self._state_edit("Add task") as edit:
             await edit.record({("plan",): [*self._store.value.plan, task]})
 
+    @update("plan", key="task_id")
     async def update_task(
         self,
         task_id: TaskId,
@@ -142,18 +149,20 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 None,
             )
             if index is None:
-                raise RejectedError(f"No task '{task_id}'")
+                raise NotFoundError(f"No task '{task_id}'")
             await edit.record({("plan", index, name): value for name, value in fields.items()})
 
-    async def remove_tasks(self, task_ids: Collection[TaskId]) -> None:
+    @action(on="plan", verb="remove")
+    async def remove_tasks(self, task_ids: list[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""
         async with self._state_edit("Remove tasks") as edit:
             plan = self._store.value.plan
             if unknown := sorted(set(task_ids) - {task.id for task in plan}):
-                raise RejectedError(f"No task {', '.join(repr(task_id) for task_id in unknown)}")
+                raise NotFoundError(f"No task {', '.join(repr(task_id) for task_id in unknown)}")
             await edit.record({("plan",): [task for task in plan if task.id not in task_ids]})
 
-    async def reorder_tasks(self, task_ids: Sequence[TaskId]) -> None:
+    @action(on="plan", verb="reorder")
+    async def reorder_tasks(self, task_ids: list[TaskId]) -> None:
         """Put the tasks of the plan in the order of ``task_ids``, which names each task 1 time."""
         async with self._state_edit("Reorder tasks") as edit:
             tasks = {task.id: task for task in self._store.value.plan}

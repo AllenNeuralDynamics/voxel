@@ -137,7 +137,7 @@ async def test_a_command_returns_its_value(node: LocalNode) -> None:
 async def test_a_failing_command_returns_an_error(node: LocalNode) -> None:
     handles, _ = await node.build_devices({"dev": DeviceConfig(target=MOCK)})
 
-    result = await handles["dev"].run_command("fail")
+    result = await handles["dev"].execute("fail")
 
     assert not result.is_ok
 
@@ -167,7 +167,7 @@ async def test_interface_describes_the_device(node: LocalNode) -> None:
     interface = await handles["dev"].interface()
 
     assert interface.kind == "mock"
-    assert "set_value" in interface.commands
+    assert "set_value" in interface.operations
     assert "value" in interface.props
 
 
@@ -186,7 +186,7 @@ async def test_a_device_log_reaches_handlers_from_the_device_thread(
     caplog.clear()
 
     with caplog.at_level(logging.INFO):
-        await handles["p"].run_command("log_it")
+        await handles["p"].execute("log_it")
 
     assert [(r.getMessage(), r.threadName) for r in caplog.records] == [("hello-from-device", "device-p")]
 
@@ -239,7 +239,7 @@ async def test_close_ends_every_device_thread() -> None:
 async def test_close_leaves_a_stuck_sync_command_behind(node: LocalNode, short_grace: float) -> None:
     handles, _ = await node.build_devices(PROBE)
     probe = probe_of(node)
-    call = asyncio.create_task(handles["p"].run_command("block"))
+    call = asyncio.create_task(handles["p"].execute("block"))
     await started(probe)
 
     began = time.monotonic()
@@ -253,14 +253,14 @@ async def test_close_leaves_a_stuck_sync_command_behind(node: LocalNode, short_g
 async def test_close_ends_a_running_async_command_with_an_error(node: LocalNode) -> None:
     handles, _ = await node.build_devices(PROBE)
     probe = probe_of(node)
-    call = asyncio.create_task(handles["p"].run_command("wait"))
+    call = asyncio.create_task(handles["p"].execute("wait"))
     await started(probe)
 
     await node.close()
 
     result = await call
     assert not result
-    assert "closed while the command ran" in result.model_dump_json()
+    assert "closed while the operation ran" in result.model_dump_json()
 
 
 async def test_close_raises_when_a_device_close_raises(node: LocalNode) -> None:
@@ -280,7 +280,7 @@ async def test_a_node_builds_again_after_a_device_close_raised(node: LocalNode) 
     handles, errors = await node.build_devices(PROBE)
 
     assert errors == {}
-    assert (await handles["p"].run_command("bump", times=1)).unwrap() == 1
+    assert (await handles["p"].execute("bump", times=1)).unwrap() == 1
 
 
 async def test_a_handle_refuses_calls_after_its_node_closed() -> None:
@@ -288,7 +288,7 @@ async def test_a_handle_refuses_calls_after_its_node_closed() -> None:
     handles, _ = await node.build_devices(PROBE)
     await node.close()
 
-    result = await handles["p"].run_command("peak")
+    result = await handles["p"].execute("peak")
 
     assert not result
 

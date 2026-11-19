@@ -13,7 +13,7 @@ from vxlib.reactivity import Subscribable
 from .controller import StreamCallback
 from .device import Device
 from .interface import DeviceInterface
-from .results import CommandRequest, PropModel, PropResults, Result, Results
+from .results import OperationRequest, PropModel, PropResults, Result, Results
 
 type PropCallback[T] = Callable[[T], Awaitable[None] | None]
 type PropParser[T] = Callable[[object], T]
@@ -52,10 +52,10 @@ class Adapter[D: Device](ABC):
     async def interface(self) -> DeviceInterface: ...
 
     @abstractmethod
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result: ...
+    async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result: ...
 
     @abstractmethod
-    async def run_commands(self, commands: list[CommandRequest]) -> Results: ...
+    async def execute_many(self, operations: list[OperationRequest]) -> Results: ...
 
     @abstractmethod
     async def get_props(self, *props: str) -> PropResults: ...
@@ -250,16 +250,16 @@ class DeviceHandle[D: Device]:
     async def interface(self) -> DeviceInterface:
         return await self._adapter.cached_interface()
 
-    async def call(self, command: str, *args: Any, **kwargs: Any) -> Any:
-        """Run a command and return its value, raising ``RuntimeError`` when it fails."""
-        response = await self._adapter.run_command(command, *args, **kwargs)
+    async def call(self, operation: str, *args: Any, **kwargs: Any) -> Any:
+        """Run an operation and return its value, raising ``RuntimeError`` when it fails."""
+        response = await self._adapter.execute(operation, *args, **kwargs)
         return response.unwrap()
 
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
-        return await self._adapter.run_command(command, *args, **kwargs)
+    async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result:
+        return await self._adapter.execute(operation, *args, **kwargs)
 
-    async def run_commands(self, commands: list[CommandRequest]) -> Results:
-        return await self._adapter.run_commands(commands)
+    async def execute_many(self, operations: list[OperationRequest]) -> Results:
+        return await self._adapter.execute_many(operations)
 
     @overload
     def subscribe(self, topic: str, cb: StreamCallback[bytes]) -> Teardown: ...

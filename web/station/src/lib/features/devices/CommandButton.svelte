@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CommandInfo, DeviceHandle } from '$lib/core/model';
+  import type { DeviceHandle, OperationInfo } from '$lib/core/model';
   import type { ArgSchema } from '$lib/core/model/types';
   import { Button, Dialog, NumberBox, Select, TextBox } from '@voxel/kit';
   import { reportFailure } from '@voxel/kit/failures';
@@ -23,7 +23,7 @@
     options?: (string | number)[];
   }
 
-  const commandInfo = $derived(device.interface?.commands?.[commandName] as CommandInfo | undefined);
+  const commandInfo = $derived(device.interface?.operations?.[commandName] as OperationInfo | undefined);
   const params = $derived(commandInfo ? readParams(commandInfo.params) : []);
   const label = $derived(commandInfo?.label || displayName(commandName));
   let values = $state<Record<string, unknown>>({});

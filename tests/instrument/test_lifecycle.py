@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import PurePosixPath
 from types import SimpleNamespace
@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from rigup.device import DeviceInterface
 from rigup.device.handle import PropModels
-from rigup.device.results import CommandRequest
+from rigup.device.results import OperationRequest
 from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 
@@ -128,8 +128,8 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
                 "unavailable": {"gain": 1},
             },
             "setup": {
-                "camera_1": [CommandRequest(attr="missing_command")],
-                "unavailable": [CommandRequest(attr="configure")],
+                "camera_1": [OperationRequest(attr="missing_command")],
+                "unavailable": [OperationRequest(attr="configure")],
             },
         }
     )
@@ -151,7 +151,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
         {
             "uid": "camera_1",
             "kind": "camera",
-            "commands": {},
+            "operations": {},
             "props": {
                 "temperature": {
                     "name": "temperature",
@@ -162,7 +162,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             },
         }
     )
-    daq_interface = DeviceInterface(uid="daq", kind="signal_generator", commands={}, props={})
+    daq_interface = DeviceInterface(uid="daq", kind="signal_generator", operations={}, props={})
 
     def axis():
         return SimpleNamespace(lower_limit=Cell(0), upper_limit=Cell(100))
@@ -225,7 +225,7 @@ async def test_startup_exposes_device_properties_and_stage_updates(opened_instru
 
 
 @asynccontextmanager
-async def _simulated(instrument: Instrument, activity: Activity) -> AsyncIterator[None]:
+async def _simulated(instrument: Instrument, activity: Activity) -> AsyncGenerator[None]:
     """Pretend an activity runs on an unopened instrument, then return to idle so teardown has nothing to stop."""
     await instrument._activity.set(activity)
     try:

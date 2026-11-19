@@ -5,8 +5,9 @@ from collections.abc import Hashable, Iterable, Mapping
 from functools import partial
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, ConfigDict
-from pydantic_core import ErrorDetails
+from pydantic import AfterValidator, BaseModel, ConfigDict, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema, ErrorDetails
 
 
 class FrozenModel(BaseModel):
@@ -29,6 +30,28 @@ class SparseModel(FrozenModel):
     def model_dump_json(self, **kwargs: Any) -> str:
         kwargs.setdefault("exclude_none", True)
         return super().model_dump_json(**kwargs)
+
+
+class _Key:
+    """The type of :data:`Key`. In a JSON Schema the field gets ``"x-key": true``."""
+
+    def __repr__(self) -> str:
+        return "Key"
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        return {**handler(schema), "x-key": True}
+
+
+Key = _Key()
+"""Mark the field that identifies each item of an ordered collection: ``id: Annotated[TaskId, Key]``."""
+
+
+def key_field(model: type[BaseModel]) -> str:
+    """The 1 field of ``model`` marked with :data:`Key`. Raise ``TypeError`` when it has none or more than 1."""
+    found = [name for name, info in model.model_fields.items() if Key in info.metadata]
+    if len(found) != 1:
+        raise TypeError(f"{model.__name__} needs exactly 1 field marked Key, found {found or 'none'}")
+    return found[0]
 
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9_-]+")
@@ -95,11 +118,13 @@ def duplicate_keys[K: Hashable](scopes: Mapping[str, Iterable[K]]) -> dict[K, li
 
 __all__ = [
     "FrozenModel",
+    "Key",
     "SparseModel",
     "UniqueList",
     "check_identifier",
     "duplicate_keys",
     "error_message",
     "identifier",
+    "key_field",
     "repeated",
 ]

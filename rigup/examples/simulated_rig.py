@@ -1,4 +1,4 @@
-"""A rig of simulated devices: interfaces, limits, commands, refusals, streams and failsafes.
+"""A rig of simulated devices: interfaces, limits, operations, refusals, streams and failsafes.
 
 Run with ``uv run python rigup/examples/simulated_rig.py``.
 """
@@ -29,14 +29,14 @@ async def show_interface(handle: DeviceHandle) -> None:
         details = [info.dtype + (f" {info.units}" if info.units else ""), info.access]
         details += [f"streams {info.stream}"] if info.stream else []
         print(f"  property {name}: {', '.join(details)}")
-    for name, info in found.commands.items():
+    for name, info in found.operations.items():
         print(f"  {info.intent} {name}({', '.join(info.params.get('properties', {}))})")
 
 
-async def call(handle: DeviceHandle, command: str, **arguments: Any) -> None:
-    result = await handle.run_command(command, **arguments)
+async def call(handle: DeviceHandle, operation: str, **arguments: Any) -> None:
+    result = await handle.execute(operation, **arguments)
     shown = f"refused: {result.error}" if result.error else f"-> {result.unwrap()!r}"
-    print(f"  {handle.uid}.{command} {shown}")
+    print(f"  {handle.uid}.{operation} {shown}")
 
 
 async def write(handle: DeviceHandle, **values: Any) -> None:
@@ -86,7 +86,7 @@ async def main() -> None:
 
         print('\n"Stop all" runs every failsafe, found from the interfaces')
         for handle in rig.devices.values():
-            for name, info in (await handle.interface()).commands.items():
+            for name, info in (await handle.interface()).operations.items():
                 if info.intent == "failsafe":
                     await call(handle, name)
 

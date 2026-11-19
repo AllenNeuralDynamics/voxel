@@ -112,7 +112,7 @@ class DeviceLoop:
                 return await coroutine
             except asyncio.CancelledError:
                 if self._state != "open":
-                    raise DeviceClosedError("the device closed while the command ran") from None
+                    raise DeviceClosedError("the device closed while the operation ran") from None
                 raise
             except BaseException as error:
                 raise _as_exception(error) from error

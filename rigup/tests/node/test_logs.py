@@ -54,12 +54,12 @@ def short_path() -> Iterator[Path]:
 
 def test_a_forwarded_record_keeps_its_traceback_and_extra_fields() -> None:
     error = ValueError("boom")
-    record = logging.LogRecord("dev", logging.ERROR, "", 0, "command %s failed", ("go",), (ValueError, error, None))
+    record = logging.LogRecord("dev", logging.ERROR, "", 0, "operation %s failed", ("go",), (ValueError, error, None))
     record.action, record.target = "cmd.fail", "go"
 
     forwarded = NodeLogEvent.model_validate_json(NodeLogEvent.from_record("n1", record).model_dump_json()).to_record()
 
-    assert forwarded.getMessage() == "command go failed"
+    assert forwarded.getMessage() == "operation go failed"
     assert "ValueError: boom" in (forwarded.exc_text or "")
     assert getattr(forwarded, "action", None) == "cmd.fail"
     assert getattr(forwarded, "target", None) == "go"

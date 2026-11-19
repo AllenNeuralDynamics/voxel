@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from rigup.build import BuildConfig, dependencies
 from rigup.config import NodeConfig, RigConfig
-from rigup.device.results import CommandRequest
+from rigup.device.results import OperationRequest
 from rigup.node._protocol import BuildDevicesRequest
 
 from rigup import Part
@@ -225,9 +225,9 @@ def test_an_empty_nodes_value_is_refused() -> None:
         (RigConfig, {"name": "test"}),
         (NodeConfig, {"kind": "subprocess", "adress": "tcp://localhost:5555"}),
         (BuildConfig, {"target": "some.Module", "initial": {}}),
-        (CommandRequest, {"attr": "enable", "arguments": []}),
+        (OperationRequest, {"attr": "enable", "arguments": []}),
     ],
-    ids=["rig", "node", "build", "command-request"],
+    ids=["rig", "node", "build", "operation-request"],
 )
 def test_an_unknown_field_is_refused(model: type[BaseModel], raw: dict[str, object]) -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):

@@ -185,13 +185,13 @@ async def test_a_remote_interface_describes_the_device(served: Served) -> None:
     interface = await handles["dev"].interface()
 
     assert interface.kind == "mock"
-    assert "set_value" in interface.commands
+    assert "set_value" in interface.operations
 
 
 async def test_concurrent_remote_calls_never_overlap_on_the_device(served: Served) -> None:
     handles, _ = await served.node.build_devices(PROBE)
 
-    results = await asyncio.gather(*[handles["p"].run_command("work", 0.02) for _ in range(40)])
+    results = await asyncio.gather(*[handles["p"].execute("work", 0.02) for _ in range(40)])
 
     assert [result.is_ok for result in results] == [True] * 40
     assert await handles["p"].call("peak") == 0
@@ -222,7 +222,7 @@ async def test_close_all_devices_ends_a_running_async_command_with_an_error(
     handles, _ = await served.node.build_devices(PROBE)
     probe = served.daemon._controllers["p"].device
     assert isinstance(probe, Probe)
-    running = asyncio.create_task(handles["p"].run_command("wait"))
+    running = asyncio.create_task(handles["p"].execute("wait"))
     assert await asyncio.to_thread(probe.started.wait, 5)
 
     await asyncio.wait_for(served.node.close_all_devices(), 10)

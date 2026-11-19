@@ -18,7 +18,7 @@ from vxlib.schema import identifier
 
 from .build import BuildConfig, dependencies, import_class
 from .component import Part
-from .device.marks import StreamTier
+from .interface import StreamTier
 
 NodeKind = Literal["subprocess", "remote"]
 ComponentUid = Annotated[str, identifier("Component UID")]

@@ -300,7 +300,7 @@ type Waveform = Annotated[Square | Sine, Field(discriminator="kind")]
 
 
 class SignalCard(Recorded, Device, kind="signal_card"):
-    """Digital lines and an analog output, with commands only."""
+    """Digital lines and an analog output, with operations only."""
 
     def __init__(self, uid: str) -> None:
         super().__init__(uid)

@@ -26,6 +26,10 @@ class RejectedError(VoxelError):
         super().__init__(message)
 
 
+class NotFoundError(RejectedError):
+    """The request names something that does not exist, such as a task or a profile, and nothing changed."""
+
+
 class BusyError(VoxelError):
     """The request is valid, but it cannot run now: an activity holds what it needs, or the station is in another
     phase."""
@@ -39,4 +43,12 @@ class FeedLaggedError(VoxelError):
     """A connection to the station's feed fell too far behind."""
 
 
-__all__ = ["BusyError", "FeedLaggedError", "RejectedError", "StartupError", "StationNotConfiguredError", "VoxelError"]
+__all__ = [
+    "BusyError",
+    "FeedLaggedError",
+    "NotFoundError",
+    "RejectedError",
+    "StartupError",
+    "StationNotConfiguredError",
+    "VoxelError",
+]

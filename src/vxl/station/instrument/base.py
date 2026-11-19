@@ -1,21 +1,24 @@
 import asyncio
+import inspect
 import logging
 import math
 from collections.abc import AsyncGenerator, Collection, Hashable, Mapping, Sequence
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from types import get_original_bases
-from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, Unpack, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast, get_args, get_origin
 
 from pydantic import SerializeAsAny, ValidationError
 from rigup.activity import ActivityInfo, ActivityScheduler, Resource
 from rigup.build import dependencies
-from rigup.device import Result
+from rigup.device import OperationParamsError, Result, collect_operations
 from rigup.device.handle import NotObservedError
 from rigup.device.results import PropResults
+from rigup.interface import OperationInfo, action, failsafe
 from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
-from vxlib.history import HistoryState, UndoHistory
+from vxlib.history import Change, HistoryState, UndoHistory
 from vxlib.issues import KeyPath, Problems
 from vxlib.reactivity import Cell, Computed, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
@@ -27,10 +30,11 @@ from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
 from vxl.live import LiveSourceEmission, LiveViewport
 from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
-from vxl.station.errors import RejectedError, StartupError
+from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
 from vxl.station.instrument.geometry import Transform
 from vxl.station.instrument.hal import HAL, DeviceView
+from vxl.station.instrument.interface import InstrumentInterface, check_operations
 from vxl.station.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
 from vxl.station.instrument.samples import render
 from vxl.station.instrument.signals import Timeline
@@ -40,7 +44,6 @@ from vxl.station.instrument.state import (
     Power,
     PowerMode,
     Profile,
-    ProfileDetails,
     ProfileId,
     StageFollowRule,
 )
@@ -52,6 +55,9 @@ if TYPE_CHECKING:
     from vxl.station.instrument.folder import InstrumentFolder
 
 logger = logging.getLogger(__name__)
+
+_OPEN_EDIT: ContextVar["Instrument.StateEdit | None"] = ContextVar("open_edit", default=None)
+"""The state edit that the current command is inside, which an edit opened in it joins."""
 
 
 class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
@@ -88,6 +94,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     config_cls: ClassVar[type[InstrumentConfig]]
     state_cls: ClassVar[type[InstrumentState]]
     view_cls: ClassVar[type[InstrumentView[Any, Any]]] = InstrumentView
+    operations: ClassVar[Mapping[str, OperationInfo]] = {}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -98,6 +105,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                     cls.config_cls, cls.state_cls, *view = args
                     if view:
                         cls.view_cls = view[0]
+        if hasattr(cls, "state_cls"):  # a kind that still has type parameters has no state class to check against
+            cls.operations = check_operations(cls, cls.state_cls)
 
     def __init__(self, folder: "InstrumentFolder[C, S]", *, records: VoxelRecords, system: System) -> None:
         """Construct the instrument of ``folder`` without opening hardware. Raise :class:`StartupError` when the
@@ -115,6 +124,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._scheduler = ActivityScheduler(self._devices_resource_map(config))
         self._remote_stores = Cell[dict[str, Remote]]({})
         self._history = UndoHistory()
+        self._operations = collect_operations(self)
         self._active_profile = Cell[ProfileId](next(iter(self._store.value.profiles)))
         self._power_mode = Cell[PowerMode]("dim")
         self._live_frames = Emitter[LiveSourceEmission]()
@@ -201,6 +211,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 await self._history.clear()
                 await self._hal.close()
 
+    @failsafe(verb="stop")
     async def stop(self) -> None:
         """End every activity, then run every failsafe of every device. It never waits for the running command."""
         await self._end_activities()
@@ -243,12 +254,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """Run a command of a device. A query or a failsafe runs at once; an action waits for the command before it.
         None of them restarts or refuses an activity."""
         handle = self._hal.device(device_id)
-        info = (await handle.interface()).commands.get(command)
+        info = (await handle.interface()).operations.get(command)
         if info is not None and info.intent in ("query", "failsafe"):
-            return await handle.run_command(command, *args, **dict(kwargs or {}))
+            return await handle.execute(command, *args, **dict(kwargs or {}))
         async with self._scheduler.run("execute a device command", requires=()):
-            return await handle.run_command(command, *args, **dict(kwargs or {}))
+            return await handle.execute(command, *args, **dict(kwargs or {}))
 
+    @action(on="stage", verb="move")
     async def move_stage(
         self,
         *,
@@ -279,6 +291,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run("select a profile", requires=self._profile_requires(profile_id)):
             await self._apply_profile(profile_id)
 
+    @action(on="profiles", verb="apply")
     async def apply_profile(self) -> None:
         """Set the devices to the active profile again, such as after an undo changed it."""
         profile_id = self._active_profile.value
@@ -305,13 +318,17 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             await self._store.update({("profiles", active, "timelines", generator): timeline})
             await self._apply_light(candidate)
 
-    async def update_profile_details(self, profile_id: ProfileId, **details: Unpack[ProfileDetails]) -> None:
-        """Change the names and notes of a profile."""
-        async with self._state_edit("Update profile details") as edit:
-            if unknown := sorted(details.keys() - ProfileDetails.__annotations__.keys()):
-                raise RejectedError(f"An edit cannot change {unknown} of a profile")
-            path = ("profiles", profile_id)
-            await edit.record({(*path, name): value for name, value in details.items()})
+    async def _update_profile(self, profile_id: ProfileId, fields: Mapping[str, object], allowed: type) -> None:
+        """Change fields of a profile as 1 edit. ``allowed`` is the kind's ``ProfileFields`` subclass, which names the
+        fields an update may change."""
+        async with self._state_edit("Update profile") as edit:
+            if unknown := sorted(fields.keys() - (allowed.__required_keys__ | allowed.__optional_keys__)):
+                raise RejectedError(f"An update cannot change {unknown} of a profile")
+            if profile_id not in self._store.value.profiles:
+                problems = Problems()
+                problems.add("profile.not_found", f"No profile '{profile_id}'.", "profiles", profile_id)
+                raise NotFoundError(str(problems), problems)
+            await edit.record({("profiles", profile_id, name): value for name, value in fields.items()})
 
     async def set_position_rule(
         self,
@@ -380,11 +397,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run("save the default state", requires={self._store}):
             await self._store.save_as_default_state(fields)
 
+    @action(on="history", verb="undo")
     async def undo(self) -> None:
         """Undo the last edit of the state. No device changes."""
         async with self._scheduler.run("undo", requires={self._store}):
             await self._history.undo()
 
+    @action(on="history", verb="redo")
     async def redo(self) -> None:
         """Do again the last edit that was undone. No device changes."""
         async with self._scheduler.run("redo", requires={self._store}):
@@ -436,7 +455,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if failed := sorted(name for name, result in results.results.items() if not result.is_ok):
                 raise RejectedError(f"'{device}' refused the properties {failed} of profile '{profile_id}'")
         for device, commands in profile.setup.items():
-            if not (await hal.device(device).run_commands(commands)).is_ok:
+            if not (await hal.device(device).execute_many(commands)).is_ok:
                 raise RejectedError(f"The setup commands of profile '{profile_id}' failed on '{device}'")
         cycles = {
             generator: self._generator_cycle(generator, timeline, OwnClock())
@@ -510,10 +529,10 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     def _profile_requires(self, profile_id: ProfileId) -> set[Resource]:
         """What applying a profile touches: the active profile, the devices it uses, the devices the instrument sets,
-        and every laser. Raise :class:`RejectedError` when there is no such profile."""
+        and every laser. Raise :class:`NotFoundError` when there is no such profile."""
         profile = self._store.value.profiles.get(profile_id)
         if profile is None:
-            raise RejectedError(f"No profile '{profile_id}'")
+            raise NotFoundError(f"No profile '{profile_id}'")
         config = self._config
         lasers = {source for source in config.optics.sources() if source in config.all_devices}
         devices = self._profile_devices(profile) | set(self._store.value.positions) | lasers
@@ -521,22 +540,19 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     @dataclass(eq=False, repr=False)
     class StateEdit:
-        """1 undoable edit of the saved state, inside its command. It records 1 change."""
+        """1 undoable edit of the saved state, inside its command. Each record saves at once, so the command reads the
+        latest state; the edit keeps each path's value before its first record and after its last."""
 
-        _label: str
         _store: InstrumentStore[Any]
-        _history: UndoHistory
-        _edit_id: Hashable | None
-        _recorded: bool = field(default=False, init=False)
+        before: dict[KeyPath, Any] = field(default_factory=dict)
+        after: dict[KeyPath, Any] = field(default_factory=dict)
 
         async def record(self, values: StateValues) -> None:
-            """Set the value at each key path of the state, and record the change. Undo and redo set the values
-            before or after."""
-            if self._recorded:
-                raise RuntimeError(f"'{self._label}' already recorded its change")
+            """Set the value at each key path of the state, and add the change to this edit."""
             change = await self._store.update(values)
-            await self._history.record(self._label, change, self._store.update, merge_key=self._edit_id)
-            self._recorded = True
+            for path, value in change.before.items():
+                self.before.setdefault(path, value)
+            self.after.update(change.after)
 
     @asynccontextmanager
     async def _state_edit(
@@ -547,10 +563,28 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         edit_id: Hashable | None = None,
     ) -> AsyncGenerator[StateEdit]:
         """Run a command that touches the store and each resource in ``requires``, and give the edit that records its
-        change. Code in the block reads the latest state. Quick edits with the same ``edit_id`` are 1 step of the
-        history."""
-        async with self._scheduler.run(label.lower(), requires={self._store, *requires}):
-            yield self.StateEdit(label, self._store, self._history, edit_id)
+        changes. An edit opened inside another joins it. When the outermost block ends, its changes are 1 step of the
+        history, merged with the step before when both have the same ``edit_id``; when the block raises, each path
+        goes back to its value before the edit."""
+        if (joined := _OPEN_EDIT.get()) is not None:
+            async with self._scheduler.run(label.lower(), requires={self._store, *requires}):
+                yield joined
+            return
+        edit = self.StateEdit(self._store)
+        token = _OPEN_EDIT.set(edit)
+        try:
+            async with self._scheduler.run(label.lower(), requires={self._store, *requires}):
+                try:
+                    yield edit
+                except BaseException:
+                    if edit.before:
+                        await self._store.update(edit.before)
+                    raise
+            await self._history.record(
+                label, Change(before=edit.before, after=edit.after), self._store.update, merge_key=edit_id
+            )
+        finally:
+            _OPEN_EDIT.reset(token)
 
     def _generator_cycle(self, generator: DeviceUid, timeline: Timeline, start: OwnClock | InputEdges) -> Cycle:
         """``timeline`` as the cycle that ``generator`` plays: each wire's volts on that wire's pin. Raise
@@ -572,6 +606,33 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 await axis.move_to(position, wait=True)
             case _:
                 raise RejectedError(f"'{device}' cannot go to {position!r}")
+
+    # === Operations ===
+
+    @property
+    def interface(self) -> InstrumentInterface:
+        """Everything a client can ask this instrument, and the JSON Schema of its view."""
+        kind = type(self)
+        return InstrumentInterface(
+            id=self._config.id,
+            kind=f"{kind.__module__}.{kind.__qualname__}",
+            operations=dict(self.operations),
+            view=self.view_cls.model_json_schema(),
+        )
+
+    async def execute(self, operation: str, args: Mapping[str, Any]) -> Any:
+        """Run an operation by name with ``args``, checked against its declaration first. Raise
+        :class:`NotFoundError` for an operation the instrument does not have, and :class:`RejectedError` for arguments
+        that do not fit."""
+        bound = self._operations.get(operation)
+        if bound is None:
+            raise NotFoundError(f"No operation '{operation}'")
+        try:
+            _, checked = bound.validate_params(**args)
+        except OperationParamsError as error:
+            raise RejectedError(str(error)) from error
+        result = getattr(self, operation)(**checked)
+        return await result if inspect.isawaitable(result) else result
 
     # === Helpers of this class ===
 

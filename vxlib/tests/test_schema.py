@@ -2,7 +2,16 @@ from typing import Annotated, Literal
 
 import pytest
 from pydantic import Field, ValidationError
-from vxlib.schema import FrozenModel, UniqueList, check_identifier, duplicate_keys, error_message, repeated
+from vxlib.schema import (
+    FrozenModel,
+    Key,
+    UniqueList,
+    check_identifier,
+    duplicate_keys,
+    error_message,
+    key_field,
+    repeated,
+)
 
 
 def test_duplicate_keys_reports_each_shared_key_with_its_scopes_in_order():
@@ -63,3 +72,19 @@ def test_error_message_says_plainly_that_the_tag_is_missing() -> None:
 def test_error_message_keeps_pydantic_messages_that_are_already_clear() -> None:
     [message] = _errors({"pace": {"kind": "timer"}})
     assert "'clock', 'software'" in message
+
+
+def test_key_marks_1_field_and_shows_in_the_json_schema() -> None:
+    class Item(FrozenModel):
+        id: Annotated[str, Key]
+        name: str = ""
+
+    class Twice(FrozenModel):
+        a: Annotated[str, Key]
+        b: Annotated[str, Key]
+
+    assert key_field(Item) == "id"
+    assert Item.model_json_schema()["properties"]["id"]["x-key"] is True
+    assert Item(id="a").id == "a"
+    with pytest.raises(TypeError, match="exactly 1 field marked Key"):
+        key_field(Twice)

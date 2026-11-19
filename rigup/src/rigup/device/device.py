@@ -6,16 +6,17 @@ from collections.abc import Callable, Mapping
 from enum import StrEnum
 from typing import Any, ClassVar
 
+from rigup.interface import StreamTier
+
 from ._loop import owners, thread_checked
 from ._spec import check_class, check_pairing
 from .controller import DeviceController
-from .marks import StreamTier
 
 
 class Device[T: StrEnum]:
     """A hardware component with a driver, declared as ``class Camera(Device, kind="camera", controller=...)``.
 
-    Marks are checked against the bases at definition: an override keeps a command's intent and a property's
+    Declarations are checked against the bases at definition: an override keeps an operation's intent and a property's
     description. Public members refuse calls from any thread but the owning controller's."""
 
     __kind: ClassVar[str] = ""

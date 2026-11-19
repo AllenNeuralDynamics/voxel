@@ -28,9 +28,14 @@ def _whole(value: object) -> bool:
     return (isinstance(value, int) and not isinstance(value, bool)) or (isinstance(value, float) and value.is_integer())
 
 
-def _schema(parse: Callable[[Any], Any]) -> CoreSchema:
+def _schema(parse: Callable[[Any], Any], axes: str, number: CoreSchema) -> CoreSchema:
+    """Validate with ``parse``, save with ``to_dict``, and describe as a map with 1 ``number`` per letter of
+    ``axes``."""
+    shape = core_schema.typed_dict_schema({axis: core_schema.typed_dict_field(number) for axis in axes})
     return core_schema.no_info_plain_validator_function(
-        parse, serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_dict())
+        parse,
+        serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v.to_dict()),
+        json_schema_input_schema=shape,
     )
 
 
@@ -92,7 +97,7 @@ class Vec2D:
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return _schema(cls.parse)
+        return _schema(cls.parse, "xy", core_schema.float_schema(allow_inf_nan=False))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -147,7 +152,7 @@ class IVec2D:
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return _schema(cls.parse)
+        return _schema(cls.parse, "xy", core_schema.int_schema())
 
 
 # === 3D Vectors ===
@@ -234,7 +239,7 @@ class Vec3D:
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return _schema(cls.parse)
+        return _schema(cls.parse, "xyz", core_schema.float_schema(allow_inf_nan=False))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -299,7 +304,7 @@ class IVec3D:
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return _schema(cls.parse)
+        return _schema(cls.parse, "xyz", core_schema.int_schema())
 
 
 # === Positive-validated variants ===

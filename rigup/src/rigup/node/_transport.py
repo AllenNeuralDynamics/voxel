@@ -11,7 +11,7 @@ from rigup.device.controller import StreamCallback
 from rigup.device.device import Device
 from rigup.device.handle import Adapter, DeviceHandle
 from rigup.device.interface import DeviceInterface
-from rigup.device.results import CommandRequest, PropResults, Result, Results
+from rigup.device.results import OperationRequest, PropResults, Result, Results
 from rigup.node._broadcast import TopicDispatcher
 from rigup.node._protocol import (
     Action,
@@ -19,9 +19,9 @@ from rigup.node._protocol import (
     BuildDevicesResponse,
     CloseDeviceRequest,
     Empty,
+    ExecuteRequest,
     GetInterfaceRequest,
     GetPropsRequest,
-    RunCommandsRequest,
     SetPropsRequest,
     call,
 )
@@ -59,17 +59,17 @@ class TransportAdapter[D: Device](Adapter[D]):
     async def interface(self) -> DeviceInterface:
         return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), DeviceInterface)
 
-    async def run_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
-        results = await self.run_commands([CommandRequest(attr=command, args=list(args), kwargs=kwargs)])
+    async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result:
+        results = await self.execute_many([OperationRequest(attr=operation, args=list(args), kwargs=kwargs)])
         # Rebuild a plain Result: the batch member carries the generic `Results` type parameter and
         # mis-serializes against a plain `Result` schema.
-        return Result.model_validate(results[f"0:{command}"].model_dump())
+        return Result.model_validate(results[f"0:{operation}"].model_dump())
 
-    async def run_commands(self, commands: list[CommandRequest]) -> Results:
+    async def execute_many(self, operations: list[OperationRequest]) -> Results:
         return await call(
             self._transport,
-            Action.RUN_COMMANDS,
-            RunCommandsRequest(uid=self._uid, commands=commands),
+            Action.EXECUTE,
+            ExecuteRequest(uid=self._uid, operations=operations),
             Results,
         )
 

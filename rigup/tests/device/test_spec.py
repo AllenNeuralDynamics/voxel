@@ -93,7 +93,7 @@ def test_a_driver_cannot_describe_a_base_property_again() -> None:
 
 
 def test_a_driver_cannot_change_a_command_intent() -> None:
-    with pytest.raises(TypeError, match="is marked query, but Base says failsafe"):
+    with pytest.raises(TypeError, match="is declared @query, but Base says @failsafe"):
 
         class Changed(Done):
             @query()
@@ -105,7 +105,7 @@ def test_a_driver_may_mark_a_command_again_with_the_same_intent() -> None:
         @failsafe()
         def stop(self) -> None: ...
 
-    assert DeviceController(Again("again")).interface.commands["stop"].intent == "failsafe"
+    assert DeviceController(Again("again")).interface.operations["stop"].intent == "failsafe"
 
 
 def test_an_override_with_other_arguments_is_refused() -> None:
@@ -130,7 +130,7 @@ def test_an_override_may_change_a_default_value() -> None:
     class Slower(Slow):
         def go(self, speed: float = 0.5) -> None: ...
 
-    assert "go" in DeviceController(Slower("slower")).interface.commands
+    assert "go" in DeviceController(Slower("slower")).interface.operations
 
 
 def temperature_method(self: Base) -> float:
@@ -141,11 +141,11 @@ def temperature_method(self: Base) -> float:
 @pytest.mark.parametrize(
     ("name", "member", "message"),
     [
-        ("stop", None, r"Drv\.stop hides the command Base describes"),
+        ("stop", None, r"Drv\.stop hides the operation Base describes"),
         ("temperature", temperature_method, r"Drv\.temperature hides the property Base describes"),
         ("temperature", 3.0, r"Drv\.temperature hides the property Base describes"),
     ],
-    ids=["command-by-attribute", "property-by-method", "property-by-attribute"],
+    ids=["operation-by-attribute", "property-by-method", "property-by-attribute"],
 )
 def test_a_member_hidden_by_a_plain_one_is_refused(name: str, member: object, message: str) -> None:
     with pytest.raises(TypeError, match=message):
@@ -167,7 +167,7 @@ def test_a_driver_that_drops_a_setter_its_base_declares_is_refused() -> None:
 
 
 def test_a_command_with_star_arguments_is_refused() -> None:
-    with pytest.raises(TypeError, match=r"\*args or \*\*kwargs"):
+    with pytest.raises(TypeError, match=r"\*args is not allowed"):
 
         class Stepper(Device, kind="stepper"):
             @action()
@@ -212,7 +212,7 @@ def test_every_problem_in_a_class_is_reported_at_once() -> None:
         @failsafe()
         def stop(self) -> None: ...
 
-    with pytest.raises(TypeError, match=r"Driver breaks 2 rules:\n- Driver\.move.*\n- Driver\.stop is marked query"):
+    with pytest.raises(TypeError, match=r"Driver breaks 2 rules:\n- Driver\.move.*\n- Driver\.stop is declared @query"):
 
         class Driver(Simple):
             def move(self, target: float, fast: bool = False) -> None:
@@ -225,7 +225,7 @@ def test_every_problem_in_a_class_is_reported_at_once() -> None:
 def test_mixin_members_are_described() -> None:
     interface = DeviceController(Mixed("mixed")).interface
 
-    assert ("hello" in interface.commands, "mix" in interface.props) == (True, True)
+    assert ("hello" in interface.operations, "mix" in interface.props) == (True, True)
 
 
 def test_forward_referenced_types_resolve_in_the_interface() -> None:
@@ -233,7 +233,7 @@ def test_forward_referenced_types_resolve_in_the_interface() -> None:
 
     assert (interface.props["count"].dtype, interface.props["count"].units) == ("int", "fd-u")
     assert interface.props["later"].dtype == "later"
-    assert "$defs" in interface.commands["get_later"].params
+    assert "$defs" in interface.operations["get_later"].params
 
 
 def test_an_interface_round_trips_through_json() -> None:
@@ -264,7 +264,7 @@ async def test_a_device_may_have_its_own_close_command() -> None:
         def close(self) -> None: ...
 
     controller = DeviceController(Shutter("s"))
-    commands = controller.interface.commands
+    operations = controller.interface.operations
     await controller.close()
 
-    assert "close" in commands
+    assert "close" in operations

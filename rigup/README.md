@@ -4,7 +4,7 @@
 another machine.**
 
 rigup is a hardware-control library for applications that need process isolation or distributed device hosting
-without maintaining separate client APIs. Drivers expose commands and properties, a `Rig` constructs the requested
+without maintaining separate client APIs. Drivers expose operations and properties, a `Rig` constructs the requested
 topology, and callers interact with every device through a `DeviceHandle`.
 
 > [!WARNING]
@@ -13,7 +13,7 @@ topology, and callers interact with every device through a `DeviceHandle`.
 ## Highlights
 
 - **Location-transparent handles** — the same calls control in-process, subprocess, and remote devices.
-- **Discoverable interfaces** — commands, properties, constraints, and presentation metadata are derived from the
+- **Discoverable interfaces** — operations, properties, constraints, and presentation metadata are derived from the
   driver and represented by validated models.
 - **Hardware-safe execution** — each device runs on its own thread and event loop, so 2 calls into 1 device never
   overlap, while separate devices remain independent. Calls from any other thread are refused.
@@ -24,8 +24,8 @@ topology, and callers interact with every device through a `DeviceHandle`.
 
 ## Define a device
 
-A driver subclasses `Device` and says its kind in the class line. Only properties marked with `@fact` or `@stream` and methods
-marked with `@query`, `@action` or `@failsafe` become part of its public interface. `@number`, `@integer` and `@choice`
+A driver subclasses `Device` and says its kind in the class line. Only properties declared with `@fact` or `@stream` and methods
+declared with `@query`, `@action` or `@failsafe` become part of its public interface. `@number`, `@integer` and `@choice`
 add limits: every write is fitted to them, and every read carries them, such as `laser.power.maximum`.
 
 ```python
@@ -57,18 +57,18 @@ class Laser(Device, kind="laser"):
         self._enabled = True
 ```
 
-Every exposed property is either a fact or a stream. `@fact` marks a value that is constant while the device is open:
-the controller reads it once, and it cannot have a setter. `@stream` marks a value that can change: the controller polls
+Every exposed property is either a fact or a stream. `@fact` declares a value that is constant while the device is open:
+the controller reads it once, and it cannot have a setter. `@stream` declares a value that can change: the controller polls
 it at its tier's rate (`"fast"`, `"normal"` by default, or `"slow"`) and publishes changed observations. Every property
 is read once when its device is built, so a handle's cache is complete from the start; a device with a property that
 cannot be read fails to build. The rates are the controller's: its class line can set them for a device kind, and a rig
 config's `streaming:` can set them for 1 device. Streams suit live telemetry, not events that need lossless delivery.
 
-An async command gives up its device at each `await`, so other calls, such as a failsafe `stop` during a move, can run
+An async operation gives up its device at each `await`, so other calls, such as a failsafe `stop` during a move, can run
 in between. Guard a read-modify-write that spans an `await` with an `asyncio.Lock` on the device.
 
-A class is checked when it is defined, and all of its problems are reported at once: a driver keeps its base's command
-arguments and intents, does not describe a base's property again or hide it, and every command must describe itself
+A class is checked when it is defined, and all of its problems are reported at once: a driver keeps its base's operation
+arguments and intents, does not describe a base's property again or hide it, and every operation must describe itself
 as JSON Schema. [`examples/simulated_rig.py`](examples/simulated_rig.py) runs every feature on simulated devices.
 
 ## Build and use a rig
@@ -101,8 +101,8 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`DeviceHandle.call()` returns the command value and raises when the operation fails. `run_command()`, batched
-commands, and property operations expose `Result` models when the caller needs per-operation error handling.
+`DeviceHandle.call()` returns the operation value and raises when the operation fails. `execute()`, batched
+operations, and property operations expose `Result` models when the caller needs per-operation error handling.
 
 Successful property reads, writes, and stream observations enter `handle.props.cache`. Subscribe to `handle.props`
 for complete cache snapshots, or use `handle.props.view(name, parser)` in a typed handle subclass for one parsed,
@@ -213,7 +213,7 @@ connecting. A claim/release handshake prevents two rigs from controlling the dae
 transport does not provide authentication or encryption.
 
 Node logs are forwarded into the controlling process's Python logging system. Log and device streams use a lossy
-publish/subscribe channel so they cannot back-pressure hardware operations; commands and explicit property reads and
+publish/subscribe channel so they cannot back-pressure hardware operations; operations and explicit property reads and
 writes use the reliable request channel.
 
 ## Architecture
@@ -230,7 +230,7 @@ flowchart TD
 
 - `Device` is the synchronous, hardware-facing abstraction.
 - `DeviceController` discovers the public interface, runs synchronous hardware calls, and publishes streams.
-- An adapter provides the common asynchronous command, property, and subscription contract.
+- An adapter provides the common asynchronous operation, property, and subscription contract.
 - `DeviceHandle` is the application-facing API; subclasses can add typed convenience methods and properties.
 - `Rig` constructs nodes and devices from configuration and owns their runtime lifecycle.
 

@@ -8,7 +8,7 @@ import numpy as np
 from pydantic import Field, field_validator, model_validator
 from scipy.spatial import ConvexHull as _Hull
 from vxlib.issues import Problems
-from vxlib.schema import FrozenModel, UniqueList, identifier, repeated
+from vxlib.schema import FrozenModel, Key, UniqueList, identifier, repeated
 from vxlib.units import Portion
 from vxlib.vector import Span
 
@@ -275,7 +275,7 @@ class TaskDefaults(FrozenModel):
 class Task(TaskDefaults):
     """1 entry in the plan, stored complete."""
 
-    id: TaskId
+    id: Annotated[TaskId, Key]
     region: Region
     profiles: Annotated[UniqueList[ProfileId], Field(min_length=1)]
 

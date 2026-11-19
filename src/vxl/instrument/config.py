@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, Self
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
 from pydantic import Field, ValidationInfo, field_validator, model_validator
-from rigup.device.results import CommandRequest
+from rigup.device.results import OperationRequest
 from vxlib.schema import FrozenModel, identifier
 
 from vxl._utils.color import Color
@@ -72,7 +72,7 @@ class ProfileConfig(FrozenModel):
     z_step: float = Field(..., gt=0, description="Axial step between frames in µm (one scan-axis move per frame)")
     sync: dict[str, Signals] = Field(default_factory=dict)
     props: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    setup: dict[str, list[CommandRequest]] = Field(default_factory=dict)
+    setup: dict[str, list[OperationRequest]] = Field(default_factory=dict)
     rois: dict[str, AreaROI] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None

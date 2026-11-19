@@ -26,7 +26,7 @@ from vxl.devices.camera.line import LineCameraHandle
 from vxl.devices.light import ControlMode, DimmableHandle, LaserHandle, ModulatorHandle, ShutterHandle
 from vxl.devices.node import NodeMonitorHandle
 from vxl.devices.signals.generator.handle import GeneratorHandle
-from vxl.station.errors import RejectedError, StartupError
+from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import DeviceUid, InstrumentConfig, LightPath, PinRef, SpecimenAxis
 
 if TYPE_CHECKING:
@@ -134,9 +134,9 @@ class HAL:
         """Run every failsafe of every open device: try every device, then raise every failure together."""
 
         async def run(handle: DeviceHandle[Any]) -> None:
-            for name, info in (await handle.interface()).commands.items():
+            for name, info in (await handle.interface()).operations.items():
                 if info.intent == "failsafe":
-                    (await handle.run_command(name)).unwrap()
+                    (await handle.execute(name)).unwrap()
 
         await gather_all(*(run(handle) for handle in self._devices.values()), message="failsafes")
 
@@ -171,11 +171,11 @@ class HAL:
         return self._signal_generators
 
     def device(self, uid: DeviceUid) -> DeviceHandle[Any]:
-        """The handle of an open device. Raise :class:`RejectedError` with its name when there is none."""
+        """The handle of an open device. Raise :class:`NotFoundError` with its name when there is none."""
         try:
             return self._devices[uid]
         except KeyError:
-            raise RejectedError(f"Device '{uid}' not found") from None
+            raise NotFoundError(f"Device '{uid}' not found") from None
 
     # === Light ===
 

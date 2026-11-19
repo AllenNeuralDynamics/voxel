@@ -11,6 +11,7 @@ from vxlib.reactivity import Cell, Emitter
 from vxl import system as system_module
 from vxl.live import LiveEmission, LiveLayer, LiveSourceEmission
 from vxl.station.config import StationConfig
+from vxl.station.errors import NotFoundError
 from vxl.station.feed import StationFeed
 from vxl.station.instrument.base import Instrument
 from vxl.station.instrument.config import InstrumentConfig
@@ -161,3 +162,8 @@ async def test_the_feed_ends_every_connection_when_the_station_closes(station: S
             seen = [view async for view in connection]
 
     assert all(view.status is StationStatus.CLOSED for view in seen)
+
+
+async def test_opening_an_instrument_that_does_not_exist_is_not_found(station: Station) -> None:
+    with pytest.raises(NotFoundError, match="No instrument 'nope'"):
+        await station.open_session("nope")

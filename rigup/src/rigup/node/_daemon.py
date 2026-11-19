@@ -20,6 +20,7 @@ from rigup.node._protocol import (
     CloseDeviceRequest,
     Dispatcher,
     Empty,
+    ExecuteRequest,
     GetInterfaceRequest,
     GetPropsRequest,
     ListDevicesResponse,
@@ -27,7 +28,6 @@ from rigup.node._protocol import (
     PingPayload,
     ReleaseRequest,
     ReleaseResponse,
-    RunCommandsRequest,
     SetPropsRequest,
     ShutdownPayload,
     bind,
@@ -103,7 +103,7 @@ class NodeDaemon:
         d.on_request(Action.CLOSE_ALL_DEVICES, Empty, Empty, self._handle_close_all)
 
         d.on_request(Action.GET_INTERFACE, GetInterfaceRequest, DeviceInterface, self._handle_get_interface)
-        d.on_request(Action.RUN_COMMANDS, RunCommandsRequest, Results, self._handle_run_commands)
+        d.on_request(Action.EXECUTE, ExecuteRequest, Results, self._handle_execute)
         d.on_request(Action.GET_PROPS, GetPropsRequest, PropResults, self._handle_get_props)
         d.on_request(Action.SET_PROPS, SetPropsRequest, PropResults, self._handle_set_props)
 
@@ -187,8 +187,8 @@ class NodeDaemon:
     async def _handle_get_interface(self, req: GetInterfaceRequest) -> DeviceInterface:
         return self._get_controller(req.uid).interface
 
-    async def _handle_run_commands(self, req: RunCommandsRequest) -> Results:
-        return await self._get_controller(req.uid).execute_commands(req.commands)
+    async def _handle_execute(self, req: ExecuteRequest) -> Results:
+        return await self._get_controller(req.uid).execute_many(req.operations)
 
     async def _handle_get_props(self, req: GetPropsRequest) -> PropResults:
         return await self._get_controller(req.uid).get_props(*req.props)

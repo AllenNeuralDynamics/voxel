@@ -8,11 +8,11 @@ from vxl_records import SQLiteRecords
 from vxlib.issues import Problems
 
 from vxl.metadata import ExperimentMetadata
-from vxl.station.errors import RejectedError, StartupError
+from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.base import Instrument
 from vxl.station.instrument.config import InstrumentConfig
 from vxl.station.instrument.folder import InstrumentFolder
-from vxl.station.instrument.state import InstrumentState
+from vxl.station.instrument.state import InstrumentState, ProfileFields
 from vxl.system import System
 
 from .support import bench
@@ -64,7 +64,15 @@ class _State(InstrumentState, frozen=True):
 
 
 class _Bench(Instrument[InstrumentConfig, _State]):
-    """The smallest kind of instrument: the base config and a state with no rules."""
+    """The smallest kind of instrument: the base config and a state with no rules. Its 1 command opens an edit and
+    calls another command inside it, then raises ``fail`` when given."""
+
+    async def label_main(self, label: str | None, desc: str, *, fail: Exception | None = None) -> None:
+        async with self._state_edit("Label main") as edit:
+            await edit.record({("profiles", "main", "label"): label})
+            await self._update_profile("main", {"desc": desc}, ProfileFields)
+            if fail is not None:
+                raise fail
 
 
 def _folder(
@@ -272,3 +280,44 @@ async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Ben
 
     with pytest.raises(ActivityBusyError, match="Unable to update metadata while capture is running"):
         await instrument.update_metadata(notes="left hemisphere")
+
+
+def _main(instrument: _Bench) -> tuple[str | None, str]:
+    profile = instrument.view.value.state.profiles["main"]
+    return profile.label, profile.desc
+
+
+def _undo_label(instrument: _Bench) -> str | None:
+    return instrument.view.value.history.undo_label
+
+
+async def test_an_edit_inside_an_edit_joins_it_as_1_undo_step(instrument: _Bench) -> None:
+    await instrument.label_main("Main", "the only profile")
+    assert _main(instrument) == ("Main", "the only profile")
+    assert _undo_label(instrument) == "Label main"
+
+    await instrument.undo()
+    assert _main(instrument) == (None, "")
+    assert _undo_label(instrument) is None
+    await instrument.redo()
+    assert _main(instrument) == ("Main", "the only profile")
+
+
+async def test_an_edit_that_raises_puts_back_what_it_saved(instrument: _Bench) -> None:
+    with pytest.raises(RuntimeError, match="after the save"):
+        await instrument.label_main("Main", "the only profile", fail=RuntimeError("after the save"))
+    assert _main(instrument) == (None, "")
+    assert _undo_label(instrument) is None
+
+
+async def test_an_edit_inside_an_edit_that_is_refused_puts_back_the_outer_change(instrument: _Bench) -> None:
+    untyped: Any = 5  # what a caller with no types can send
+    with pytest.raises(RejectedError):
+        await instrument.label_main("Main", untyped)
+    assert _main(instrument) == (None, "")
+    assert _undo_label(instrument) is None
+
+
+async def test_a_device_that_does_not_exist_is_not_found(instrument: _Bench) -> None:
+    with pytest.raises(NotFoundError, match="Device 'nope' not found"):
+        await instrument.set_device_properties("nope", {"power": 1.0})

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from vxl_records.errors import DatabaseIdentityError, DatabaseVersionError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
 _APPLICATION_ID = 0x56584C52  # ASCII "VXLR"
 _LATEST_SCHEMA_VERSION = 2
@@ -45,7 +45,7 @@ class SQLiteDatabase:
         return connection
 
     @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(self) -> Generator[sqlite3.Connection]:
         """Run one immediate write transaction and always close its connection."""
         connection = self.connect()
         try:

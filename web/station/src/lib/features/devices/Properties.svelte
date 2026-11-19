@@ -33,7 +33,7 @@
     }
     return { settings, readings };
   });
-  const commands = $derived(Object.keys(device.interface?.commands ?? {}));
+  const commands = $derived(Object.keys(device.interface?.operations ?? {}));
   const blocked = $derived(deviceLocked(device, instrument));
   const divergence = $derived(instrument.divergence.get(device.id));
   const changed = $derived(divergence?.changed.size ?? 0);

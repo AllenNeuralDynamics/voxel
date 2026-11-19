@@ -22,7 +22,7 @@ from .models import LogEntry, LogException
 from .models.log import unix_time_us
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
     from sqlite3 import Connection, Row
     from uuid import UUID
 
@@ -109,7 +109,7 @@ class LogJournal:
         self._write_failure: BaseException | None = None
 
     @asynccontextmanager
-    async def capture(self, *, level: int = logging.DEBUG) -> AsyncIterator[None]:
+    async def capture(self, *, level: int = logging.DEBUG) -> AsyncGenerator[None]:
         """Capture root Python logs for this context and durably drain them on exit."""
         await self._start_capture(level)
         try:

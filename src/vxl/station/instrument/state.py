@@ -7,7 +7,7 @@ from itertools import pairwise, product
 from typing import Annotated, Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
-from rigup.device.results import CommandRequest
+from rigup.device.results import OperationRequest
 from vxlib.issues import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Quantity
@@ -107,7 +107,7 @@ class Profile(FrozenModel):
     positions: dict[DeviceUid, AxisPosition] = Field(default_factory=dict)
     power: dict[DeviceUid, Power] = Field(default_factory=dict)
     props: dict[DeviceUid, dict[PropertyName, Any]] = Field(default_factory=dict)
-    setup: dict[DeviceUid, list[CommandRequest]] = Field(default_factory=dict)
+    setup: dict[DeviceUid, list[OperationRequest]] = Field(default_factory=dict)
     timelines: dict[DeviceUid, Timeline] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None
@@ -264,8 +264,8 @@ class Profile(FrozenModel):
         return ", ".join(f"{device} at {value}" for device, value in self.positions.items()) or "no positions"
 
 
-class ProfileDetails(TypedDict, total=False):
-    """The names and notes of a profile, each one optional."""
+class ProfileFields(TypedDict, total=False):
+    """The fields of a profile that an update may change, each one optional. A kind adds its own in a subclass."""
 
     label: str | None
     desc: str

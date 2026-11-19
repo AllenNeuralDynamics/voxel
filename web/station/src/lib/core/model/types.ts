@@ -162,7 +162,7 @@ export interface Signals {
 }
 
 /** A device method call: attribute name + args/kwargs. */
-export interface CommandRequest {
+export interface OperationRequest {
   attr: string;
   args?: unknown[];
   kwargs?: Record<string, unknown>;
@@ -192,7 +192,7 @@ export interface ProfileConfig {
   z_step: number;
   sync: Record<string, Signals>;
   props: Record<string, Record<string, unknown>>;
-  setup: Record<string, CommandRequest[]>;
+  setup: Record<string, OperationRequest[]>;
   rois: Record<string, AreaROI>;
   desc: string;
   label?: string | null;
@@ -657,28 +657,31 @@ export interface ArgSchema {
   $defs?: Record<string, ArgSchema>;
 }
 
-/** Whether a command reads state, changes it, or makes the device safe. */
-export type CommandIntent = 'query' | 'action' | 'failsafe';
+/** What an operation is for: it reads state, changes it, makes things safe, or changes a saved state's item. */
+export type OperationIntent = 'query' | 'action' | 'failsafe' | 'create' | 'update' | 'delete';
 
 /** A property's streaming tier. */
 export type StreamTier = 'fast' | 'normal' | 'slow';
 
-/** A command: its name, label, intent, and JSON Schemas of its arguments and return value. */
-export interface CommandInfo {
+/** An operation: its name, label, intent, what its mark names, and JSON Schemas of its arguments and return value. */
+export interface OperationInfo {
   name: string;
   label: string;
   desc?: string | null;
-  intent: CommandIntent;
+  intent: OperationIntent;
+  resource?: string | null;
+  key?: string | null;
+  verb?: string | null;
   params: ArgSchema;
   returns: ArgSchema;
 }
 
-/** A device's introspected surface: identity, streaming periods, commands, and properties. */
+/** A device's introspected surface: identity, streaming periods, operations, and properties. */
 export interface DeviceInterface {
   uid: string;
   kind: string;
   streaming: Record<StreamTier, number>;
-  commands: Record<string, CommandInfo>;
+  operations: Record<string, OperationInfo>;
   props: Record<string, PropertyInfo>;
 }
 

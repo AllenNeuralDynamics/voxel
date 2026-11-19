@@ -1,4 +1,4 @@
-"""Shell words plus the described properties and commands of the active device."""
+"""Shell words plus the described properties and operations of the active device."""
 
 import cmd
 import logging
@@ -15,8 +15,8 @@ from rich.logging import RichHandler
 from rich.table import Table
 from rich.text import Text
 from rigup.device import DeviceController
-from rigup.device.interface import CommandInfo, PropInfo
 from rigup.device.results import PropModel
+from rigup.interface import OperationInfo, PropInfo
 from ruamel.yaml import YAML
 
 from .session import Session, load_configs, stop
@@ -51,7 +51,7 @@ class DeviceShell(cmd.Cmd):
         self._uid: str | None = None
         self._controller: DeviceController[Any] | None = None
         self._properties: dict[str, PropInfo] = {}
-        self._commands: dict[str, CommandInfo] = {}
+        self._commands: dict[str, OperationInfo] = {}
 
     def open(self, uids: Iterable[str]) -> None:
         """Open devices before the loop starts; the first that opens becomes active."""
@@ -97,7 +97,7 @@ class DeviceShell(cmd.Cmd):
         elif name in self._commands:
             self._command(name, tokens)
         else:
-            raise ValueError(f"{self._uid} has no property or command {name!r}; see 'info'")
+            raise ValueError(f"{self._uid} has no property or operation {name!r}; see 'info'")
 
     def completenames(self, text: str, *ignored: Any) -> list[str]:
         members = [name for name in (*self._properties, *self._commands) if name.startswith(text)]
@@ -117,7 +117,7 @@ class DeviceShell(cmd.Cmd):
             self._activate(arg)
 
     def do_info(self, _arg: str) -> None:
-        """info: show the active device's properties and commands."""
+        """info: show the active device's properties and operations."""
         controller = self._active()
         properties = Table("Property", "Value", "Units", "Access", "Limits", "Step")
         results = self._session.run(controller.get_props(*self._properties))
@@ -128,10 +128,10 @@ class DeviceShell(cmd.Cmd):
             model = results[name].unwrap()
             cells = (name, model.value, info.units, info.access, _limits(model), model.step)
             properties.add_row(*(Text(_text(cell)) for cell in cells))
-        commands = Table("Command", "Parameters")
-        for name, command in self._commands.items():
-            commands.add_row(Text(name), Text(", ".join(_params(command))))
-        self._output.print(properties, commands)
+        operations = Table("Operation", "Parameters")
+        for name, operation in self._commands.items():
+            operations.add_row(Text(name), Text(", ".join(_params(operation))))
+        self._output.print(properties, operations)
 
     def do_watch(self, arg: str) -> None:
         """watch <property> [<property> ...]: read every 0.5 s until Ctrl+C."""
@@ -151,7 +151,7 @@ class DeviceShell(cmd.Cmd):
             self._output.print()
 
     def do_stop(self, _arg: str) -> None:
-        """stop: run the failsafe commands of every open device."""
+        """stop: run the failsafe operations of every open device."""
         for uid in reversed(self._session.controllers):
             self._stop(uid)
 
@@ -171,7 +171,7 @@ class DeviceShell(cmd.Cmd):
         self._uid = uid
         self._controller = self._session.controllers[uid]
         self._properties = dict(self._controller.interface.props)
-        self._commands = dict(self._controller.interface.commands)
+        self._commands = dict(self._controller.interface.operations)
         self.prompt = f"{uid}> "
 
     def _active(self) -> DeviceController[Any]:
@@ -208,7 +208,7 @@ class DeviceShell(cmd.Cmd):
                 args.append(_value(token))
         if unknown := kwargs.keys() - self._commands[name].params.get("properties", {}).keys():
             raise ValueError(f"{name} has no parameter {', '.join(sorted(unknown))}")
-        result = self._session.run(self._active().execute_command(name, *args, **kwargs)).unwrap()
+        result = self._session.run(self._active().execute(name, *args, **kwargs)).unwrap()
         if result is not None:
             self._output.print(result)
 
@@ -241,10 +241,10 @@ def _text(value: object) -> str:
     return "" if value is None else str(value)
 
 
-def _params(command: CommandInfo) -> list[str]:
-    required = set(command.params.get("required", []))
+def _params(operation: OperationInfo) -> list[str]:
+    required = set(operation.params.get("required", []))
     params: list[str] = []
-    for name, schema in command.params.get("properties", {}).items():
+    for name, schema in operation.params.get("properties", {}).items():
         dtype = " | ".join(str(option.get("type", "?")) for option in schema.get("anyOf", [schema]))
         params.append(f"{name}: {dtype}" if name in required else f"{name}: {dtype} = {schema.get('default')}")
     return params

@@ -1,4 +1,4 @@
-"""Wire models for property values, command requests and results."""
+"""Wire models for property values, operation requests and results."""
 
 import dataclasses
 import logging
@@ -72,7 +72,7 @@ class PropModel[T: str | int | float | bool](BaseModel):
         return PropModel(value=value)
 
 
-class CommandRequest(BaseModel):
+class OperationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     attr: str

@@ -84,6 +84,7 @@ vxl-records = { workspace = true }
 [dependency-groups]
 dev = [
     "basedpyright>=1.20.0",
+    "pyrefly>=1.5.0",
     "pytest>=9.0.0",
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
@@ -106,6 +107,11 @@ testpaths = [
 markers = [
     "slow: integration-flavored tests (ZMQ networking, zarr I/O); excluded from pre-push, run in CI",
 ]
+
+[tool.pyrefly]
+# The folders pytest adds to the import path, so test helpers such as rigup_fakes resolve.
+search-path = ["src", ".", "rigup/tests", "rigup/tests/device", "omezarr/tests"]
+project-excludes = ["**/sdk/**", "**/vendor/**", "**/bench/**/analysis.py", "**/node_modules/**", "**/.venv/**"]
 
 [tool.pyright]
 typeCheckingMode = "standard"

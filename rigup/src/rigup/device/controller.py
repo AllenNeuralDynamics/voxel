@@ -1,4 +1,4 @@
-"""The controller that runs a device's commands, property access and streaming."""
+"""The controller that runs a device's operations, property access and streaming."""
 
 import asyncio
 import logging
@@ -11,12 +11,13 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from .device import Device
 
-from ._command import Command, CommandParamsError
+from rigup.interface import StreamTier
+
 from ._loop import DeviceLoop, take
-from ._spec import check_class, check_pairing, collect_commands, collect_properties
+from ._operation import Operation, OperationParamsError
+from ._spec import check_class, check_pairing, collect_operations, collect_properties
 from .interface import DeviceInterface
-from .marks import StreamTier
-from .results import CommandRequest, PropModel, PropResults, Result, Results
+from .results import OperationRequest, PropModel, PropResults, Result, Results
 
 # Typed events let subscribers receive the model and serialize on demand; schemaless streams go out as raw bytes.
 type PublishTypedFn = Callable[[str, BaseModel], Awaitable[None]]
@@ -27,7 +28,7 @@ _NO_VALUE = object()
 
 
 class DeviceController[D: "Device"]:
-    """Run a device's commands and property access on its own thread, and stream its properties.
+    """Run a device's operations and property access on its own thread, and stream its properties.
 
     A fact is read from the device once and cached; later reads return the cached value.
 
@@ -57,19 +58,19 @@ class DeviceController[D: "Device"]:
             raise
         self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
 
-        device_commands = collect_commands(device)
-        self._device_commands = set(device_commands)
+        device_operations = collect_operations(device)
+        self._device_operations = set(device_operations)
         self._device_props = collect_properties(device)
-        ctrl_commands = collect_commands(self)
+        own_operations = collect_operations(self)
         self._ctrl_props = collect_properties(self)
-        self._commands: dict[str, Command] = {**device_commands, **ctrl_commands}
+        self._operations: dict[str, Operation] = {**device_operations, **own_operations}
         all_properties = {**self._device_props, **self._ctrl_props}
 
         self._interface = DeviceInterface(
             uid=device.uid,
             kind=device.kind,
             streaming=dict(self.__streaming),
-            commands={name: cmd.info for name, cmd in self._commands.items()},
+            operations={name: cmd.info for name, cmd in self._operations.items()},
             props=all_properties,
         )
 
@@ -107,11 +108,12 @@ class DeviceController[D: "Device"]:
         """Run ``fn`` on the device's thread. Subclasses must reach the device this way; other threads are refused."""
         return await self._device_loop.run(lambda: fn(*args, **kwargs))
 
-    async def _call(self, command: str, cmd: Command, *args: Any, **kwargs: Any) -> Any:
-        """Run device commands on the device's thread; run the controller's own async commands on the caller's loop."""
+    async def _call(self, operation: str, cmd: Operation, *args: Any, **kwargs: Any) -> Any:
+        """Run device operations on the device's thread, and the controller's own async operations on the caller's
+        loop."""
         if not cmd.is_async:
             return await self._run(cmd, *args, **kwargs)
-        if command not in self._device_commands:
+        if operation not in self._device_operations:
             return await cmd(*args, **kwargs)
 
         async def on_device() -> Any:
@@ -119,26 +121,26 @@ class DeviceController[D: "Device"]:
 
         return await self._device_loop.run_async(on_device())
 
-    async def execute_command(self, command: str, *args: Any, **kwargs: Any) -> Result:
-        if command not in self._commands:
-            return Result.err(f"Unknown command: {command}")
+    async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result:
+        if operation not in self._operations:
+            return Result.err(f"Unknown operation: {operation}")
 
-        cmd = self._commands[command]
-        self.log.debug("command %s", command, extra={"action": "cmd.execute", "target": command})
+        cmd = self._operations[operation]
+        self.log.debug("operation %s", operation, extra={"action": "cmd.execute", "target": operation})
         try:
-            return Result.ok(await self._call(command, cmd, *args, **kwargs))
-        except CommandParamsError as e:
-            self.log.warning("%s", e, extra={"action": "cmd.refused", "target": command})
+            return Result.ok(await self._call(operation, cmd, *args, **kwargs))
+        except OperationParamsError as e:
+            self.log.warning("%s", e, extra={"action": "cmd.refused", "target": operation})
             return Result.err(str(e))
         except Exception as e:
-            self.log.exception("command %s failed", command, extra={"action": "cmd.fail", "target": command})
+            self.log.exception("operation %s failed", operation, extra={"action": "cmd.fail", "target": operation})
             return Result.err(str(e))
 
-    async def execute_commands(self, commands: list[CommandRequest]) -> Results:
-        """Run the commands in order, keying each result as ``"{index}:{command}"``."""
+    async def execute_many(self, operations: list[OperationRequest]) -> Results:
+        """Run the operations in order, keying each result as ``"{index}:{operation}"``."""
         results = {
-            f"{i}:{request.attr}": await self.execute_command(request.attr, *request.args, **request.kwargs)
-            for i, request in enumerate(commands)
+            f"{i}:{request.attr}": await self.execute(request.attr, *request.args, **request.kwargs)
+            for i, request in enumerate(operations)
         }
         return Results(results=results)
 

@@ -118,9 +118,9 @@ def test_a_property_without_a_desc_uses_its_docstring() -> None:
 
 
 def test_commands_report_their_intent() -> None:
-    commands = DeviceController(Laser()).interface.commands
+    operations = DeviceController(Laser()).interface.operations
 
-    assert {name: info.intent for name, info in commands.items()} == {
+    assert {name: info.intent for name, info in operations.items()} == {
         "output_off": "failsafe",
         "ramp": "action",
         "status": "query",
@@ -128,7 +128,7 @@ def test_commands_report_their_intent() -> None:
 
 
 def test_a_command_reports_its_params_and_returns() -> None:
-    ramp = DeviceController(Laser()).interface.commands["ramp"]
+    ramp = DeviceController(Laser()).interface.operations["ramp"]
 
     assert ramp.params["required"] == ["target"]
     assert ramp.params["properties"]["target"]["minimum"] == 0
@@ -137,14 +137,14 @@ def test_a_command_reports_its_params_and_returns() -> None:
 
 
 def test_a_command_keeps_the_label_it_is_given() -> None:
-    assert DeviceController(Laser()).interface.commands["output_off"].label == "Laser off"
+    assert DeviceController(Laser()).interface.operations["output_off"].label == "Laser off"
 
 
 def test_a_command_label_and_desc_fall_back_to_its_name_and_docstring() -> None:
-    commands = DeviceController(Documented("documented")).interface.commands
+    operations = DeviceController(Documented("documented")).interface.operations
 
-    assert (commands["read_it"].label, commands["read_it"].desc) == ("Read It", "Reads it.")
-    assert commands["undocumented"].desc is None
+    assert (operations["read_it"].label, operations["read_it"].desc) == ("Read It", "Reads it.")
+    assert operations["undocumented"].desc is None
 
 
 def test_units_from_a_function_follow_the_subclass() -> None:

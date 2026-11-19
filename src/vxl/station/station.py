@@ -14,7 +14,7 @@ from vxlib.reactivity import Cell, Emitter, Readable
 from vxlib.schema import FrozenModel, check_identifier
 
 from vxl.live import LiveSourceEmission
-from vxl.station.errors import BusyError, RejectedError
+from vxl.station.errors import BusyError, NotFoundError
 from vxl.station.instrument.base import Instrument, InstrumentView
 from vxl.station.instrument.folder import InstrumentFolder
 
@@ -161,10 +161,10 @@ class Station:
 
             directory = self._instrument_home(instrument_name)
             if not directory.is_dir():
-                raise RejectedError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
+                raise NotFoundError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
             state_path = directory / "state.json"
             if not state_path.exists():
-                raise RejectedError(f"No state.json to archive for '{instrument_name}'")
+                raise NotFoundError(f"No state.json to archive for '{instrument_name}'")
 
             archive = directory / "state.bak.json"
             index = 2
@@ -194,7 +194,7 @@ class Station:
 
             instrument_home = self._instrument_home(instrument_name)
             if not instrument_home.is_dir():
-                raise RejectedError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
+                raise NotFoundError(f"No instrument '{instrument_name}' under {self.instruments_dir}")
 
             await self._view.set(StationView(status=StationStatus.OPENING))
             instrument: AnyInstrument | None = None

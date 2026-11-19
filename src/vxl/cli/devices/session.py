@@ -76,9 +76,9 @@ class Session:
 
 
 async def stop(controller: DeviceController[Any]) -> bool:
-    """Run every failsafe command of a device; return False when it has none."""
-    names = [name for name, info in controller.interface.commands.items() if info.intent == "failsafe"]
-    errors = [error for name in names if (error := (await controller.execute_command(name)).error) is not None]
+    """Run every failsafe operation of a device; return False when it has none."""
+    names = [name for name, info in controller.interface.operations.items() if info.intent == "failsafe"]
+    errors = [error for name in names if (error := (await controller.execute(name)).error) is not None]
     if errors:
         raise RuntimeError("; ".join(errors))
     return bool(names)
