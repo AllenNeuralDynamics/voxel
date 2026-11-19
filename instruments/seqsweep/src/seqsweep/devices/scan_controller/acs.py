@@ -40,8 +40,8 @@ CLEAR_ALL_LINES = 100_000
 UPLOAD_BYTES = 65_536
 
 
-class AcsStageConfig(FrozenModel):
-    """Connection, wiring and motion settings of the ACS stage (mm, mm/s). Every value comes from the config; no defaults."""
+class AcsControllerConfig(FrozenModel):
+    """Connection, wiring and motion settings of the ACS controller (mm, mm/s). Every value comes from the config; no defaults."""
 
     communication_option: Literal["ethernet_tcp", "simulator"] = Field(
         description="How the host talks to the controller; 'simulator' uses the SPiiPlus stand-alone simulator"
@@ -76,11 +76,11 @@ def _split_output(output: str) -> tuple[int, int]:
 
 
 class AcsController(ScanController):
-    """The real ACS scan controller; the keyword arguments after ``gate_outputs`` are the ``AcsStageConfig`` fields."""
+    """The real ACS scan controller; the keyword arguments after ``gate_outputs`` are the ``AcsControllerConfig`` fields."""
 
-    def __init__(self, uid: str, *, gate_outputs: dict[str, str], **stage: object) -> None:
+    def __init__(self, uid: str, *, gate_outputs: dict[str, str], **config: object) -> None:
         super().__init__(uid, gate_outputs=gate_outputs)
-        self._stage = AcsStageConfig.model_validate(stage)
+        self._config = AcsControllerConfig.model_validate(config)
         self._lock = threading.RLock()  # one vendor handle: serialize calls and multi-call sequences
         self._sp = self._import_library()
         self._hc = -1
@@ -109,8 +109,8 @@ class AcsController(ScanController):
     def _connect(self) -> None:
         """Open the channel to the controller, or to the SPiiPlus simulator."""
         sp = self._sp
-        address, port = self._stage.address, self._stage.port
-        simulated = self._stage.communication_option == "simulator"
+        address, port = self._config.address, self._config.port
+        simulated = self._config.communication_option == "simulator"
         target = "SPiiPlus simulator" if simulated else f"{address}:{port}"
         with self._lock:
             if simulated:
@@ -144,24 +144,24 @@ class AcsController(ScanController):
             for axis in self._axes:
                 self._sp.Enable(self._hc, axis, self._sp.SYNCHRONOUS, True)
                 self._sp.WaitMotorEnabled(self._hc, axis, 1, MOTION_TIMEOUT_MS, True)
-                self._sp.SetVelocity(self._hc, axis, self._stage.move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
-                self._sp.SetAcceleration(self._hc, axis, self._stage.scan_accel, self._sp.SYNCHRONOUS, True)
-                self._sp.SetDeceleration(self._hc, axis, self._stage.scan_decel, self._sp.SYNCHRONOUS, True)
+                self._sp.SetVelocity(self._hc, axis, self._config.move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
+                self._sp.SetAcceleration(self._hc, axis, self._config.scan_accel, self._sp.SYNCHRONOUS, True)
+                self._sp.SetDeceleration(self._hc, axis, self._config.scan_decel, self._sp.SYNCHRONOUS, True)
 
     @property
     def _axes(self) -> tuple[int, int]:
-        return self._stage.axis_x, self._stage.axis_y
+        return self._config.axis_x, self._config.axis_y
 
     def _axis_index(self, axis: Literal["x", "y"]) -> int:
-        return self._stage.axis_x if axis == "x" else self._stage.axis_y
+        return self._config.axis_x if axis == "x" else self._config.axis_y
 
     def _declare_lci(self) -> None:
         """Make sure the D-Buffer declares the LCI struct ``lc``; the scan pass uses it and structs must be global there."""
         sp = self._sp
         with self._lock:
             # The D-Buffer cannot change while another buffer is compiled, so decompile the scan buffer first.
-            sp.StopBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
-            sp.ClearBuffer(self._hc, self._stage.scan_buffer, 1, CLEAR_ALL_LINES, sp.SYNCHRONOUS, True)
+            sp.StopBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
+            sp.ClearBuffer(self._hc, self._config.scan_buffer, 1, CLEAR_ALL_LINES, sp.SYNCHRONOUS, True)
             d_buffer = sp.UploadBuffer(self._hc, D_BUFFER, 0, UPLOAD_BYTES, sp.SYNCHRONOUS, True)
             if LCI_DECLARATION_PATTERN.search(d_buffer or ""):
                 return
@@ -174,8 +174,8 @@ class AcsController(ScanController):
         sp = self._sp
         self._declare_lci()
         with self._lock:
-            sp.LoadBuffer(self._hc, self._stage.scan_buffer, SCAN_PASS_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
-            sp.CompileBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
+            sp.LoadBuffer(self._hc, self._config.scan_buffer, SCAN_PASS_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
+            sp.CompileBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
 
     def _write(self, name: str, value: float | int) -> None:
         """Write a global scan-pass variable."""
@@ -200,7 +200,7 @@ class AcsController(ScanController):
     @describe(label="Running", desc="Whether a pass is in progress", stream=True)
     def is_running(self) -> bool:
         with self._lock:
-            program_running = bool(self._sp.GetProgramState(self._hc, self._stage.scan_buffer, self._sp.SYNCHRONOUS, True) & PST_RUN)
+            program_running = bool(self._sp.GetProgramState(self._hc, self._config.scan_buffer, self._sp.SYNCHRONOUS, True) & PST_RUN)
         return program_running or any(state["moving"] for state in self.read_status().values())
 
     @property
@@ -278,7 +278,7 @@ class AcsController(ScanController):
 
     @describe(label="Go Home", desc="Move to the configured origin")
     def go_home(self) -> None:
-        self.move_to(*self._stage.origin_mm)
+        self.move_to(*self._config.origin_mm)
 
     @describe(label="Wait Motion End", desc="Block until both axes have settled")
     def wait_motion_end(self, timeout_ms: int = MOTION_TIMEOUT_MS) -> None:
@@ -290,10 +290,10 @@ class AcsController(ScanController):
     def abort(self) -> None:
         sp = self._sp
         with self._lock:
-            sp.StopBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
+            sp.StopBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
             for axis in self._axes:
                 sp.Halt(self._hc, axis, sp.SYNCHRONOUS, True)
-            for output in (*self._gate_outputs.values(), self._stage.frame_trigger_output):
+            for output in (*self._gate_outputs.values(), self._config.frame_trigger_output):
                 self._clear_output(output)
 
     def _clear_output(self, output: str) -> None:
@@ -306,7 +306,7 @@ class AcsController(ScanController):
             sp.SetOutputPort(self._hc, int(output.removeprefix("OUT")), 0, sp.SYNCHRONOUS, True)
 
     def _check_in_limits(self, axis: Literal["x", "y"], position_mm: float) -> None:
-        low, high = self._stage.limits_mm[axis]
+        low, high = self._config.limits_mm[axis]
         if not low <= position_mm <= high:
             raise ValueError(f"{axis} position {position_mm} mm is outside the limits [{low}, {high}]")
 
@@ -317,15 +317,15 @@ class AcsController(ScanController):
         unknown = sorted(set(config.lasers) - self._gate_outputs.keys())
         if unknown:
             raise ValueError(f"No gate output for lasers {unknown}")
-        low, high = self._stage.limits_mm[derived.scan_axis]
+        low, high = self._config.limits_mm[derived.scan_axis]
         parameters: dict[str, float | int] = {
             "overscan_mm": derived.overscan_um / 1000,
             "pixel_size_mm": derived.pixel_size_um / 1000,
             "scan_speed_mm_s": derived.scan_speed_mm_s,
-            "line_pulse_ms": self._stage.line_pulse_width_ms,
-            "move_speed_mm_s": self._stage.move_velocity_mm_s,
-            "accel": self._stage.scan_accel,
-            "decel": self._stage.scan_decel,
+            "line_pulse_ms": self._config.line_pulse_width_ms,
+            "move_speed_mm_s": self._config.move_velocity_mm_s,
+            "accel": self._config.scan_accel,
+            "decel": self._config.scan_decel,
             "limit_min_mm": low,
             "limit_max_mm": high,
             "scan_axis": self._axis_index(derived.scan_axis),
@@ -347,7 +347,7 @@ class AcsController(ScanController):
         self._write("scan_end_mm", end_mm)
         self._write("scan_dir", 1 if end_mm >= start_mm else -1)
         with self._lock:
-            self._sp.RunBuffer(self._hc, self._stage.scan_buffer, None, self._sp.SYNCHRONOUS, True)
+            self._sp.RunBuffer(self._hc, self._config.scan_buffer, None, self._sp.SYNCHRONOUS, True)
 
     @property
     @describe(label="Line pulses", desc="Line pulses fired in the last pass")

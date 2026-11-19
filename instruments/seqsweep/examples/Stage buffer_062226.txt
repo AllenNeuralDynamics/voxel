@@ -1,0 +1,222 @@
+DISP "TDI scan starting..."
+
+! homeA goes to X,Y = (0,0)
+!START 8, homeA
+! Axes: X=0, Y=1
+
+! ---------------------------------------------------------------
+! USER PARAMETERS
+! ---------------------------------------------------------------
+int AX_X = 0
+int AX_Y = 1
+
+! Stage max range
+real X_ABS_MIN = 20
+real X_ABS_MAX = 290
+real Y_ABS_MIN = 20
+real Y_ABS_MAX = 290
+
+! Optical parameters
+real TDI_PIXEL_SIZE = 5.0	! TDI sensor pixel size (um)
+real MAG = 20			    ! magnification
+int TDI_PIX_WIDTH = 480		! TDI sensor width (pixels), max 16384,  increment value is 32
+int TDI_STAGES = 200		! overscan before direction change (pixels)
+
+! Home position
+real origin = 155.0			! mm
+
+! Scan ROI parameters
+real X0, X_end, Y0, Y_SAMP_1, Y_SAMP_2, Y_SAMP_3
+X0 = 116.75					! X ROI start (mm), X safe range: 116.75 - 173.25 mm (10mm margin from sample chamber edges)
+X_end = 168.2				! X ROI end   (mm), keep X_end - X0 such that image height = 29400
+!X_interval = 7.35 mm		! equivalent to image height = 29400 pixels (for each frame), X_interval must match with image height in camera .cpp config.
+
+Y_SAMP_1 = 200.25			! Y-axis, Sample chamber 1 (mm)
+Y_SAMP_2 = 155				! Y-axis, Sample chamber 2 (mm)
+Y_SAMP_3 = 109.75			! Y-axis, Sample chamber 3 (mm)
+Y0 = Y_SAMP_2				! Y ROI start (mm)
+
+int NUM_STRIPS = 1			! # of frames per sample chamber
+
+! Motion parameters
+real LINE_RATE = 10000.0       ! Hz, line rate must match with camera .cpp config.
+!real LINE_PULSE_MS = 0.0001   ! 100 ns line trigger pulse (0.0001 ms)
+real LINE_PULSE_MS = 0.01
+
+
+! ---------------------------------------------------------------
+! DERIVED VALUES
+! ---------------------------------------------------------------
+real PIXEL_SIZE
+real FOV_Y
+real MARGIN
+real VEL_X
+real CAPTURE_DISTANCE
+real X_SCAN_MIN
+real X_SCAN_MAX
+real Y_SCAN_MIN
+real Y_SCAN_MAX
+real Y_SCAN
+real travel_len
+
+PIXEL_SIZE = TDI_PIXEL_SIZE / MAG
+PIXEL_SIZE = PIXEL_SIZE / 1000.0       ! mm on sample
+
+FOV_Y = TDI_PIX_WIDTH * PIXEL_SIZE
+MARGIN = TDI_STAGES * PIXEL_SIZE       ! margin must be less than 10mm
+VEL_X = LINE_RATE * PIXEL_SIZE                  ! stage velocity must match with camera line rate
+
+CAPTURE_DISTANCE = ABS(X_end - X0)
+travel_len = ABS(X_end - X0) + (2 * MARGIN)
+
+X_SCAN_MIN = X0 - MARGIN
+X_SCAN_MAX = X_end + MARGIN
+Y_SCAN = Y0
+
+IF X_SCAN_MIN < X_ABS_MIN
+    DISP "ERROR: scan minimum X exceeds safety limit: ", X_SCAN_MIN
+    STOP
+END
+
+IF X_SCAN_MAX > X_ABS_MAX
+    DISP "ERROR: scan maximum X exceeds safety limit: ", X_SCAN_MAX
+    STOP
+END
+
+IF (Y_SCAN > Y_ABS_MAX) | (Y_SCAN < Y_ABS_MIN)
+    DISP "ERROR: Y position is outside safety limits: ", Y_SCAN
+    STOP
+END
+
+
+DISP "Derived parameters:"
+DISP "Pixel Size (mm) = ", PIXEL_SIZE
+DISP "X Velocity (mm/s) = ", VEL_X
+DISP "Lead distance before/after ROI (mm) = ", MARGIN
+DISP "Y FOV (mm) = ", FOV_Y
+DISP "Capture distance + margin (mm) = ", travel_len
+DISP "Capture distance (mm) = ", CAPTURE_DISTANCE
+
+
+! --------------------------------------------------------------
+! CONTROLLER SETUP
+! --------------------------------------------------------------
+ENABLE(AX_X)
+ENABLE(AX_Y)
+ACC(AX_X) = 6000
+DEC(AX_X) = 6000
+DISP "Motors enabled."
+
+! OUT0.0 = direction to camera
+! OUT0.1 = frame trigger pulse to frame grabber (External Trigger 2)
+OUT0.0 = 0
+OUT0.1 = 0
+
+DISP "Moving stage to home position."
+VEL(AX_X) = 50
+VEL(AX_Y) = 50
+PTP/e(AX_X, AX_Y), origin, origin
+TILL ^MST(AX_X).#MOVE & ^MST(AX_Y).#MOVE
+
+! --------------------------------------------------------------
+! LCI INITIALIZATION
+! --------------------------------------------------------------
+lc.Init()
+lc.SetSafetyMasks(1, 1)
+lc.SetMotionAxes(AX_X)
+
+! Reserve Channel 0 for line trigger pulse train, Channel 1 for frame trigger
+int Channels(8) = (100,100,0,0,0,0,0,0)
+lc.AssignChannels(Channels)
+
+! Disconnect configurable output initially
+lc.SetConfigOut(0, 0, 0)
+
+! --------------------------------------------------------------
+! MAIN SCAN LOOP (single direction scan)
+! --------------------------------------------------------------
+int i = 0
+int forward
+int chLine
+int chFrame
+int NLine
+int NFrame
+real Y_POS
+real move_start
+real move_end
+real InitialPos
+
+
+WHILE i <= (NUM_STRIPS - 1)
+
+    ! Move Y to strip position
+    Y_POS = Y0 + i * FOV_Y
+    PTP/e(AX_Y), Y_POS
+    TILL ^MST(AX_Y).#MOVE
+
+    move_start = X0 - MARGIN
+    move_end   = X_end + MARGIN
+	
+    OUT0.0 = 1
+
+    ! Move X to strip start
+    VEL(AX_X) = 50
+    PTP/e(AX_X), move_start
+    TILL ^MST(AX_X).#MOVE
+
+    DISP "Strip ", i + 1, " start X (mm) = ", move_start, "  Y (mm) = ", Y_POS
+
+    ! Clear previous LCI operations
+    lc.Stop()
+    lc.SetMotionAxes(AX_X)
+
+    ! Define line trigger pulses during scan motion
+    ! InitialPos = APOS(AX_X)
+    ! lc.FixedDistPulse(PulseWidth, Interval, StartPos, StopPos, InitialPos)
+    ! start, stop positions are RELATIVE positions to where scan move starts
+    
+    !chLine = lc.FixedDistPulse(LINE_PULSE_MS,PIXEL_SIZE,0,CAPTURE_DISTANCE)
+    !chLine = lc.FixedDistPulse(LINE_PULSE_MS,-PIXEL_SIZE,0,-CAPTURE_DISTANCE)
+
+    chLine = lc.FixedDistPulse(LINE_PULSE_MS,PIXEL_SIZE,MARGIN,MARGIN + (X_end - X0))
+
+
+    DISP "Calculated # Line Pulse:", CAPTURE_DISTANCE/PIXEL_SIZE
+	
+	! Start frame trigger (active high)
+	OUT0.1 = 1
+    ! Enable LCI and perform scan
+    lc.LaserEnable()
+
+    VEL(AX_X) = VEL_X
+    PTP/e(AX_X), move_end
+    TILL ^MST(AX_X).#MOVE
+
+    NLine = lc.GetPulseCounts(chLine)	! Read line count
+    DISP "Strip ", i + 1, " line count = ", NLine
+	
+	OUT0.1 = 0	! End frame trigger
+	
+    ! Cleanup after strip
+    lc.LaserDisable()
+    lc.SetConfigOut(0, 0, 0)
+    lc.Stop()
+
+    DISP "Strip ", i + 1, " complete. X POS (mm) = ", FPOS(AX_X), "  Y POS (mm) = ", FPOS(AX_Y)
+
+    i = i + 1
+
+END
+
+
+DISP "Scan complete."
+
+VEL(AX_X) = 50
+VEL(AX_Y) = 50
+PTP/e(AX_X, AX_Y), origin, origin
+TILL ^MST(AX_X).#MOVE & ^MST(AX_Y).#MOVE
+
+DISABLE(AX_X)
+DISABLE(AX_Y)
+
+STOP

@@ -4,7 +4,7 @@ Maps the variables in `Stage buffer_062226.txt` to the SeqSweep Python names.
 
 | Buffer | Meaning | Python name |
 |---|---|---|
-| `AX_X` / `AX_Y` | axis indices | `axis_x` / `axis_y` (`AcsStageConfig`) |
+| `AX_X` / `AX_Y` | axis indices | `axis_x` / `axis_y` (`AcsControllerConfig`) |
 | `X0` | scan start, imaged range | `scan_start_um` (µm, not mm) |
 | `X_end` | scan end, imaged range | `scan_end_um` (µm) |
 | `Y0`, `Y_SAMP_1/2/3` | strip start, chamber Y positions | `chambers_step_mm` (`{1: 200.25, 2: 155.0, 3: 109.75}`); the strip's own cross-scan position is not found yet |
@@ -19,7 +19,7 @@ Maps the variables in `Stage buffer_062226.txt` to the SeqSweep Python names.
 | `MARGIN` | lead-in/out distance | `overscan_um` |
 | `CAPTURE_DISTANCE` | `abs(X_end - X0)` | `capture_mm` |
 | `travel_len` | capture plus 2 × margin | `travel_mm` |
-| `X_ABS_MIN/MAX`, `Y_ABS_MIN/MAX` | stage range | `limits_mm` (`AcsStageConfig`) |
+| `X_ABS_MIN/MAX`, `Y_ABS_MIN/MAX` | stage range | `limits_mm` (`AcsControllerConfig`) |
 | `X_SCAN_MIN/MAX` | scan ± margin | derived from `scan_start_um`, `scan_end_um`, `overscan_um`; may not have its own name |
 | `origin` | home | `origin_mm` |
 | `LINE_RATE` | camera line rate | `line_rate_hz` (pass config); `max_line_rate_hz` is only the limit it is checked against |

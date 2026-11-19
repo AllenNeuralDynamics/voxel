@@ -125,11 +125,29 @@ class SeqSweep:
         if defaults.max_line_rate_hz is not None and line_rate_hz > defaults.max_line_rate_hz:
             raise ValueError(f"line rate {line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
 
-    async def _run_passes(self, pass_config: ScanPassConfig, derived: DerivedScan, direction: ScanDirection) -> None:
+    async def _run_passes(self, job: ScanJob, derived: DerivedScan) -> None:
+        """Configure once, then per strip: move to the strip start, run one pass, wait for it to finish."""
         scan_controller = self._hal.scan_controller
+        pass_config = job.pass_config
+        defaults = self.config.default
+        scan_axis_is_x = derived.scan_axis == "x"
         try:
             await scan_controller.configure(pass_config, derived)
-            await scan_controller.run(direction)
+            for strip in range(job.num_strips):
+                if job.chamber is not None:
+                    step_mm = (
+                        defaults.chambers_step_mm[job.chamber]
+                        + STRIP_STEP_SIGN * strip * derived.tdi_image_width_um / 1000
+                    )
+                    start_um = pass_config.scan_end_um if job.direction is ScanDirection.REVERSE else pass_config.scan_start_um
+                    x_mm, y_mm = (start_um / 1000, step_mm) if scan_axis_is_x else (step_mm, start_um / 1000)
+                    await scan_controller.move_to(x_mm, y_mm)
+                    await scan_controller.wait_motion_end()
+                    self.log.info("Moved to X=%.3f mm, Y=%.3f mm for strip %d/%d", x_mm, y_mm, strip + 1, job.num_strips)
+                self.log.info("Strip %d/%d", strip + 1, job.num_strips)
+                await scan_controller.run(job.direction)
+                while await scan_controller.is_running.get():
+                    await asyncio.sleep(RUN_POLL_S)
             self._status = "finished"
         except asyncio.CancelledError:
             await scan_controller.abort()

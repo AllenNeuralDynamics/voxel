@@ -27,14 +27,16 @@ router_server_api:
 hal:
   devices:
     acs:
-      target: seqsweep.devices.scan_controller.acs.AcsController  # TODO: driver not written yet; simulated setup is in ../seqsweep_simulated
+      target: seqsweep.devices.scan_controller.acs.AcsController
       init:
         # communication_option: ethernet_tcp
         communication_option: simulator  # ethernet_tcp | simulator (SPiiPlus stand-alone simulator; address and port unused)
         address: 10.0.0.100
         port: 701
         gate_outputs:
-          laser_532: OUT0
+          laser_532: OUT0  # TODO verify correct output mapping
+          laser_585: OUT1
+          laser_658: OUT2
         axis_x: 0
         axis_y: 1
         frame_trigger_output: OUT0.1  # frame trigger to grabber
