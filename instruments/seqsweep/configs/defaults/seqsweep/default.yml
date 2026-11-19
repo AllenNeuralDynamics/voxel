@@ -29,7 +29,8 @@ hal:
     acs:
       target: seqsweep.devices.scan_controller.acs.AcsController  # TODO: driver not written yet; simulated setup is in ../seqsweep_simulated
       init:
-        communication_option: ethernet_tcp
+        # communication_option: ethernet_tcp
+        communication_option: simulator  # ethernet_tcp | simulator (SPiiPlus stand-alone simulator; address and port unused)
         address: 10.0.0.100
         port: 701
         gate_outputs:

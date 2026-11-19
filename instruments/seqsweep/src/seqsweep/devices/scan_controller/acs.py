@@ -38,9 +38,11 @@ NO_INDEX = -1  # ACSC_NONE: "global variable" buffer, and "no array index" for s
 class AcsStageConfig(FrozenModel):
     """Connection, wiring and motion settings of the ACS stage (mm, mm/s). Every value comes from the config; no defaults."""
 
-    communication_option: Literal["ethernet_tcp"] = Field(description="How the host talks to the controller")
-    address: str = Field(min_length=1, description="Controller network address, IP or host name")
-    port: int = Field(gt=0, le=65535, description="Controller TCP port (701 is the SPiiPlus stream port)")
+    communication_option: Literal["ethernet_tcp", "simulator"] = Field(
+        description="How the host talks to the controller; 'simulator' uses the SPiiPlus stand-alone simulator"
+    )
+    address: str | None = Field(default=None, min_length=1, description="Controller IP or host name; ethernet_tcp only")
+    port: int | None = Field(default=None, gt=0, le=65535, description="Controller TCP port (701 is the SPiiPlus stream port); ethernet_tcp only")
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
     frame_trigger_output: AcsOutput = Field(description="Output driving the frame trigger to the grabber")
@@ -54,6 +56,8 @@ class AcsStageConfig(FrozenModel):
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
+        if self.communication_option == "ethernet_tcp" and (self.address is None or self.port is None):
+            raise ValueError("address and port are required when communication_option is ethernet_tcp")
         for axis, (low, high) in self.limits_mm.items():
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
@@ -94,17 +98,22 @@ class AcsController(ScanController):
         return sp
 
     def _connect(self) -> None:
-        """Open the Ethernet TCP channel to the controller."""
+        """Open the channel to the controller, or to the SPiiPlus simulator."""
         sp = self._sp
+        address, port = self._stage.address, self._stage.port
+        simulated = self._stage.communication_option == "simulator"
+        target = "SPiiPlus simulator" if simulated else f"{address}:{port}"
         with self._lock:
-            self._hc = sp.OpenCommEthernetTCP(self._stage.address, self._stage.port)
+            if simulated:
+                self._hc = sp.OpenCommSimulator()
+            elif address is None or port is None:
+                raise ValueError("address and port are required for ethernet_tcp")  # also checked by the config
+            else:
+                self._hc = sp.OpenCommEthernetTCP(address, port)
             if self._hc == -1:
                 error = sp.GetLastError()
-                raise ConnectionError(
-                    f"Could not connect to the ACS controller at {self._stage.address}:{self._stage.port} "
-                    f"(error {error})"
-                )
-        self.log.info("Connected to ACS controller at %s:%d", self._stage.address, self._stage.port)
+                raise ConnectionError(f"Could not connect to the ACS controller ({target}), error {error}")
+        self.log.info("Connected to ACS controller (%s)", target)
 
     def close(self) -> None:
         """Stop motion, close every gate, switch the axes off and close the connection."""
@@ -157,11 +166,11 @@ class AcsController(ScanController):
     # -- status -----------------------------------------------------------------------------------------------
 
     @property
-    @describe(label="Position", desc="Feedback position (X, Y) in mm", stream=True)
-    def position_mm(self) -> tuple[float, float]:
+    @describe(label="Position", desc="Feedback position in mm, as {'x': ..., 'y': ...}", stream=True)
+    def position_mm(self) -> dict[str, float]:
         with self._lock:
             x, y = (self._sp.GetFPosition(self._hc, axis, self._sp.SYNCHRONOUS, True) for axis in self._axes)
-        return x, y
+        return {"x": x, "y": y}
 
     @property
     @describe(label="Running", desc="Whether a pass is in progress", stream=True)
@@ -240,8 +249,8 @@ class AcsController(ScanController):
     @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")
     def move_by(self, dx_mm: float, dy_mm: float) -> None:
         # Target from the feedback position, so the limit check sees the real destination.
-        x_mm, y_mm = self.position_mm
-        self.move_to(x_mm + dx_mm, y_mm + dy_mm)
+        position = self.position_mm
+        self.move_to(position["x"] + dx_mm, position["y"] + dy_mm)
 
     @describe(label="Go Home", desc="Move to the configured origin")
     def go_home(self) -> None:
