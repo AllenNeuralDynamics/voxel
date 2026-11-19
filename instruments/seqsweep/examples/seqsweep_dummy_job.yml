@@ -1,8 +1,8 @@
 # Values from "Stage buffer_062226.txt" (mm in the buffer, um here).
-name: "Chamber 2, 7-frame strip"
-chamber: 2  # resolves to Y0 from default.chambers_step_mm
+name: "Chambers 1 and 3"
+chambers: [1, 3]  # scanned in this order; each resolves to its lower Y edge from default.chambers_step_mm
 direction: forward
-num_strips: 10  # passes or frames per chamber
+num_strips: 5  # passes or frames per chamber
 pass_config:
   scan_start_um: 116750  # X0
   scan_end_um: 168200  # X_end; use 124100 for exactly one 29400 px frame

@@ -42,8 +42,10 @@ class ScanJob(FrozenModel):
     """One scan job: a pass geometry repeated over ``num_strips`` strips of a sample chamber."""
 
     name: str = Field(default="seqsweep job", min_length=1)
-    #TODO Chamber: Change in to the list type to support multiple chambers
-    chamber: int | None = Field(default=None, description="Sample chamber; its Y start comes from the defaults")
+    chambers: list[int] = Field(
+        default_factory=list,
+        description="Sample chambers, scanned in this order; each Y start comes from the defaults. Empty: no Y moves",
+    )
     direction: ScanDirection = ScanDirection.FORWARD
     # TODO Validate the number of strips does not exceed the next chamber's start position
     num_strips: int = Field(default=1, ge=1, description="Frames per chamber, stepped along Y")
