@@ -7,8 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from vxl_records import RecordsError, SQLiteRecords
 
-from vxl.core.station import StationConfig
-from vxl.station_legacy.config import StationNotConfiguredError
+from vxl.station.config import StationConfig
 from vxl.station_legacy.station import StationConfig as LegacyStationConfig
 from vxl.system import load_voxel_env
 
@@ -52,7 +51,7 @@ def import_catalog(*, output: TextIO, errors: TextIO) -> int:
             resolve_root=lambda spec: station.resolve_storage(spec).target,
         )
         result = asyncio.run(records.acquisitions.import_legacy_file_catalog(station.dir / "catalog"))
-    except (OSError, RecordsError, StationNotConfiguredError, ValidationError) as exc:
+    except (OSError, RecordsError, ValidationError) as exc:
         errors.write(f"{exc}\n")
         return 2
 

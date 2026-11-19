@@ -37,8 +37,8 @@ uv sync --all-packages --extra web
 vp -C web install --frozen-lockfile
 vp -C web/station build
 
-uv run vxl init-legacy --name my-microscope
-uv run vxl web-legacy
+uv run vxl legacy init --name my-microscope
+uv run vxl legacy web
 ```
 
 Open [http://localhost:8000](http://localhost:8000), create an instrument from the `simulated-local` template, and
@@ -61,7 +61,7 @@ Qt dependencies and launch the same station:
 
 ```bash
 uv sync --all-packages --extra qt
-uv run vxl qt
+uv run vxl legacy qt
 ```
 
 ## Use the instrument API
@@ -150,7 +150,7 @@ uv run pytest
 vp -C web run -r check
 ```
 
-For frontend development, run `vp -C web/station dev` beside `uv run vxl web-legacy`. Build the frontend and Python
+For frontend development, run `vp -C web/station dev` beside `uv run vxl legacy web`. Build the frontend and Python
 release artifacts together with `uv run scripts/build.py`.
 
 Package-specific boundaries and workflows are documented in their respective READMEs. Types and docstrings remain

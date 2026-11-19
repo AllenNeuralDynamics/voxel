@@ -9,11 +9,11 @@ from vxlib.reactivity import Emitter
 from vxlib.schema import FrozenModel
 from vxlib.vector import Vec3D
 
-from vxl.core.instrument.config import DeviceUid
-from vxl.core.instrument.geometry import Transform
 from vxl.devices.camera import AreaCameraHandle
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
 from vxl.live.protocol import StagePosition
+from vxl.station.instrument.config import DeviceUid
+from vxl.station.instrument.geometry import Transform
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown

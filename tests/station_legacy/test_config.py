@@ -34,7 +34,7 @@ def test_system_uses_env_over_whole_station_file_over_system_file(
 
 def test_station_config_load_requires_station_yaml(voxel_home: Path) -> None:
     del voxel_home
-    with pytest.raises(StationNotConfiguredError, match="vxl init-legacy"):
+    with pytest.raises(StationNotConfiguredError, match="vxl legacy init"):
         StationConfig.load()
 
 

@@ -9,7 +9,8 @@ from vxlib.issues import Problem, Problems
 from vxlib.schema import FrozenModel
 from vxlib.units import Portion
 
-from vxl.core.instrument.config import (
+from vxl.devices.camera import AreaROI
+from vxl.station.instrument.config import (
     DeviceUid,
     DigitalWire,
     InstrumentConfig,
@@ -17,8 +18,7 @@ from vxl.core.instrument.config import (
     Stage,
     Wire,
 )
-from vxl.core.instrument.state import Profile
-from vxl.devices.camera import AreaROI
+from vxl.station.instrument.state import Profile
 
 SOFTWARE = "software"
 """The pacer of a capture that the program runs frame by frame."""

@@ -12,11 +12,11 @@ from vxlib.schema import FrozenModel, UniqueList, identifier, repeated
 from vxlib.units import Portion
 from vxlib.vector import Span
 
-from vxl.core.instrument.config import (
+from vxl.station.instrument.config import (
     SpecimenAxis,
     Stage,
 )
-from vxl.core.instrument.state import ProfileId
+from vxl.station.instrument.state import ProfileId
 
 from .config import SPIMConfig
 

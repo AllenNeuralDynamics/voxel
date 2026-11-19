@@ -12,13 +12,6 @@ from rigup.activity import ActivityBusyError, ActivityInfo
 from vxl_records import SQLiteRecords
 
 from vxl._utils.files import load_yaml
-from vxl.core.errors import RejectedError, StartupError
-from vxl.core.instrument.config import new_instrument_id
-from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.instrument.samples import render
-from vxl.core.instrument.signals import Timeline
-from vxl.core.instrument.state import StageFollowRule
-from vxl.core.instrument.store import ABSENT, InstrumentStore, Merge
 from vxl.devices.camera import AreaROI
 from vxl.devices.signals.generator.base import OwnClock
 from vxl.instruments.spim.config import SPIMConfig
@@ -26,6 +19,13 @@ from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMState, WriterFields
 from vxl.instruments.spim.task import Task, TaskFields
 from vxl.live import LiveSourceEmission, LiveViewport, live_source_header
+from vxl.station.errors import RejectedError, StartupError
+from vxl.station.instrument.config import new_instrument_id
+from vxl.station.instrument.folder import InstrumentFolder
+from vxl.station.instrument.samples import render
+from vxl.station.instrument.signals import Timeline
+from vxl.station.instrument.state import StageFollowRule
+from vxl.station.instrument.store import ABSENT, InstrumentStore, Merge
 from vxl.system import System
 
 from .support import codes, load, objective_turret, simulated, sweep_x, template, two_arms, two_cameras

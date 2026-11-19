@@ -5,7 +5,7 @@ Agreed on 2026-11-17, not built. For the web layer, after the acquisition captur
 ## Why
 
 `StationFeed` sends a **complete** `StationFeedView` to every connection on **every** change (`_view_unlocked()` in
-`src/vxl/core/feed.py`). The view holds the whole instrument view: `config` (fixed for the session), `state` and
+`src/vxl/station/feed.py`). The view holds the whole instrument view: `config` (fixed for the session), `state` and
 `default_state` (2 full copies of profiles and tasks), every device's properties, `live`, `history`, and so on. The
 old feed (`station_legacy`) did the same, with even more in it (`planned_volumes`, `profile_fovs`).
 

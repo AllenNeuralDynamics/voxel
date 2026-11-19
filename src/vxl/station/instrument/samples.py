@@ -10,8 +10,8 @@ from scipy.interpolate import PchipInterpolator
 from vxlib.issues import Problems
 from vxlib.vector import Span
 
-from vxl.core.instrument.config import AnalogWire, DigitalWire, WireConfig, WireName
-from vxl.core.instrument.signals import (
+from vxl.station.instrument.config import AnalogWire, DigitalWire, WireConfig, WireName
+from vxl.station.instrument.signals import (
     AnalogConstant,
     AnalogFollow,
     AnalogPoints,

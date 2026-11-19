@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from vxl.core.instrument.config import InstrumentConfig, OpticalGraph
+from vxl.station.instrument.config import InstrumentConfig, OpticalGraph
 
 from .support import bench
 

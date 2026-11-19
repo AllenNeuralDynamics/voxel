@@ -14,9 +14,9 @@ from vxlib.issues import KeyPath, Problems
 from vxlib.reactivity import Cell, Readable, Subscribable
 
 from vxl._utils.files import atomic_write, update_yaml
-from vxl.core.errors import RejectedError
-from vxl.core.instrument.config import InstrumentConfig
-from vxl.core.instrument.state import InstrumentState
+from vxl.station.errors import RejectedError
+from vxl.station.instrument.config import InstrumentConfig
+from vxl.station.instrument.state import InstrumentState
 
 
 class Absent(Enum):

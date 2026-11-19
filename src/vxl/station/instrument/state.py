@@ -12,7 +12,8 @@ from vxlib.issues import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.units import Quantity
 
-from vxl.core.instrument.config import (
+from vxl.metadata import ExperimentMetadata, MetadataCls
+from vxl.station.instrument.config import (
     AxisPosition,
     DeviceUid,
     InstrumentConfig,
@@ -21,9 +22,8 @@ from vxl.core.instrument.config import (
     SpecimenAxis,
     Wire,
 )
-from vxl.core.instrument.samples import render
-from vxl.core.instrument.signals import Timeline
-from vxl.metadata import ExperimentMetadata, MetadataCls
+from vxl.station.instrument.samples import render
+from vxl.station.instrument.signals import Timeline
 
 ProfileId = Annotated[str, identifier("Profile id")]
 

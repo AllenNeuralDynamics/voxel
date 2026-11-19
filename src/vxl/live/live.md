@@ -7,7 +7,7 @@ processing and composition.
 
 "Live" names the frames; "preview" names the instrument's mode of exploring by hand. Frames also flow during a run.
 
-The new core (`vxl.core`) implements the path from the camera to `StationFeed`, the planes, and the viewport. The
+The new core (`vxl.station`) implements the path from the camera to `StationFeed`, the planes, and the viewport. The
 web layer and the Qt app still use the old instrument (`vxl.instrument`, `vxl.station_legacy`); they move to the new
 core later.
 
@@ -17,7 +17,7 @@ Live metadata is split at the boundary where it becomes known:
 
 - The camera owns `camera_id`, source-stream identity, capture sequence, pixel geometry, valid bit depth, and
   encoding details.
-- The instrument's `LiveRelay` (`vxl.core.instrument.live`) reads only each frame's header. It drops frames of an
+- The instrument's `LiveRelay` (`vxl.station.instrument.live`) reads only each frame's header. It drops frames of an
   old stream and sends the packed frame on with the stage position from when that frame number was first seen,
   without decoding it. `Instrument.live` gives these frames out, keyed by camera; `Station.live` passes on those of
   the open instrument.

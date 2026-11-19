@@ -11,12 +11,12 @@ from vxlib.asyncio import gather_all
 from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 
-from vxl.core.errors import RejectedError
-from vxl.core.instrument.base import Instrument, InstrumentView
-from vxl.core.instrument.config import DeviceUid
-from vxl.core.instrument.state import ProfileId
-from vxl.core.instrument.store import ABSENT
 from vxl.devices.camera import AreaROI
+from vxl.station.errors import RejectedError
+from vxl.station.instrument.base import Instrument, InstrumentView
+from vxl.station.instrument.config import DeviceUid
+from vxl.station.instrument.state import ProfileId
+from vxl.station.instrument.store import ABSENT
 from vxl.system import System
 
 from .config import SPIMConfig
@@ -24,7 +24,7 @@ from .state import SPIMState, WriterFields
 from .task import Task, TaskFields, TaskId
 
 if TYPE_CHECKING:
-    from vxl.core.instrument.folder import InstrumentFolder
+    from vxl.station.instrument.folder import InstrumentFolder
 
 logger = logging.getLogger(__name__)
 

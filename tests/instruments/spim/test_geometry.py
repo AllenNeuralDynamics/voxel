@@ -3,9 +3,9 @@ import math
 import pytest
 from vxlib.vector import IVec2D, Vec2D, Vec3D
 
-from vxl.core.instrument.config import Detector
-from vxl.core.instrument.geometry import AxisRun, Transform
 from vxl.devices.camera import AreaROI, CameraSensor
+from vxl.station.instrument.config import Detector
+from vxl.station.instrument.geometry import AxisRun, Transform
 
 _EXASPIM = Detector(width={"y": 1}, height={"x": -1})
 _OPEN_TOP = Detector(width={"y": 1}, height={"x": 1, "z": 1})

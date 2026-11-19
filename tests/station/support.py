@@ -1,6 +1,6 @@
 from typing import Any
 
-from vxl.core.instrument.config import InstrumentConfig
+from vxl.station.instrument.config import InstrumentConfig
 
 _IDENTITY: dict[str, Any] = {
     "id": "5x8k2m9q4r7t1v3w6y0z2b4c8d",

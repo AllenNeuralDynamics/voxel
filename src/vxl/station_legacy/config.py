@@ -95,7 +95,7 @@ class StationConfig(System):
         path = cls.config_path()
         if not path.is_file():
             raise StationNotConfiguredError(
-                f"No control station configured at {path}. Initialize one with `vxl init-legacy --name <name>`."
+                f"No control station configured at {path}. Initialize one with `vxl legacy init --name <name>`."
             )
         return cls()  # pyright: ignore[reportCallIssue] -- required fields come from the checked YAML source
 

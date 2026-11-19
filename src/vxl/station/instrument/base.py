@@ -21,14 +21,20 @@ from vxlib.reactivity import Cell, Computed, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
 
-from vxl.core.errors import RejectedError, StartupError
-from vxl.core.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
-from vxl.core.instrument.geometry import Transform
-from vxl.core.instrument.hal import HAL, DeviceView
-from vxl.core.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
-from vxl.core.instrument.samples import render
-from vxl.core.instrument.signals import Timeline
-from vxl.core.instrument.state import (
+from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
+from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
+from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
+from vxl.live import LiveSourceEmission, LiveViewport
+from vxl.live.protocol import StagePosition
+from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.station.errors import RejectedError, StartupError
+from vxl.station.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
+from vxl.station.instrument.geometry import Transform
+from vxl.station.instrument.hal import HAL, DeviceView
+from vxl.station.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
+from vxl.station.instrument.samples import render
+from vxl.station.instrument.signals import Timeline
+from vxl.station.instrument.state import (
     InstrumentState,
     PositionRule,
     Power,
@@ -38,18 +44,12 @@ from vxl.core.instrument.state import (
     ProfileId,
     StageFollowRule,
 )
-from vxl.core.instrument.store import InstrumentStore, Merge, StateValues
-from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
-from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
-from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
-from vxl.live import LiveSourceEmission, LiveViewport
-from vxl.live.protocol import StagePosition
-from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.station.instrument.store import InstrumentStore, Merge, StateValues
 from vxl.system import Remote, System, remote_store_fingerprint
 
 if TYPE_CHECKING:
-    from vxl.core.instrument.folder import InstrumentFolder
     from vxl.devices.camera import CameraHandle
+    from vxl.station.instrument.folder import InstrumentFolder
 
 logger = logging.getLogger(__name__)
 

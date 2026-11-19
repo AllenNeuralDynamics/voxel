@@ -16,8 +16,6 @@ from vxlib.reactivity import Cell, Readable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
 
-from vxl.core.errors import RejectedError, StartupError
-from vxl.core.instrument.config import DeviceUid, InstrumentConfig, LightPath, PinRef, SpecimenAxis
 from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.continuous.linear import LinearAxisHandle
 from vxl.devices.axes.continuous.rotation import RotationAxisHandle
@@ -28,6 +26,8 @@ from vxl.devices.camera.line import LineCameraHandle
 from vxl.devices.light import ControlMode, DimmableHandle, LaserHandle, ModulatorHandle, ShutterHandle
 from vxl.devices.node import NodeMonitorHandle
 from vxl.devices.signals.generator.handle import GeneratorHandle
+from vxl.station.errors import RejectedError, StartupError
+from vxl.station.instrument.config import DeviceUid, InstrumentConfig, LightPath, PinRef, SpecimenAxis
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown

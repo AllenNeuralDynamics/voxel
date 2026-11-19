@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from vxl.core.instrument.config import AnalogWire, WireConfig
+from vxl.station.instrument.config import AnalogWire, WireConfig
 
 
 @pytest.mark.parametrize(

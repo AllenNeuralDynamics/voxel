@@ -3,10 +3,10 @@ import math
 import pytest
 from vxlib.vector import IVec2D, Vec2D, Vec3D
 
-from vxl.core.instrument.config import Detector
-from vxl.core.instrument.geometry import Transform
-from vxl.core.instrument.live import Picture, planes_of
 from vxl.devices.camera import AreaROI, CameraSensor
+from vxl.station.instrument.config import Detector
+from vxl.station.instrument.geometry import Transform
+from vxl.station.instrument.live import Picture, planes_of
 
 _SENSOR = CameraSensor(pixel_um=Vec2D(x=1.0, y=1.0), size_px=IVec2D(x=1000, y=800))
 _FULL = AreaROI(x=0, y=0, w=1000, h=800)

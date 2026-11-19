@@ -13,10 +13,10 @@ import numpy as np
 from vxlib.vector import IVec2D, Vec2D, Vec3D
 
 from tests.instruments.spim.support import load_file
-from vxl.core.instrument.config import Detector
-from vxl.core.instrument.geometry import Transform
 from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.instruments.spim.plan import _light
+from vxl.station.instrument.config import Detector
+from vxl.station.instrument.geometry import Transform
 
 _FILES = Path("tests/instruments/spim/files")
 _SAME_PLANE_DEG = 1.0

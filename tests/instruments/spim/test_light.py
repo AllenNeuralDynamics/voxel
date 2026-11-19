@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 from vxl_records import SQLiteRecords
 
-from vxl.core.errors import RejectedError
-from vxl.core.instrument.folder import InstrumentFolder
 from vxl.instruments.spim.instrument import Microscope
+from vxl.station.errors import RejectedError
+from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 from .support import simulated, template

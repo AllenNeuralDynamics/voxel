@@ -24,8 +24,9 @@ if TYPE_CHECKING:
     from vxlib.reactivity import Readable, Subscribable
 
 
-from vxl.core.errors import FeedLaggedError
-from vxl.core.station import StationInfo, StationStatus, StationView
+from vxl.station.config import StationInfo
+from vxl.station.errors import FeedLaggedError
+from vxl.station.station import StationStatus, StationView
 
 
 class StationFeedView(StationView):

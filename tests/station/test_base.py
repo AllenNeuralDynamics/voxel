@@ -7,12 +7,12 @@ from rigup.activity import ActivityBusyError, ActivityInfo
 from vxl_records import SQLiteRecords
 from vxlib.issues import Problems
 
-from vxl.core.errors import RejectedError, StartupError
-from vxl.core.instrument.base import Instrument
-from vxl.core.instrument.config import InstrumentConfig
-from vxl.core.instrument.folder import InstrumentFolder
-from vxl.core.instrument.state import InstrumentState
 from vxl.metadata import ExperimentMetadata
+from vxl.station.errors import RejectedError, StartupError
+from vxl.station.instrument.base import Instrument
+from vxl.station.instrument.config import InstrumentConfig
+from vxl.station.instrument.folder import InstrumentFolder
+from vxl.station.instrument.state import InstrumentState
 from vxl.system import System
 
 from .support import bench
@@ -20,7 +20,7 @@ from .support import bench
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from vxl.core.instrument.hal import DeviceView
+    from vxl.station.instrument.hal import DeviceView
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 

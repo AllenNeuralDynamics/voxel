@@ -8,12 +8,14 @@ import pytest
 main_module = import_module("vxl.cli.main")
 
 
-def test_bare_vxl_prints_the_help() -> None:
+@pytest.mark.parametrize(
+    ("argv", "listed"), [([], ["station", "legacy"]), (["station"], ["init"]), (["legacy"], ["web"])]
+)
+def test_a_bare_vxl_or_product_prints_its_help(argv: list[str], listed: list[str]) -> None:
     output = io.StringIO()
 
-    assert main_module.run([], stdout=output) == 0
-    assert "init" in output.getvalue()
-    assert "devices" in output.getvalue()
+    assert main_module.run(argv, stdout=output) == 0
+    assert all(word in output.getvalue() for word in listed)
 
 
 def test_missing_optional_web_extra_has_an_actionable_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -23,7 +25,7 @@ def test_missing_optional_web_extra_has_an_actionable_error(monkeypatch: pytest.
     monkeypatch.setattr(main_module, "import_module", missing_dependency)
     errors = io.StringIO()
 
-    status = main_module.run(["web-legacy"], stderr=errors)
+    status = main_module.run(["legacy", "web"], stderr=errors)
 
     assert status == 2
     assert "fastapi" in errors.getvalue()
@@ -38,14 +40,14 @@ def test_node_command_uses_the_cli_node_launcher(monkeypatch: pytest.MonkeyPatch
         lambda node_id, address, *, debug: called.append((node_id, address, debug)),
     )
 
-    status = main_module.run(["node", "cameras", "--address", "tcp://127.0.0.1:5555", "--debug"])
+    status = main_module.run(["node", "start", "cameras", "--address", "tcp://127.0.0.1:5555", "--debug"])
 
     assert status == 0
     assert called == [("cameras", "tcp://127.0.0.1:5555", True)]
 
 
-@pytest.mark.parametrize(("command", "target"), [("init", "initialize"), ("init-legacy", "initialize_legacy")])
-def test_init_dispatches_to_its_station_initializer(command: str, target: str, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(("product", "target"), [("station", "initialize"), ("legacy", "initialize_legacy")])
+def test_init_dispatches_to_its_station_initializer(product: str, target: str, monkeypatch: pytest.MonkeyPatch) -> None:
     called: list[tuple[str, object]] = []
 
     def initialize(name: str, *, station_id: UUID | None, output: TextIO, errors: TextIO) -> int:
@@ -56,7 +58,7 @@ def test_init_dispatches_to_its_station_initializer(command: str, target: str, m
     monkeypatch.setattr(main_module, target, initialize)
 
     status = main_module.run(
-        [command, "--name", "scope", "--id", "12345678-1234-5678-1234-567812345678"],
+        [product, "init", "--name", "scope", "--id", "12345678-1234-5678-1234-567812345678"],
         stdout=io.StringIO(),
         stderr=io.StringIO(),
     )

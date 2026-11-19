@@ -8,11 +8,11 @@ from pydantic import Field, field_validator
 from vxlib.issues import Problem, Problems
 from vxlib.schema import repeated
 
-from vxl.core.instrument.config import (
+from vxl.station.instrument.config import (
     InstrumentConfig,
     NotDefault,
 )
-from vxl.core.instrument.state import InstrumentState, ProfileId, StageFollowRule
+from vxl.station.instrument.state import InstrumentState, ProfileId, StageFollowRule
 
 from .config import SPIMConfig, SPIMProfile
 from .task import Task, TaskDefaults

@@ -58,7 +58,7 @@ frontend dependencies and start the Python backend from the workspace root:
 ```bash
 uv sync --all-packages --extra web
 vp -C web install --frozen-lockfile
-uv run vxl web-legacy
+uv run vxl legacy web
 ```
 
 In another terminal, run the Vite development server:

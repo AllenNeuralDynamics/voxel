@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 from vxlib.vector import Span, Vec3D
 
-from vxl.core.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
-from vxl.core.instrument.geometry import AxisRun, Transform
-from vxl.core.instrument.state import ProfileId
 from vxl.devices.camera import AreaROI, CameraSensor
+from vxl.station.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
+from vxl.station.instrument.geometry import AxisRun, Transform
+from vxl.station.instrument.state import ProfileId
 
 from .config import Scan, SPIMConfig, SPIMProfile
 from .state import SPIMState

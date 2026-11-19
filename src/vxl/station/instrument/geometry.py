@@ -11,8 +11,8 @@ from itertools import product
 import numpy as np
 from vxlib.vector import Span, Vec3D
 
-from vxl.core.instrument.config import SpecimenAxis
 from vxl.devices.camera import AreaROI, CameraSensor
+from vxl.station.instrument.config import SpecimenAxis
 
 _ZERO = Vec3D(z=0.0, y=0.0, x=0.0)
 

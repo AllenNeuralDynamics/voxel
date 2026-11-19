@@ -9,12 +9,13 @@ from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Emitter
 
 from vxl import system as system_module
-from vxl.core.feed import StationFeed
-from vxl.core.instrument.base import Instrument
-from vxl.core.instrument.config import InstrumentConfig
-from vxl.core.instrument.state import InstrumentState
-from vxl.core.station import SessionInfo, SessionView, Station, StationConfig, StationStatus, StationView
 from vxl.live import LiveEmission, LiveLayer, LiveSourceEmission
+from vxl.station.config import StationConfig
+from vxl.station.feed import StationFeed
+from vxl.station.instrument.base import Instrument
+from vxl.station.instrument.config import InstrumentConfig
+from vxl.station.instrument.state import InstrumentState
+from vxl.station.station import SessionInfo, SessionView, Station, StationStatus, StationView
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 

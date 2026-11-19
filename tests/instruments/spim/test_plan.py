@@ -4,10 +4,10 @@ from typing import Any
 import pytest
 from vxlib.vector import IVec2D, Vec2D
 
-from vxl.core.instrument.geometry import AxisRun
 from vxl.devices.camera import CameraSensor
 from vxl.instruments.spim.plan import Volume, plan_task
 from vxl.instruments.spim.task import Task
+from vxl.station.instrument.geometry import AxisRun
 
 from .support import load_file
 
