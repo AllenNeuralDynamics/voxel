@@ -63,7 +63,7 @@ default:
     tdi_image_width_px: 480  # sensor width, steps of 32, max 16384
     overscan_px: 200  # lead-in/out distance in pixels; must fit in chamber_edge_margin_mm
   chamber_edge_margin_mm: 10  # clearance between the safe X range and the chamber edge
-  chambers_step_mm:  # start of each chamber across the scan (Y while scan_axis is x)
+  chambers_step_mm:  # lower edge of each chamber across the scan (Y while scan_axis is x); strips step upward from it
     1: 200.25
     2: 155.0
     3: 109.75   

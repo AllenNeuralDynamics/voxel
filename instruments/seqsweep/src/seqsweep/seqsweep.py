@@ -6,7 +6,6 @@ from seqsweep.hal import HAL
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanPattern
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
-STRIP_STEP_SIGN = -1  # strips step towards lower step-axis positions, like chambers_step_mm (chamber 1 is the highest)
 RUN_POLL_S = 0.2
 
 
@@ -135,10 +134,7 @@ class SeqSweep:
             await scan_controller.configure(pass_config, derived)
             for strip in range(job.num_strips):
                 if job.chamber is not None:
-                    step_mm = (
-                        defaults.chambers_step_mm[job.chamber]
-                        + STRIP_STEP_SIGN * strip * derived.tdi_image_width_um / 1000
-                    )
+                    step_mm = defaults.chambers_step_mm[job.chamber] + strip * derived.tdi_image_width_um / 1000
                     start_um = pass_config.scan_end_um if job.direction is ScanDirection.REVERSE else pass_config.scan_start_um
                     x_mm, y_mm = (start_um / 1000, step_mm) if scan_axis_is_x else (step_mm, start_um / 1000)
                     await scan_controller.move_to(x_mm, y_mm)

@@ -65,7 +65,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     optics: OpticsConfig = Field(..., description="TDI camera and objective")
     # TODO Maybe different type of key for chambers (e.g., str instead of int)
     chambers_step_mm: dict[int, float] = Field(
-        default_factory=dict, description="Start position of each sample chamber along the step axis (across the scan)"
+        default_factory=dict, description="Lower edge of each sample chamber along the step axis (across the scan); strips step upward from it"
     )
     chamber_edge_margin_mm: float = Field(
         ..., gt=0, description="Clearance between the safe X range and the chamber edge; the overscan must fit in it"
