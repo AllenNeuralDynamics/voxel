@@ -5,14 +5,70 @@ Start the server first (``uv run seqsweep`` from ``instruments/seqsweep``), then
 
 import time
 from pathlib import Path
+from typing import Any
 
 import yaml
 from one_liner.client import RouterClient  # type: ignore
 
 
+STEP_MM = 1.0
+POLL_S = 2.0
+TIMEOUT_S = 3600.0
+
+
 def print_job_status(client: RouterClient) -> None:
     _, status = client.call("seqsweep", "check_job_status")
     print(f"  {status}")
+
+
+def stage_call(client: RouterClient, name: str, **kwargs: float) -> Any:
+    _, result = client.call("seqsweep", name, kwargs=kwargs)
+    return result
+
+
+def print_position(client: RouterClient, label: str) -> None:
+    status = stage_call(client, "stage_status")
+    print(f"  {label}: " + ", ".join(f"{axis}={state['position_mm']:.3f} mm" for axis, state in status.items()))
+
+
+def test_stage(client: RouterClient) -> None:
+    """Exercise the stage API: go home, move by, move to; ends at home."""
+    print("\n--- Stage test: go home ---")
+    stage_call(client, "stage_go_home")
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "at home")
+
+    print(f"\n--- Stage test: move by +{STEP_MM} mm in X and Y ---")
+    stage_call(client, "stage_move_by", dx_mm=STEP_MM, dy_mm=STEP_MM)
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "after move_by")
+
+    print("\n--- Stage test: move to (absolute) one step back ---")
+    status = stage_call(client, "stage_status")
+    stage_call(
+        client,
+        "stage_move_to",
+        x_mm=status["x"]["position_mm"] - STEP_MM,
+        y_mm=status["y"]["position_mm"] - STEP_MM,
+    )
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "after move_to")
+
+    print("\n--- Stage test: go home ---")
+    stage_call(client, "stage_go_home")
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "at home")
+
+
+def wait_for_job(client: RouterClient) -> str:
+    """Poll until the job leaves ``running``; returns its final status."""
+    deadline = time.monotonic() + TIMEOUT_S
+    while time.monotonic() < deadline:
+        _, status = client.call("seqsweep", "check_job_status")
+        if status["status"] != "running":
+            return status["status"]
+        time.sleep(POLL_S)
+    return "timeout"
 
 
 def main() -> None:
@@ -30,16 +86,23 @@ def main() -> None:
     print("\n--- Job Status Before Start ---")
     print_job_status(client)
 
+    test_stage(client)
+
     print("\n--- Starting Run ---")
     print(f"Response: {client.call("seqsweep", "start_acquisition", kwargs={'job': job_payload})}")
     time.sleep(1)
 
     print("\n--- Job Status While Running ---")
     print_job_status(client)
-    time.sleep(1)
+
+    final_status = wait_for_job(client)
+    print(f"\n--- Job ended: {final_status} ---")
     print_job_status(client)
-    time.sleep(1)
-    print_job_status(client)
+
+    print("\n--- Go home after the run ---")
+    stage_call(client, "stage_go_home")
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "at home")
 
 if __name__ == "__main__":
     main()

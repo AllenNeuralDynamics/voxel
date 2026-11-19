@@ -21,6 +21,21 @@ router_server_api:
     seqsweep_check_job_status:
       obj_name: "seqsweep"
       attr_name: "check_job_status"
+    seqsweep_stage_move_to:
+      obj_name: "seqsweep"
+      attr_name: "stage_move_to"
+    seqsweep_stage_move_by:
+      obj_name: "seqsweep"
+      attr_name: "stage_move_by"
+    seqsweep_stage_go_home:
+      obj_name: "seqsweep"
+      attr_name: "stage_go_home"
+    seqsweep_stage_wait_motion_end:
+      obj_name: "seqsweep"
+      attr_name: "stage_wait_motion_end"
+    seqsweep_stage_status:
+      obj_name: "seqsweep"
+      attr_name: "stage_status"
 
 # hal: the hardware blueprint (SeqSweepHardwareTopology) - rigup devices/nodes plus the role each device plays.
 # Stage values (mm, mm/s) come from "Stage buffer_062226.txt".

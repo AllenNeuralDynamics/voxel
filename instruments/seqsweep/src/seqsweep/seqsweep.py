@@ -68,6 +68,35 @@ class SeqSweep:
         # Launch in the background
         self._scan_task = asyncio.create_task(self._run_passes(scan_job, self._derived))
 
+    # ==================== Stage test API ====================
+
+    def _check_stage_free(self) -> None:
+        if self._scan_task is not None and not self._scan_task.done():
+            raise RuntimeError("a scan is running; the stage cannot be moved by hand")
+
+    async def stage_move_to(self, x_mm: float, y_mm: float) -> None:
+        """Move the stage to an absolute (X, Y) position in mm; returns once the move has started."""
+        self._check_stage_free()
+        await self._hal.scan_controller.move_to(x_mm, y_mm)
+
+    async def stage_move_by(self, dx_mm: float, dy_mm: float) -> None:
+        """Move the stage by a relative (X, Y) step in mm; returns once the move has started."""
+        self._check_stage_free()
+        await self._hal.scan_controller.move_by(dx_mm, dy_mm)
+
+    async def stage_go_home(self) -> None:
+        """Move the stage to its configured origin; returns once the move has started."""
+        self._check_stage_free()
+        await self._hal.scan_controller.go_home()
+
+    async def stage_wait_motion_end(self) -> None:
+        """Block until both axes have settled."""
+        await self._hal.scan_controller.wait_motion_end()
+
+    async def stage_status(self) -> dict[str, dict[str, float | bool | int]]:
+        """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""
+        return await self._hal.scan_controller.read_status()
+
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
         """Apply the optics to a pass: pixel size, stage speed, overscan, strip width and distances."""
         optics = self.config.default.optics

@@ -49,10 +49,25 @@ class ScanController(Device):
         # TODO: start the positioning move
         pass
 
+    @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")
+    def move_by(self, dx_mm: float, dy_mm: float) -> None:
+        # TODO: start the relative move
+        pass
+
+    @describe(label="Go Home", desc="Move to the configured origin")
+    def go_home(self) -> None:
+        # TODO: start the move to the origin
+        pass
+
     @describe(label="Wait Motion End", desc="Block until both axes have settled")
     def wait_motion_end(self) -> None:
         # TODO: block until motion stops
         pass
+
+    @describe(label="Read Status", desc="Per-axis position, motor state and faults")
+    def read_status(self) -> dict[str, dict[str, float | bool | int]]:
+        # TODO: report the axes
+        return {}
 
     @describe(label="Abort", desc="Stop the pass and close every gate")
     def abort(self) -> None:
