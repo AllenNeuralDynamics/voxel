@@ -9,7 +9,7 @@ from vxl_records import SQLiteRecords
 
 from vxl.instruments.basic import BasicInstrument
 from vxl.instruments.spim.instrument import Microscope
-from vxl.instruments.spim.task import Task
+from vxl.instruments.spim.task import SPIMTask
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
@@ -19,13 +19,14 @@ _REGION = {"outline": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]},
 
 
 def _task(microscope: Microscope, task_id: str) -> Mapping[str, Any]:
-    task = Task.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.view.value.state.task)
+    task = SPIMTask.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.view.value.state.task)
     return {"task": task.model_dump(mode="json")}
 
 
 _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any]]] = {
     "add_task": lambda m: _task(m, "a"),
     "update_task": {"task_id": "a", "overlap": {"x": "20 %", "y": "10 %"}},
+    "update_task_metadata": {"task_id": "a", "fields": {"notes": "left hemisphere"}},
     "reorder_tasks": {"task_ids": ["b", "a"]},
     "remove_tasks": {"task_ids": ["b"]},
     "update_profile": {"profile_id": "gfp", "spacing": 2.5, "label": "GFP"},
@@ -41,7 +42,6 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
     "set_dim_power": {"device": "laser", "value": 5.0},
     "stage_position": {},
     "set_position_rule": {"device_id": "fw", "rule": "GFP"},
-    "update_metadata": {"fields": {"notes": "left hemisphere"}},
     "set_metadata_class": {"cls": "vxl.metadata.ExperimentMetadata"},
     "save_as_default_state": {"fields": ["writer"]},
     "restore_default_state": {"fields": ["writer"]},
@@ -59,7 +59,7 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
 """1 valid call of each operation, in the order they run; a function builds arguments that need the instrument."""
 
 
-_EDITS = {"reorder_tasks", "remove_tasks", "set_position_rule", "update_metadata"}
+_EDITS = {"update_task_metadata", "reorder_tasks", "remove_tasks", "set_position_rule"}
 """Actions that edit the saved state, and so must be 1 undo step too."""
 
 

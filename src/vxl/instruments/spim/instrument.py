@@ -1,5 +1,5 @@
 import logging
-from collections.abc import AsyncGenerator, Hashable, Sequence
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Unpack
@@ -12,16 +12,16 @@ from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 
 from vxl.devices.camera import AreaROI
-from vxl.station.errors import NotFoundError, RejectedError
+from vxl.station.errors import RejectedError
 from vxl.station.instrument.base import Instrument, InstrumentView
 from vxl.station.instrument.config import DeviceUid
-from vxl.station.instrument.state import ProfileId
+from vxl.station.instrument.state import ProfileId, TaskId
 from vxl.station.instrument.store import ABSENT
 from vxl.system import System
 
 from .config import SPIMConfig
 from .state import SPIMProfileFields, SPIMState, WriterFields
-from .task import Task, TaskFields, TaskId
+from .task import SPIMTask, SPIMTaskFields
 
 if TYPE_CHECKING:
     from vxl.station.instrument.folder import InstrumentFolder
@@ -127,48 +127,31 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         await self._update_profile(profile_id, fields, SPIMProfileFields)
 
     @create("plan")
-    async def add_task(self, task: Task) -> None:
+    async def add_task(self, task: SPIMTask) -> None:
         """Add a task at the end of the plan."""
-        async with self._state_edit("Add task") as edit:
-            await edit.record({("plan",): [*self._store.value.plan, task]})
+        await self._add_task(task)
 
     @update("plan", key="task_id")
     async def update_task(
-        self,
-        task_id: TaskId,
-        *,
-        edit_id: Hashable | None = None,
-        **fields: Unpack[TaskFields],
+        self, task_id: TaskId, *, edit_id: str | None = None, **fields: Unpack[SPIMTaskFields]
     ) -> None:
         """Change fields of a task. It keeps its place in the plan."""
-        async with self._state_edit("Update task", edit_id=edit_id) as edit:
-            if unknown := sorted(fields.keys() - TaskFields.__annotations__.keys()):
-                raise RejectedError(f"An edit cannot change {unknown} of a task")
-            index = next(
-                (i for i, task in enumerate(self._store.value.plan) if task.id == task_id),
-                None,
-            )
-            if index is None:
-                raise NotFoundError(f"No task '{task_id}'")
-            await edit.record({("plan", index, name): value for name, value in fields.items()})
+        await self._update_task(task_id, fields, SPIMTaskFields, edit_id=edit_id)
+
+    @action(on="plan", key="task_id", verb="update_metadata")
+    async def update_task_metadata(self, task_id: TaskId, fields: dict[str, Any]) -> None:
+        """Change fields of the metadata of a task, checked against the metadata form."""
+        await self._update_task_metadata(task_id, fields)
 
     @action(on="plan", verb="remove")
     async def remove_tasks(self, task_ids: list[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""
-        async with self._state_edit("Remove tasks") as edit:
-            plan = self._store.value.plan
-            if unknown := sorted(set(task_ids) - {task.id for task in plan}):
-                raise NotFoundError(f"No task {', '.join(repr(task_id) for task_id in unknown)}")
-            await edit.record({("plan",): [task for task in plan if task.id not in task_ids]})
+        await self._remove_tasks(task_ids)
 
     @action(on="plan", verb="reorder")
     async def reorder_tasks(self, task_ids: list[TaskId]) -> None:
         """Put the tasks of the plan in the order of ``task_ids``, which names each task 1 time."""
-        async with self._state_edit("Reorder tasks") as edit:
-            tasks = {task.id: task for task in self._store.value.plan}
-            if sorted(task_ids) != sorted(tasks):
-                raise RejectedError("The new order must name each task of the plan 1 time")
-            await edit.record({("plan",): [tasks[task_id] for task_id in task_ids]})
+        await self._reorder_tasks(task_ids)
 
     async def _open_problems(self) -> Problems:
         """Also each channel camera that is not an area camera: SPIM images with area cameras only."""

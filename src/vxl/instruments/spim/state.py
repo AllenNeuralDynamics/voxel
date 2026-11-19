@@ -1,12 +1,11 @@
 """The state of a SPIM instrument: what the operator edits, saved in ``state.json``."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Annotated, TypedDict
 
 from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettings
-from pydantic import Field, PositiveFloat, field_validator
-from vxlib.issues import Problem, Problems
-from vxlib.schema import repeated
+from pydantic import Field, PositiveFloat
+from vxlib.issues import Problems
 
 from vxl.station.instrument.config import (
     InstrumentConfig,
@@ -15,7 +14,7 @@ from vxl.station.instrument.config import (
 from vxl.station.instrument.state import InstrumentState, ProfileFields, ProfileId, StageFollowRule
 
 from .config import SPIMConfig, SPIMProfile
-from .task import Task, TaskDefaults
+from .task import SPIMTask, TaskDefaults
 
 
 class WriterFields(TypedDict, total=False):
@@ -41,14 +40,7 @@ class SPIMState(InstrumentState, frozen=True):
     task: TaskDefaults
     writer: WriterSettings = Field(default_factory=WriterSettings)
     profiles: Mapping[ProfileId, SPIMProfile] = Field(min_length=1)
-    plan: Annotated[list[Task], NotDefault] = Field(default_factory=list)
-
-    @field_validator("plan")
-    @classmethod
-    def _unique_task_ids(cls, plan: list[Task]) -> list[Task]:
-        if duplicates := repeated(task.id for task in plan):
-            raise ValueError(f"task ids must be unique (repeated: {duplicates})")
-        return plan
+    plan: Annotated[Sequence[SPIMTask], NotDefault] = Field(default_factory=list)
 
     def problems(self, config: InstrumentConfig) -> Problems:
         if not isinstance(config, SPIMConfig):
@@ -57,12 +49,7 @@ class SPIMState(InstrumentState, frozen=True):
         problems += super().problems(config)
         problems += self._follow_problems(config).under("positions")
         for index, task in enumerate(self.plan):
-            found = task.problems(config)
-            for profile_index, profile_id in enumerate(task.profiles):
-                if profile_id not in self.profiles:
-                    loc = ("profiles", profile_index)
-                    found.append(Problem.not_configured("Profile", profile_id, code="task.profile_missing", loc=loc))
-            problems += found.under("plan", index)
+            problems += task.problems(config).under("plan", index)
         return problems
 
     def _follow_problems(self, config: SPIMConfig) -> Problems:

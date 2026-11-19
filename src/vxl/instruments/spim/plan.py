@@ -10,11 +10,11 @@ from vxlib.vector import Span, Vec3D
 from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.station.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
 from vxl.station.instrument.geometry import AxisRun, Transform
-from vxl.station.instrument.state import ProfileId
+from vxl.station.instrument.state import ProfileId, TaskId
 
 from .config import Scan, SPIMConfig, SPIMProfile
 from .state import SPIMState
-from .task import ExplicitPoints, Grid, Region, Task, TaskDefaults, TaskId
+from .task import ExplicitPoints, Grid, Region, SPIMTask, TaskDefaults
 
 _COUNT_TOLERANCE = 1e-9
 
@@ -34,7 +34,7 @@ class Volume:
 
 
 def plan_task(
-    task: Task,
+    task: SPIMTask,
     config: SPIMConfig,
     state: SPIMState,
     sensors: Mapping[DeviceUid, CameraSensor],

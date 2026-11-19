@@ -45,6 +45,8 @@ from vxl.station.instrument.state import (
     Profile,
     ProfileId,
     StageFollowRule,
+    Task,
+    TaskId,
 )
 from vxl.station.instrument.store import InstrumentStore, Merge, StateValues
 from vxl.system import Remote, System, remote_store_fingerprint
@@ -332,6 +334,52 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 raise NotFoundError(str(problems), problems)
             await edit.record({("profiles", profile_id, name): value for name, value in fields.items()})
 
+    async def _add_task(self, task: Task) -> None:
+        """Add a task at the end of the plan, as 1 edit."""
+        async with self._state_edit("Add task") as edit:
+            await edit.record({("plan",): [*self._store.value.plan, task]})
+
+    async def _update_task(
+        self, task_id: TaskId, fields: Mapping[str, object], allowed: type, *, edit_id: str | None = None
+    ) -> None:
+        """Change fields of a task as 1 edit. It keeps its place in the plan. ``allowed`` is the kind's
+        ``TaskFields`` subclass, which names the fields an update may change."""
+        async with self._state_edit("Update task", edit_id=edit_id) as edit:
+            if unknown := sorted(fields.keys() - (allowed.__required_keys__ | allowed.__optional_keys__)):
+                raise RejectedError(f"An update cannot change {unknown} of a task")
+            index = self._task_index(task_id)
+            await edit.record({("plan", index, name): value for name, value in fields.items()})
+
+    async def _update_task_metadata(self, task_id: TaskId, fields: Mapping[str, Any]) -> None:
+        """Change fields of the metadata of a task as 1 edit, checked against the metadata form."""
+        async with self._state_edit("Update task metadata") as edit:
+            index = self._task_index(task_id)
+            metadata = self._store.value.plan[index].metadata
+            await edit.record({("plan", index, "metadata"): {**metadata, **fields}})
+
+    async def _remove_tasks(self, task_ids: Sequence[TaskId]) -> None:
+        """Remove tasks from the plan, as 1 edit."""
+        async with self._state_edit("Remove tasks") as edit:
+            plan = self._store.value.plan
+            if unknown := sorted(set(task_ids) - {task.id for task in plan}):
+                raise NotFoundError(f"No task {', '.join(repr(task_id) for task_id in unknown)}")
+            await edit.record({("plan",): [task for task in plan if task.id not in task_ids]})
+
+    async def _reorder_tasks(self, task_ids: Sequence[TaskId]) -> None:
+        """Put the tasks of the plan in the order of ``task_ids``, which names each task 1 time."""
+        async with self._state_edit("Reorder tasks") as edit:
+            tasks = {task.id: task for task in self._store.value.plan}
+            if sorted(task_ids) != sorted(tasks):
+                raise RejectedError("The new order must name each task of the plan 1 time")
+            await edit.record({("plan",): [tasks[task_id] for task_id in task_ids]})
+
+    def _task_index(self, task_id: TaskId) -> int:
+        """The place of a task in the plan. Raise ``NotFoundError`` when there is no such task."""
+        for index, task in enumerate(self._store.value.plan):
+            if task.id == task_id:
+                return index
+        raise NotFoundError(f"No task '{task_id}'")
+
     @action(on="positions", key="device_id", verb="set")
     async def set_position_rule(
         self,
@@ -380,27 +428,22 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     # === Saved state ===
 
-    @action(on="metadata", verb="update")
-    async def update_metadata(self, fields: dict[str, Any]) -> None:
-        """Change fields of the specimen metadata, checked against its form."""
-        async with self._state_edit("Update metadata") as edit:
-            await edit.record({("metadata",): {**self._store.value.metadata, **fields}})
-
     @action(on="metadata", verb="set_form")
     async def set_metadata_class(self, cls: MetadataCls) -> None:
-        """Change the form of the specimen metadata, a class or its dotted path, and keep the metadata that fits it."""
+        """Change the form of the task metadata, a class or its dotted path. Each task keeps the metadata that fits
+        it."""
         form = resolve_metadata_class(cls) if isinstance(cls, str) else cls
         async with self._state_edit("Change the metadata form") as edit:
-            await edit.record({("metadata_cls",): form, ("metadata",): self._fit_metadata(form)})
+            await edit.record({("metadata_cls",): form, ("plan",): self._fit_plan(form)})
 
     @action(on="defaults", verb="restore")
     async def restore_default_state(self, fields: Sequence[str] | None = None) -> None:
-        """Set the given fields of the state back to the default state, or each field that can be a default. A restored
-        metadata form keeps the metadata that fits it."""
+        """Set the given fields of the state back to the default state, or each field that can be a default. With a
+        restored metadata form, each task keeps the metadata that fits it."""
         async with self._state_edit("Restore the default state") as edit:
             values = self._store.default_values(fields)
             if ("metadata_cls",) in values:
-                values["metadata",] = self._fit_metadata(values["metadata_cls",])
+                values["plan",] = self._fit_plan(values["metadata_cls",])
             await edit.record(values)
 
     @action(on="defaults", verb="save")
@@ -730,13 +773,18 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 problems.add("position.wrong_kind", f"'{device}' cannot take the position {position!r}.", *loc)
         return problems
 
-    def _fit_metadata(self, form: type[ExperimentMetadata]) -> dict[str, Any]:
-        """The metadata in ``form``: each value that fits it, or the form's defaults when they do not fit."""
-        kept = {key: value for key, value in self._store.value.metadata.items() if key in form.model_fields}
-        try:
-            return form.model_validate(kept).model_dump()
-        except ValidationError:
-            return form().model_dump()
+    def _fit_plan(self, form: type[ExperimentMetadata]) -> list[Task]:
+        """The tasks of the plan, each with its metadata in ``form``: each value that fits it, or the form's defaults
+        when they do not fit."""
+        fitted: list[Task] = []
+        for task in self._store.value.plan:
+            kept = {key: value for key, value in task.metadata.items() if key in form.model_fields}
+            try:
+                metadata = form.model_validate(kept).model_dump()
+            except ValidationError:
+                metadata = form().model_dump()
+            fitted.append(task.model_copy(update={"metadata": metadata}))
+        return fitted
 
     async def _discover_remote_stores(self) -> None:
         """Keep each object store that every camera's computer has with the same connection as this computer."""

@@ -17,7 +17,7 @@ from vxl.devices.signals.generator.base import OwnClock
 from vxl.instruments.spim.config import SPIMConfig, SPIMProfile
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMProfileFields, SPIMState, WriterFields
-from vxl.instruments.spim.task import Task, TaskFields
+from vxl.instruments.spim.task import SPIMTask, SPIMTaskFields
 from vxl.live import LiveSourceEmission, LiveViewport, live_source_header
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import new_instrument_id
@@ -75,10 +75,10 @@ def test_a_template_has_no_id(config_data: dict[str, Any], tmp_path: Path) -> No
         InstrumentFolder.create(with_identity, "left", tmp_path)
 
 
-def test_a_default_has_no_plan_and_no_metadata(config_data: dict[str, Any], tmp_path: Path) -> None:
+def test_a_default_has_no_plan(config_data: dict[str, Any], tmp_path: Path) -> None:
     assert SPIMState.default_fields() == {"metadata_cls", "writer", "task", "positions", "profiles"}
 
-    config_data["default"]["metadata"] = {"notes": "left hemisphere"}
+    config_data["default"]["plan"] = []
     assert InstrumentFolder.create(template(config_data), "left", tmp_path).problems.codes() == ["default.not_default"]
 
 
@@ -95,10 +95,11 @@ async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
 
     xy = {"kind": "bounding_box", "points": [{"x": 0, "y": 0}, {"x": 500, "y": 500}]}
     region = {"outline": xy, "bounds": [0, 100]}
-    task = Task.complete({"id": "brain", "region": region, "profiles": ["gfp"]}, store.value.task)
-    await store.update(
-        {("plan",): [task], ("metadata",): {"notes": "left hemisphere"}, ("profiles", "gfp", "spacing"): 2.0}
+    task = SPIMTask.complete(
+        {"id": "brain", "region": region, "profiles": ["gfp"], "metadata": {"notes": "left hemisphere"}},
+        store.value.task,
     )
+    await store.update({("plan",): [task], ("profiles", "gfp", "spacing"): 2.0})
     assert store.last_modified is not None
 
     await store.save_as_default_state()
@@ -110,7 +111,7 @@ async def test_the_store_keeps_the_plan_and_the_metadata_out_of_the_defaults(
     await store.update({("profiles", "gfp", "spacing"): 3.0})
     await store.update(store.default_values())
     assert (store.value.profiles["gfp"].spacing, len(store.value.plan)) == (2.0, 1)
-    assert store.value.metadata == {"notes": "left hemisphere"}
+    assert store.value.plan[0].metadata == {"notes": "left hemisphere"}
 
     with pytest.raises(RejectedError, match="'x_axis' is not a device of 'optics'"):
         await store.update({("positions", "x_axis"): 10})
@@ -261,8 +262,8 @@ def microscope(config_data: dict[str, Any], tmp_path: Path) -> Microscope:
     return _microscope(config_data, tmp_path)
 
 
-def _task(microscope: Microscope, task_id: str) -> Task:
-    return Task.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.view.value.state.task)
+def _task(microscope: Microscope, task_id: str) -> SPIMTask:
+    return SPIMTask.complete({"id": task_id, "region": _REGION, "profiles": ["gfp"]}, microscope.view.value.state.task)
 
 
 async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope: Microscope) -> None:
@@ -306,7 +307,7 @@ async def test_an_update_of_a_missing_profile_is_not_found(microscope: Microscop
 
 
 @pytest.mark.parametrize(
-    ("fields", "model"), [(TaskFields, Task), (WriterFields, WriterSettings), (SPIMProfileFields, SPIMProfile)]
+    ("fields", "model"), [(SPIMTaskFields, SPIMTask), (WriterFields, WriterSettings), (SPIMProfileFields, SPIMProfile)]
 )
 def test_each_field_list_names_fields_of_its_model(fields: type, model: type[BaseModel]) -> None:
     assert fields.__annotations__.keys() <= model.model_fields.keys()

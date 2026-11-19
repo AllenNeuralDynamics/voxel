@@ -2,13 +2,13 @@
 
 from collections.abc import Mapping, Sequence
 from functools import cached_property
-from typing import Annotated, Any, Literal, Self, TypedDict
+from typing import Annotated, Any, Literal, Self
 
 import numpy as np
 from pydantic import Field, field_validator, model_validator
 from scipy.spatial import ConvexHull as _Hull
 from vxlib.issues import Problems
-from vxlib.schema import FrozenModel, Key, UniqueList, identifier, repeated
+from vxlib.schema import FrozenModel, repeated
 from vxlib.units import Portion
 from vxlib.vector import Span
 
@@ -16,12 +16,9 @@ from vxl.station.instrument.config import (
     SpecimenAxis,
     Stage,
 )
-from vxl.station.instrument.state import ProfileId
+from vxl.station.instrument.state import Task, TaskFields
 
 from .config import SPIMConfig
-
-TaskId = Annotated[str, identifier("Task id")]
-
 
 type Point = dict[SpecimenAxis, Annotated[float, Field(allow_inf_nan=False)]]
 """A point of an outline, in µm: its position on 2 stage axes, such as ``{x: 0, z: 500}``."""
@@ -272,12 +269,10 @@ class TaskDefaults(FrozenModel):
         return problems
 
 
-class Task(TaskDefaults):
-    """1 entry in the plan, stored complete."""
+class SPIMTask(Task, TaskDefaults):
+    """1 entry in the plan of a SPIM instrument, stored complete: the region to image, and how to go through it."""
 
-    id: Annotated[TaskId, Key]
     region: Region
-    profiles: Annotated[UniqueList[ProfileId], Field(min_length=1)]
 
     @classmethod
     def complete(cls, data: Mapping[str, Any], defaults: TaskDefaults) -> Self:
@@ -306,11 +301,10 @@ class Task(TaskDefaults):
         return problems
 
 
-class TaskFields(TypedDict, total=False):
-    """The fields of a :class:`Task` that an edit may change, each one optional. A task keeps its ``id``."""
+class SPIMTaskFields(TaskFields, total=False):
+    """The fields of a :class:`SPIMTask` that an update may change, each one optional."""
 
     overlap: dict[SpecimenAxis, Portion]
     path: TaskPath
     iteration: Iteration
     region: Region
-    profiles: UniqueList[ProfileId]

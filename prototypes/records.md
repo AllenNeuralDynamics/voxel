@@ -1,6 +1,6 @@
 # Records
 
-Discussed on 2026-11-18, not built. Replaces `vxl_records` for the new core; `vxl_records` stays frozen for legacy and
+Discussed on 2026-11-18, decisions added on 2026-11-19, not built. Replaces `vxl_records` for the new core; `vxl_records` stays frozen for legacy and
 goes with it.
 
 ## Lines
@@ -16,12 +16,12 @@ goes with it.
 
 ```text
 Run
-├── id, instrument, operator, status, times, failure, storage
+├── schema: "voxel.run/1"
+├── id, operator, status, times, failure, storage
 ├── instrument_config, instrument_state     # what ran; replaces hardware_snapshot and state_snapshot
-├── metadata                                # the lab's own form (metadata_schemas)
 └── visits                                  # was volumes; 1 per planned SPIM Volume
     └── Visit
-        ├── task, profile, failure
+        ├── task, profile, status, failure
         ├── progress: {done, total, unit}, expected_s
         └── channels.<channel>.<camera>: Image
             ├── shape, transform            # pixel index -> stage µm
@@ -32,7 +32,18 @@ Run
 - No motion fields. The capture reads SPIM's own frozen `Volume`s, kept in memory for the run; the record only
   describes what happened.
 - Every visit and image is written `pending` at Start, so totals are known and unrun work becomes `skipped`.
-- Open: is a visit's status stored, or derived from its images plus `failure`?
+- A visit stores its own status. We may derive it from its images later, if storing it gives no value.
+- No separate instrument block. `instrument_config` and `instrument_state` carry the instrument, and the schema
+  covers their base fields. A kind's own fields are extra.
+
+## Metadata
+
+- Metadata is per task. Each task in the plan has `metadata`, in the form that the state's `metadata_cls` gives. 1
+  task can be 1 subject, or not; vxl does not assume either.
+- The run has no `metadata` field of its own. It is in `instrument_state.plan[].metadata`, and a visit names its
+  task.
+- Frozen at Start. vxl gives the lab the facts as they were; a lab corrects them in its own systems.
+- Later option: corrections through the share service, stored next to the run, never in it.
 
 ## Progress
 
@@ -47,7 +58,7 @@ Run
 
 1 source, the records database, with 2 outputs that share 1 schema:
 
-| | Read service | `run.json` |
+| | Share service | `run.json` |
 | --- | --- | --- |
 | Job | live: status, progress, search, change events | the copy that travels with the data |
 | How | a separate, capped process that reads the database (WAL) | written by the station at Start, each visit end, and the end |
@@ -55,15 +66,14 @@ Run
 
 Both carry the record's `revision`, so a reader can tell which is newer.
 
-## Read service
+## Share service
 
+- Named `share`. `vxl station start` starts it when `station.yaml` has a `share:` section. Off by default.
 - Its own process: its own GIL, its own CPU share. Reads SQLite in WAL mode, so it never blocks station writes.
 - Capped: lower OS priority, a limit on requests at once.
 - Big data comes from storage (Zarr, `run.json`), never through the station.
 
 ## Open
 
-- The public schema of `run.json` and how it is versioned.
-- Whether the read service starts with `vxl station` or a lab turns it on.
-- Whether the lab's form is filled once at Start or can be edited later.
+- The full public schema of `run.json`: versioned by `schema`, a new major version for a breaking change.
 - Presets and logs: copied from `vxl_records` mostly as they are.

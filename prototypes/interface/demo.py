@@ -14,7 +14,7 @@ from vxl_records import SQLiteRecords
 
 from tests.instruments.spim.support import config_data, simulated, template
 from vxl.instruments.spim.instrument import Microscope
-from vxl.instruments.spim.task import Task
+from vxl.instruments.spim.task import SPIMTask
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
@@ -88,7 +88,9 @@ async def main() -> None:
 
 async def run(defaults: Any) -> None:
     def task(task_id: str) -> dict[str, Any]:
-        return Task.complete({"id": task_id, "region": REGION, "profiles": ["gfp"]}, defaults).model_dump(mode="json")
+        return SPIMTask.complete({"id": task_id, "region": REGION, "profiles": ["gfp"]}, defaults).model_dump(
+            mode="json"
+        )
 
     print("== interface and docs")
     _, described = await call("GET", "/interface")

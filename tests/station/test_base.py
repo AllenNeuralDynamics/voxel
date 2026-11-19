@@ -13,7 +13,7 @@ from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.base import Instrument
 from vxl.station.instrument.config import InstrumentConfig
 from vxl.station.instrument.folder import InstrumentFolder
-from vxl.station.instrument.state import InstrumentState, ProfileFields
+from vxl.station.instrument.state import InstrumentState, ProfileFields, Task
 from vxl.system import System
 
 from .support import bench
@@ -215,36 +215,51 @@ class _LabMetadata(ExperimentMetadata):
     operator: str = ""
 
 
-async def test_a_metadata_edit_can_be_undone_and_redone(instrument: _Bench) -> None:
-    await instrument.update_metadata({"notes": "left hemisphere"})
-    assert instrument.view.value.state.metadata["notes"] == "left hemisphere"
-    assert instrument.view.value.history.undo_label == "Update metadata"
+async def _with_task(instrument: _Bench) -> None:
+    await instrument._add_task(Task(id="brain", profiles=["main"]))
+
+
+def _metadata(instrument: _Bench) -> dict[str, Any]:
+    return instrument.view.value.state.plan[0].metadata
+
+
+async def test_a_task_metadata_edit_can_be_undone_and_redone(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    await instrument._update_task_metadata("brain", {"notes": "left hemisphere"})
+    assert _metadata(instrument)["notes"] == "left hemisphere"
+    assert instrument.view.value.history.undo_label == "Update task metadata"
 
     await instrument.undo()
-    assert instrument.view.value.state.metadata.get("notes", "") == ""
+    assert _metadata(instrument).get("notes", "") == ""
     await instrument.redo()
-    assert instrument.view.value.state.metadata["notes"] == "left hemisphere"
+    assert _metadata(instrument)["notes"] == "left hemisphere"
 
 
 async def test_metadata_that_does_not_fit_its_form_is_rejected_at_its_field(instrument: _Bench) -> None:
+    await _with_task(instrument)
     with pytest.raises(RejectedError) as caught:
-        await instrument.update_metadata({"weight": 12})
+        await instrument._update_task_metadata("brain", {"weight": 12})
 
-    assert [problem.loc for problem in caught.value.problems] == [("metadata", "weight")]
-    assert instrument.view.value.history.undo_label is None
+    assert [problem.loc for problem in caught.value.problems] == [("plan", 0, "metadata", "weight")]
+    assert instrument.view.value.history.undo_label == "Add task"
+
+
+async def test_metadata_of_a_missing_task_is_not_found(instrument: _Bench) -> None:
+    with pytest.raises(NotFoundError, match="No task 'brain'"):
+        await instrument._update_task_metadata("brain", {"notes": "x"})
 
 
 async def test_changing_the_metadata_form_keeps_what_fits_and_can_be_undone(instrument: _Bench) -> None:
-    await instrument.update_metadata({"notes": "left hemisphere"})
+    await _with_task(instrument)
+    await instrument._update_task_metadata("brain", {"notes": "left hemisphere"})
 
     await instrument.set_metadata_class(_LabMetadata)
-    assert instrument.view.value.state.metadata == {"notes": "left hemisphere", "operator": ""}
+    assert _metadata(instrument) == {"notes": "left hemisphere", "operator": ""}
     assert instrument.view.value.history.undo_label == "Change the metadata form"
 
     await instrument.undo()
     assert instrument.view.value.state.metadata_cls is ExperimentMetadata
-    await instrument.undo()
-    assert instrument.view.value.state.metadata.get("notes", "") == ""
+    assert _metadata(instrument) == {"notes": "left hemisphere"}
 
 
 async def test_the_default_state_is_saved_and_restored(instrument: _Bench) -> None:
@@ -261,26 +276,27 @@ async def test_the_default_state_is_saved_and_restored(instrument: _Bench) -> No
 
 
 async def test_restoring_the_metadata_form_keeps_the_metadata_that_fits(instrument: _Bench) -> None:
-    await instrument.update_metadata({"notes": "left hemisphere"})
     await instrument.save_as_default_state()
+    await _with_task(instrument)
     await instrument.set_metadata_class(_LabMetadata)
-    await instrument.update_metadata({"operator": "ana"})
+    await instrument._update_task_metadata("brain", {"notes": "left hemisphere", "operator": "ana"})
 
     await instrument.restore_default_state()
     assert instrument.view.value.state.metadata_cls is ExperimentMetadata
-    assert instrument.view.value.state.metadata == {"notes": "left hemisphere"}
+    assert _metadata(instrument) == {"notes": "left hemisphere"}
 
     await instrument.undo()
-    assert instrument.view.value.state.metadata == {"notes": "left hemisphere", "operator": "ana"}
+    assert _metadata(instrument) == {"notes": "left hemisphere", "operator": "ana"}
 
 
 async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Bench) -> None:
+    await _with_task(instrument)
     scheduler = instrument._scheduler
     async with scheduler.run("start a capture", requires=()):
         await scheduler.start(ActivityInfo(kind="capture"), {instrument._store})
 
-    with pytest.raises(ActivityBusyError, match="Unable to update metadata while capture is running"):
-        await instrument.update_metadata({"notes": "left hemisphere"})
+    with pytest.raises(ActivityBusyError, match="Unable to update task metadata while capture is running"):
+        await instrument._update_task_metadata("brain", {"notes": "left hemisphere"})
 
 
 def _main(instrument: _Bench) -> tuple[str | None, str]:
@@ -347,7 +363,14 @@ def _basic(tmp_path: Path) -> BasicInstrument:
 
 
 def test_a_basic_instrument_offers_the_base_operations_and_its_profile_update() -> None:
-    assert set(BasicInstrument.operations) == set(_Bench.operations) | {"update_profile"}
+    assert set(BasicInstrument.operations) == set(_Bench.operations) | {
+        "update_profile",
+        "add_task",
+        "update_task",
+        "update_task_metadata",
+        "remove_tasks",
+        "reorder_tasks",
+    }
     update = BasicInstrument.operations["update_profile"]
     assert (update.intent, update.resource, update.key) == ("update", "profiles", "profile_id")
     assert set(update.params["properties"]) == {"profile_id", "label", "desc"}

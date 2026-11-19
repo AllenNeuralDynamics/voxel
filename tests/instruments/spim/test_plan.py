@@ -6,7 +6,7 @@ from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera import CameraSensor
 from vxl.instruments.spim.plan import Volume, plan_task
-from vxl.instruments.spim.task import Task
+from vxl.instruments.spim.task import SPIMTask
 from vxl.station.instrument.geometry import AxisRun
 
 from .support import load_file
@@ -33,7 +33,7 @@ def _plan(
     example = load_file(_FILES / name)
     data = {"id": "t", "region": region, "profiles": list(profiles), **task}
     sensors = dict.fromkeys(example.config.optics.detectors(), sensor)
-    return plan_task(Task.complete(data, example.default.task), example.config, example.default, sensors)
+    return plan_task(SPIMTask.complete(data, example.default.task), example.config, example.default, sensors)
 
 
 def test_exaspim_steps_z_and_its_side_selector_follows_x() -> None:

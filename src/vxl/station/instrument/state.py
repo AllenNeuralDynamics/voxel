@@ -6,10 +6,11 @@ from collections.abc import Mapping, Sequence
 from itertools import pairwise, product
 from typing import Annotated, Any, Literal, Self, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
+from pydantic_core import InitErrorDetails
 from rigup.device import OperationRequest
-from vxlib.issues import Problems
-from vxlib.schema import FrozenModel, UniqueList, identifier
+from vxlib.issues import Problem, Problems
+from vxlib.schema import FrozenModel, Key, UniqueList, identifier, repeated
 from vxlib.units import Quantity
 
 from vxl.metadata import ExperimentMetadata, MetadataCls, get_path_from_class
@@ -271,6 +272,25 @@ class ProfileFields(TypedDict, total=False):
     desc: str
 
 
+TaskId = Annotated[str, identifier("Task id")]
+
+
+class Task(FrozenModel):
+    """1 entry in the plan: the profiles to image, and the metadata of the specimen. ``metadata`` has the form that
+    the state's ``metadata_cls`` gives. A kind of instrument adds its own fields in a subclass."""
+
+    id: Annotated[TaskId, Key]
+    profiles: Annotated[UniqueList[ProfileId], Field(min_length=1)]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskFields(TypedDict, total=False):
+    """The fields of a task that an update may change, each one optional. A task keeps its ``id``, and its metadata
+    changes on its own. A kind adds its own fields in a subclass."""
+
+    profiles: UniqueList[ProfileId]
+
+
 class StageFollowRule(FrozenModel):
     """A device follows the stage. Along ``axis``, it takes the positions in ``order``, 1 after the other. ``at``
     gives the points, in µm, where it changes to the next position; within ``margin`` of a point, it keeps the
@@ -310,22 +330,41 @@ type _DevicePositions = Mapping[DeviceUid, AxisPosition]
 
 class InstrumentState(BaseModel, frozen=True):
     """What the operator edits. ``state.json`` has this form, and so do ``default.yaml`` and a preset. A kind of
-    instrument adds its own fields in a subclass. ``metadata`` is the facts about the specimen, in the form that
-    ``metadata_cls`` gives. ``positions`` gives the position of each device that the instrument sets, the same for
+    instrument adds its own fields in a subclass. ``plan`` is the tasks to run, and ``metadata_cls`` the form of the
+    metadata of each task. ``positions`` gives the position of each device that the instrument sets, the same for
     every profile: 1 position, or the rule by which the device follows the stage."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     metadata_cls: MetadataCls = Field(default=get_path_from_class(ExperimentMetadata), validate_default=True)
-    metadata: Annotated[dict[str, Any], NotDefault] = Field(default_factory=dict, validate_default=True)
     profiles: Mapping[ProfileId, Profile] = Field(min_length=1)
     positions: dict[DeviceUid, PositionRule] = Field(default_factory=dict)
+    plan: Annotated[Sequence[Task], NotDefault] = Field(default_factory=list)
 
-    @field_validator("metadata")
+    @field_validator("plan")
     @classmethod
-    def _check_metadata(cls, metadata: dict[str, Any], info: ValidationInfo) -> dict[str, Any]:
+    def _check_plan(cls, plan: Sequence[Task], info: ValidationInfo) -> Sequence[Task]:
+        if duplicates := repeated(task.id for task in plan):
+            raise ValueError(f"task ids must be unique (repeated: {duplicates})")
         form = info.data.get("metadata_cls")  # missing when metadata_cls itself failed
-        return metadata if form is None else form.model_validate(metadata).model_dump()
+        if form is None:
+            return plan
+        checked: list[Task] = []
+        errors: list[InitErrorDetails] = []
+        for index, task in enumerate(plan):
+            try:
+                checked.append(task.model_copy(update={"metadata": form.model_validate(task.metadata).model_dump()}))
+            except ValidationError as error:
+                for found in error.errors():
+                    detail = InitErrorDetails(
+                        type=found["type"], loc=(index, "metadata", *found["loc"]), input=found["input"]
+                    )
+                    if "ctx" in found:
+                        detail["ctx"] = found["ctx"]
+                    errors.append(detail)
+        if errors:
+            raise ValidationError.from_exception_data(cls.__name__, errors)
+        return checked
 
     @classmethod
     def default_fields(cls) -> frozenset[str]:
@@ -352,6 +391,11 @@ class InstrumentState(BaseModel, frozen=True):
             problems += profile.problems(config).under("profiles", profile_id)
         problems += self._level_problems(config).under("profiles")
         problems += self._magnification_problems(config).under("profiles")
+        for index, task in enumerate(self.plan):
+            for profile_index, profile_id in enumerate(task.profiles):
+                if profile_id not in self.profiles:
+                    loc = ("plan", index, "profiles", profile_index)
+                    problems.append(Problem.not_configured("Profile", profile_id, code="task.profile_missing", loc=loc))
         return problems
 
     def _position_problems(self, config: InstrumentConfig) -> Problems:

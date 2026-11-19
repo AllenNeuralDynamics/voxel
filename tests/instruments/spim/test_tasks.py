@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from vxl.instruments.spim.state import SPIMState
 from vxl.instruments.spim.task import (
     Region,
-    Task,
+    SPIMTask,
 )
 
 from .support import load, sweep_x
@@ -19,7 +19,7 @@ _REGION = {
 
 def _preset(config_data: dict[str, Any], *tasks: dict[str, Any]) -> SPIMState:
     default = load(config_data).default
-    plan = [Task.complete(task, default.task) for task in tasks]
+    plan = [SPIMTask.complete(task, default.task) for task in tasks]
     return SPIMState.model_validate({**default.model_dump(mode="json"), "plan": plan})
 
 
