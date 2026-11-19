@@ -44,6 +44,16 @@ class ScanController(Device):
         # TODO: start the pass without blocking
         pass
 
+    @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
+    def move_to(self, x_mm: float, y_mm: float) -> None:
+        # TODO: start the positioning move
+        pass
+
+    @describe(label="Wait Motion End", desc="Block until both axes have settled")
+    def wait_motion_end(self) -> None:
+        # TODO: block until motion stops
+        pass
+
     @describe(label="Abort", desc="Stop the pass and close every gate")
     def abort(self) -> None:
         # TODO: halt motion and close every gate; must be safe when idle

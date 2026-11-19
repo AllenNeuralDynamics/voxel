@@ -3,8 +3,11 @@ import logging
 from typing import Any
 
 from seqsweep.hal import HAL
-from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanPattern
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
+
+STRIP_STEP_SIGN = -1  # strips step towards lower step-axis positions, like chambers_step_mm (chamber 1 is the highest)
+RUN_POLL_S = 0.2
 
 
 class SeqSweep:
@@ -64,7 +67,7 @@ class SeqSweep:
         self._log_derived(scan_job.name, self._derived)
         self._status, self._error = "running", None
         # Launch in the background
-        self._scan_task = asyncio.create_task(self._run_passes(scan_job.pass_config, self._derived, scan_job.direction))
+        self._scan_task = asyncio.create_task(self._run_passes(scan_job, self._derived))
 
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
         """Apply the optics to a pass: pixel size, stage speed, overscan, strip width and distances."""
@@ -105,6 +108,10 @@ class SeqSweep:
     def _check_job(self, job: ScanJob) -> None:
         """Raise ``ValueError`` if the job names an unknown chamber, leaves the safe scan range or exceeds the line rate."""
         defaults = self.config.default
+        if defaults.scan_pattern is not ScanPattern.SAME_DIRECTION:
+            raise ValueError(f"scan_pattern '{defaults.scan_pattern}' is not implemented yet; use 'same_direction'")
+        if job.chamber is None and job.num_strips > 1:
+            raise ValueError("num_strips > 1 needs a chamber to step from")
         if job.chamber is not None and job.chamber not in defaults.chambers_step_mm:
             raise ValueError(
                 f"chamber {job.chamber} is not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}"

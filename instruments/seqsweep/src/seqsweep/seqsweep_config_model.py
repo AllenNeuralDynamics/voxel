@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from vxlib.schema import FrozenModel
 
 from seqsweep.hal import SeqSweepHardwareTopology
+from seqsweep.job_model import ScanPattern
 
 
 class HandlerConfig(BaseModel):
@@ -62,6 +63,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
         ..., description="Stage axis the scan runs along; the strip step is along the other axis"
     )
     optics: OpticsConfig = Field(..., description="TDI camera and objective")
+    # TODO Maybe different type of key for chambers (e.g., str instead of int)
     chambers_step_mm: dict[int, float] = Field(
         default_factory=dict, description="Start position of each sample chamber along the step axis (across the scan)"
     )
@@ -74,6 +76,10 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     )
     max_line_rate_hz: float | None = Field(
         default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"
+    )
+    scan_pattern: ScanPattern = Field(
+        default=ScanPattern.SAME_DIRECTION,
+        description="same_direction: every strip scans the same way; snake: strips alternate (not implemented yet)",
     )
     # TODO: lasers, passes
 

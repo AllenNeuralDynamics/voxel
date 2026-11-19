@@ -10,6 +10,11 @@ class ScanDirection(StrEnum):
     REVERSE = "reverse"  # scan_end_um → scan_start_um
 
 
+class ScanPattern(StrEnum):
+    SAME_DIRECTION = "same_direction"  # every strip scans the same way; the stage returns to the start between strips
+    SNAKE = "snake"  # strips alternate direction (needs the camera scan direction switched per strip)
+
+
 class ScanPassConfig(FrozenModel):
     """One strip pass along the scan axis (µm, Hz). Stage speed and line pitch follow from the optics."""
 

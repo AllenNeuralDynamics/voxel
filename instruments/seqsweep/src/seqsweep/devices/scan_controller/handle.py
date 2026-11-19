@@ -24,6 +24,14 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         """Start one strip pass in the given direction without blocking."""
         await self.call("run", direction)
 
+    async def move_to(self, x_mm: float, y_mm: float) -> None:
+        """Start a move to an absolute (X, Y) position in mm."""
+        await self.call("move_to", x_mm, y_mm)
+
+    async def wait_motion_end(self) -> None:
+        """Block until both axes have settled."""
+        await self.call("wait_motion_end")
+
     async def abort(self) -> None:
         """Stop the pass and close every gate. Safe when idle."""
         await self.call("abort")
