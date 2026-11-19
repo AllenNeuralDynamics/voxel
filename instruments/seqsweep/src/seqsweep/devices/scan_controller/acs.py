@@ -9,10 +9,12 @@ Positions and speeds are in the controller's user units, which are assumed to be
 
 import re
 import threading
+from pathlib import Path
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, StringConstraints, model_validator
 from rigup import describe
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 from vxlib.schema import FrozenModel
 
 from .base import ScanController
@@ -26,7 +28,11 @@ MST_INPOS = 0x00000010
 MST_MOVE = 0x00000020
 MST_ACC = 0x00000040
 
+PST_RUN = 0x00000002  # Program state flag: the buffer is running (manual, ProgramStates)
+
 MOTION_TIMEOUT_MS = 60_000
+SCAN_PASS_FILE = Path(__file__).with_name("scan_pass.acsp")  # ACSPL+ program for one strip pass
+NO_INDEX = -1  # ACSC_NONE: "global variable" buffer, and "no array index" for scalars
 
 
 class AcsStageConfig(FrozenModel):
@@ -38,7 +44,7 @@ class AcsStageConfig(FrozenModel):
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
     frame_trigger_output: AcsOutput = Field(description="Output driving the frame trigger to the grabber")
-    direction_output: AcsOutput = Field(description="Output telling the camera the scan direction")
+    scan_buffer: int = Field(ge=0, description="Controller program buffer that holds the scan pass; it is overwritten on connect")
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
@@ -48,8 +54,6 @@ class AcsStageConfig(FrozenModel):
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
-        if self.frame_trigger_output == self.direction_output:
-            raise ValueError(f"frame_trigger_output and direction_output must differ, both are {self.direction_output}")
         for axis, (low, high) in self.limits_mm.items():
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
@@ -71,8 +75,10 @@ class AcsController(ScanController):
         self._lock = threading.RLock()  # one vendor handle: serialize calls and multi-call sequences
         self._sp = self._import_library()
         self._hc = -1
+        self._pass: tuple[ScanPassConfig, DerivedScan] | None = None
         self._connect()
         self._enable_axes()
+        self._load_scan_pass()
 
     # -- library and connection -------------------------------------------------------------------------------
 
@@ -128,6 +134,26 @@ class AcsController(ScanController):
     def _axes(self) -> tuple[int, int]:
         return self._stage.axis_x, self._stage.axis_y
 
+    def _axis_index(self, axis: Literal["x", "y"]) -> int:
+        return self._stage.axis_x if axis == "x" else self._stage.axis_y
+
+    def _load_scan_pass(self) -> None:
+        """Load and compile the scan pass program; this also creates its global parameter variables."""
+        sp = self._sp
+        with self._lock:
+            sp.LoadBuffer(self._hc, self._stage.scan_buffer, SCAN_PASS_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
+            sp.CompileBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
+
+    def _write(self, name: str, value: float | int) -> None:
+        """Write a global scan-pass variable."""
+        write = self._sp.WriteInteger if isinstance(value, int) else self._sp.WriteReal
+        with self._lock:
+            write(self._hc, NO_INDEX, name, NO_INDEX, NO_INDEX, NO_INDEX, NO_INDEX, value, self._sp.SYNCHRONOUS, True)
+
+    def _read(self, name: str) -> float:
+        with self._lock:
+            return self._sp.ReadReal(self._hc, NO_INDEX, name, NO_INDEX, NO_INDEX, NO_INDEX, NO_INDEX, self._sp.SYNCHRONOUS, True)
+
     # -- status -----------------------------------------------------------------------------------------------
 
     @property
@@ -140,7 +166,19 @@ class AcsController(ScanController):
     @property
     @describe(label="Running", desc="Whether a pass is in progress", stream=True)
     def is_running(self) -> bool:
-        return any(state["moving"] for state in self.read_status().values())
+        with self._lock:
+            program_running = bool(self._sp.GetProgramState(self._hc, self._stage.scan_buffer, self._sp.SYNCHRONOUS, True) & PST_RUN)
+        return program_running or any(state["moving"] for state in self.read_status().values())
+
+    @property
+    @describe(label="Strip position", desc="Strip-axis feedback position in mm; None until a pass is configured", stream=True)
+    def strip_pos_mm(self) -> float | None:
+        if self._pass is None:
+            return None
+        scan_axis = self._pass[1].scan_axis
+        axis = self._axis_index("y" if scan_axis == "x" else "x")
+        with self._lock:
+            return self._sp.GetFPosition(self._hc, axis, self._sp.SYNCHRONOUS, True)
 
     @describe(label="Read Status", desc="Per-axis position, motor state and faults")
     def read_status(self) -> dict[str, dict[str, float | bool | int]]:
@@ -219,6 +257,7 @@ class AcsController(ScanController):
     def abort(self) -> None:
         sp = self._sp
         with self._lock:
+            sp.StopBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
             for axis in self._axes:
                 sp.Halt(self._hc, axis, sp.SYNCHRONOUS, True)
             for output in (*self._gate_outputs.values(), self._stage.frame_trigger_output):
@@ -238,5 +277,48 @@ class AcsController(ScanController):
         if not low <= position_mm <= high:
             raise ValueError(f"{axis} position {position_mm} mm is outside the limits [{low}, {high}]")
 
-    # TODO: configure(config, derived) and run(direction): program the scan pass (constant-velocity move with line
-    # triggers on frame_trigger_output via PEG, direction on direction_output, laser gates on gate_outputs).
+    # -- scan pass --------------------------------------------------------------------------------------------
+
+    @describe(label="Configure Scan", desc="Load pass geometry and gating")
+    def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
+        unknown = sorted(set(config.lasers) - self._gate_outputs.keys())
+        if unknown:
+            raise ValueError(f"No gate output for lasers {unknown}")
+        low, high = self._stage.limits_mm[derived.scan_axis]
+        parameters: dict[str, float | int] = {
+            "overscan_mm": derived.overscan_um / 1000,
+            "pixel_size_mm": derived.pixel_size_um / 1000,
+            "scan_speed_mm_s": derived.scan_speed_mm_s,
+            "line_pulse_ms": self._stage.line_pulse_width_ms,
+            "move_speed_mm_s": self._stage.move_velocity_mm_s,
+            "accel": self._stage.scan_accel,
+            "decel": self._stage.scan_decel,
+            "limit_min_mm": low,
+            "limit_max_mm": high,
+            "scan_axis": self._axis_index(derived.scan_axis),
+        }
+        for name, value in parameters.items():
+            self._write(name, value)
+        self._pass = (config, derived)
+
+    @describe(label="Run Pass", desc="Start one strip pass in the given direction")
+    def run(self, direction: ScanDirection) -> None:
+        """Start the pass and return; ``is_running`` reports when it ends."""
+        if self._pass is None:
+            raise RuntimeError("configure() must be called before run()")
+        config, _ = self._pass
+        start_mm, end_mm = config.scan_start_um / 1000, config.scan_end_um / 1000
+        if direction is ScanDirection.REVERSE:
+            start_mm, end_mm = end_mm, start_mm
+        self._write("scan_start_mm", start_mm)
+        self._write("scan_end_mm", end_mm)
+        self._write("scan_dir", 1 if end_mm >= start_mm else -1)
+        with self._lock:
+            self._sp.RunBuffer(self._hc, self._stage.scan_buffer, None, self._sp.SYNCHRONOUS, True)
+
+    @property
+    @describe(label="Line pulses", desc="Line pulses fired in the last pass")
+    def pulse_count(self) -> int:
+        return int(self._read("pulse_count"))
+
+    # TODO: abort() leaves lc.LaserEnable() on if it stops the program mid-pass; add an LCI cleanup (LaserDisable, Stop).

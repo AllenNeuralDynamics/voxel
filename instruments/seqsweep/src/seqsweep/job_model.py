@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import Field
 from vxlib.schema import FrozenModel
@@ -20,8 +21,9 @@ class ScanPassConfig(FrozenModel):
 
 
 class DerivedScan(FrozenModel):
-    """What a pass works out to once the optics are applied (computed, never configured)."""
+    """What a pass works out to once the defaults (optics, scan axis) are applied; never set by hand."""
 
+    scan_axis: Literal["x", "y"] = Field(description="Stage axis the scan runs along (from the defaults)")
     pixel_size_um: float = Field(description="Pixel size on the sample; also the stage travel per line trigger")
     scan_speed_mm_s: float = Field(description="Constant stage speed during imaging")
     overscan_um: float = Field(description="Run-up and run-out outside the imaged range")

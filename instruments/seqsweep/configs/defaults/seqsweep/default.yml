@@ -37,7 +37,7 @@ hal:
         axis_x: 0
         axis_y: 1
         frame_trigger_output: OUT0.1  # frame trigger to grabber
-        direction_output: OUT0.0  # direction to camera
+        scan_buffer: 1  # TODO: confirm this program buffer is free; the scan pass is loaded into it on connect
         line_pulse_width_ms: 0.01
         scan_accel: 6000
         scan_decel: 6000

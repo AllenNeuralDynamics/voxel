@@ -71,6 +71,7 @@ class SeqSweep:
         optics = self.config.default.optics
         capture_um = abs(pass_config.scan_end_um - pass_config.scan_start_um)
         return DerivedScan(
+            scan_axis=self.config.default.scan_axis,
             pixel_size_um=optics.pixel_size_um,
             scan_speed_mm_s=pass_config.line_rate_hz * optics.pixel_size_um / 1000,
             overscan_um=optics.overscan_um,
