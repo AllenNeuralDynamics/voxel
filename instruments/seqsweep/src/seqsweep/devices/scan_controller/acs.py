@@ -33,6 +33,11 @@ PST_RUN = 0x00000002  # Program state flag: the buffer is running (manual, Progr
 MOTION_TIMEOUT_MS = 60_000
 SCAN_PASS_FILE = Path(__file__).with_name("scan_pass.acsp")  # ACSPL+ program for one strip pass
 NO_INDEX = -1  # ACSC_NONE: "global variable" buffer, and "no array index" for scalars
+D_BUFFER = 64  # the D-Buffer (ACSPL+ reference, USGBUF); TODO: confirm for the real controller's firmware
+LCI_DECLARATION = "global LCI lc"  # the LCI struct the scan pass calls as lc.*
+LCI_DECLARATION_PATTERN = re.compile(r"^\s*global\s+LCI\s+lc\b", re.IGNORECASE | re.MULTILINE)
+CLEAR_ALL_LINES = 100_000
+UPLOAD_BYTES = 65_536
 
 
 class AcsStageConfig(FrozenModel):
@@ -88,6 +93,10 @@ class AcsController(ScanController):
 
     @staticmethod
     def _import_library():  # noqa: ANN205
+        import numpy as np
+
+        if not hasattr(np, "chararray"):  # the vendor wheel (UploadBuffer, GetErrorString) still uses the numpy 1 name
+            np.chararray = np.char.chararray  # type: ignore[attr-defined]
         try:
             import SPiiPlusPython as sp  # type: ignore[import-not-found]
         except ImportError as e:
@@ -146,9 +155,24 @@ class AcsController(ScanController):
     def _axis_index(self, axis: Literal["x", "y"]) -> int:
         return self._stage.axis_x if axis == "x" else self._stage.axis_y
 
+    def _declare_lci(self) -> None:
+        """Make sure the D-Buffer declares the LCI struct ``lc``; the scan pass uses it and structs must be global there."""
+        sp = self._sp
+        with self._lock:
+            # The D-Buffer cannot change while another buffer is compiled, so decompile the scan buffer first.
+            sp.StopBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
+            sp.ClearBuffer(self._hc, self._stage.scan_buffer, 1, CLEAR_ALL_LINES, sp.SYNCHRONOUS, True)
+            d_buffer = sp.UploadBuffer(self._hc, D_BUFFER, 0, UPLOAD_BYTES, sp.SYNCHRONOUS, True)
+            if LCI_DECLARATION_PATTERN.search(d_buffer or ""):
+                return
+            sp.AppendBuffer(self._hc, D_BUFFER, LCI_DECLARATION + "\n", None, sp.SYNCHRONOUS, True)  # existing globals kept
+            sp.CompileBuffer(self._hc, D_BUFFER, sp.SYNCHRONOUS, True)
+        self.log.info("Declared '%s' in the controller D-Buffer", LCI_DECLARATION)
+
     def _load_scan_pass(self) -> None:
         """Load and compile the scan pass program; this also creates its global parameter variables."""
         sp = self._sp
+        self._declare_lci()
         with self._lock:
             sp.LoadBuffer(self._hc, self._stage.scan_buffer, SCAN_PASS_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
             sp.CompileBuffer(self._hc, self._stage.scan_buffer, sp.SYNCHRONOUS, True)
@@ -329,5 +353,3 @@ class AcsController(ScanController):
     @describe(label="Line pulses", desc="Line pulses fired in the last pass")
     def pulse_count(self) -> int:
         return int(self._read("pulse_count"))
-
-    # TODO: abort() leaves lc.LaserEnable() on if it stops the program mid-pass; add an LCI cleanup (LaserDisable, Stop).
