@@ -1,21 +1,25 @@
 """Shell words plus the described properties and commands of the active device."""
 
 import cmd
+import logging
 import shlex
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from contextlib import ExitStack
 from datetime import datetime
+from pathlib import Path
 from typing import Any, TextIO
 
-import yaml
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.table import Table
 from rich.text import Text
 from rigup.device import DeviceController
 from rigup.device.interface import CommandInfo, PropInfo
 from rigup.device.results import PropModel
+from ruamel.yaml import YAML
 
-from vxl_drivers.cli.devices import Session, stop
+from .session import Session, load_configs, stop
 
 _WATCH_INTERVAL_S = 0.5
 
@@ -37,7 +41,7 @@ class Output:
             self._transcript.print(f"{datetime.now():%H:%M:%S} {line}", markup=False, highlight=False)
 
 
-class DriverShell(cmd.Cmd):
+class DeviceShell(cmd.Cmd):
     prompt = "> "
 
     def __init__(self, session: Session, output: Output) -> None:
@@ -64,6 +68,10 @@ class DriverShell(cmd.Cmd):
                 self._output.print()
 
     def precmd(self, line: str) -> str:
+        """Record the line; ``cmd`` gives Ctrl+D as the line ``EOF``, which quits."""
+        if line == "EOF":
+            self._output.print()
+            return "quit"
         self._output.record_input(self.prompt + line)
         return line
 
@@ -148,12 +156,7 @@ class DriverShell(cmd.Cmd):
             self._stop(uid)
 
     def do_quit(self, _arg: str) -> bool:
-        """quit: close every open device and exit."""
-        return True
-
-    def do_EOF(self, _arg: str) -> bool:  # noqa: N802 - cmd dispatches Ctrl+D here
-        """Ctrl+D: same as quit."""
-        self._output.print()
+        """quit: close every open device and exit. Ctrl+D does the same."""
         return True
 
     def _open(self, uid: str) -> bool:
@@ -190,7 +193,7 @@ class DriverShell(cmd.Cmd):
                 raise ValueError(f"{name} is read-only")
             if len(tokens) != 1:
                 raise ValueError(f"{name} takes one value")
-            if error := self._session.run(controller.set_props(**{name: yaml.safe_load(tokens[0])}))[name].error:
+            if error := self._session.run(controller.set_props(**{name: _value(tokens[0])}))[name].error:
                 raise ValueError(error)
         self._output.print(self._format(controller, name))
 
@@ -200,9 +203,9 @@ class DriverShell(cmd.Cmd):
         for token in tokens:
             key, separator, value = token.partition("=")
             if separator and key.isidentifier():
-                kwargs[key] = yaml.safe_load(value)
+                kwargs[key] = _value(value)
             else:
-                args.append(yaml.safe_load(token))
+                args.append(_value(token))
         if unknown := kwargs.keys() - self._commands[name].params.get("properties", {}).keys():
             raise ValueError(f"{name} has no parameter {', '.join(sorted(unknown))}")
         result = self._session.run(self._active().execute_command(name, *args, **kwargs)).unwrap()
@@ -245,3 +248,47 @@ def _params(command: CommandInfo) -> list[str]:
         dtype = " | ".join(str(option.get("type", "?")) for option in schema.get("anyOf", [schema]))
         params.append(f"{name}: {dtype}" if name in required else f"{name}: {dtype} = {schema.get('default')}")
     return params
+
+
+def run(config: Path, devices: Sequence[str] = (), *, log: Path | None = None) -> int:
+    """Open the shell on the devices of ``config``, with ``devices`` open at start, and return the exit code."""
+    console = Console()
+    with ExitStack() as stack:
+        transcript = stack.enter_context(log.open("a", encoding="utf-8")) if log else None
+        output = Output(console, transcript)
+        _configure_logging(console, transcript)
+        try:
+            session = Session(load_configs(config))
+        except (OSError, ValueError) as error:
+            output.print(str(error), style="red")
+            return 1
+        if unknown := [uid for uid in devices if uid not in session.configs]:
+            output.print(f"Unknown devices: {', '.join(unknown)}", style="red")
+            return 1
+
+        stack.callback(_close, session, output)
+        shell = DeviceShell(session, output)
+        shell.open(devices)
+        shell.run()
+    return 0
+
+
+def _configure_logging(console: Console, transcript: TextIO | None) -> None:
+    terminal = RichHandler(console=console, show_time=False, show_path=False)
+    terminal.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    handlers: list[logging.Handler] = [terminal]
+    if transcript:
+        file = logging.StreamHandler(transcript)
+        file.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
+        handlers.append(file)
+    logging.basicConfig(level=logging.WARNING, handlers=handlers)
+
+
+def _close(session: Session, output: Output) -> None:
+    for uid, error in session.close().items():
+        output.print(f"Could not close {uid}: {error}", style="red")
+
+
+def _value(text: str) -> Any:
+    """A value typed in the shell, read as YAML: ``1.5``, ``true``, ``[1, 2]`` or a plain word."""
+    return YAML(typ="safe", pure=True).load(text)

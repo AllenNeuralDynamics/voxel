@@ -127,9 +127,15 @@ class StationConfig(System):
         return {"Base": BASE_METADATA_SCHEMA, **self.metadata_schemas}
 
     @classmethod
+    def station_dir(cls) -> Path:
+        """The station's own folder, ``new`` in the Voxel home: its config, instruments and records. The machine's
+        files (process registry, ``.env``, data roots) stay in the Voxel home."""
+        return system.voxel_home() / "new"
+
+    @classmethod
     def config_path(cls) -> Path:
         """Return the required control-station configuration path."""
-        return system.voxel_home() / "station.yaml"
+        return cls.station_dir() / "station.yaml"
 
     @classmethod
     def settings_customise_sources(
@@ -154,7 +160,7 @@ class StationConfig(System):
         path = cls.config_path()
         if not path.is_file():
             raise StationNotConfiguredError(
-                f"No control station configured at {path}. Initialize one with `vxl station init --name <name>`."
+                f"No control station configured at {path}. Initialize one with `vxl init --name <name>`."
             )
         return cls()  # pyright: ignore[reportCallIssue] -- required fields come from the checked YAML source
 
@@ -204,10 +210,9 @@ class Station:
         if lease_drain_timeout_s <= 0:
             raise ValueError("lease_drain_timeout_s must be positive")
         self._config = config
-        self._config.dir.mkdir(parents=True, exist_ok=True)
-        self.instruments_dir.mkdir(exist_ok=True)
+        self.instruments_dir.mkdir(parents=True, exist_ok=True)
         self._records = records or SQLiteRecords(
-            self._config.dir / "records.sqlite3",
+            self._config.station_dir() / "records.sqlite3",
             resolve_root=lambda spec: self._config.resolve_storage(spec).target,
         )
         self._instrument: AnyInstrument | None = None
@@ -243,7 +248,7 @@ class Station:
     @property
     def instruments_dir(self) -> Path:
         """Root holding the station's ``<name>.voxel`` instrument directories."""
-        return self._config.dir / "instruments"
+        return self._config.station_dir() / "instruments"
 
     def discover_instruments(self) -> dict[str, InstrumentFolder]:
         """Inspect every installed instrument without opening hardware."""

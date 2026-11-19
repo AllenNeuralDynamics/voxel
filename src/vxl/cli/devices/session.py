@@ -1,26 +1,23 @@
-"""Device configs from a rig or instrument file, opened on demand, plus stopping and closing."""
+"""The devices of a rig file, opened on demand, plus stopping and closing."""
 
 import asyncio
 from collections.abc import Coroutine, Mapping
 from pathlib import Path
 from typing import Any
 
-import yaml
+from rigup.config import DeviceConfig, RigConfig
 from rigup.device import Device, DeviceController
 from vxlib.issues import Problem
 
 from rigup import build_objects
-from vxl.hal.rig_config import DeviceConfig, RigConfig
+from vxl._utils.files import load_yaml
 
 
 def load_configs(path: Path) -> dict[str, DeviceConfig]:
-    """Read every device of a rig file, or of an instrument file's hal section."""
-    data = yaml.safe_load(path.read_text()) or {}
-    section = data.get("hal", data)
-    rig = RigConfig.model_validate({key: section[key] for key in ("devices", "nodes") if key in section})
-    configs = dict(rig.devices)
-    for node in rig.nodes.values():
-        configs.update(node.devices)
+    """Read every device of a rig file, such as an instrument's ``rig.yaml``, in its own process or on a node."""
+    data = load_yaml(path) or {}
+    rig = RigConfig.model_validate({key: data[key] for key in ("devices", "nodes") if key in data})
+    configs = rig.all_devices
     if not configs:
         raise ValueError(f"No devices found in {path}")
     return configs

@@ -204,7 +204,7 @@ was given.
 Start the daemon on the device host, using the node ID declared by the controlling rig:
 
 ```bash
-rigup-node motion_host --address tcp://0.0.0.0:5555
+rigup node motion_host --address tcp://0.0.0.0:5555
 ```
 
 The TCP RPC endpoint uses the configured port and the stream endpoint uses the following port, so this example needs
