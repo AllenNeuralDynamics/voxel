@@ -22,7 +22,6 @@ from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
 from ome_zarr_writer.writer import BatchMetrics
 from pydantic import BaseModel, Field
 from rigup.interface import StreamTier, action, choice, fact, failsafe, integer, number, query, stream
-from vxl_records import DatasetLocation, StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
 from vxlib.vector import IVec2D, Vec2D
@@ -44,6 +43,7 @@ from vxl.devices.camera.base import (
     TriggerPolarity,
 )
 from vxl.live import LiveFrame, LiveGenerator, LiveLayer, LiveViewport, ValidBits
+from vxl.storage import ImageLocation, StorageSpec
 from vxl.system import System
 
 log = logging.getLogger(__name__)
@@ -224,7 +224,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         storage: StorageSpec,
         subpath: PurePosixPath,
         settings: WriterSettings,
-    ) -> DatasetLocation:
+    ) -> ImageLocation:
         """Prepare the camera + writer for a stack and return its durable dataset location.
 
         ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
@@ -290,7 +290,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         target = self._writer.target
         if target is None:
             raise RuntimeError("writer did not expose a dataset target")
-        return self._system.describe_dataset_location(storage, target)
+        return self._system.describe_image_location(storage, target)
 
     def _size_ring(self, config: WriterConfig) -> int:
         """Choose the depth of a ring the writer is about to allocate.

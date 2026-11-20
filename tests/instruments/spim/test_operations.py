@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from vxl_records import SQLiteRecords
 
 from vxl.instruments.basic import BasicInstrument
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.task import SPIMTask
+from vxl.records import Records
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
@@ -69,7 +69,7 @@ async def opened(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterator[M
     rule can set it."""
     del config_data["default"]["profiles"]["gfp"]["positions"]
     folder = InstrumentFolder.create(template(simulated(config_data)), "left", tmp_path)
-    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     microscope = Microscope(folder, records=records, system=system)
     await microscope.open()

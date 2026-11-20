@@ -12,13 +12,14 @@ from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from rigup.device import DeviceHandle, DeviceInterface, NotObservedError, PropResults, Result
 from rigup.device.handle import PropModels
 from vxl_records import (
     AcquisitionManifest,
     AcquisitionOrigin,
     AcquisitionVolume,
+    DatasetLocation,
     DatasetStatus,
     LocationStatus,
     PlannedVolume,
@@ -37,6 +38,7 @@ from vxl.hal import HAL, HardwareTopology
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
 from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class
+from vxl.storage import StorageSpec as NewStorageSpec
 from vxl.system import Remote, System, remote_store_fingerprint
 
 from .config import (
@@ -68,6 +70,13 @@ from .planning import resolve_xy, resolve_z
 from .store import PROMOTABLE_FIELDS, InstrumentStore
 
 logger = logging.getLogger(__name__)
+
+_LEGACY_LOCATION = TypeAdapter(DatasetLocation)
+
+
+def _new_storage(spec: StorageSpec) -> NewStorageSpec:
+    """The legacy storage request as the new type that the cameras and the system take."""
+    return NewStorageSpec.model_validate(spec.model_dump())
 
 
 async def _gather_hardware[T](*calls: Awaitable[T]) -> list[T]:
@@ -706,7 +715,7 @@ class Instrument:
                 if ch_id in state.imaging.channels
             }
             cameras = [self._hal.cameras[d] for d in detections if d in self._hal.cameras]
-            await asyncio.gather(*(cam.check_writable(storage) for cam in cameras))
+            await asyncio.gather(*(cam.check_writable(_new_storage(storage)) for cam in cameras))
 
             manifest = AcquisitionManifest(
                 id=uuid.uuid4(),
@@ -1517,7 +1526,7 @@ class Instrument:
             logger.info(
                 "Acquisition complete: %d volumes → %s",
                 len(manifest.volumes),
-                self._system.resolve_storage(manifest.storage).target,
+                self._system.resolve_storage(_new_storage(manifest.storage)).target,
             )
         except asyncio.CancelledError:
             try:
@@ -1595,7 +1604,7 @@ class Instrument:
                 config = self._channel_config(ch_id)
                 init_coros.append(
                     ch.camera.open_stack(
-                        storage=manifest.storage,
+                        storage=_new_storage(manifest.storage),
                         subpath=subpath / ch_id,
                         num_frames=num_frames,
                         z_step=volume.z_step,
@@ -1604,7 +1613,9 @@ class Instrument:
                     )
                 )
             opened = await _gather_hardware(*init_coros)
-            locations = dict(zip(channels, opened, strict=True))
+            locations = {
+                ch: _LEGACY_LOCATION.validate_python(loc.model_dump()) for ch, loc in zip(channels, opened, strict=True)
+            }
             await self._activity.set(self._capture_activity().model_copy(update={"channels": tuple(channels)}))
             await self._reset_preview()
             manifest = await self._records.acquisitions.register_datasets(

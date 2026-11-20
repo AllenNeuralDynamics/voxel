@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID, uuid4
 
 from pydantic import Field, SerializeAsAny, model_validator
-from vxl_records import SQLiteRecords, VoxelRecords
 from vxlib.reactivity import Cell, Emitter, Readable
 from vxlib.schema import FrozenModel, check_identifier
 
 from vxl.live import LiveSourceEmission
+from vxl.records import Records
 from vxl.station.errors import BusyError, NotFoundError
 from vxl.station.instrument.base import Instrument, InstrumentView
 from vxl.station.instrument.folder import InstrumentFolder
@@ -90,17 +90,18 @@ class Station:
         self,
         config: StationConfig,
         *,
-        records: VoxelRecords | None = None,
+        records: Records | None = None,
         lease_drain_timeout_s: float = 10.0,
     ) -> None:
         if lease_drain_timeout_s <= 0:
             raise ValueError("lease_drain_timeout_s must be positive")
         self._config = config
         self.instruments_dir.mkdir(parents=True, exist_ok=True)
-        self._records = records or SQLiteRecords(
+        self._records = records or Records(
             self._config.station_dir() / "records.sqlite3",
             resolve_root=lambda spec: self._config.resolve_storage(spec).target,
         )
+        self._log_capture: AsyncExitStack | None = None
         self._instrument: AnyInstrument | None = None
         self._session_info: SessionInfo | None = None
         self._session_teardowns: list[Teardown] = []
@@ -117,7 +118,7 @@ class Station:
         return self._config
 
     @property
-    def records(self) -> VoxelRecords:
+    def records(self) -> Records:
         """The durable record service composed with this station."""
         return self._records
 
@@ -248,12 +249,27 @@ class Station:
         async with self._lifecycle_lock:
             await self._close_session_locked(session_id)
 
+    async def open(self) -> list[UUID]:
+        """Start keeping every log line of the session in the records, and end each acquisition that an earlier run
+        left open as interrupted. Give back their ids. Calling it again only ends open acquisitions again."""
+        async with self._lifecycle_lock:
+            if self._log_capture is None:
+                stack = AsyncExitStack()
+                await stack.enter_async_context(self._records.logs.capture())
+                self._log_capture = stack
+        return await self._records.acquisitions.interrupt_open()
+
     async def close(self) -> None:
-        """Close any active session and mark the station closed for good."""
+        """Close any active session, stop keeping log lines, and mark the station closed for good."""
         async with self._lifecycle_lock:
             if self._view.value.status is StationStatus.CLOSED:
                 return
-            await self._close_session_locked()
+            try:
+                await self._close_session_locked()
+            finally:
+                if self._log_capture is not None:
+                    await self._log_capture.aclose()
+                    self._log_capture = None
             await self._view.set(StationView(status=StationStatus.CLOSED))
 
     async def _close_session_locked(self, expected_session_id: UUID | None = None) -> None:

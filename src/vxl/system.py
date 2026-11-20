@@ -29,18 +29,11 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
-from vxl_records import (
-    DatasetLocation,
-    LocalLocation,
-    LocationRole,
-    LocationStatus,
-    ObjectLocation,
-    StorageSpec,
-)
 from vxlib.s3 import S3Store
 from vxlib.schema import FrozenModel
 
 from vxl._utils.files import load_yaml
+from vxl.storage import ImageLocation, LocalLocation, LocationRole, LocationStatus, ObjectLocation, StorageSpec
 
 log = logging.getLogger(__name__)
 
@@ -378,8 +371,8 @@ class System(BaseSettings):
             return StagedS3(scratch=self.scratch / relpath, target=target, store=store)
         return DirectS3(target=target, store=store)
 
-    def describe_dataset_location(self, spec: StorageSpec, target: Path | S3Path) -> DatasetLocation:
-        """Describe a concrete writer target as a durable acquisition-record location."""
+    def describe_image_location(self, spec: StorageSpec, target: Path | S3Path) -> ImageLocation:
+        """The location of an image that a writer writes at ``target``, for the acquisition record."""
         if spec.remote is None:
             if not isinstance(target, Path):
                 raise TypeError(f"local storage resolved to a non-local target: {target}")

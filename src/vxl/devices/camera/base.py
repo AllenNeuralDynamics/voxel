@@ -10,12 +10,12 @@ from typing import Literal
 from pydantic import BaseModel
 from rigup.device import Device, DeviceController
 from rigup.interface import StreamTier, query
-from vxl_records import StorageSpec
 from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
 from vxlib.vector import IVec2D, Vec2D
 
 from vxl.live import ValidBits
+from vxl.storage import StorageSpec, StorageStatus
 from vxl.system import System, remote_store_fingerprint
 
 log = logging.getLogger(__name__)
@@ -34,15 +34,6 @@ class CameraSensor(FrozenModel):
 
     pixel_um: Vec2D
     size_px: IVec2D
-
-
-class StorageStatus(FrozenModel):
-    """A node's write-access result for a `Storage` root (preflight). ``free_bytes`` is -1 when
-    capacity is unknown (e.g. an S3 root)."""
-
-    host: str
-    root: str
-    free_bytes: int
 
 
 class TriggerMode(StrEnum):

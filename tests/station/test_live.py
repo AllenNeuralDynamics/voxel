@@ -1,11 +1,11 @@
 import math
 
 import pytest
-from vxlib.vector import IVec2D, Vec2D, Vec3D
+from vxlib.vector import IVec2D, Transform, Vec2D, Vec3D
 
 from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.station.instrument.config import Detector
-from vxl.station.instrument.geometry import Transform
+from vxl.station.instrument.geometry import camera_frame
 from vxl.station.instrument.live import Picture, planes_of
 
 _SENSOR = CameraSensor(pixel_um=Vec2D(x=1.0, y=1.0), size_px=IVec2D(x=1000, y=800))
@@ -14,7 +14,7 @@ _FULL = AreaROI(x=0, y=0, w=1000, h=800)
 
 def _frame(width: dict[str, float], height: dict[str, float]) -> Transform:
     """A camera's frame with its sensor's sides along ``width`` and ``height``, at magnification 1."""
-    return Transform.frame(Detector.model_validate({"width": width, "height": height}).sides(), _SENSOR, _FULL)
+    return camera_frame(Detector.model_validate({"width": width, "height": height}).sides(), _SENSOR, _FULL)
 
 
 def test_a_flat_camera_lies_in_the_stage_plane_x_right_and_y_down() -> None:

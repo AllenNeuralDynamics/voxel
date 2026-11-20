@@ -6,16 +6,19 @@ Provides float, integer, and non-negative-validated variants:
 - UVec2D, UVec3D: Non-negative float vectors (all components >= 0)
 - UIVec2D, UIVec3D: Non-negative (unsigned) integer vectors (all components >= 0)
 - Span: 2 numbers in the order they were given, with ``low`` and ``high``
+- Transform: where each element of a 3D array sits in space
 
 Components are named everywhere: vectors are built with keywords, and they are saved as maps such as
 ``{x: 1.5, y: 2.0}``. Iterating yields y,x (and z,y,x), the order of NumPy array indexes.
 """
 
 import math
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, NamedTuple, Self, final
+from itertools import product
+from typing import Annotated, Any, Literal, NamedTuple, Self, final
 
+import numpy as np
 from pydantic import Field, GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
 
@@ -380,3 +383,36 @@ class Span(NamedTuple):
     @property
     def middle(self) -> float:
         return (self.a + self.b) / 2
+
+
+@dataclass(frozen=True)
+class Transform:
+    """Where each element of a 3D array sits in space. Element ``[i, j, k]`` is at
+    ``origin + i * steps[0] + j * steps[1] + k * steps[2]``. Array axes are in z, y, x order, slowest first."""
+
+    origin: Vec3D
+    steps: tuple[Vec3D, Vec3D, Vec3D]
+    shape: tuple[int, int, int]
+
+    def position(self, index: Sequence[float]) -> Vec3D:
+        """The position of an index, 1 value for each array axis."""
+        position = self.origin
+        for i, step in zip(index, self.steps, strict=True):
+            position = position + step * i
+        return position
+
+    def bounds(self) -> dict[Literal["z", "y", "x"], Span]:
+        """The span on each axis that holds every element, out to the outer edges of the first and last."""
+        corners = [self.position(c) for c in product(*((-0.5, size - 0.5) for size in self.shape))]
+        return {
+            axis: Span(min(getattr(c, axis) for c in corners), max(getattr(c, axis) for c in corners))
+            for axis in ("z", "y", "x")
+        }
+
+    @property
+    def matrix(self) -> np.ndarray:
+        """The same as a 4 by 4 affine matrix, the form BigStitcher and OME-Zarr use. Its rows are z, y, x, then
+        [0, 0, 0, 1]; its columns are the 3 steps, then the origin."""
+        matrix = np.eye(4)
+        matrix[:3, :] = np.column_stack([list(v) for v in (*self.steps, self.origin)])
+        return matrix

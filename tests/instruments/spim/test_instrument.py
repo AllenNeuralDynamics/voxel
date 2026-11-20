@@ -9,7 +9,6 @@ import pytest
 from ome_zarr_writer import WriterSettings
 from pydantic import BaseModel, ValidationError
 from rigup.activity import ActivityBusyError, ActivityInfo
-from vxl_records import SQLiteRecords
 
 from vxl._utils.files import load_yaml
 from vxl.devices.camera import AreaROI
@@ -19,6 +18,7 @@ from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.state import SPIMProfileFields, SPIMState, WriterFields
 from vxl.instruments.spim.task import SPIMTask, SPIMTaskFields
 from vxl.live import LiveSourceEmission, LiveViewport, live_source_header
+from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import new_instrument_id
 from vxl.station.instrument.folder import InstrumentFolder
@@ -252,7 +252,7 @@ _REGION = {"outline": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]},
 
 def _microscope(config_data: dict[str, Any], tmp_path: Path) -> Microscope:
     folder = InstrumentFolder.create(template(config_data), "left", tmp_path)
-    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     return Microscope(folder, records=records, system=system)
 

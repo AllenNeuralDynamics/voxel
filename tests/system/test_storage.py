@@ -2,16 +2,9 @@ from pathlib import PurePosixPath
 
 from cloudpathlib import S3Path
 from ome_zarr_writer import DirectS3, Local, StagedS3
-from vxl_records import (
-    LocalLocation,
-    LocationRole,
-    LocationStatus,
-    ObjectLocation,
-    RemoteTarget,
-    StorageSpec,
-)
 from vxlib.s3 import S3Store
 
+from vxl.storage import LocalLocation, LocationRole, LocationStatus, ObjectLocation, RemoteTarget, StorageSpec
 from vxl.system import Remote, System
 
 
@@ -71,7 +64,7 @@ def test_describe_local_dataset_location(monkeypatch, tmp_path) -> None:
     spec = StorageSpec(path=PurePosixPath("experiment/run"))
     target = tmp_path / "experiment/run/tasks/0001/488/green.ome.zarr"
 
-    location = system.describe_dataset_location(spec, target)
+    location = system.describe_image_location(spec, target)
 
     assert location == LocalLocation(
         role=LocationRole.DESTINATION,
@@ -90,7 +83,7 @@ def test_describe_staged_object_dataset_location_uses_destination(monkeypatch, t
     )
     target = S3Path("s3://buffer/prefix/experiment/run/tasks/0001/488/green.ome.zarr")
 
-    location = system.describe_dataset_location(spec, target)
+    location = system.describe_image_location(spec, target)
 
     assert location == ObjectLocation(
         role=LocationRole.DESTINATION,

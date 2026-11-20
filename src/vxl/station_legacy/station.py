@@ -14,6 +14,7 @@ from vxlib.schema import check_identifier
 
 from vxl.instrument import Instrument, InstrumentConfig, InstrumentInspection, InstrumentStore
 from vxl.station_legacy.config import StationConfig
+from vxl.storage import StorageSpec
 
 from .feed import StationFeed
 from .models import (
@@ -61,7 +62,9 @@ class Station:
         self.instruments_dir.mkdir(exist_ok=True)
         self._records = records or SQLiteRecords(
             self._config.dir / "records.sqlite3",
-            resolve_root=lambda spec: self._config.resolve_storage(spec).target,
+            resolve_root=lambda spec: (
+                self._config.resolve_storage(StorageSpec.model_validate(spec.model_dump())).target
+            ),
         )
         self._instrument_factory = instrument_factory
         self._instrument: Instrument | None = None

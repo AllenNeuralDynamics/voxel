@@ -1,4 +1,4 @@
-"""The files of a SPIM instrument: ``rig.yaml``, ``default.yaml``, ``state.json`` and presets."""
+"""The files of a SPIM instrument: ``rig.yaml``, ``default.yaml`` and ``state.json``."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

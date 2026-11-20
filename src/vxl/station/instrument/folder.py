@@ -7,10 +7,10 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 from rigup.build import import_class
-from vxl_records import VoxelRecords
 from vxlib.issues import Problems
 
 from vxl._utils.files import load_yaml, update_yaml
+from vxl.records import Records
 from vxl.station.errors import RejectedError, StartupError
 from vxl.station.instrument.base import Instrument
 from vxl.station.instrument.config import InstrumentConfig, new_instrument_id
@@ -88,7 +88,7 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
         update_yaml(home / "default.yaml", template["default"])
         return InstrumentFolder.read(home)
 
-    def instrument(self, *, records: VoxelRecords, system: System) -> Instrument[C, S]:
+    def instrument(self, *, records: Records, system: System) -> Instrument[C, S]:
         """The instrument of this folder, of its kind, without opening hardware. Raise :class:`StartupError` when
         the folder has a problem."""
         if self.kind is None:

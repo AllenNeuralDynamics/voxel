@@ -15,7 +15,6 @@ from rigup.build import dependencies
 from rigup.device import PropResults, Result
 from rigup.device.handle import NotObservedError
 from rigup.interface import OperationInfo, OperationParamsError, action, bind_operations, failsafe, query
-from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.history import Change, HistoryState, UndoHistory
 from vxlib.issues import KeyPath, Problems
@@ -29,9 +28,10 @@ from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
 from vxl.live import LiveSourceEmission, LiveViewport
 from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
+from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
-from vxl.station.instrument.geometry import Transform
+from vxl.station.instrument.geometry import camera_frame
 from vxl.station.instrument.hal import HAL, DeviceView
 from vxl.station.instrument.interface import InstrumentInterface, check_operations
 from vxl.station.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
@@ -52,6 +52,8 @@ from vxl.station.instrument.store import InstrumentStore, Merge, StateValues
 from vxl.system import Remote, System, remote_store_fingerprint
 
 if TYPE_CHECKING:
+    from vxlib.vector import Transform
+
     from vxl.devices.camera import CameraHandle
     from vxl.station.instrument.folder import InstrumentFolder
 
@@ -109,7 +111,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         if hasattr(cls, "state_cls"):  # a kind that still has type parameters has no state class to check against
             cls.operations = check_operations(cls, cls.state_cls)
 
-    def __init__(self, folder: "InstrumentFolder[C, S]", *, records: VoxelRecords, system: System) -> None:
+    def __init__(self, folder: "InstrumentFolder[C, S]", *, records: Records, system: System) -> None:
         """Construct the instrument of ``folder`` without opening hardware. Raise :class:`StartupError` when the
         folder has a problem, and :class:`TypeError` when another class runs it."""
         config, default = folder.config, folder.default
@@ -557,7 +559,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 sensor, roi = hal.area_cameras[camera].sensor.value, hal.area_cameras[camera].roi.value
             except (KeyError, ValueError, NotObservedError):
                 continue
-            frames[camera] = Transform.frame(axes, sensor, roi)  # binning changes a pixel's size, not the place
+            frames[camera] = camera_frame(axes, sensor, roi)  # binning changes a pixel's size, not the place
         return planes_of(frames)
 
     def _apply_boxes(self, cameras: Collection[DeviceUid]) -> None:

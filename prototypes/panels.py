@@ -10,13 +10,13 @@ from itertools import product
 from pathlib import Path
 
 import numpy as np
-from vxlib.vector import IVec2D, Vec2D, Vec3D
+from vxlib.vector import IVec2D, Transform, Vec2D, Vec3D
 
 from tests.instruments.spim.support import load_file
 from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.instruments.spim.plan import _light
 from vxl.station.instrument.config import Detector
-from vxl.station.instrument.geometry import Transform
+from vxl.station.instrument.geometry import camera_frame
 
 _FILES = Path("tests/instruments/spim/files")
 _SAME_PLANE_DEG = 1.0
@@ -157,12 +157,12 @@ def main() -> None:
     big = CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=2048, y=2048))
     small = CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=1024, y=1024))
     frames = {
-        "camera_1": Transform.frame(
+        "camera_1": camera_frame(
             _axes(Detector(width={"x": 1}, height={"y": 1}), 10),
             big,
             AreaROI(x=0, y=0, w=2048, h=2048),
         ),
-        "camera_2": Transform.frame(
+        "camera_2": camera_frame(
             _axes(Detector(width={"x": -1}, height={"y": 1}), 10),
             small,
             AreaROI(x=0, y=0, w=1024, h=1024),

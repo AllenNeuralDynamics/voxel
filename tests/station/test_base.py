@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from rigup.activity import ActivityBusyError, ActivityInfo
-from vxl_records import SQLiteRecords
 from vxlib.issues import Problems
 
 from vxl.instruments.basic import BasicInstrument
 from vxl.metadata import ExperimentMetadata
+from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.base import Instrument
 from vxl.station.instrument.config import InstrumentConfig
@@ -84,7 +84,7 @@ def _folder(
 
 
 def _instrument(tmp_path: Path, rig: dict[str, Any]) -> _Bench:
-    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     return _Bench(_folder(tmp_path, rig, _Bench), records=records, system=system)
 
@@ -199,7 +199,7 @@ def test_read_gives_a_problem_for_a_target_it_cannot_import(tmp_path: Path) -> N
 
 def test_the_folder_builds_the_instrument_of_its_kind(tmp_path: Path) -> None:
     folder = _create(tmp_path, f"{__name__}._Bench")
-    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
 
     assert type(folder.instrument(records=records, system=system)) is _Bench
@@ -357,7 +357,7 @@ def _basic(tmp_path: Path) -> BasicInstrument:
     """A basic instrument on the bench rig with an objective, with the base state and its rules, not opened."""
     state = InstrumentState.model_validate(_DEFAULT)
     folder = InstrumentFolder(tmp_path, BasicInstrument, bench(_BASIC_RIG), state, None, Problems())
-    records = SQLiteRecords(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     return BasicInstrument(folder, records=records, system=system)
 

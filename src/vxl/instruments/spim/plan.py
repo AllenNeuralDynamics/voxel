@@ -5,11 +5,11 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from vxlib.vector import Span, Vec3D
+from vxlib.vector import Span, Transform, Vec3D
 
 from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.station.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
-from vxl.station.instrument.geometry import AxisRun, Transform
+from vxl.station.instrument.geometry import AxisRun, camera_frame
 from vxl.station.instrument.state import ProfileId, TaskId
 
 from .config import Scan, SPIMConfig, SPIMProfile
@@ -93,7 +93,7 @@ def _light(
         on_paths = {node for path in (*lit, *seen) for node in path.nodes}
         positions.update({node: value for node, value in chosen.items() if node in on_paths})
         region = profile.fov.get(camera, AreaROI(x=0, y=0, w=sensors[camera].size_px.x, h=sensors[camera].size_px.y))
-        frames[camera] = Transform.frame(
+        frames[camera] = camera_frame(
             config.camera_axes(camera, chosen),
             sensors[camera],
             region,

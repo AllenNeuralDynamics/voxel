@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from vxl_records import SQLiteRecords
 
 from tests.instruments.spim.support import config_data, simulated, template
 from vxl.instruments.spim.instrument import Microscope
 from vxl.instruments.spim.task import SPIMTask
+from vxl.records import Records
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
@@ -68,7 +68,7 @@ async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
         folder = InstrumentFolder.create(template(simulated(config_data())), "left", home)
-        records = SQLiteRecords(home / "records.sqlite3", resolve_root=lambda spec: home / spec.path.as_posix())
+        records = Records(home / "records.sqlite3", resolve_root=lambda spec: home / spec.path.as_posix())
         system = System(store=home / "data", scratch=home / "scratch", remotes={}, max_ram_fraction=0.1)
         microscope = Microscope(folder, records=records, system=system)
         await microscope.open()

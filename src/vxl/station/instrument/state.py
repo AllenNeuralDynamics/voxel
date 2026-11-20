@@ -329,7 +329,7 @@ type _DevicePositions = Mapping[DeviceUid, AxisPosition]
 
 
 class InstrumentState(BaseModel, frozen=True):
-    """What the operator edits. ``state.json`` has this form, and so do ``default.yaml`` and a preset. A kind of
+    """What the operator edits. ``state.json`` and ``default.yaml`` have this form. A kind of
     instrument adds its own fields in a subclass. ``plan`` is the tasks to run, and ``metadata_cls`` the form of the
     metadata of each task. ``positions`` gives the position of each device that the instrument sets, the same for
     every profile: 1 position, or the rule by which the device follows the stage."""

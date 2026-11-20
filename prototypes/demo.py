@@ -11,10 +11,9 @@ from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 
-from vxl_records import SQLiteRecords
-
 from tests.instruments.spim.support import config_data, simulated, template
 from vxl.instruments.spim.instrument import Microscope
+from vxl.records import Records
 from vxl.station.errors import RejectedError
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
@@ -95,7 +94,7 @@ class Session:
         del analog["power"]["laser"]
         default["profiles"] |= {"align": align, "analog": analog}
         folder = InstrumentFolder.create(template(data), "lab", home)
-        records = SQLiteRecords(home / "records.sqlite3", resolve_root=lambda spec: home / spec.path.as_posix())
+        records = Records(home / "records.sqlite3", resolve_root=lambda spec: home / spec.path.as_posix())
         system = System(store=home / "data", scratch=home / "scratch", remotes={}, max_ram_fraction=0.1)
         self.microscope = Microscope(folder, records=records, system=system)
 

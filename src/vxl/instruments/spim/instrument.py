@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING, Any, Unpack
 
 from rigup.activity import Activity, ActivityInfo
 from rigup.interface import action, create, failsafe, update
-from vxl_records import VoxelRecords
 from vxlib.asyncio import gather_all
 from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 
 from vxl.devices.camera import AreaROI
+from vxl.records import Records
 from vxl.station.errors import RejectedError
 from vxl.station.instrument.base import Instrument, InstrumentView
 from vxl.station.instrument.config import DeviceUid
@@ -59,7 +59,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     path that the lasers' light can take, but not the stage: a change to one of them restarts it, and the stage moves
     freely under it. The choices last while the instrument runs."""
 
-    def __init__(self, folder: SPIMInstrumentFolder, *, records: VoxelRecords, system: System) -> None:
+    def __init__(self, folder: SPIMInstrumentFolder, *, records: Records, system: System) -> None:
         super().__init__(folder, records=records, system=system)
         self._preview_choices: dict[ProfileId, frozenset[DeviceUid]] = {}
         self._preview_channels = Cell[tuple[DeviceUid, ...]](self._preview_choice(self._active_profile.value))

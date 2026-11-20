@@ -1,12 +1,14 @@
 """Issues: what is wrong, each with a stable code, a level, a message, and the place in the data that it is about.
 
 A :class:`Problem` is wrong in a setup's data and refuses what it belongs to, such as opening an instrument or an
-edit. An :class:`Alert` is wrong in a running instrument now, and ends by itself when the state changes back.
+edit. An :class:`Alert` is wrong in a running instrument now, and ends by itself when the state changes back. A
+:class:`Failure` is what stopped a piece of work, such as an acquisition, and stays in its record.
 
 A check collects problems and returns them, or raises them as 1 pydantic ``ValidationError`` from a validator. The 2
 forms convert into each other: :meth:`Problems.raise_if_any` and :meth:`Problems.from_validation`.
 """
 
+import traceback
 from collections.abc import Collection
 from datetime import datetime
 from typing import Literal, LiteralString, Self, cast
@@ -55,6 +57,20 @@ class Alert(Issue, frozen=True):
     changes back. Its code and ``loc`` stay the same while it lasts."""
 
     since: datetime
+
+
+class Failure(Issue, frozen=True):
+    """What stopped a piece of work, such as an acquisition or 1 part of it. It is always an error, and it stays in
+    the record of the work."""
+
+    level: Literal["error"] = "error"
+
+    @classmethod
+    def of(cls, error: BaseException, *, code: str, loc: KeyPath = ()) -> Self:
+        """The failure that ``error`` describes: its kind and message as ``msg``, its traceback as ``detail``."""
+        text = str(error)
+        msg = f"{type(error).__name__}: {text}" if text else type(error).__name__
+        return cls(code=code, msg=msg, loc=loc, detail="".join(traceback.format_exception(error)))
 
 
 class Problems(list[Problem]):
@@ -118,4 +134,4 @@ class Problems(list[Problem]):
         return "; ".join(found.msg for found in self)
 
 
-__all__ = ["Alert", "Issue", "KeyPath", "Level", "Problem", "Problems"]
+__all__ = ["Alert", "Failure", "Issue", "KeyPath", "Level", "Problem", "Problems"]

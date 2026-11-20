@@ -6,15 +6,15 @@ from ome_zarr_writer import WriterSettings
 from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, PropView
-from vxl_records import DatasetLocation, StorageSpec
 from vxlib.coalescer import Coalescer
 from vxlib.vector import Vec2D
 
 from vxl.devices.camera.area import AreaCamera, AreaROI
-from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, StorageStatus, TriggerMode, TriggerPolarity
+from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, TriggerMode, TriggerPolarity
 from vxl.live import LiveViewport
+from vxl.storage import ImageLocation, StorageSpec, StorageStatus
 
-_DATASET_LOCATION_ADAPTER = TypeAdapter(DatasetLocation)
+_IMAGE_LOCATION_ADAPTER = TypeAdapter(ImageLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
 
 
@@ -99,7 +99,7 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         z_step: float,
         magnification: float,
         settings: WriterSettings,
-    ) -> DatasetLocation:
+    ) -> ImageLocation:
         """Prepare camera and writer for a stack acquisition; return its durable dataset location.
 
         ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
@@ -116,7 +116,7 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
             magnification=magnification,
             settings=settings,
         )
-        return _DATASET_LOCATION_ADAPTER.validate_python(result)
+        return _IMAGE_LOCATION_ADAPTER.validate_python(result)
 
     async def close_stack(self) -> None:
         """Start draining and closing the writer in the background. Poll capture_state until CLOSED."""
