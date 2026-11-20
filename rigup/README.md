@@ -120,7 +120,7 @@ from rigup.activity import ActivityInfo, ActivityScheduler
 
 scheduler = ActivityScheduler()
 
-capture = await scheduler.start(ActivityInfo(kind="capture"), requires={"camera", "stage"})
+capture = await scheduler.start(ActivityInfo(kind="capture"), requires={"camera", "stage"}, stop=camera.stop)
 
 async with scheduler.run("set the laser power", requires={"laser"}):
     await laser.props.set(power=12.5)  # runs: the capture does not require the laser

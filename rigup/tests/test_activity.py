@@ -34,9 +34,12 @@ class _Bench:
     async def start_preview(self) -> None:
         async with self.scheduler.run("start the preview", requires=()):
             self.preview = await self.scheduler.start(
-                ActivityInfo(kind="preview"), {Word.PROFILE}, restart=self._restart
+                ActivityInfo(kind="preview"), {Word.PROFILE}, stop=self._stop, restart=self._restart
             )
             self.log.append("preview on")
+
+    async def _stop(self) -> None:
+        self.log.append("preview stopped")
 
     @asynccontextmanager
     async def _restart(self) -> AsyncGenerator[None]:
@@ -48,7 +51,11 @@ class _Bench:
 
     async def start(self, kind: str, requires: set[object]) -> Activity:
         async with self.scheduler.run(f"start {kind}", requires=()):
-            return await self.scheduler.start(ActivityInfo(kind=kind), requires)
+            return await self.scheduler.start(ActivityInfo(kind=kind), requires, stop=_nothing)
+
+
+async def _nothing() -> None:
+    pass
 
 
 @pytest.fixture
@@ -168,10 +175,25 @@ async def test_activities_show_what_runs_until_each_one_ends(bench: _Bench) -> N
 
 async def test_a_scheduler_with_no_covers_keeps_each_resource_apart() -> None:
     scheduler = ActivityScheduler()
-    await scheduler.start(ActivityInfo(kind="capture"), {"camera"})
+    await scheduler.start(ActivityInfo(kind="capture"), {"camera"}, stop=_nothing)
 
     async with scheduler.run("move the stage", requires={"x_axis"}):
         pass
     with pytest.raises(ActivityBusyError, match="Unable to set a region while capture is running"):
         async with scheduler.run("set a region", requires={"camera"}):
             pass
+
+
+async def test_stop_all_stops_and_ends_every_activity_even_when_one_fails(bench: _Bench) -> None:
+    await bench.start_preview()
+
+    async def fail() -> None:
+        raise RuntimeError("stuck")
+
+    async with bench.scheduler.run("start a capture", requires=()):
+        await bench.scheduler.start(ActivityInfo(kind="capture"), {"camera"}, stop=fail)
+
+    with pytest.raises(ExceptionGroup, match="Not every activity stopped cleanly"):
+        await bench.scheduler.stop_all()
+    assert "preview stopped" in bench.log
+    assert bench.scheduler.activities.value == ()

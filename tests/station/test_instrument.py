@@ -323,6 +323,10 @@ async def _filter_slot(instrument: BasicInstrument) -> int | None:
     return (await instrument.get_device_properties("fw", ["state"])).results["state"].unwrap().value["position"]
 
 
+async def _nothing() -> None:
+    pass
+
+
 @asynccontextmanager
 async def _activity(instrument: BasicInstrument, kind: str, requires: set[Any]) -> AsyncGenerator[list[str]]:
     """Start an activity of ``kind`` that holds ``requires``, and give the list where its restarts are noted. A
@@ -337,7 +341,7 @@ async def _activity(instrument: BasicInstrument, kind: str, requires: set[Any]) 
 
     async with instrument._scheduler.run(f"start a {kind}", requires=()):
         activity = await instrument._scheduler.start(
-            ActivityInfo(kind=kind), requires, restart=None if kind == "capture" else restart
+            ActivityInfo(kind=kind), requires, stop=_nothing, restart=None if kind == "capture" else restart
         )
     try:
         yield seen

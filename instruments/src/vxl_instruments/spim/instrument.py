@@ -210,14 +210,13 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         paths = (path for source in sources for path in self._config.optics.paths_from(source, {}))
         on_paths = {node for path in paths for node in path.nodes if node in self._config.all_devices}
         requires = {self._active_profile, *cameras, *generators, *on_paths}
-        activity = await self._scheduler.start(ActivityInfo(kind="preview"), requires, restart=self._restart_preview)
+        activity = await self._scheduler.start(
+            ActivityInfo(kind="preview"), requires, stop=self._end_preview, restart=self._restart_preview
+        )
         self._preview = _Preview(activity, cameras, generators)
 
     def _view_sources(self) -> dict[str, Readable[Any]]:
         return {**super()._view_sources(), "preview_channels": self._preview_channels}
-
-    async def _end_activities(self) -> None:
-        await self._end_preview()
 
     async def _end_preview(self) -> None:
         """Stop the preview's devices and end its activity. Do nothing when no preview runs."""

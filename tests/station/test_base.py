@@ -139,10 +139,14 @@ async def test_move_stage_moves_only_the_given_axes(instrument: _Bench) -> None:
     assert positions == {"x": 100, "y": 0, "z": 250}
 
 
+async def _nothing() -> None:
+    pass
+
+
 async def test_a_device_command_runs_while_an_activity_holds_the_device(instrument: _Bench) -> None:
     scheduler = instrument._scheduler
     async with scheduler.run("start a calibration", requires=()):
-        await scheduler.start(ActivityInfo(kind="calibration"), {"laser_488"})
+        await scheduler.start(ActivityInfo(kind="calibration"), {"laser_488"}, stop=_nothing)
 
     result = await instrument.execute_device_command("laser_488", "off")
 
@@ -293,7 +297,7 @@ async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Ben
     await _with_task(instrument)
     scheduler = instrument._scheduler
     async with scheduler.run("start a capture", requires=()):
-        await scheduler.start(ActivityInfo(kind="capture"), {instrument._store})
+        await scheduler.start(ActivityInfo(kind="capture"), {instrument._store}, stop=_nothing)
 
     with pytest.raises(ActivityBusyError, match="Unable to update task metadata while capture is running"):
         await instrument._update_task_metadata("brain", {"notes": "left hemisphere"})

@@ -18,6 +18,9 @@ type Resource = Hashable
 type Restart = Callable[[], AbstractAsyncContextManager[None]]
 """Returns a context manager that ends an activity on entry and starts a new one on a clean exit."""
 
+type Stop = Callable[[], Awaitable[None]]
+"""Stops the work of an activity, such as its devices."""
+
 
 class ActivityBusyError(Exception):
     """Raised when work cannot run because a running activity requires one of its resources and cannot restart."""
@@ -75,7 +78,7 @@ class ActivityScheduler:
         self._covers = covers or {}
         self._lock = asyncio.Lock()
         self._operation: object | None = None
-        self._running: dict[Activity, Restart | None] = {}
+        self._running: dict[Activity, tuple[Stop, Restart | None]] = {}
         self._activities = Cell[tuple[ActivityInfo, ...]](())
 
     @property
@@ -103,10 +106,11 @@ class ActivityScheduler:
                 self._operation = None
 
     async def start(
-        self, info: ActivityInfo, requires: Collection[Resource], *, restart: Restart | None = None
+        self, info: ActivityInfo, requires: Collection[Resource], *, stop: Stop, restart: Restart | None = None
     ) -> Activity:
-        """Start an activity; end it with :meth:`Activity.end`. Pass ``restart`` to allow operations to restart it.
-        Raises :class:`ActivityBusyError` if a running activity requires one of ``requires``."""
+        """Start an activity; end it with :meth:`Activity.end`. :meth:`stop_all` calls ``stop``. Pass ``restart`` to
+        allow operations to restart it. Raises :class:`ActivityBusyError` if a running activity requires one of
+        ``requires``."""
         required = self._spread(requires)
         for other in self._running:
             if required & other.requires:
@@ -118,9 +122,23 @@ class ActivityScheduler:
                 await self._publish()
 
         activity = Activity(info, required, self._publish, ended)
-        self._running[activity] = restart
+        self._running[activity] = (stop, restart)
         await self._publish()
         return activity
+
+    async def stop_all(self) -> None:
+        """Stop and end every running activity. Each one is stopped even when another fails; raises every failure
+        together."""
+        failures: list[Exception] = []
+        for activity, (stop, _) in list(self._running.items()):
+            try:
+                await stop()
+            except Exception as error:
+                failures.append(error)
+            finally:
+                await activity.end()
+        if failures:
+            raise ExceptionGroup("Not every activity stopped cleanly", failures)
 
     def _spread(self, resources: Collection[Resource]) -> frozenset[Resource]:
         """Return ``resources`` together with every resource they cover."""
@@ -131,7 +149,7 @@ class ActivityScheduler:
         """Refuse the operation, or restart every activity that requires one of its resources."""
         required = self._spread(requires)
         restarts: list[Restart] = []
-        for activity, restart in self._running.items():
+        for activity, (_, restart) in self._running.items():
             if activity.requires & required:
                 if restart is None:
                     raise ActivityBusyError(f"Unable to {name} while {activity.info.kind} is running")
@@ -145,4 +163,4 @@ class ActivityScheduler:
         await self._activities.set(tuple(activity.info for activity in self._running))
 
 
-__all__ = ["Activity", "ActivityBusyError", "ActivityInfo", "ActivityScheduler", "Resource", "Restart"]
+__all__ = ["Activity", "ActivityBusyError", "ActivityInfo", "ActivityScheduler", "Resource", "Restart", "Stop"]

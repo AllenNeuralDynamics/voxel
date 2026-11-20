@@ -203,7 +203,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """End every activity, then turn off every laser and close the devices."""
         async with self._scheduler.run("close the instrument", requires=()):
             try:
-                await self._end_activities()
+                await self._scheduler.stop_all()
             finally:
                 if self._planes is not None:
                     self._planes.close()
@@ -219,7 +219,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     @failsafe(verb="stop")
     async def stop(self) -> None:
         """End every activity, then run every failsafe of every device. It never waits for the running command."""
-        await self._end_activities()
+        await self._scheduler.stop_all()
         await self._hal.stop()
 
     # === Devices ===
@@ -469,9 +469,6 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             await self._history.redo()
 
     # === For a kind of instrument: to use/extends ===
-
-    async def _end_activities(self) -> None:
-        """End every activity. A kind of instrument that runs activities overrides this."""
 
     def _view_sources(self) -> dict[str, Readable[Any]]:
         """Each changing field of :attr:`view`, by its name there. A kind of instrument with more to show adds its
