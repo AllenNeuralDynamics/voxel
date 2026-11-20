@@ -38,11 +38,11 @@ def microscope(config_data: dict[str, Any], tmp_path: Path) -> Microscope:
 
 
 async def test_writer_spacing_and_profile_detail_edits_can_be_undone(microscope: Microscope) -> None:
-    await microscope.update_writer_settings(shard_z_chunks=4, target_shard_gb=2.0)
+    await microscope.update_writer_settings(shard_frame_chunks=4, target_shard_gb=2.0)
     await microscope.update_profile("gfp", spacing=2.5)
     await microscope.update_profile("gfp", label="GFP", desc="green")
     state = microscope.view.value.state
-    assert (state.writer.shard_z_chunks, state.profiles["gfp"].spacing) == (4, 2.5)
+    assert (state.writer.shard_frame_chunks, state.profiles["gfp"].spacing) == (4, 2.5)
     assert (state.profiles["gfp"].label, state.profiles["gfp"].desc) == ("GFP", "green")
 
     for _ in range(3):

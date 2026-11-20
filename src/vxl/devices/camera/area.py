@@ -10,21 +10,13 @@ from pathlib import PurePosixPath
 from typing import Literal, cast
 
 import numpy as np
-from ome_zarr_writer import (
-    FrameLease,
-    OMEZarrWriter,
-    UIVec3D,
-    UVec3D,
-    WriterConfig,
-    WriterSettings,
-)
-from ome_zarr_writer.sizing import per_slot_bytes, slots_for_budget
-from ome_zarr_writer.writer import BatchMetrics
+from ome_zarr_writer import OMEZarrWriter, Storage, WriterSettings
 from pydantic import BaseModel, Field
 from rigup.interface import StreamTier, action, choice, fact, failsafe, integer, number, query, stream
 from vxlib.dtype import Dtype
+from vxlib.imaging.writer import FrameLease, ImageWriter, WriterProgress
 from vxlib.schema import FrozenModel
-from vxlib.vector import IVec2D, Vec2D
+from vxlib.vector import IVec2D, Transform, Vec2D
 
 from vxl.devices.base import DeviceType
 from vxl.devices.camera.base import (
@@ -89,6 +81,11 @@ class AreaROI(FrozenModel):
 
 
 class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.5}):
+    """Runs an area camera: its preview, and the images it writes through ``writer``. A kind of camera that writes
+    another format sets its own ``writer`` in a subclass."""
+
+    writer: type[ImageWriter[WriterSettings, Storage]] = OMEZarrWriter
+
     def __init__(
         self,
         device: "AreaCamera",
@@ -101,11 +98,11 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
         self._live = LiveGenerator(sink=self._on_live_frame, uid=device.uid)
-        self._writer: OMEZarrWriter | None = None
+        self._writer: ImageWriter[WriterSettings, Storage] | None = None
         self._task: asyncio.Task[None] | None = None
         self._task_kind: Literal["batch", "close"] | None = None
         self._publish_tasks: dict[LiveLayer, asyncio.Task[None]] = {}
-        # Preview-publish counters (best-effort publish is skip-if-busy); reported per stack.
+        # Preview-publish counters (best-effort publish is skip-if-busy); reported per image.
         self._ram = self._system.ram
         self._ram.reserve(self.device.uid, weight=1.0)
 
@@ -115,8 +112,8 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         for task in self._publish_tasks.values():
             task.cancel()
         self._publish_tasks.clear()
-        if self._writer is not None:  # free the reusable ring (its slots' workers + shared memory)
-            await self._run(self._writer.close)
+        if self._writer is not None:  # free the writer's buffers (its workers and shared memory)
+            await self._run(self._writer.release)
             self._writer = None
         self._ram.release(self.device.uid)
         await super().close()
@@ -133,8 +130,9 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
 
     @property
     @stream("fast")
-    def writer_metrics(self) -> list[BatchMetrics]:
-        return self._writer.batches if self._writer else []
+    def progress(self) -> WriterProgress:
+        """How far the open image is: frames collected into memory and flushed to storage."""
+        return self._writer.progress if self._writer else WriterProgress()
 
     def _on_live_frame(self, frame: LiveFrame) -> None:
         task = self._publish_tasks.get(frame.header.layer)
@@ -215,136 +213,83 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         await self._run(self.device.free_buffer)
 
     @action()
-    async def open_stack(
+    async def open_image(
         self,
         *,
-        num_frames: int,
-        z_step: float,
-        magnification: float,
         storage: StorageSpec,
         subpath: PurePosixPath,
+        transform: Transform,
         settings: WriterSettings,
     ) -> ImageLocation:
-        """Prepare the camera + writer for a stack and return its durable dataset location.
+        """Prepare the camera and its writer for 1 image, and give the image's location while it is written.
 
-        ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
-        under it (e.g. ``task/profile/channel``); the node resolves it against its :class:`System` and
-        the writer names it ``<subpath>.ome.zarr``. ``num_frames``/``z_step`` are the volume's
-        geometry; ``magnification`` converts the sensor-space ``effective_pixel_size_um`` into the
-        sample-space lateral voxel size. ``settings`` are the broadcast output-format knobs. The
-        returned location describes the destination while it is being written; OME-Zarr metadata is
-        authoritative for dataset geometry. The trigger is configured per-batch in ``begin_batch``.
+        ``storage`` is where the acquisition writes and ``subpath`` the image's place under it; this computer
+        resolves them. ``transform`` gives the image's frame count and where each pixel sits; its frames must have
+        the size the camera reads now. ``settings`` are the writer's own. Batches start with :meth:`begin_batch`.
         """
-        if self._mode != CameraMode.IDLE:  # a stack already open (or previewing) → mode is not IDLE
-            raise RuntimeError(f"Cannot open stack: camera in {self._mode} mode")
+        if self._mode != CameraMode.IDLE:  # an image already open, or a preview → the mode is not IDLE
+            raise RuntimeError(f"Cannot open an image: camera in {self._mode} mode")
 
         self._mode = CameraMode.ACQUISITION
         self._frame_idx = 0
         self._live.reset_stream()
         self._task = None
         self._task_kind = None
+        try:
+            # Allocate the camera's buffers now, after its region is set, so every batch starts fast.
+            started = time.perf_counter()
+            await self._run(self.device.allocate_buffer)
+            log.info("allocate_buffer for %s took %.1fs", self.device.uid, time.perf_counter() - started)
 
-        # Allocate buffers eagerly (after ROI is set), so every batch's start() is fast.
-        _t = time.perf_counter()
-        await self._run(self.device.allocate_buffer)
-        log.info("allocate_buffer for %s took %.1fs", self.device.uid, time.perf_counter() - _t)
-
-        # Resolve the logical StorageSpec to a concrete omezarr Storage, then build the writer config:
-        # the broadcast `settings` (knobs) + this camera's geometry (frame size, voxel size from
-        # z_step + magnification) + dtype from the device's pixel format. Where/how to write lives on
-        # the Storage; the config is purely the dataset spec.
-        dest = self._system.resolve_storage(storage, subpath)
-        frame, eff_px, dtype = await self._run(
-            lambda: (
-                self.device.frame_size_px,
-                self.device.effective_pixel_size_um(magnification),
-                self.device.pixel_type,
+            target = self._system.resolve_storage(storage, subpath)
+            size, dtype = await self._run(lambda: (self.device.frame_size_px, self.device.pixel_type))
+            if self._writer is None:
+                self._writer = self.writer()
+            started = time.perf_counter()
+            written = await self._run(
+                lambda: self._writer_or_fail().open_image(
+                    target, size, dtype, transform, settings, self.ram_budget_bytes()
+                )
             )
-        )
-        cfg = WriterConfig(
-            **settings.model_dump(),
-            volume_shape=UIVec3D(z=num_frames, y=frame.y, x=frame.x),
-            voxel_size=UVec3D(z=z_step, y=eff_px.y, x=eff_px.x),
-            dtype=dtype,
-        )
+            log.info(
+                "Image opened for %s at %s in %.1fs", self.device.uid, written.target, time.perf_counter() - started
+            )
+        except BaseException:
+            await self._run(self.device.free_buffer)
+            self._mode = CameraMode.IDLE
+            raise
+        return self._system.describe_image_location(storage, written.target)
 
-        # The coordinator persists across volumes so its ring is reused. Ring sizing happens inside
-        # begin_stack via `_size_ring`, and only when it actually (re)allocates — reusing a ring
-        # allocates nothing, so there is no RAM budget to check.
+    def _writer_or_fail(self) -> ImageWriter[WriterSettings, Storage]:
         if self._writer is None:
-            self._writer = OMEZarrWriter()
-        _t = time.perf_counter()
-        self._writer.begin_stack(cfg, dest, sizer=self._size_ring)
-        log.info(
-            "OMEZarrWriter begin_stack for %s took %.1fs",
-            self.device.uid,
-            time.perf_counter() - _t,
-        )
-
-        log.info(
-            "Stack init for %s → %s: batch_z=%d",
-            self.device.uid,
-            self._writer.target,
-            cfg.batch_z,
-        )
-        target = self._writer.target
-        if target is None:
-            raise RuntimeError("writer did not expose a dataset target")
-        return self._system.describe_image_location(storage, target)
-
-    def _size_ring(self, config: WriterConfig) -> int:
-        """Choose the depth of a ring the writer is about to allocate.
-
-        Called by ``begin_stack`` only on the allocating path, and only after the previous ring has been
-        released — so the RAM share read here is not depressed by memory this camera is giving back.
-        Refuses below ``MIN_SLOTS``: a single slot would serialize collect against flush.
-        """
-        budget = self.ram_budget_bytes()
-        available = System.available_ram_bytes()
-        slots = slots_for_budget(
-            config.batch_shape,
-            config.max_level,
-            config.dtype,
-            budget_bytes=budget,
-            available_bytes=available,
-            label=self.device.uid,
-        )
-        log.info(
-            "Sizing ring for %s: %d slots (%.2f GB/slot peak, %.2f GB share, %.2f GB free)",
-            self.device.uid,
-            slots,
-            per_slot_bytes(config.batch_shape, config.max_level, config.dtype) / 1e9,
-            budget / 1e9,
-            available / 1e9,
-        )
-        return slots
+            raise RuntimeError("No image open. Call open_image() first.")
+        return self._writer
 
     @action()
-    async def close_stack(self) -> None:
-        """Drain and close the writer in the background, then disarm the camera. Returns immediately;
-        poll :meth:`capture_state` until ``CLOSED``. Draining/uploading can take a while, so it runs
-        off the RPC path rather than blocking the call."""
+    async def close_image(self) -> None:
+        """Write what is left of the image and close it in the background, then disarm the camera. Returns at
+        once; poll :meth:`capture_state` until ``CLOSED``. Writing what is left can take a while, so it runs off
+        the call."""
         if self._task is not None and not self._task.done():
             raise RuntimeError("Capture task already in progress.")
-        self._task = asyncio.create_task(self._close_stack())
+        self._task = asyncio.create_task(self._close_image())
         self._task_kind = "close"
 
-    async def _close_stack(self) -> None:
-        """Flush and close the writer, then reset the camera to a reusable IDLE state.
+    async def _close_image(self) -> None:
+        """Write what is left of the image and close it, then reset the camera to a reusable IDLE state.
 
-        The camera is always reset even if ``writer.end_stack()`` raises. A failed writer ring remains
-        owned but poisoned until preview releases its readers; the next stack or :meth:`release_writer`
-        then replaces it safely.
+        The camera is always reset, even when closing the image raises. A failed writer stays held but unusable
+        until the preview releases its frames; the next image or :meth:`release_writer` then replaces it.
         """
         self._live.cancel_pending()
         try:
             if self._writer is not None:
-                await self._run(self._writer.end_stack)  # drain the dataset; keep the ring for reuse
+                await self._run(self._writer.close_image)  # write what is left; keep the buffers for reuse
         finally:
             await self._run(self.device.free_buffer)
             self._mode = CameraMode.IDLE
-        log.info("Stack closed for %s", self.device.uid)
-        # Preview health for the stack: how many frames got an overview vs were dropped (best-effort),
+        log.info("Image closed for %s", self.device.uid)
+        # Preview health for the image: how many frames got an overview vs were dropped (best-effort),
         # overview gen-time, and publish drops. overview_busy_drops climbing means gen can't hold 6fps.
         pv = self._live.health.snapshot()
         log.info(
@@ -362,10 +307,10 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
 
     @action()
     async def release_writer(self) -> None:
-        """Free the reusable writer ring (its worker processes + shared memory) while keeping the
-        controller alive for preview / the next acquisition, which re-allocates the ring cold.
+        """Free the writer's buffers (its worker processes and shared memory) while keeping the controller alive
+        for the preview and the next acquisition, which allocates them again.
 
-        The ring is otherwise held from the first ``open_stack`` until ``close``; releasing it here
+        The buffers are otherwise held from the first ``open_image`` until ``close``; releasing them here
         (e.g. once an acquisition run ends) avoids holding ~hundreds of GB resident while idle. No-op
         if a capture task is still active — freeing a ring mid-flush would corrupt in-flight writes.
         """
@@ -374,7 +319,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         if self._writer is not None:
             self._live.cancel_pending()
             self._live.clear_frame()
-            await self._run(self._writer.close)
+            await self._run(self._writer.release)
             self._writer = None
             log.info("Writer ring released for %s", self.device.uid)
 
@@ -383,7 +328,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
     def ready_for_batch(self) -> bool:
         """Whether the writer has at least one free slot to accept the next batch.
 
-        True when no stack is initialized, or when at least one ring-buffer slot
+        True when no image is open, or when at least one buffer
         is IDLE.
         """
         return self._writer is None or self._writer.ready_for_batch
@@ -399,10 +344,10 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
 
         Waits for a free writer slot, then arms the camera before returning — so the caller can start
         the AO/triggers as soon as this resolves. Poll :meth:`capture_state` for completion; frame and
-        pipeline progress stream via ``writer_metrics``. Must call ``open_stack`` first.
+        pipeline progress stream via ``progress``. Must call ``open_image`` first.
         """
         if self._writer is None:
-            raise RuntimeError("No stack open. Call open_stack() first.")
+            raise RuntimeError("No image open. Call open_image() first.")
         if self._mode != CameraMode.ACQUISITION:
             raise RuntimeError(f"Cannot capture batch: camera in {self._mode} mode")
         if self._task is not None and not self._task.done():
@@ -420,7 +365,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         self._task = asyncio.create_task(self._collect_batch(num_frames, writer))
         self._task_kind = "batch"
 
-    async def _collect_batch(self, num_frames: int, writer: OMEZarrWriter) -> None:
+    async def _collect_batch(self, num_frames: int, writer: ImageWriter[WriterSettings, Storage]) -> None:
         """Grab ``num_frames`` frames into the writer, then stop the camera."""
         valid_bits = await self._run(self._valid_bits)
         for _ in range(num_frames):
@@ -437,7 +382,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
             self._frame_idx += 1
         await self._run(self.device.stop)
 
-    async def _capture_into_writer(self, writer: OMEZarrWriter) -> FrameLease:
+    async def _capture_into_writer(self, writer: ImageWriter[WriterSettings, Storage]) -> FrameLease:
         """Fill and commit one writer frame as one serialized, cancellation-safe device transaction."""
 
         def _grab() -> FrameLease:
@@ -458,7 +403,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
 
     @query()
     async def capture_state(self) -> CaptureState:
-        """Lifecycle of the most recent :meth:`begin_batch`/:meth:`close_stack` task. Non-mutating: the
+        """Lifecycle of the most recent :meth:`begin_batch`/:meth:`close_image` task. Non-mutating: the
         terminal state persists until the next task starts. Raises if the task failed."""
         task = self._task
         if task is None:

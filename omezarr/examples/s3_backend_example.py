@@ -18,29 +18,27 @@ from ome_zarr_writer import (
     ScaleLevel,
     StagedS3,
     Storage,
-    UIVec3D,
-    UVec3D,
     WriterConfig,
 )
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.writer import _as_ome_zarr
 from vxlib.s3 import ProfileCredentials
+from vxlib.vector import Transform, Vec3D
 
 
 def write_volume(storage: Storage) -> None:
     """Stream a small volume to `storage` (local, direct-to-S3, or staged)."""
     z, y, x = 64, 512, 512
     cfg = WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x),
-        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)),
         max_level=ScaleLevel.L3,
     )
     writer = OMEZarrWriter(slots=3)
-    writer.begin_stack(cfg, storage)
+    writer.open_dataset(cfg, storage)
     for i in range(z):
         with writer.new_frame() as frame:
             frame.fill(i + 1)
-    writer.close()
+    writer.release()
     print(f"wrote {z} frames to {_as_ome_zarr(storage.target)}")
 
 

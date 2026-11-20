@@ -1,5 +1,8 @@
 """Camera device handle with typed methods."""
 
+import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import PurePosixPath
 
 from ome_zarr_writer import WriterSettings
@@ -7,7 +10,7 @@ from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, PropView
 from vxlib.coalescer import Coalescer
-from vxlib.vector import Vec2D
+from vxlib.vector import Transform, Vec2D
 
 from vxl.devices.camera.area import AreaCamera, AreaROI
 from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, TriggerMode, TriggerPolarity
@@ -16,6 +19,7 @@ from vxl.storage import ImageLocation, StorageSpec, StorageStatus
 
 _IMAGE_LOCATION_ADAPTER = TypeAdapter(ImageLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
+_CLOSE_POLL_S = 0.05
 
 
 class CameraHandle[D: Camera](DeviceHandle[D]):
@@ -90,40 +94,36 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         """Apply a preview viewport to the camera — drain for ``live_viewport``."""
         await self.call("update_live_viewport", viewport)
 
-    async def open_stack(
-        self,
-        *,
-        storage: StorageSpec,
-        subpath: PurePosixPath,
-        num_frames: int,
-        z_step: float,
-        magnification: float,
-        settings: WriterSettings,
+    async def open_image(
+        self, *, storage: StorageSpec, subpath: PurePosixPath, transform: Transform, settings: WriterSettings
     ) -> ImageLocation:
-        """Prepare camera and writer for a stack acquisition; return its durable dataset location.
-
-        ``storage`` is the run's logical destination and ``subpath`` the dataset's relative location
-        under it (the node resolves it against machine-local storage); ``settings`` are the broadcast
-        output-format knobs. ``magnification`` converts the sensor-space pixel size into the
-        sample-space lateral voxel size. OME-Zarr metadata remains authoritative for dataset geometry.
-        """
-        result = await self.call(
-            "open_stack",
-            storage=storage,
-            subpath=subpath,
-            num_frames=num_frames,
-            z_step=z_step,
-            magnification=magnification,
-            settings=settings,
-        )
+        """Prepare the camera and its writer for 1 image, and give the image's location while it is written.
+        ``transform`` gives the frame count and where each pixel sits; ``settings`` are the writer's own."""
+        result = await self.call("open_image", storage=storage, subpath=subpath, transform=transform, settings=settings)
         return _IMAGE_LOCATION_ADAPTER.validate_python(result)
 
-    async def close_stack(self) -> None:
-        """Start draining and closing the writer in the background. Poll capture_state until CLOSED."""
-        await self.call("close_stack")
+    async def close_image(self) -> None:
+        """Start writing what is left of the image and closing it. Poll :meth:`capture_state` until ``CLOSED``."""
+        await self.call("close_image")
+
+    @asynccontextmanager
+    async def image(
+        self, storage: StorageSpec, subpath: PurePosixPath, transform: Transform, settings: WriterSettings
+    ) -> AsyncGenerator[ImageLocation]:
+        """Open 1 image for the block, and give its location. Leaving the block closes the image and waits until
+        every frame is written, also after an error."""
+        location = await self.open_image(storage=storage, subpath=subpath, transform=transform, settings=settings)
+        try:
+            yield location
+        finally:
+            await self.close_image()
+            while True:  # the camera runs on a node: its state is polled, there is no event to wait on
+                if await self.capture_state() is CaptureState.CLOSED:
+                    break
+                await asyncio.sleep(_CLOSE_POLL_S)
 
     async def release_writer(self) -> None:
-        """Free the writer ring (workers + shared memory); the next open_stack re-allocates it cold."""
+        """Free the writer's buffers (its workers and shared memory); the next image allocates them again."""
         await self.call("release_writer")
 
     async def begin_batch(self, num_frames: int) -> None:
@@ -131,7 +131,7 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         await self.call("begin_batch", num_frames)
 
     async def capture_state(self) -> CaptureState:
-        """Lifecycle of the most recent begin_batch/close_stack. Raises if the task failed."""
+        """Where the most recent :meth:`begin_batch` or :meth:`close_image` is. Raises if it failed."""
         result = await self.call("capture_state")
         return CaptureState(result)
 

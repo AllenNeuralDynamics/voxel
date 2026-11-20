@@ -26,7 +26,7 @@ from vxl.devices.camera.base import ValidBits
 
 REGION = "us-west-2"  # aind-open-data (the real-data source) lives here
 LEVEL = "0"  # full-res level of the multiscale tile
-BATCH_SIZE = 128  # frames per block == one writer batch (batch_z)
+BATCH_SIZE = 128  # frames per block == one writer batch (batch_frames)
 
 console = Console()
 

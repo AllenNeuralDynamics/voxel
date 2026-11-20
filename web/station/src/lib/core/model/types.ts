@@ -273,8 +273,8 @@ export type DownscaleType = 'gaussian' | 'mean' | 'min' | 'max';
 /** OME-Zarr writer settings. */
 export interface WriterSettings {
   max_level: ScaleLevel;
-  shard_z_chunks: number;
-  batch_z_shards: number;
+  shard_frame_chunks: number;
+  batch_shards: number;
   compression: Compression;
   downscale_type: DownscaleType;
   target_shard_gb: number;
@@ -334,8 +334,8 @@ export interface ChannelPatch {
 /** Edit OME-Zarr writer settings. */
 export interface WriterPatch {
   max_level?: ScaleLevel | null;
-  shard_z_chunks?: number | null;
-  batch_z_shards?: number | null;
+  shard_frame_chunks?: number | null;
+  batch_shards?: number | null;
   compression?: Compression | null;
   downscale_type?: DownscaleType | null;
   target_shard_gb?: number | null;

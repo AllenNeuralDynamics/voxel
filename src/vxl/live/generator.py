@@ -9,7 +9,7 @@ from functools import partial
 from uuid import uuid4
 
 import numpy as np
-from ome_zarr_writer import FrameLease
+from vxlib.imaging.writer import FrameLease
 
 from .protocol import LiveFrame, LiveLayer, LiveViewport, ValidBits
 

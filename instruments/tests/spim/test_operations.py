@@ -29,7 +29,7 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
     "reorder_tasks": {"task_ids": ["b", "a"]},
     "remove_tasks": {"task_ids": ["b"]},
     "update_profile": {"profile_id": "gfp", "spacing": 2.5, "label": "GFP"},
-    "update_writer_settings": {"shard_z_chunks": 4},
+    "update_writer_settings": {"shard_frame_chunks": 4},
     "set_preview_channels": {"channels": ["camera"]},
     "set_camera_region": {"camera": "camera", "region": None},
     "start_preview": {},

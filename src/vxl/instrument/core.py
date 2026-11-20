@@ -30,6 +30,7 @@ from vxlib.history import Change, HistoryState, UndoHistory
 from vxlib.lifecycle import Teardown  # noqa: TC002 — runtime annotation alias
 from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Readable, Subscribable
 from vxlib.schema import FrozenModel
+from vxlib.vector import Transform, Vec3D
 
 from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import AreaCameraHandle, AreaROI, CaptureState
@@ -72,6 +73,17 @@ from .store import PROMOTABLE_FIELDS, InstrumentStore
 logger = logging.getLogger(__name__)
 
 _LEGACY_LOCATION = TypeAdapter(DatasetLocation)
+
+
+async def _stack_transform(camera: AreaCameraHandle, frames: int, z_step: float, magnification: float) -> Transform:
+    """A Z stack as the camera writes it: ``frames`` frames ``z_step`` µm apart, each of the camera's current
+    frame, with pixels of its binned pixel size behind ``magnification``."""
+    roi, sensor = await camera.roi.get(), await camera.sensor.get()
+    binning = int(await camera.props.get_value("binning"))
+    px, py = sensor.pixel_um.x * binning / magnification, sensor.pixel_um.y * binning / magnification
+    zero = Vec3D(z=0.0, y=0.0, x=0.0)
+    steps = (Vec3D(z=z_step, y=0.0, x=0.0), Vec3D(z=0.0, y=py, x=0.0), Vec3D(z=0.0, y=0.0, x=px))
+    return Transform(zero, steps, (frames, roi.h // binning, roi.w // binning))
 
 
 def _new_storage(spec: StorageSpec) -> NewStorageSpec:
@@ -1576,7 +1588,7 @@ class Instrument:
         channels = {uid: self._channels[uid] for uid in self._store.value.imaging.profiles[volume.profile].channels}
         scanning_axis = self._hal.stage.scanning_axis
         num_frames = volume.frames_total
-        batch_z = settings.batch_z
+        batch_frames = settings.batch_frames
         subpath = PurePosixPath(
             "volumes",
             f"{volume_index + 1:06d}",
@@ -1602,13 +1614,13 @@ class Instrument:
             init_coros = []
             for ch_id, ch in channels.items():
                 config = self._channel_config(ch_id)
+                magnification = self._hal.topology.detection[config.detection].magnification
+                transform = await _stack_transform(ch.camera, num_frames, volume.z_step, magnification)
                 init_coros.append(
-                    ch.camera.open_stack(
+                    ch.camera.open_image(
                         storage=_new_storage(manifest.storage),
                         subpath=subpath / ch_id,
-                        num_frames=num_frames,
-                        z_step=volume.z_step,
-                        magnification=self._hal.topology.detection[config.detection].magnification,
+                        transform=transform,
                         settings=settings,
                     )
                 )
@@ -1627,8 +1639,8 @@ class Instrument:
 
             await self._update_acquisition(manifest, phase=AcquisitionPhase.CAPTURING)
 
-            for batch_idx in range(math.ceil(num_frames / batch_z)):
-                frames_in_batch = min(batch_z, num_frames - batch_idx * batch_z)
+            for batch_idx in range(math.ceil(num_frames / batch_frames)):
+                frames_in_batch = min(batch_frames, num_frames - batch_idx * batch_frames)
                 # begin_batch waits for a free writer slot and arms the camera before returning,
                 # so the signal generator is safe to fire once these resolve.
                 await _gather_hardware(*(ch.camera.begin_batch(frames_in_batch) for ch in channels.values()))
@@ -1641,7 +1653,7 @@ class Instrument:
                         break
                     await asyncio.sleep(0.05)
                 await self._stop_signal_generators()
-                done = min((batch_idx + 1) * batch_z, num_frames)
+                done = min((batch_idx + 1) * batch_frames, num_frames)
                 frames_done = done
                 await self._update_acquisition(manifest, frames_captured=done)
         except BaseException as error:
@@ -1716,15 +1728,15 @@ class Instrument:
             errors.append(error)
         with suppress(NotImplementedError, RuntimeError):
             await scanning_axis.reset_ttl_stepper()
-        close_results = await asyncio.gather(*(ch.camera.close_stack() for ch in chans), return_exceptions=True)
-        errors.extend(_report("close_stack", close_results, collect=True))
+        close_results = await asyncio.gather(*(ch.camera.close_image() for ch in chans), return_exceptions=True)
+        errors.extend(_report("close_image", close_results, collect=True))
         pending = [ch for ch, result in zip(chans, close_results, strict=True) if not isinstance(result, BaseException)]
         while pending:
             states = await asyncio.gather(*(ch.camera.capture_state() for ch in pending), return_exceptions=True)
             still_closing = []
             for ch, state in zip(pending, states, strict=True):
                 if isinstance(state, BaseException):
-                    logger.error("cleanup: close_stack failed for %s", ch.uid, exc_info=state)
+                    logger.error("cleanup: close_image failed for %s", ch.uid, exc_info=state)
                     errors.append(state if isinstance(state, Exception) else RuntimeError(str(state)))
                 elif state is not CaptureState.CLOSED:
                     still_closing.append(ch)

@@ -438,8 +438,8 @@ class TaskPatch(Patch):
 
 class WriterPatch(Patch):
     max_level: ScaleLevel | None = None
-    shard_z_chunks: Annotated[int, Field(ge=1)] | None = None
-    batch_z_shards: Annotated[int, Field(ge=1)] | None = None
+    shard_frame_chunks: Annotated[int, Field(ge=1)] | None = None
+    batch_shards: Annotated[int, Field(ge=1)] | None = None
     compression: Compression | None = None
     downscale_type: DownscaleType | None = None
     target_shard_gb: Annotated[float, Field(gt=0)] | None = None

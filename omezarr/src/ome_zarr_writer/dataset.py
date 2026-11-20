@@ -16,20 +16,21 @@ import math
 from collections.abc import Iterator
 from enum import IntEnum, StrEnum
 from functools import cached_property
+from itertools import pairwise
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, NamedTuple
 
+import numpy as np
 from cloudpathlib import S3Path
 from pydantic import (
-    AfterValidator,
-    BeforeValidator,
+    AliasChoices,
+    ConfigDict,
     Field,
-    PlainSerializer,
     model_validator,
 )
 from vxlib.dtype import Dtype
 from vxlib.schema import SparseModel
-from vxlib.vector import UIVec3D, UVec3D
+from vxlib.vector import Transform, UIVec3D
 
 
 class ScaleLevel(IntEnum):
@@ -190,9 +191,8 @@ class Zarr3ArrayMeta(SparseModel):
         """A sharded array meta — outer (shard) chunk grid wrapping an inner
         chunk shape inside a `sharding_indexed` codec.
 
-        `shape`, `shard_shape`, `chunk_shape` all include the leading channel
-        dimension. `compression` selects the inner codec chain (applied to each
-        inner chunk inside a shard).
+        `shape`, `shard_shape` and `chunk_shape` are (z, y, x). `compression` selects the inner codec chain
+        (applied to each inner chunk inside a shard).
         """
         return cls(
             shape=shape,
@@ -241,7 +241,6 @@ class Shard(NamedTuple):
     """
 
     level: ScaleLevel
-    c: int
     z: int
     y: int
     x: int
@@ -250,8 +249,7 @@ class Shard(NamedTuple):
     def relpath(self) -> PurePosixPath:
         return PurePosixPath(
             str(self.level.value),
-            "c",
-            str(self.c),
+            "c",  # the Zarr v3 chunk key prefix, not a channel
             str(self.z),
             str(self.y),
             str(self.x),
@@ -261,42 +259,11 @@ class Shard(NamedTuple):
         return root / str(self.relpath)
 
 
-class AxisName(StrEnum):
-    X = "x"
-    Y = "y"
-    Z = "z"
-    C = "c"
-    T = "t"
-
-
-class AxisType(StrEnum):
-    SPACE = "space"
-    TIME = "time"
-    CHANNEL = "channel"
-
-
-class TimeUnit(StrEnum):
-    SECOND = "second"
-    MILLISECOND = "millisecond"
-    MICROSECOND = "microsecond"
-    MINUTE = "minute"
-    HOUR = "hour"
-    DAY = "day"
-
-
 class SpaceUnit(StrEnum):
     METER = "meter"
     MICROMETER = "micrometer"
     NANOMETER = "nanometer"
     MILLIMETER = "millimeter"
-    INCH = "inch"
-    FOOT = "foot"
-
-
-class TransformType(StrEnum):
-    IDENTITY = "identity"
-    TRANSLATION = "translation"
-    SCALE = "scale"
 
 
 class DownscaleType(StrEnum):
@@ -306,180 +273,141 @@ class DownscaleType(StrEnum):
     MAX = "max"
 
 
-class SpaceAxis(SparseModel):
-    name: Literal[AxisName.X, AxisName.Y, AxisName.Z]
-    type: Literal[AxisType.SPACE] = AxisType.SPACE
-    unit: SpaceUnit
+IMAGE = "image"
+"""The coordinate system along the array's own axes, in physical units: the intrinsic system of OME-NGFF 0.6."""
 
-    @classmethod
-    def axes(cls, unit: SpaceUnit) -> list["SpaceAxis"]:
-        return [
-            cls(name=AxisName.Z, unit=unit),
-            cls(name=AxisName.Y, unit=unit),
-            cls(name=AxisName.X, unit=unit),
-        ]
+SPECIMEN = "specimen"
+"""The coordinate system of real directions in the specimen."""
+
+_ARRAY_AXES = (("z", "frame"), ("y", "row"), ("x", "column"))
 
 
-class TimeAxis(SparseModel):
-    name: Literal[AxisName.T] = AxisName.T
-    type: Literal[AxisType.TIME] = AxisType.TIME
-    unit: TimeUnit
+class _NgffModel(SparseModel):
+    """An OME-NGFF metadata object: snake_case fields, written with the spec's camelCase keys."""
+
+    model_config = ConfigDict(serialize_by_alias=True)
 
 
-class ChannelAxis(SparseModel):
-    name: Literal[AxisName.C] = AxisName.C
-    type: Literal[AxisType.CHANNEL] = AxisType.CHANNEL
+class Axis(_NgffModel):
+    """1 axis of a coordinate system. OME-NGFF 0.6 lets ``name`` be any unique string; ``longName`` says more."""
+
+    name: str
+    type: Literal["space"] = "space"
+    unit: SpaceUnit | None = None
+    long_name: str | None = Field(
+        default=None, serialization_alias="longName", validation_alias=AliasChoices("longName", "long_name")
+    )
 
 
-Axis = Annotated[SpaceAxis | TimeAxis | ChannelAxis, Field(discriminator="type")]
+class CoordinateSystem(_NgffModel):
+    name: str
+    axes: list[Axis] = Field(min_length=2, max_length=3)
 
 
-def _validate_multiscale_axes(value: list) -> list[Axis]:
-    """OME-NGFF axis ordering and count constraints.
-
-    2-5 axes total, 2-3 space axes, ≤1 time axis, ≤1 channel axis. Order is
-    time (if present), channel (if present), then space.
-    """
-    if not isinstance(value, list):
-        raise ValueError(f"axes must be a list, got {type(value)}")
-    if not (2 <= len(value) <= 5):
-        raise ValueError(f"Must have 2-5 axes, found {len(value)}")
-
-    space_axes = [ax for ax in value if isinstance(ax, SpaceAxis)]
-    time_axes = [ax for ax in value if isinstance(ax, TimeAxis)]
-    channel_axes = [ax for ax in value if isinstance(ax, ChannelAxis)]
-
-    if not (2 <= len(space_axes) <= 3):
-        raise ValueError(f"Must have 2-3 space axes, found {len(space_axes)}")
-    if len(time_axes) > 1:
-        raise ValueError(f"May have at most 1 time axis, found {len(time_axes)}")
-    if len(channel_axes) > 1:
-        raise ValueError(f"May have at most 1 channel axis, found {len(channel_axes)}")
-
-    time_idx = [i for i, ax in enumerate(value) if isinstance(ax, TimeAxis)]
-    channel_idx = [i for i, ax in enumerate(value) if isinstance(ax, ChannelAxis)]
-    space_idx = [i for i, ax in enumerate(value) if isinstance(ax, SpaceAxis)]
-
-    if time_idx and channel_idx and time_idx[0] > channel_idx[0]:
-        raise ValueError("Time axis must come before channel axis")
-    if time_idx and space_idx and time_idx[0] > space_idx[0]:
-        raise ValueError("Time axis must come before space axes")
-    if channel_idx and space_idx and channel_idx[0] > space_idx[0]:
-        raise ValueError("Channel axis must come before space axes")
-
-    return value
+class PathRef(_NgffModel):
+    path: str
 
 
-MultiscaleAxes = Annotated[
-    list[Axis],
-    AfterValidator(_validate_multiscale_axes),
-    Field(min_length=2, max_length=5),
-]
+class NameRef(_NgffModel):
+    name: str
 
 
-class IdentityTransform(SparseModel):
-    type: Literal[TransformType.IDENTITY] = TransformType.IDENTITY
+class ScaleTransform(_NgffModel):
+    type: Literal["scale"] = "scale"
+    scale: list[float]
 
 
-class TranslationTransform(SparseModel):
-    type: Literal[TransformType.TRANSLATION] = TransformType.TRANSLATION
-    translation: list[float] | None = None
-    path: str | None = None
+class TranslationTransform(_NgffModel):
+    type: Literal["translation"] = "translation"
+    translation: list[float]
 
 
-class ScaleTransform(SparseModel):
-    type: Literal[TransformType.SCALE] = TransformType.SCALE
-    scale: list[float] | None = None
-    path: str | None = None
+class SequenceTransform(_NgffModel):
+    """A scale then a translation: the most a pyramid level may hold."""
+
+    type: Literal["sequence"] = "sequence"
+    transformations: tuple[ScaleTransform, TranslationTransform]
 
 
-def _normalize_coord_transforms(value: list | tuple) -> tuple:
-    """Accept [scale] or [scale, translation]; return (scale, translation|None)."""
-    if not isinstance(value, (tuple, list)):
-        raise ValueError(f"Expected list or tuple, got {type(value)}")
-    if isinstance(value, list):
-        value = tuple(value)
-    if len(value) == 1:
-        return (value[0], None)
-    if len(value) == 2:
-        return tuple(value)
-    raise ValueError(f"Must have 1-2 transforms, got {len(value)}")
+class LevelScale(ScaleTransform):
+    input: PathRef
+    output: NameRef
 
 
-def _serialize_coord_transforms(value: tuple) -> list:
-    """Drop trailing None translation when serializing."""
-    scale, translation = value
-    if translation is None:
-        return [scale]
-    return [scale, translation]
+class LevelSequence(SequenceTransform):
+    input: PathRef
+    output: NameRef
 
 
-CoordinateTransformations = Annotated[
-    tuple[ScaleTransform, TranslationTransform | None] | tuple[ScaleTransform, ...],
-    BeforeValidator(_normalize_coord_transforms),
-    PlainSerializer(_serialize_coord_transforms, return_type=list),
-]
+class ImageTranslation(TranslationTransform):
+    input: NameRef
+    output: NameRef
 
 
-class Dataset(SparseModel):
-    """One resolution level inside a Multiscale.
+class ImageAffine(_NgffModel):
+    """The image system to the specimen: M rows of N + 1 numbers, a homogeneous matrix without its last row."""
 
-    Per OME-NGFF v0.5: exactly one scale transform, optionally followed by one
-    translation transform. Datasets compare by resolution — lower scale values
-    are higher resolution.
-    """
+    type: Literal["affine"] = "affine"
+    affine: list[list[float]]
+    input: NameRef
+    output: NameRef
+
+
+type LevelTransform = Annotated[LevelScale | LevelSequence, Field(discriminator="type")]
+type ImageTransform = Annotated[ImageTranslation | ImageAffine, Field(discriminator="type")]
+
+
+class Dataset(_NgffModel):
+    """1 pyramid level: its array path, and the 1 transform from its pixels to the image system."""
 
     path: str
-    coordinateTransformations: CoordinateTransformations  # noqa: N815 - OME-NGFF schema field
+    transforms: tuple[LevelTransform] = Field(
+        serialization_alias="coordinateTransformations",
+        validation_alias=AliasChoices("coordinateTransformations", "transforms"),
+    )
 
     @property
-    def resolution(self) -> tuple[float, ...]:
-        scale = self.coordinateTransformations[0].scale
-        if not scale:
-            raise ValueError(f"Dataset {self.path} has no scale values")
-        return tuple(scale)
+    def scale(self) -> list[float]:
+        transform = self.transforms[0]
+        return transform.scale if isinstance(transform, LevelScale) else transform.transformations[0].scale
 
 
-class Multiscale(SparseModel):
-    """OME-NGFF multiscale: ordered datasets sharing a coordinate system.
+class Multiscale(_NgffModel):
+    """OME-NGFF 0.6 multiscale: the levels from finest to coarsest, each scaled into ``image``, and 1 transform
+    from ``image`` to ``specimen``."""
 
-    Datasets must be ordered highest-to-lowest resolution.
-    """
-
-    axes: MultiscaleAxes
-    datasets: list[Dataset] = Field(..., min_length=1)
     name: str | None = None
+    coordinate_systems: list[CoordinateSystem] = Field(
+        min_length=1,
+        serialization_alias="coordinateSystems",
+        validation_alias=AliasChoices("coordinateSystems", "coordinate_systems"),
+    )
+    datasets: list[Dataset] = Field(min_length=1)
+    transforms: list[ImageTransform] | None = Field(
+        default=None,
+        serialization_alias="coordinateTransformations",
+        validation_alias=AliasChoices("coordinateTransformations", "transforms"),
+    )
     type: DownscaleType | None = None
-    metadata: dict | None = None
-    coordinateTransformations: CoordinateTransformations | None = None  # noqa: N815 - OME-NGFF schema field
 
     @model_validator(mode="after")
-    def _validate_dataset_ordering(self) -> "Multiscale":
-        for i in range(len(self.datasets) - 1):
-            curr = self.datasets[i].resolution
-            nxt = self.datasets[i + 1].resolution
-            if curr >= nxt:
-                raise ValueError(
-                    f"Datasets must be ordered highest-to-lowest resolution. "
-                    f"Index {i} (path={self.datasets[i].path}, scale={curr}) is not "
-                    f"strictly higher resolution than index {i + 1} "
-                    f"(path={self.datasets[i + 1].path}, scale={nxt})"
-                )
+    def _finest_first(self) -> "Multiscale":
+        scales = [tuple(dataset.scale) for dataset in self.datasets]
+        if any(coarser <= finer for finer, coarser in pairwise(scales)):
+            raise ValueError(f"levels must go from finest to coarsest, got scales {scales}")
         return self
 
 
-class OmeMeta(SparseModel):
-    """Top-level OME-Zarr v0.5 group attributes."""
-
-    version: Literal["0.5"] = "0.5"
+class OmeMeta(_NgffModel):
+    version: Literal["0.6"] = "0.6"
     multiscales: list[Multiscale] | None = None
 
 
-class ZarrGroupAttributes(SparseModel):
+class ZarrGroupAttributes(_NgffModel):
     ome: OmeMeta
 
 
-class Zarr3GroupMeta(SparseModel):
+class Zarr3GroupMeta(_NgffModel):
     """Zarr v3 group metadata — mirrors `{root}/zarr.json`."""
 
     zarr_format: Literal[3] = 3
@@ -488,47 +416,61 @@ class Zarr3GroupMeta(SparseModel):
 
     @classmethod
     def multiscale(
-        cls,
-        *,
-        voxel_size: UVec3D,
-        voxel_unit: SpaceUnit,
-        max_level: ScaleLevel,
-        downscale_type: DownscaleType,
+        cls, *, transform: Transform, unit: SpaceUnit, max_level: ScaleLevel, downscale_type: DownscaleType
     ) -> "Zarr3GroupMeta":
-        """A Zarr v3 group with OME-NGFF v0.5 multiscale attributes for a CZYX
-        dataset. Builds the channel + space axes and a per-level scale dataset."""
-        return cls(
-            attributes=ZarrGroupAttributes(
-                ome=OmeMeta(
-                    multiscales=[
-                        Multiscale(
-                            axes=[ChannelAxis(), *SpaceAxis.axes(unit=voxel_unit)],
-                            datasets=[
-                                Dataset(
-                                    path=str(level.value),
-                                    coordinateTransformations=(
-                                        ScaleTransform(
-                                            scale=[
-                                                1.0,
-                                                voxel_size.z * level.factor,
-                                                voxel_size.y * level.factor,
-                                                voxel_size.x * level.factor,
-                                            ]
-                                        ),
-                                    ),
-                                )
-                                for level in max_level.levels
-                            ],
-                            type=downscale_type,
-                        )
-                    ]
-                )
+        """OME-NGFF 0.6 metadata for 1 image whose pixel [i, j, k] sits at ``transform.position``. Each level is
+        scaled into ``image`` by the length of each step; a coarser level is shifted so its first pixel's center
+        sits at the center of the fine pixels it covers. ``image`` goes to ``specimen`` by a translation when the
+        steps run along +z, +y and +x, and by an affine otherwise."""
+        lengths = [float(np.linalg.norm(list(step))) for step in transform.steps]
+        if not all(lengths):
+            raise ValueError("every step of an image's transform must have a length")
+        directions = np.array([[*step] for step in transform.steps]).T / np.array(lengths)  # columns: unit steps
+        origin = [*transform.origin]
+        datasets = []
+        for level in max_level.levels:
+            f = level.factor
+            scale = LevelScale(
+                scale=[n * f for n in lengths], input=PathRef(path=str(level.value)), output=NameRef(name=IMAGE)
             )
+            if f > 1:
+                shift = TranslationTransform(translation=[n * (f - 1) / 2 for n in lengths])
+                datasets.append(
+                    Dataset(
+                        path=str(level.value),
+                        transforms=(
+                            LevelSequence(
+                                transformations=(ScaleTransform(scale=scale.scale), shift),
+                                input=scale.input,
+                                output=scale.output,
+                            ),
+                        ),
+                    )
+                )
+            else:
+                datasets.append(Dataset(path=str(level.value), transforms=(scale,)))
+        to_specimen: ImageTransform
+        if np.allclose(directions, np.eye(3)):
+            to_specimen = ImageTranslation(translation=origin, input=NameRef(name=IMAGE), output=NameRef(name=SPECIMEN))
+        else:
+            rows = [[*map(float, directions[r]), origin[r]] for r in range(3)]
+            to_specimen = ImageAffine(affine=rows, input=NameRef(name=IMAGE), output=NameRef(name=SPECIMEN))
+        systems = [
+            CoordinateSystem(name=IMAGE, axes=[Axis(name=n, unit=unit, long_name=long) for n, long in _ARRAY_AXES]),
+            CoordinateSystem(name=SPECIMEN, axes=[Axis(name=n, unit=unit) for n, _ in _ARRAY_AXES]),
+        ]
+        multiscale = Multiscale(
+            name="image",
+            coordinate_systems=systems,
+            datasets=datasets,
+            transforms=[to_specimen],
+            type=downscale_type,
         )
+        return cls(attributes=ZarrGroupAttributes(ome=OmeMeta(multiscales=[multiscale])))
 
 
 class OmeZarrDataset(SparseModel):
-    """Full on-disk shape of an OME-Zarr v0.5 / Zarr v3 dataset.
+    """Full on-disk shape of an OME-Zarr 0.6 / Zarr v3 dataset.
 
     Bundles the OME-NGFF group metadata (`group`) with the per-array metadata
     (`arrays`). Reading and writing are symmetric: an `OmeZarrDataset` parses
@@ -544,12 +486,12 @@ class OmeZarrDataset(SparseModel):
 
     @property
     def volume_shape(self) -> UIVec3D:
-        z, y, x = self.arrays[ScaleLevel.L0].shape[1:]
+        z, y, x = self.arrays[ScaleLevel.L0].shape
         return UIVec3D(z=z, y=y, x=x)
 
     @property
     def shard_shape(self) -> UIVec3D:
-        z, y, x = self.arrays[ScaleLevel.L0].chunk_grid.configuration.chunk_shape[1:]
+        z, y, x = self.arrays[ScaleLevel.L0].chunk_grid.configuration.chunk_shape
         return UIVec3D(z=z, y=y, x=x)
 
     @property
@@ -560,8 +502,8 @@ class OmeZarrDataset(SparseModel):
     def dtype(self) -> Dtype:
         return self.arrays[ScaleLevel.L0].data_type
 
-    def shards(self, channels: list[int], z_range: range | None = None) -> Iterator[Shard]:
-        """Yield shards at every pyramid level for the given channels.
+    def shards(self, z_range: range | None = None) -> Iterator[Shard]:
+        """Yield the shards at every pyramid level.
 
         `z_range` selects a window of z-shard indices in L0 coordinates (the
         same range applies at every level since shard sizes halve in lockstep
@@ -570,7 +512,7 @@ class OmeZarrDataset(SparseModel):
         Higher levels may have fewer total z-shards (tail) — out-of-range z
         values are skipped per level.
 
-        Iteration order: level → channel → z → y → x.
+        Iteration order: level → z → y → x.
         """
         if z_range is None:
             z_range = range(math.ceil(self.volume_shape.z / self.shard_shape.z))
@@ -579,16 +521,15 @@ class OmeZarrDataset(SparseModel):
             scaled_volume = level.scale(self.volume_shape)
             n_y = math.ceil(scaled_volume.y / scaled_shard.y)
             n_x = math.ceil(scaled_volume.x / scaled_shard.x)
-            scaled_volume_z = level.scale(self.volume_shape).z
+            scaled_frame_count = level.scale(self.volume_shape).z
             scaled_shard_z = level.scale(self.shard_shape).z
-            max_z = math.ceil(scaled_volume_z / scaled_shard_z)
-            for c in channels:
-                for z in z_range:
-                    if z >= max_z:
-                        continue
-                    for y in range(n_y):
-                        for x in range(n_x):
-                            yield Shard(level=level, c=c, z=z, y=y, x=x)
+            max_z = math.ceil(scaled_frame_count / scaled_shard_z)
+            for z in z_range:
+                if z >= max_z:
+                    continue
+                for y in range(n_y):
+                    for x in range(n_x):
+                        yield Shard(level=level, z=z, y=y, x=x)
 
     def write_metadata(self, target: Path | S3Path) -> None:
         """Write Zarr v3 group + per-level array `zarr.json` files under `target` — a local path

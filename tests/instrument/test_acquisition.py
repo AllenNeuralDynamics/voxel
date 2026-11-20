@@ -39,7 +39,7 @@ class _Writer:
     async def check_writable(self, _storage: StorageSpec) -> None:
         return
 
-    async def open_stack(self, *, storage: StorageSpec, subpath: PurePosixPath, **_kwargs: object) -> LocalLocation:
+    async def open_image(self, *, storage: StorageSpec, subpath: PurePosixPath, **_kwargs: object) -> LocalLocation:
         target = self._root / storage.path.as_posix() / f"{subpath.as_posix()}.ome.zarr"
         return LocalLocation(
             role=LocationRole.DESTINATION,
@@ -54,7 +54,7 @@ class _Writer:
     async def capture_state(self) -> CaptureState:
         return CaptureState.CLOSED if self._closing else CaptureState.DONE
 
-    async def close_stack(self) -> None:
+    async def close_image(self) -> None:
         if self._close_error:
             raise RuntimeError("writer close failed")
         self._closing = True
@@ -68,7 +68,7 @@ async def writer(opened_instrument: Instrument, tmp_path: Path, monkeypatch: pyt
     instrument = opened_instrument
     writer = _Writer(tmp_path / "data")
     camera = instrument._hal.cameras["camera_1"]
-    for name in ("check_writable", "open_stack", "begin_batch", "capture_state", "close_stack", "release_writer"):
+    for name in ("check_writable", "open_image", "begin_batch", "capture_state", "close_image", "release_writer"):
         monkeypatch.setattr(camera, name, getattr(writer, name))
     await instrument.add_task(
         AcquisitionTask(

@@ -104,10 +104,9 @@ class OutputSetup(BaseModel):
     backend: ArrayWriter.Backend  # which ArrayWriter the worker instantiates (TS, zarrs, …)
     author_root: Path | S3Path  # root the level arrays live under (metadata already authored there)
     store: S3Store | None  # S3 connection for a remote write, else None (local filesystem)
-    channel: int  # leading-axis index this writer owns
     levels: tuple[ScaleLevel, ...]  # pyramid levels to write — one ArrayWriter each
-    batch_z: int  # L0 depth per batch → maps batch_idx to its z-range
-    volume_z: int  # total L0 depth → clamps the final partial batch
+    batch_frames: int  # L0 depth per batch → maps batch_idx to its z-range
+    frame_count: int  # total L0 depth → clamps the final partial batch
     reduction: DownscaleType = DownscaleType.MEAN  # pyramid downsample method (mirrors config.downscale_type)
 
 
@@ -214,12 +213,12 @@ def _worker_process_and_write(max_level_value: int, filled_l0: int, batch_idx: i
         arr[:z, :y, :x] = vol[:z, :y, :x].astype(arr.dtype)
 
     process_ended = datetime.now(UTC)  # also the flush start — the write begins as soon as the pyramid is ready
-    z_start = batch_idx * setup.batch_z
-    z_end = min(z_start + setup.batch_z, setup.volume_z)
+    z_start = batch_idx * setup.batch_frames
+    z_end = min(z_start + setup.batch_frames, setup.frame_count)
     flushed = 0
     for level in setup.levels:
         z0, z1 = z_start // level.factor, z_end // level.factor
-        flushed += _WORKER_WRITERS[level].write_slice(setup.channel, z0, _WORKER_ARRAYS[level][: z1 - z0])
+        flushed += _WORKER_WRITERS[level].write_slice(z0, _WORKER_ARRAYS[level][: z1 - z0])
 
     return BatchResult(
         process_started=process_started,

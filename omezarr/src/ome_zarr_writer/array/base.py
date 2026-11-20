@@ -49,8 +49,8 @@ class ArrayWriter(ABC):
         credentials. Metadata must already exist there (the caller writes it before `open`)."""
 
     @abstractmethod
-    def write_slice(self, c: int, z_offset: int, arr: np.ndarray) -> int:
-        """Write `arr` (shape `[z, y, x]`) at channel `c`, z-range
+    def write_slice(self, z_offset: int, arr: np.ndarray) -> int:
+        """Write `arr` (shape `[z, y, x]`) at frames
         [z_offset, z_offset + arr.shape[0]). Synchronous: blocks until
         durable. Returns bytes written. Raises on error."""
 

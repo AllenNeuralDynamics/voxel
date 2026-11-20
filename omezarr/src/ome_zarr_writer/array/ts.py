@@ -51,11 +51,11 @@ class TSArrayWriter(ArrayWriter):
             }
         ).result()
 
-    def write_slice(self, c: int, z_offset: int, arr: np.ndarray) -> int:
+    def write_slice(self, z_offset: int, arr: np.ndarray) -> int:
         if self._handle is None:
             raise RuntimeError("write_slice called before open")
         z_end = z_offset + arr.shape[0]
-        self._handle[c, z_offset:z_end, :, :].write(arr).result()
+        self._handle[z_offset:z_end, :, :].write(arr).result()
         return int(arr.nbytes)
 
     def close(self) -> None:
@@ -89,7 +89,7 @@ class TSArrayReader:
         return tuple(int(x) for x in self._handle.shape)
 
     def read_3d(self, z0: int = 0, n: int | None = None, z1: int | None = None) -> np.ndarray:
-        """Read a 3D (z, y, x) slice; leading axes (e.g. channel) are taken at index 0. `z1`
+        """Read a 3D (z, y, x) slice; any leading axes are taken at index 0. `z1`
         (exclusive) overrides `n`; otherwise the range is [z0, z0 + (n or 128))."""
         if z1 is None:
             z1 = z0 + (n if n is not None else 128)

@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Callable
 
 import numpy as np
-from ome_zarr_writer import FrameLease
+from vxlib.imaging.writer import FrameLease
 
 from vxl.live import LatestFrameQueue, LiveFrame, LiveGenerator, LiveLayer, LiveViewport
 from vxl.live.generator import RENDER_CAP

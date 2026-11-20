@@ -394,6 +394,14 @@ class Transform:
     steps: tuple[Vec3D, Vec3D, Vec3D]
     shape: tuple[int, int, int]
 
+    @classmethod
+    def grid(cls, shape: tuple[int, int, int], step: Vec3D, origin: Vec3D | None = None) -> Self:
+        """A stack whose array axes run along +z, +y and +x, ``step`` apart on each, with pixel [0, 0, 0] at
+        ``origin`` (0 when left out)."""
+        zero = Vec3D(z=0.0, y=0.0, x=0.0)
+        steps = (Vec3D(z=step.z, y=0.0, x=0.0), Vec3D(z=0.0, y=step.y, x=0.0), Vec3D(z=0.0, y=0.0, x=step.x))
+        return cls(origin if origin is not None else zero, steps, shape)
+
     def position(self, index: Sequence[float]) -> Vec3D:
         """The position of an index, 1 value for each array axis."""
         position = self.origin

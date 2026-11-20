@@ -7,6 +7,7 @@ production bugs, so both are pinned here.
 
 from pathlib import Path
 
+import ome_zarr_writer.writer as writer_module
 import pytest
 from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, WriterConfig
 from ome_zarr_writer.sizing import (
@@ -20,13 +21,12 @@ from ome_zarr_writer.sizing import (
     slots_for_budget,
 )
 from vxlib.dtype import Dtype
-from vxlib.vector import UIVec3D, UVec3D
+from vxlib.vector import Transform, UIVec3D, Vec3D
 
 
 def _cfg(y: int = 64, x: int = 64, z: int = 32, level: ScaleLevel = ScaleLevel.L2) -> WriterConfig:
     return WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x),
-        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)),
         max_level=level,
     )
 
@@ -127,77 +127,61 @@ def test_label_identifies_the_consumer_in_the_message() -> None:
 
 
 @pytest.mark.slow
-def test_sizer_runs_only_when_the_ring_is_allocated(tmp_path: Path) -> None:
+def test_a_ring_is_sized_only_when_it_is_allocated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The regression guard: a reused ring must not be re-sized.
 
-    Re-checking a RAM budget on the reuse path once failed a run at its second volume — the first
+    Re-checking a RAM budget on the reuse path once failed a run at its second volume -- the first
     volume's ring was still resident, so the budget it had already spent counted against it, and the
     writer refused a ring it was about to reuse unchanged without allocating a byte.
     """
     calls: list[UIVec3D] = []
 
-    def sizer(config: WriterConfig) -> int:
-        calls.append(config.batch_shape)
+    def sized(batch_shape: UIVec3D, *_: object, **__: object) -> int:
+        calls.append(batch_shape)
         return MIN_SLOTS
 
+    monkeypatch.setattr(writer_module, "slots_for_budget", sized)
     cfg = _cfg()
     writer = OMEZarrWriter()
     try:
-        writer.begin_stack(cfg, Local(target=tmp_path / "v1"), sizer=sizer)
-        writer.end_stack()
-        assert len(calls) == 1, "first volume must size the ring it allocates"
+        writer.open_dataset(cfg, Local(target=tmp_path / "v1"), ram_bytes=1)
+        writer.close_image()
+        writer.open_dataset(cfg, Local(target=tmp_path / "v2"), ram_bytes=1)
+        writer.close_image()
+        assert len(calls) == 1, "reusing a ring must not size it again"
 
-        # Same geometry → the ring is reused, so nothing is allocated and nothing is sized.
-        writer.begin_stack(cfg, Local(target=tmp_path / "v2"), sizer=sizer)
-        writer.end_stack()
-        assert len(calls) == 1, "reusing a ring must not consult the sizer"
-
-        # Changed geometry → the ring is rebuilt, so the new size is chosen against the new config.
         wider = _cfg(y=128, x=128)
-        writer.begin_stack(wider, Local(target=tmp_path / "v3"), sizer=sizer)
-        writer.end_stack()
-        assert len(calls) == 2, "a geometry change must re-size the ring"
-        assert calls[-1] == wider.batch_shape
+        writer.open_dataset(wider, Local(target=tmp_path / "v3"), ram_bytes=1)
+        writer.close_image()
+        assert calls == [cfg.batch_shape, wider.batch_shape], "a geometry change must size the new ring"
     finally:
-        writer.close()
+        writer.release()
 
 
-@pytest.mark.slow
-def test_sizer_determines_ring_depth(tmp_path: Path) -> None:
-    """The sizer's return value wins over the constructor default, and applies per allocation."""
-    cfg = _cfg()
-    writer = OMEZarrWriter(slots=MAX_SLOTS)
-    try:
-        writer.begin_stack(cfg, Local(target=tmp_path / "v1"), sizer=lambda _: MIN_SLOTS)
-        assert writer._ring is not None
-        assert len(writer._ring) == MIN_SLOTS
-        writer.end_stack()
-    finally:
-        writer.close()
-
-
-def test_writer_rejects_a_sizer_that_returns_too_few_slots(tmp_path: Path) -> None:
-    """The floor is enforced at the library boundary, not left to each sizer to remember."""
+def test_a_ring_needs_fixed_slots_or_a_budget_that_fits(tmp_path: Path) -> None:
+    """The floor and the budget are enforced at the library boundary."""
     writer = OMEZarrWriter()
     try:
-        with pytest.raises(RingSizingError, match="at least"):
-            writer.begin_stack(_cfg(), Local(target=tmp_path / "v1"), sizer=lambda _: MIN_SLOTS - 1)
+        with pytest.raises(RingSizingError, match="fixed slots or a memory budget"):
+            writer.open_dataset(_cfg(), Local(target=tmp_path / "v1"))
+        with pytest.raises(RingBudgetExceededError):
+            writer.open_dataset(_cfg(), Local(target=tmp_path / "v1"), ram_bytes=1)
     finally:
-        writer.close()
+        writer.release()
 
 
 @pytest.mark.slow
-def test_sizer_is_optional_and_falls_back_to_constructor_slots(tmp_path: Path) -> None:
-    """Callers that pin slots explicitly (benchmarks, examples) keep working untouched."""
+def test_fixed_slots_set_the_ring_depth(tmp_path: Path) -> None:
+    """Callers that pin slots explicitly (benchmarks, examples) get exactly that depth."""
     cfg = _cfg()
     writer = OMEZarrWriter(slots=MIN_SLOTS)
     try:
-        writer.begin_stack(cfg, Local(target=tmp_path / "v1"))
+        writer.open_dataset(cfg, Local(target=tmp_path / "v1"))
         assert writer._ring is not None
         assert len(writer._ring) == MIN_SLOTS
         for i in range(cfg.volume_shape.z):
             with writer.new_frame() as frame:
                 frame.fill(i + 1)
-        writer.end_stack()
+        writer.close_image()
     finally:
-        writer.close()
+        writer.release()

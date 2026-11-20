@@ -19,12 +19,11 @@ from ome_zarr_writer import (
     ScaleLevel,
     StagedS3,
     Storage,
-    UIVec3D,
-    UVec3D,
     WriterConfig,
 )
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.array.ts import TSArrayReader
+from vxlib.vector import Transform, Vec3D
 
 pytestmark = pytest.mark.slow
 
@@ -43,18 +42,16 @@ def test_s3_roundtrip(minio: Minio, kind: str, tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", minio.password)
     monkeypatch.setenv("AWS_REGION", "us-east-1")
 
-    # L6 (factor 64) aligns batch_z to the z-shard so each staged batch is a complete shard;
+    # L6 (factor 64) aligns batch_frames to the z-shard so each staged batch is a complete shard;
     # z=128 gives two batches, exercising the per-batch upload loop.
     z, y, x = 128, 128, 128
-    cfg = WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L6
-    )
+    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
     writer = OMEZarrWriter(slots=3)
-    writer.begin_stack(cfg, _storage(kind, tmp_path, minio))
+    writer.open_dataset(cfg, _storage(kind, tmp_path, minio))
     for i in range(z):
         with writer.new_frame() as frame:
             frame.fill(i + 1)
-    writer.close()
+    writer.release()
 
     # Objects landed in S3: group + level metadata and L0 shards.
     keys = [
@@ -85,15 +82,13 @@ def test_s3_roundtrip_zarrs_backend(
     monkeypatch.setenv("AWS_REGION", "us-east-1")
 
     z, y, x = 128, 128, 128
-    cfg = WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L6
-    )
+    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
     writer = OMEZarrWriter(backend=ArrayWriter.Backend.ZARRS, slots=3)
-    writer.begin_stack(cfg, DirectS3(target=S3Path(f"s3://{minio.bucket}/zarrs"), store=minio.store()))
+    writer.open_dataset(cfg, DirectS3(target=S3Path(f"s3://{minio.bucket}/zarrs"), store=minio.store()))
     for i in range(z):
         with writer.new_frame() as frame:
             frame.fill(i + 1)
-    writer.close()
+    writer.release()
 
     arr = TSArrayReader(S3Path(f"s3://{minio.bucket}/zarrs.ome.zarr/0"), minio.store()).read_3d(z0=0, n=z)
     assert arr.shape == (z, y, x)

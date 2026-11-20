@@ -43,7 +43,7 @@ def load() -> pd.DataFrame:
     """All `results/write/*.jsonl` as a flat DataFrame (nested git/machine/versions/run/result columns
     become dotted, e.g. `run.slots`, `result.wall_s`) with derived metric columns appended."""
     flat = pd.json_normalize(_read().to_dict(orient="records"))
-    flat["frames"] = flat["run.batch_z"] * flat["run.batches"]
+    flat["frames"] = flat["run.batch_frames"] * flat["run.batches"]
     flat["eff_fps"] = flat["frames"] / flat["result.collect_s"]
     flat["mb_s"] = flat["result.stored_bytes"] / 1e6 / flat["result.wall_s"]
     flat["ratio"] = flat["result.raw_bytes"] / flat["result.stored_bytes"]

@@ -16,7 +16,7 @@ from ome_zarr_writer import DirectS3, S3Store, ScaleLevel, WriterConfig
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.slot import BatchSlot, OutputSetup
-from vxlib.vector import UIVec3D, UVec3D
+from vxlib.vector import Transform, Vec3D
 
 
 def _roundtrip(setup: OutputSetup) -> OutputSetup:
@@ -28,10 +28,9 @@ def test_output_setup_pickle_local() -> None:
         backend=ArrayWriter.Backend.TS,
         author_root=Path("/data/exp.ome.zarr"),  # local (Local or StagedS3 scratch)
         store=None,
-        channel=0,
         levels=(ScaleLevel.L0, ScaleLevel.L1),
-        batch_z=128,
-        volume_z=512,
+        batch_frames=128,
+        frame_count=512,
     )
     assert _roundtrip(setup) == setup
 
@@ -43,17 +42,15 @@ def test_output_setup_pickle_direct_s3() -> None:
         backend=ArrayWriter.Backend.TS,
         author_root=storage.target,  # a client-bound S3Path — the real picklability question
         store=store,
-        channel=0,
         levels=(ScaleLevel.L0,),
-        batch_z=128,
-        volume_z=512,
+        batch_frames=128,
+        frame_count=512,
     )
     r = _roundtrip(setup)
     assert str(r.author_root) == str(setup.author_root)
     assert r.store == setup.store
     assert r.backend == setup.backend
     assert r.levels == setup.levels
-    assert r.channel == setup.channel
 
 
 @pytest.mark.slow
@@ -62,12 +59,10 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
     and verify every frame's value survived. Exercises spawn + bind_output + flush + slot reuse across
     successive batches (the worker opens the writers once, the slot is reassigned after each flush)."""
     z, y, x = 6, 64, 64
-    cfg = WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L1
-    )
-    batch_z = cfg.batch_z
-    assert batch_z == 2
-    assert z % batch_z == 0  # three full batches
+    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L1)
+    batch_frames = cfg.batch_frames
+    assert batch_frames == 2
+    assert z % batch_frames == 0  # three full batches
 
     root = Path(f"{tmp_path / 'ds'}.ome.zarr")
     cfg.dataset.write_metadata(root)  # arrays must exist before the worker opens them
@@ -75,19 +70,18 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
         backend=ArrayWriter.Backend.TS,
         author_root=root,
         store=None,
-        channel=0,
         levels=tuple(cfg.dataset.arrays),
-        batch_z=batch_z,
-        volume_z=z,
+        batch_frames=batch_frames,
+        frame_count=z,
     )
 
     slot = BatchSlot(name=f"bstest_{os.getpid()}", shape_l0=cfg.batch_shape, max_level=cfg.max_level, dtype=cfg.dtype)
     try:
         slot.bind_output(setup)
-        for b in range(z // batch_z):
+        for b in range(z // batch_frames):
             slot.assign_batch(b)
-            for i in range(batch_z):
-                slot.frame_array().fill(b * batch_z + i + 1)
+            for i in range(batch_frames):
+                slot.frame_array().fill(b * batch_frames + i + 1)
                 slot.commit_frame()
             result = slot.flush().result()  # waits for the worker's downsample + write
             assert result.flushed_bytes > 0
@@ -106,16 +100,14 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
 def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
     """Several BatchSlot workers write disjoint, shard-aligned z-ranges of the SAME arrays concurrently
     — exactly what the ring does. This is the assumption the whole worker-flush design rests on: with
-    batch_z == shard_z (L6 here), each batch owns whole shards, so concurrent writers from different
+    batch_frames == shard_z (L6 here), each batch owns whole shards, so concurrent writers from different
     processes never touch the same shard. Distinct per-slice values mean any cross-writer clobber shows
     up as a wrong value on read-back."""
-    n_slots, batch_z = 3, 64
-    z, y, x = n_slots * batch_z, 64, 64  # 192 frames = 3 shard-aligned batches
-    cfg = WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x), voxel_size=UVec3D(z=1.0, y=0.5, x=0.5), max_level=ScaleLevel.L6
-    )
-    assert cfg.batch_z == batch_z
-    assert cfg.shard_shape.z == batch_z  # shard-aligned: one batch = whole shard(s)
+    n_slots, batch_frames = 3, 64
+    z, y, x = n_slots * batch_frames, 64, 64  # 192 frames = 3 shard-aligned batches
+    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
+    assert cfg.batch_frames == batch_frames
+    assert cfg.shard_shape.z == batch_frames  # shard-aligned: one batch = whole shard(s)
 
     root = Path(f"{tmp_path / 'ds'}.ome.zarr")
     cfg.dataset.write_metadata(root)
@@ -123,10 +115,9 @@ def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
         backend=ArrayWriter.Backend.TS,
         author_root=root,
         store=None,
-        channel=0,
         levels=tuple(cfg.dataset.arrays),
-        batch_z=batch_z,
-        volume_z=z,
+        batch_frames=batch_frames,
+        frame_count=z,
     )
 
     slots = [
@@ -140,8 +131,8 @@ def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
         # downsample+writes run in separate processes concurrently against the same arrays.
         for b, slot in enumerate(slots):
             slot.assign_batch(b)
-            for i in range(batch_z):
-                slot.frame_array().fill(b * batch_z + i + 1)
+            for i in range(batch_frames):
+                slot.frame_array().fill(b * batch_frames + i + 1)
                 slot.commit_frame()
         futures = [slot.flush() for slot in slots]
         results = [fut.result() for fut in futures]

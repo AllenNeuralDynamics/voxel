@@ -21,8 +21,8 @@ class WriterFields(TypedDict, total=False):
     """The fields of the :class:`WriterSettings` that an edit may change, each one optional."""
 
     max_level: ScaleLevel
-    shard_z_chunks: int
-    batch_z_shards: int
+    shard_frame_chunks: int
+    batch_shards: int
     compression: Compression
     downscale_type: DownscaleType
     target_shard_gb: float

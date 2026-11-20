@@ -7,9 +7,10 @@ back with `TSArrayReader` and checks the per-frame content.
 import tempfile
 from pathlib import Path
 
-from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, UIVec3D, UVec3D, WriterConfig
+from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, WriterConfig
 from ome_zarr_writer.array.ts import TSArrayReader
 from ome_zarr_writer.writer import _as_ome_zarr
+from vxlib.vector import Transform, Vec3D
 
 
 def main(directory: Path | None = None, filename: str = "stack") -> None:
@@ -18,21 +19,20 @@ def main(directory: Path | None = None, filename: str = "stack") -> None:
     storage = Local(target=directory / filename)  # the writer appends the .ome.zarr suffix
 
     cfg = WriterConfig(
-        volume_shape=UIVec3D(z=z, y=y, x=x),
-        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)),
         max_level=ScaleLevel.L7,
         target_shard_gb=1,  # tiny shards keep the example small
     )
 
-    # Batch depth (cfg.batch_z) is policy-derived from the config knobs; RAM only sizes the ring slots.
+    # Batch depth (cfg.batch_frames) is policy-derived from the config knobs; RAM only sizes the ring slots.
     writer = OMEZarrWriter(slots=3)
-    writer.begin_stack(cfg, storage)
+    writer.open_dataset(cfg, storage)
     for i in range(z):
         with writer.new_frame() as frame:
             frame.fill(i + 1)  # frame i holds value i+1
-    writer.close()
+    writer.release()
 
-    dataset = _as_ome_zarr(storage.target)  # writer.target is None after close(); derive from the storage
+    dataset = _as_ome_zarr(storage.target)  # the writer holds no dataset after release(); derive it from the storage
     l0 = TSArrayReader(dataset / "0").read_3d(z0=0, z1=z)
     assert l0.shape == (z, y, x), l0.shape
     assert int(l0[0].max()) == 1

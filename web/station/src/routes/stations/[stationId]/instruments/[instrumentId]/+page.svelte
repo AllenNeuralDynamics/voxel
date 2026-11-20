@@ -530,20 +530,20 @@
                 {/snippet}
               </Select>
             </Field>
-            <Field label="Shard Z chunks">
+            <Field label="Shard frame chunks">
               <SpinBox
-                value={output.shard_z_chunks}
-                onChange={(value) => instrument.updateOutput({ shard_z_chunks: value })}
+                value={output.shard_frame_chunks}
+                onChange={(value) => instrument.updateOutput({ shard_frame_chunks: value })}
                 onEditStart={() => instrument.edits.hold()}
                 min={1}
                 step={1}
                 size="sm"
               />
             </Field>
-            <Field label="Batch Z shards">
+            <Field label="Batch shards">
               <SpinBox
-                value={output.batch_z_shards}
-                onChange={(value) => instrument.updateOutput({ batch_z_shards: value })}
+                value={output.batch_shards}
+                onChange={(value) => instrument.updateOutput({ batch_shards: value })}
                 onEditStart={() => instrument.edits.hold()}
                 min={1}
                 step={1}

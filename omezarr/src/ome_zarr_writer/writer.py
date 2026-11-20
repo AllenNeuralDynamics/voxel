@@ -2,7 +2,7 @@
 
 The module provides two objects:
 
-- :class:`DatasetWriter` writes one multiscale OME-Zarr dataset (a single stack + channel) from a
+- :class:`DatasetWriter` writes one multiscale OME-Zarr dataset (1 image: a stack of frames) from a
   frame stream, using a ring of buffer slots supplied by the caller. It borrows the ring for its
   lifetime and never closes it; it owns and releases the remaining per-dataset resources (the
   per-level array writers, the thread pools, and the batch metrics).
@@ -25,7 +25,7 @@ import json
 import logging
 import math
 import threading
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Generator, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -35,9 +35,12 @@ from pathlib import Path
 from typing import Any, Self, cast
 
 import numpy as np
+import psutil
 from cloudpathlib import S3Path
 from pydantic import BaseModel, ConfigDict, Field
-from vxlib.vector import UIVec3D, UVec3D
+from vxlib.dtype import Dtype as PixelType
+from vxlib.imaging.writer import FrameLease, ImageWriter, WriterProgress
+from vxlib.vector import IVec2D, Transform, UIVec3D
 
 from ome_zarr_writer.array import ArrayWriter
 from ome_zarr_writer.dataset import (
@@ -50,7 +53,7 @@ from ome_zarr_writer.dataset import (
     Zarr3ArrayMeta,
     Zarr3GroupMeta,
 )
-from ome_zarr_writer.sizing import MIN_SLOTS, RingSizingError
+from ome_zarr_writer.sizing import MIN_SLOTS, RingSizingError, per_slot_bytes, slots_for_budget
 from ome_zarr_writer.slot import BatchResult, BatchSlot, OutputSetup, SlotStage
 from ome_zarr_writer.storage import Local, S3Store, StagedS3, StagingConfig, Storage
 from ome_zarr_writer.transfer import TransferJob, run_s5cmd
@@ -76,10 +79,10 @@ class WriterSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # sync-critical (determine batch_z)
+    # sync-critical (determine batch_frames)
     max_level: ScaleLevel = Field(default=ScaleLevel.L7, description="Maximum pyramid downscale level")
-    shard_z_chunks: int = 1
-    batch_z_shards: int = 1
+    shard_frame_chunks: int = 1
+    batch_shards: int = 1
     # coherence (uniform for a consistent dataset; camera conforms)
     compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
     downscale_type: DownscaleType = Field(
@@ -95,23 +98,27 @@ class WriterSettings(BaseModel):
         return UIVec3D(z=edge, y=edge, x=edge)
 
     @property
-    def batch_z(self) -> int:
-        return self.batch_z_shards * self.shard_z_chunks * self.max_level.factor
+    def batch_frames(self) -> int:
+        return self.batch_shards * self.shard_frame_chunks * self.max_level.factor
 
 
 class WriterConfig(WriterSettings):
-    """The dataset spec for a writer run — acquisition geometry plus the output-format knobs
+    """The dataset spec for a writer run — the image's transform plus the output-format knobs
     inherited from :class:`WriterSettings`. Frozen; its ``dataset`` is cached, which immutability
     keeps sound. *Where* the run is written is a separate :class:`Storage` passed to the writer."""
 
     model_config = ConfigDict(frozen=True)
 
-    # acquisition geometry
-    volume_shape: UIVec3D
-    voxel_size: UVec3D
+    # the image: its shape, and where each pixel sits
+    transform: Transform
     voxel_unit: SpaceUnit = SpaceUnit.MICROMETER
     dtype: Dtype = Dtype.UINT16
-    channel_index: int = 0
+
+    @property
+    def volume_shape(self) -> UIVec3D:
+        """The image's shape: frames, rows, columns."""
+        frames, rows, columns = self.transform.shape
+        return UIVec3D(z=frames, y=rows, x=columns)
 
     @cached_property
     def shard_shape(self) -> UIVec3D:
@@ -120,7 +127,7 @@ class WriterConfig(WriterSettings):
         target_bytes = int(self.target_shard_gb * (1024**3))
         target_chunks = max(1, round(target_bytes / c_bytes))
 
-        zc = self.shard_z_chunks
+        zc = self.shard_frame_chunks
         per_layer = max(1, target_chunks // zc)
         yc = max(1, round(math.sqrt(per_layer)))
         xc = max(1, per_layer // yc)
@@ -134,14 +141,14 @@ class WriterConfig(WriterSettings):
 
     @cached_property
     def batch_shape(self) -> UIVec3D:
-        """L0 shape of a single batch: one batch deep (``batch_z``) and the full frame in y/x.
+        """L0 shape of a single batch: one batch deep (``batch_frames``) and the full frame in y/x.
 
-        Depends only on ``batch_z`` and the frame extent, not on ``volume_shape.z`` (which sets the
+        Depends only on ``batch_frames`` and the frame extent, not on ``volume_shape.z`` (which sets the
         number of batches, not their shape). A buffer ring sized to this shape therefore serves any
         volume with the same frame geometry, batch depth, dtype, and ``max_level``, regardless of frame
         count.
         """
-        return UIVec3D(z=self.batch_z, y=self.volume_shape.y, x=self.volume_shape.x)
+        return UIVec3D(z=self.batch_frames, y=self.volume_shape.y, x=self.volume_shape.x)
 
     @cached_property
     def dataset(self) -> OmeZarrDataset:
@@ -152,17 +159,17 @@ class WriterConfig(WriterSettings):
             ss = level.scale(self.shard_shape)
             sc = level.scale(self.chunk_shape)
             arrays[level] = Zarr3ArrayMeta.sharded(
-                shape=[1, sv.z, sv.y, sv.x],
-                shard_shape=[1, ss.z, ss.y, ss.x],
-                chunk_shape=[1, sc.z, sc.y, sc.x],
+                shape=[sv.z, sv.y, sv.x],
+                shard_shape=[ss.z, ss.y, ss.x],
+                chunk_shape=[sc.z, sc.y, sc.x],
                 dtype=self.dtype,
                 compression=self.compression,
-                dimension_names=["c", "z", "y", "x"],
+                dimension_names=["z", "y", "x"],
             )
 
         group = Zarr3GroupMeta.multiscale(
-            voxel_size=self.voxel_size,
-            voxel_unit=self.voxel_unit,
+            transform=self.transform,
+            unit=self.voxel_unit,
             max_level=self.max_level,
             downscale_type=self.downscale_type,
         )
@@ -230,9 +237,12 @@ class BatchMetrics(BaseModel):
     evicting: Timing = Field(default_factory=Timing)
 
     @classmethod
-    def create_many(cls, total_frames: int, batch_z: int) -> list[Self]:
-        n_batches = total_frames // batch_z + 1
-        return [cls(batch_idx=i, expected_frames=min(batch_z, total_frames - i * batch_z)) for i in range(n_batches)]
+    def create_many(cls, total_frames: int, batch_frames: int) -> list[Self]:
+        n_batches = total_frames // batch_frames + 1
+        return [
+            cls(batch_idx=i, expected_frames=min(batch_frames, total_frames - i * batch_frames))
+            for i in range(n_batches)
+        ]
 
 
 @dataclass(frozen=True)
@@ -291,39 +301,8 @@ class Ring:
         return self.slots[idx]
 
 
-class FrameLease:
-    """Read-only access to one committed frame that prevents its batch slot from being reused."""
-
-    def __init__(self, array: np.ndarray, release: Callable[[], None]) -> None:
-        self._array = array.view()
-        self._array.flags.writeable = False
-        self._release: Callable[[], None] | None = release
-        self._lock = threading.Lock()
-
-    @property
-    def array(self) -> np.ndarray:
-        """The retained read-only frame view."""
-        with self._lock:
-            if self._release is None:
-                raise RuntimeError("frame lease is closed")
-            return self._array
-
-    def close(self) -> None:
-        """Release retained access. Idempotent and safe to call from a consumer thread."""
-        with self._lock:
-            release, self._release = self._release, None
-        if release is not None:
-            release()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        self.close()
-
-
 class DatasetWriter:
-    """Writes one multiscale OME-Zarr dataset (a single stack + channel) from a frame stream, using a
+    """Writes one multiscale OME-Zarr dataset (1 image: a stack of frames) from a frame stream, using a
     ring of :class:`BatchSlot`s supplied by the caller.
 
     Frames are ingested via :meth:`new_frame`; each frame fills the current slot until a batch is complete,
@@ -358,11 +337,10 @@ class DatasetWriter:
         self._ring = ring  # borrowed for this writer's lifetime; never closed here
         self._slot_count = len(ring)
 
-        self._channel = config.channel_index
-        self._volume_z = config.volume_shape.z
+        self._frame_count = config.volume_shape.z
         self._levels = list(config.dataset.arrays)
         self._shard_z = config.dataset.shard_shape.z
-        self._batch_z = config.batch_z
+        self._batch_frames = config.batch_frames
         self._staging = storage.tuning if isinstance(storage, StagedS3) else None  # upload tuning, iff staged
         self._store: S3Store | None = None if isinstance(storage, Local) else storage.store  # S3 connection, iff remote
         self._target = _as_ome_zarr(storage.target)  # concrete dataset location: base target + .ome.zarr
@@ -382,10 +360,9 @@ class DatasetWriter:
                 backend=backend,
                 author_root=author_root,
                 store=self._store,
-                channel=self._channel,
                 levels=tuple(self._levels),
-                batch_z=self._batch_z,
-                volume_z=self._volume_z,
+                batch_frames=self._batch_frames,
+                frame_count=self._frame_count,
                 reduction=config.downscale_type,
             )
         )
@@ -410,7 +387,14 @@ class DatasetWriter:
         self._frame_open = False
         self._latest_slot: BatchSlot | None = None
         self._failure: BaseException | None = None
-        self._batches = BatchMetrics.create_many(self._volume_z, self._batch_z)  # one record per batch, by index
+        self._batches = BatchMetrics.create_many(
+            self._frame_count, self._batch_frames
+        )  # one record per batch, by index
+
+    @property
+    def batch_frames(self) -> int:
+        """The frames in 1 batch."""
+        return self._batch_frames
 
     @property
     def target(self) -> Path | S3Path:
@@ -424,7 +408,7 @@ class DatasetWriter:
             return False
         if self._current_slot is not None:
             slot = self._ring[self._current_slot]
-            if slot.stage == SlotStage.COLLECTING and slot.filled_l0 < self._batch_z:
+            if slot.stage == SlotStage.COLLECTING and slot.filled_l0 < self._batch_frames:
                 return True
         return any(slot.reusable for slot in self._ring)
 
@@ -439,8 +423,8 @@ class DatasetWriter:
         self._raise_if_failed()
         if self._frame_open:
             raise RuntimeError("a frame is already open")
-        if self._frames_added >= self._volume_z:
-            raise RuntimeError(f"volume complete: {self._frames_added}/{self._volume_z} frames")
+        if self._frames_added >= self._frame_count:
+            raise RuntimeError(f"volume complete: {self._frames_added}/{self._frame_count} frames")
         if self._current_slot is None:
             self._assign_collecting_slot()
         if self._current_slot is None:  # pragma: no cover - narrowed by _assign_collecting_slot
@@ -478,7 +462,7 @@ class DatasetWriter:
                     continue
                 if slot_idx in self._inflight:
                     self._harvest(slot_idx)  # completed future: record metrics before reassigning its memory
-                batch_idx = self._frames_added // self._batch_z
+                batch_idx = self._frames_added // self._batch_frames
                 slot.assign_batch(batch_idx)
                 self._batches[batch_idx].collecting.begin()
                 self._current_slot = slot_idx
@@ -510,7 +494,7 @@ class DatasetWriter:
         self._frame_open = False
 
         try:
-            if slot.filled_l0 == self._batch_z and self._frames_added < self._volume_z:
+            if slot.filled_l0 == self._batch_frames and self._frames_added < self._frame_count:
                 self._flush_current()
                 self._current_slot = None
                 self._reap()
@@ -579,7 +563,7 @@ class DatasetWriter:
         payload = {
             "schema_version": 1,
             "target": str(self._target),
-            "batch_z": self._batch_z,
+            "batch_frames": self._batch_frames,
             "slots": self._slot_count,
             "config": self._config.model_dump(mode="json"),
             "batches": [b.model_dump(mode="json") for b in self._batches],
@@ -632,8 +616,8 @@ class DatasetWriter:
         tuning = self._staging
         if tuning is None:
             return
-        z_start = batch_idx * self._batch_z
-        z_end = min(z_start + self._batch_z, self._volume_z)
+        z_start = batch_idx * self._batch_frames
+        z_end = min(z_start + self._batch_frames, self._frame_count)
         jobs = self._transfer_jobs(z_start, z_end)
         self._upload_slots.acquire()
         batch = self._batches[batch_idx]
@@ -648,7 +632,7 @@ class DatasetWriter:
         dest_root = cast("S3Path", self._target)  # staged ⇒ target is an S3Path (see StagedS3)
         return [
             TransferJob(src=shard.at(self._storage.scratch), dest=shard.at(dest_root))
-            for shard in self._config.dataset.shards(channels=[self._channel], z_range=z_shards)
+            for shard in self._config.dataset.shards(z_range=z_shards)
         ]
 
     def _upload_and_evict(self, jobs: list[TransferJob], batch: BatchMetrics, tuning: StagingConfig) -> None:
@@ -718,30 +702,26 @@ class DatasetWriter:
         )
 
 
-class OMEZarrWriter:
-    """Per-camera coordinator that owns a reusable :class:`Ring` and writes a sequence of datasets.
+class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
+    """Writes each image as 1 OME-Zarr dataset, through a reusable :class:`Ring` of batch buffers.
 
-    Each volume is written by a fresh :class:`DatasetWriter` created in :meth:`begin_stack` and closed in
-    :meth:`end_stack`. The ring is retained between volumes and reused whenever the frame geometry is
-    unchanged; a change in batch shape, pyramid depth, or dtype triggers a single reallocation for the
-    new geometry. :meth:`close` releases the ring at the end of the acquisition.
+    The ring is kept from image to image and reused while the frame geometry stays the same; a change in batch
+    shape, pyramid depth, or pixel type allocates a new one, sized from the memory the caller allows.
+    :meth:`release` frees it.
 
-        writer = OMEZarrWriter(slots=5)
-        writer.begin_stack(config, storage)
+        writer = OMEZarrWriter()
+        location = writer.open_image(storage, size, dtype, transform, settings, ram_bytes)
         with writer.new_frame() as destination:
             np.copyto(destination, frame)
         ...
-        writer.end_stack()
+        writer.close_image()
         ...
-        writer.close()
+        writer.release()
     """
 
-    def __init__(
-        self,
-        *,
-        backend: ArrayWriter.Backend = ArrayWriter.Backend.TS,
-        slots: int = 4,  # ring depth = max batches in flight (caller sizes from its RAM share)
-    ) -> None:
+    def __init__(self, *, backend: ArrayWriter.Backend = ArrayWriter.Backend.TS, slots: int | None = None) -> None:
+        """``slots`` fixes the ring depth, as a benchmark does; when it is ``None`` each ring is sized from the memory
+        that :meth:`open_image` or :meth:`open_dataset` allows."""
         self._backend = backend
         self._slots = slots
         self._ring: Ring | None = None
@@ -750,46 +730,61 @@ class OMEZarrWriter:
 
     @property
     def ready_for_batch(self) -> bool:
-        """Whether the next batch can be collected without blocking: True when no dataset is open, or the
-        open dataset has at least one IDLE slot."""
+        """Whether a free buffer can take the next batch now: True when no image is open, or the open image has an
+        idle slot."""
         return self._active is None or self._active.ready_for_batch
 
     @property
+    def batch_frames(self) -> int:
+        """The frames in 1 batch of the open image. Raise ``RuntimeError`` when none is open."""
+        if self._active is None:
+            raise RuntimeError("no image open; call open_image() first")
+        return self._active.batch_frames
+
+    @property
     def batches(self) -> list[BatchMetrics]:
-        """The per-batch metrics of the open dataset, or an empty list when none is open."""
+        """The metrics of each batch of the open image, or an empty list when none is open."""
         return self._active.batches if self._active is not None else []
 
     @property
-    def target(self) -> Path | S3Path | None:
-        """The location of the open dataset, or None when none is open."""
-        return self._active.target if self._active is not None else None
+    def progress(self) -> WriterProgress:
+        """Frames collected and flushed in the open image: a batch counts as flushed once its write ended."""
+        batches = self.batches
+        done = [b for b in batches if b.flushing.ended is not None and b.flushing.error is None]
+        flushed = sum(b.expected_frames for b in done)
+        collected = sum(b.collected_frames for b in batches)
+        return WriterProgress(
+            collected=collected, flushed=min(flushed, collected), total=sum(b.expected_frames for b in batches)
+        )
 
-    def begin_stack(
+    def open_image(
         self,
-        config: WriterConfig,
-        storage: Storage,
-        *,
-        sizer: Callable[[WriterConfig], int] | None = None,
-    ) -> DatasetWriter:
-        """Open a dataset for one volume and return its writer. Reuses the retained ring when its
-        geometry matches `config`; otherwise releases it and allocates a ring for the new geometry.
+        target: Storage,
+        size: IVec2D,
+        dtype: PixelType,
+        transform: Transform,
+        settings: WriterSettings,
+        ram_bytes: int,
+    ) -> Storage:
+        """Open 1 image as a dataset under ``target`` and give back the dataset's own location. Its metadata says
+        where each pixel sits, from ``transform``."""
+        _, height, width = transform.shape
+        if (height, width) != (size.y, size.x):
+            raise ValueError(f"frames of {size.x} x {size.y} px do not match the image's {width} x {height}")
+        config = WriterConfig(**settings.model_dump(), transform=transform, dtype=dtype)
+        dataset = self.open_dataset(config, target, ram_bytes=ram_bytes)
+        return target.model_copy(update={"target": dataset.target})
 
-        `sizer` chooses the depth of a ring about to be allocated, overriding the constructor's `slots`;
-        :func:`~ome_zarr_writer.sizing.slots_for_budget` is the usual implementation. It is called only on
-        the allocating path, and only *after* the previous ring has been released — so a caller sizing
-        against free memory reads a figure that is not depressed by the memory this writer is in the
-        middle of giving back. On the reuse path nothing is allocated, so `sizer` is not called and no
-        budget applies. Note the previous ring is already gone if `sizer` raises.
-        """
+    def open_dataset(self, config: WriterConfig, storage: Storage, *, ram_bytes: int | None = None) -> DatasetWriter:
+        """Open 1 dataset from a full ``config``, as :meth:`open_image` does from a transform, and give its writer.
+        Reuse the kept ring when its geometry fits; otherwise release it and allocate one: of the fixed ``slots``
+        when the writer has them, else within ``ram_bytes`` and the memory free now."""
         if self._active is not None:
-            raise RuntimeError("stack already open; call end_stack() first")
-        if (
-            self._ring is None
-            or self._ring_failed
-            or not self._ring.matches(config.batch_shape, config.max_level, config.dtype)
-        ):
-            self._drop_ring()
-            slots = sizer(config) if sizer is not None else self._slots
+            raise RuntimeError("an image is already open; call close_image() first")
+        geometry = (config.batch_shape, config.max_level, config.dtype)
+        if self._ring is None or self._ring_failed or not self._ring.matches(*geometry):
+            self._drop_ring()  # first, so the free memory read below is not depressed by the ring being given back
+            slots = self._slots if self._slots is not None else self._slots_within(config, ram_bytes)
             if slots < MIN_SLOTS:  # a ring this shallow cannot overlap collect with flush
                 raise RingSizingError(f"ring depth must be at least {MIN_SLOTS}, got {slots}")
             self._ring = Ring.allocate(
@@ -802,36 +797,51 @@ class OMEZarrWriter:
         self._active = DatasetWriter(config, storage, self._ring, backend=self._backend)
         return self._active
 
+    @staticmethod
+    def _slots_within(config: WriterConfig, ram_bytes: int | None) -> int:
+        if ram_bytes is None:
+            raise RingSizingError("a ring needs either fixed slots or a memory budget")
+        slots = slots_for_budget(
+            config.batch_shape,
+            config.max_level,
+            config.dtype,
+            budget_bytes=ram_bytes,
+            available_bytes=psutil.virtual_memory().available,
+        )
+        slot_gb = per_slot_bytes(config.batch_shape, config.max_level, config.dtype) / 1e9
+        log.info("Ring of %d slots (%.2f GB each) within %.2f GB", slots, slot_gb, ram_bytes / 1e9)
+        return slots
+
     @contextmanager
     def new_frame(self) -> Generator[np.ndarray]:
-        """Yield the next writable frame destination in the open dataset."""
+        """The memory for the next frame of the open image."""
         if self._active is None:
-            raise RuntimeError("no stack open; call begin_stack() first")
+            raise RuntimeError("no image open; call open_image() first")
         with self._active.new_frame() as frame:
             yield frame
 
     def latest_frame(self) -> FrameLease:
-        """Retain read-only access to the latest committed frame in the open dataset."""
+        """The last frame written to the open image, lent read-only."""
         if self._active is None:
-            raise RuntimeError("no stack open; call begin_stack() first")
+            raise RuntimeError("no image open; call open_image() first")
         return self._active.latest_frame()
 
-    def end_stack(self) -> None:
-        """Drain the open dataset, retaining a healthy ring for the next volume."""
+    def close_image(self) -> None:
+        """Write what is left of the open image and close it, keeping a healthy ring for the next image."""
         if self._active is None:
-            raise RuntimeError("no stack open")
+            raise RuntimeError("no image open")
         try:
             self._active.close()
         except Exception:
             # Do not close the ring here: an external FrameLease may still pin it. Mark it unusable so
-            # begin_stack or close drops it only after the owner has had a chance to release readers.
+            # open_image or release drops it only after the owner has had a chance to release readers.
             self._ring_failed = True
             raise
         finally:
             self._active = None
 
-    def close(self) -> None:
-        """Close any open dataset and release the ring."""
+    def release(self) -> None:
+        """Close any open image and free the ring."""
         try:
             if self._active is not None:
                 self._active.close()

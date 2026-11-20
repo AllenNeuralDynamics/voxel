@@ -119,13 +119,13 @@ class ZarrsArrayWriter(ArrayWriter):
         local_store = LocalStore(target.expanduser().resolve().as_posix())
         self._handle = zarr.open_array(store=local_store, mode="r+")
 
-    def write_slice(self, c: int, z_offset: int, arr: np.ndarray) -> int:
+    def write_slice(self, z_offset: int, arr: np.ndarray) -> int:
         if self._handle is None:
             raise RuntimeError("write_slice called before open")
         z_end = z_offset + arr.shape[0]
         shards = getattr(self._handle, "shards", None)
         if not shards:  # unsharded array: a single write is already the fast path
-            self._handle[c, z_offset:z_end, :, :] = arr
+            self._handle[z_offset:z_end, :, :] = arr
             return int(arr.nbytes)
         # Sharded: write one shard-region at a time, concurrently. zarrs-python's *multi-shard* write
         # path serializes inner-chunk encoding (~4x slower measured); a write covering a *single* shard
@@ -140,7 +140,7 @@ class ZarrsArrayWriter(ArrayWriter):
         def _write_shard(t: tuple[int, int, int]) -> None:
             z, y, x = t
             ze, ye, xe = min(z + sz, z_end), min(y + sy, y_dim), min(x + sx, x_dim)
-            self._handle[c, z:ze, y:ye, x:xe] = arr[z - z_offset : ze - z_offset, y:ye, x:xe]
+            self._handle[z:ze, y:ye, x:xe] = arr[z - z_offset : ze - z_offset, y:ye, x:xe]
 
         with ThreadPoolExecutor(max_workers=min(_SHARD_WRITE_WORKERS, len(tiles))) as pool:
             for _ in pool.map(_write_shard, tiles):  # consume the iterator to surface any exception

@@ -8,9 +8,9 @@ and records every point to the same results/write/<host>.jsonl (shared run_id) a
 pool in analysis. Concurrency caps are fixed for the whole sweep (set `VOXEL_*` env before running); to
 sweep them, run the sweep once per setting.
 
-Geometry constraint: `batch_z = batch_z_shards * shard_z_chunks * max_level.factor` must equal BATCH_SIZE
+Geometry constraint: `batch_frames = batch_shards * shard_frame_chunks * max_level.factor` must equal BATCH_SIZE
 (128, the frames pushed per batch). The default geometry (L7 / 1 / 1) satisfies it. To sweep `max_level`
-you must also set `shard_z_chunks`/`batch_z_shards` so the product stays 128 (e.g. L6 with shard_z_chunks=2);
+you must also set `shard_frame_chunks`/`batch_shards` so the product stays 128 (e.g. L6 with shard_frame_chunks=2);
 a bad combination fails loudly in `build_wconfig`.
 """
 
@@ -47,8 +47,8 @@ SWEEP = {
     "downscale": [DownscaleType.GAUSSIAN],
 }
 
-_GEOMETRY = ("max_level", "shard_z_chunks", "batch_z_shards", "target_shard_gb", "compression")  # -> WriterConfig
-_EXPENSIVE = ("backend", "slots", "max_level", "shard_z_chunks", "batch_z_shards")  # force a writer/ring rebuild
+_GEOMETRY = ("max_level", "shard_frame_chunks", "batch_shards", "target_shard_gb", "compression")  # -> WriterConfig
+_EXPENSIVE = ("backend", "slots", "max_level", "shard_frame_chunks", "batch_shards")  # force a writer/ring rebuild
 
 
 def _points(grid: dict) -> list[dict]:
@@ -102,9 +102,9 @@ def sweep(grid: dict, *, batches: int, samples: int, keep: bool) -> None:
                 # A mid-stack failure leaves the writer's stack open; drop it (the close releases its target
                 # handles too) so the next point starts fresh and the failure doesn't cascade.
                 with contextlib.suppress(Exception):
-                    writer.close()
+                    writer.release()
                 writers.pop((be, slots), None)
-            # This point's begin_stack (ring rebind) or the failure close above released the *previous*
+            # This point's open_dataset (ring rebind) or the failure close above released the *previous*
             # point's target -- safe to delete now, which bounds disk to ~2 points' worth.
             if prev is not None:
                 purge_target(*prev)
@@ -112,7 +112,7 @@ def sweep(grid: dict, *, batches: int, samples: int, keep: bool) -> None:
     finally:
         for w in writers.values():
             try:
-                w.close()  # releases the last point's target handles
+                w.release()  # releases the last point's target handles
             except Exception:  # a poisoned writer's close re-raises its failed batch; don't crash cleanup
                 console.print("[dim]  (a writer failed to close cleanly)[/]")
         if prev is not None:

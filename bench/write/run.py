@@ -38,8 +38,6 @@ from ome_zarr_writer import (
     OMEZarrWriter,
     StagedS3,
     Storage,
-    UIVec3D,
-    UVec3D,
     WriterConfig,
 )
 from ome_zarr_writer.array import ArrayWriter
@@ -47,6 +45,7 @@ from pydantic import BaseModel
 from rich import box
 from rich.console import Console
 from rich.table import Table
+from vxlib.vector import Transform, Vec3D
 
 from bench.data import BATCH_SIZE, CATALOG, load_real_block
 from bench.harness import Results, new_run_id
@@ -87,9 +86,9 @@ class WriteRun(BaseModel):
     compression: str
     max_level: str
     target_shard_gb: float
-    shard_z_chunks: int
-    batch_z_shards: int
-    batch_z: int
+    shard_frame_chunks: int
+    batch_shards: int
+    batch_frames: int
     frame_y: int
     frame_x: int
     dtype: str
@@ -280,7 +279,7 @@ def _print_combo(run: WriteRun, result: WriteResult) -> None:
     d = _derived(run.batches, result)
     console.print(
         f"\n[bold cyan]{run.backend}/{run.mode}[/]  {run.compression} · shard {run.target_shard_gb}GB · "
-        f"{run.max_level} · {run.downscale} · slots {run.slots} · batch_z {run.batch_z} · "
+        f"{run.max_level} · {run.downscale} · slots {run.slots} · batch_frames {run.batch_frames} · "
         f"{run.frame_y}x{run.frame_x} {run.dtype} · "
         f"caps {run.numba_threads}/{run.ts_concurrency}/{run.zarrs_shard_workers}"
     )
@@ -299,7 +298,8 @@ def _print_header(cfg: BenchConfig, wconfig: WriterConfig, blocks: list, run_id:
     gb = sum(b.nbytes for b in blocks) / 1e9
     console.rule(f"[bold]write bench[/]  run_id={run_id}")
     console.print(
-        f"frame={y}x{x} | batch_z={wconfig.batch_z} x {cfg.batches} batches = {BATCH_SIZE * cfg.batches} frames "
+        f"frame={y}x{x} | batch_frames={wconfig.batch_frames} x {cfg.batches} batches = "
+        f"{BATCH_SIZE * cfg.batches} frames "
         f"@ {cfg.fps:.0f}fps | slots={cfg.slots} | {wconfig.compression} | downscale={wconfig.downscale_type} | "
         f"samples={len(blocks)} ({gb:.0f}GB)"
     )
@@ -350,7 +350,7 @@ def clear_artifacts(label: str) -> None:
 def purge_target(mode: str, bn: str, tag: str = "") -> None:
     """Delete one sweep point's written data (local dataset, staged scratch, S3 prefix) so successive
     points don't accumulate on disk. Only call it once the point's writer has released the target -- i.e.
-    after the *next* point's begin_stack rebinds the ring, or after the writer's close. Best-effort; the
+    after the *next* point's open_dataset rebinds the ring, or after the writer's close. Best-effort; the
     sweep's final clear_artifacts backstops anything left."""
     sub = mode if not tag else f"{mode}-{tag}"
     shutil.rmtree(LOCAL_ROOT / bn / f"{sub}.ome.zarr", ignore_errors=True)  # local dataset (writer adds .ome.zarr)
@@ -387,7 +387,7 @@ def run_combo(
 ) -> WriteResult:
     """Write `batches` batches through `writer` at `fps`, measure, record a JSONL row, print. All the
     varying inputs are explicit args so the sweep can drive it without a BenchConfig."""
-    dw = writer.begin_stack(wconfig, storage)  # DatasetWriter; its .target + metrics.json survive end_stack
+    dw = writer.open_dataset(wconfig, storage)  # DatasetWriter; its .target + metrics.json survive end_stack
     interval = 1.0 / fps
     t0 = next_t = time.perf_counter()
     for batch_idx in range(batches):
@@ -400,7 +400,7 @@ def run_combo(
             if delay > 0:
                 time.sleep(delay)
     t_add = time.perf_counter()
-    writer.end_stack()
+    writer.close_image()
     t_end = time.perf_counter()
 
     stored = stored_bytes(dw.target)
@@ -423,9 +423,9 @@ def run_combo(
         compression=str(wconfig.compression),
         max_level=wconfig.max_level.name,
         target_shard_gb=wconfig.target_shard_gb,
-        shard_z_chunks=wconfig.shard_z_chunks,
-        batch_z_shards=wconfig.batch_z_shards,
-        batch_z=wconfig.batch_z,
+        shard_frame_chunks=wconfig.shard_frame_chunks,
+        batch_shards=wconfig.batch_shards,
+        batch_frames=wconfig.batch_frames,
         frame_y=int(wconfig.volume_shape.y),
         frame_x=int(wconfig.volume_shape.x),
         dtype=str(blocks[0].dtype),
@@ -446,17 +446,17 @@ def run_combo(
 
 def build_wconfig(blocks: list, batches: int, downscale: DownscaleType, **geometry) -> WriterConfig:
     """A WriterConfig for `batches` batches of the loaded frame shape. `geometry` overrides the writer's
-    geometry defaults (max_level, shard_z_chunks, batch_z_shards, target_shard_gb) -- the sweep uses this."""
+    geometry defaults (max_level, shard_frame_chunks, batch_shards, target_shard_gb) -- the sweep uses this."""
     y, x = blocks[0].shape[1], blocks[0].shape[2]
     wconfig = WriterConfig(
-        volume_shape=UIVec3D(z=BATCH_SIZE * batches, y=y, x=x),
-        voxel_size=UVec3D(z=1.0, y=0.5, x=0.5),
+        transform=Transform.grid((BATCH_SIZE * batches, y, x), Vec3D(z=1.0, y=0.5, x=0.5)),
         downscale_type=downscale,
         **geometry,
     )
-    if wconfig.batch_z != BATCH_SIZE:
+    if wconfig.batch_frames != BATCH_SIZE:
         raise SystemExit(
-            f"batch_z={wconfig.batch_z} != BATCH_SIZE={BATCH_SIZE}; fix max_level/shard_z_chunks/batch_z_shards"
+            f"batch_frames={wconfig.batch_frames} != BATCH_SIZE={BATCH_SIZE}; "
+            "fix max_level/shard_frame_chunks/batch_shards"
         )
     return wconfig
 
@@ -511,7 +511,7 @@ def main(cfg: BenchConfig) -> None:
                             f"[red]  {bn}/{label} FAILED {type(e).__name__}: {str(e).splitlines()[0][:120]}[/]"
                         )
             finally:
-                writer.close()
+                writer.release()
     finally:
         if cfg.keep:
             console.print(
@@ -535,7 +535,9 @@ def _parse_args() -> BenchConfig:
     )
     p.add_argument("--backends", default="ts", help="comma-separated backends: ts,zarrs (default ts)")
     p.add_argument("--modes", default=",".join(MODE_KEYS), help="storage modes: local,direct,staged (default all)")
-    p.add_argument("--slots", type=int, default=4, help="ring depth / batches in flight (default 4; ~batch_z RAM each)")
+    p.add_argument(
+        "--slots", type=int, default=4, help="ring depth / batches in flight (default 4; ~batch_frames RAM each)"
+    )
     p.add_argument("--batches", type=int, default=5, help="batches written back-to-back (default 5)")
     p.add_argument("--samples", type=int, default=2, help=f"samples to rotate through, 1..{len(CATALOG)} (default 2)")
     p.add_argument("--keep", action="store_true", help="keep local + VAST artifacts after the run (default: clear)")
