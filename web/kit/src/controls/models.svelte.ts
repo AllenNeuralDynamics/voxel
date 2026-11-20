@@ -371,17 +371,6 @@ export class NumericModel extends BasePropModel<number> {
     if (snapshot.step !== undefined) this.#rawStep = snapshot.step;
   }
 
-  wheel: Attachment<HTMLElement> = (node) => {
-    const onWheel = (e: WheelEvent) => {
-      if (!e.altKey) return;
-      e.preventDefault();
-      const direction = e.deltaY < 0 ? 1 : -1;
-      this.patch(this.value + direction * (this.step ?? 1), { throttled: true });
-    };
-    node.addEventListener('wheel', onWheel, { passive: false });
-    return () => node.removeEventListener('wheel', onWheel);
-  };
-
   scrubber: Attachment<HTMLElement> = (node) => {
     let dragStartX = 0;
     let dragStartValue = 0;

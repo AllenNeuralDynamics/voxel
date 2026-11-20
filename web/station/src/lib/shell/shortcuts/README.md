@@ -35,6 +35,7 @@ deliberate, and stopping it must be easy.
 
 - The number controls step with Alt+scroll, not ⌘+scroll. Ctrl+scroll zooms the page, a trackpad pinch also sends
   Ctrl, and Shift+scroll scrolls sideways. A plain scroll never changes a value, so scrolling the page cannot change a
-  laser level.
+  laser level. The first event of a scroll steps at once, then each 30 px of scroll is 1 step, so a trackpad's many
+  small events neither lag nor race (`wheelStepper` in the kit).
 - Space does not start preview. 1 key would turn on the lasers too easily.
 - The stop chord is ⌘. (Ctrl+.), because ⌘. already means "stop" on a Mac.

@@ -5,6 +5,7 @@ import type { HTMLInputAttributes } from 'svelte/elements';
 import { reportFailure } from '../../failures';
 import { type EditContext, NumericModel } from '../models.svelte';
 import { decimalsOf } from './decimals';
+import { wheelStepper } from './wheel';
 
 export interface NumberLimits {
   min?: number | null;
@@ -186,12 +187,15 @@ export function stepNumber(model: NumericModel, direction: 1 | -1, big = false):
   return model.value + direction * (big ? model.bigStep : (model.step ?? 1));
 }
 
+/** Alt+scroll steps the value, as `wheelStepper` counts the steps. A plain scroll scrolls the page. */
 export function altScroll(step: (direction: 1 | -1) => void): Attachment<HTMLElement> {
   return (node) => {
+    const steps = wheelStepper();
     const onWheel = (event: WheelEvent) => {
       if (!event.altKey) return;
       event.preventDefault();
-      step(event.deltaY < 0 ? 1 : -1);
+      const count = steps(event);
+      for (let i = 0; i < Math.abs(count); i++) step(count > 0 ? 1 : -1);
     };
     node.addEventListener('wheel', onWheel, { passive: false });
     return () => node.removeEventListener('wheel', onWheel);
