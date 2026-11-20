@@ -6,7 +6,7 @@ from vxl_instruments.spim.task import SPIMTask
 from vxlib.vector import IVec2D, Vec2D
 
 from vxl.devices.camera import CameraSensor
-from vxl.station.instrument.geometry import AxisRun
+from vxl.instrument.geometry import AxisRun
 
 from .support import TEMPLATES, load_file
 

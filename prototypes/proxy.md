@@ -51,3 +51,7 @@ The proxy opens only the message envelope (topics, cursor, `full`). Frames (VXLF
 - How a frame message is framed: the envelope and the VXLF bytes in 1 binary WebSocket message.
 - The lab's topic list.
 - Whether the station limits how many operations it takes at once.
+
+## Where it will live
+
+See the table in `station.md`.

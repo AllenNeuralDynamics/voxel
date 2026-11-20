@@ -184,9 +184,7 @@ def test_a_ready_object_is_passed_and_not_built_again() -> None:
 
 
 async def test_a_ready_object_is_checked_against_the_hint() -> None:
-    cube = Cube(
-        id="cube", excitation=Filter(id="a", band=(1, 2)), emission=Filter(id="b", band=(3, 4))
-    )
+    cube = Cube(id="cube", excitation=Filter(id="a", band=(1, 2)), emission=Filter(id="b", band=(3, 4)))
     configs = {"reader": config("Reader", glass="cube"), "wheel": config("Wheel", slots={"0": "cube"})}
 
     built, errors = await build_objects_async(configs, Device, ready={"cube": cube})

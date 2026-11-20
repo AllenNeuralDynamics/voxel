@@ -56,9 +56,7 @@ class TransportAdapter[D: Device](Adapter[D]):
         return None
 
     async def interface(self) -> DeviceInterface:
-        return await call(
-            self._transport, Action.GET_INTERFACE, GetInterfaceRequest(id=self._id), DeviceInterface
-        )
+        return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(id=self._id), DeviceInterface)
 
     async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result:
         results = await self.execute_many([OperationRequest(attr=operation, args=list(args), kwargs=kwargs)])
@@ -83,9 +81,7 @@ class TransportAdapter[D: Device](Adapter[D]):
         )
 
     async def set_props(self, **props: Any) -> PropResults:
-        return await call(
-            self._transport, Action.SET_PROPS, SetPropsRequest(id=self._id, props=props), PropResults
-        )
+        return await call(self._transport, Action.SET_PROPS, SetPropsRequest(id=self._id, props=props), PropResults)
 
     @overload
     def subscribe(self, topic: str, cb: StreamCallback[bytes]) -> Teardown: ...

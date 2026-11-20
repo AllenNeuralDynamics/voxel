@@ -12,11 +12,11 @@ from pydantic import Field, SerializeAsAny, model_validator
 from vxlib.reactivity import Cell, Emitter, Readable
 from vxlib.schema import FrozenModel, check_identifier
 
+from vxl.instrument.base import Instrument, InstrumentView
+from vxl.instrument.folder import InstrumentFolder
 from vxl.live import LiveSourceEmission
 from vxl.records import Records
 from vxl.station.errors import BusyError, NotFoundError
-from vxl.station.instrument.base import Instrument, InstrumentView
-from vxl.station.instrument.folder import InstrumentFolder
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Mapping

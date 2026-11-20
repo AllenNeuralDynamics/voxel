@@ -2,7 +2,7 @@
 
 **Operate a Voxel station from the browser.**
 
-The station app is the Svelte application served by `vxl.web`. It covers the instrument library and presets, live hardware
+The station app is the Svelte application served by `vxl._legacy.web`. It covers the instrument library and presets, live hardware
 inspection and configuration, acquisition planning and execution, preview rendering, and recorded acquisitions and
 logs. It is an application-specific client of the Voxel API rather than a standalone component library.
 
@@ -21,7 +21,7 @@ flowchart TD
     model --> state["Ordered state WebSocket"]
     model --> logs["Committed log WebSocket"]
     preview["Preview session and WebGPU renderer"] --> frames["Latest-frame WebSocket"]
-    rest --> backend["vxl.web"]
+    rest --> backend["vxl._legacy.web"]
     state --> backend
     logs --> backend
     frames --> backend
@@ -77,7 +77,7 @@ unavailable, but preview rendering reports an error.
 ## Backend contracts
 
 The TypeScript definitions in [`src/lib/core/model/types.ts`](src/lib/core/model/types.ts) mirror the Python models serialized
-by `vxl.web`. They are not generated, so a backend wire-model change must update both sides in the same change.
+by `vxl._legacy.web`. They are not generated, so a backend wire-model change must update both sides in the same change.
 
 Preview framing has an additional versioned contract implemented in
 [`src/lib/features/preview/protocol.ts`](src/lib/features/preview/protocol.ts) and its Python counterpart under `vxl.live`. A protocol
@@ -93,7 +93,7 @@ through those models and render their reactive state rather than parsing wire pa
 vp -C web/station build
 ```
 
-The static adapter writes the production SPA directly to `src/vxl/web/static/` in the workspace root. That directory is generated, ignored
+The static adapter writes the production SPA directly to `src/vxl/_legacy/web/static/` in the workspace root. That directory is generated, ignored
 by Git, and included as package data when Voxel is built; do not edit its contents manually. The FastAPI application
 serves these files from `/` and falls back to `index.html` for client-side routes.
 

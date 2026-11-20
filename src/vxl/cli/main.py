@@ -107,13 +107,13 @@ def run(
         case "devices", "shell":
             return run_devices(args.config, args.devices, log=args.log)
         case "legacy", "web":
-            web_app = _load_optional("vxl.web.app", "web", errors)
+            web_app = _load_optional("vxl._legacy.web.app", "web", errors)
             if web_app is None:
                 return 2
             web_app.serve(host=args.host, port=args.port, debug=args.debug)
             return 0
         case "legacy", "qt":
-            qt_app = _load_optional("vxl.qt.app", "qt", errors)
+            qt_app = _load_optional("vxl._legacy.qt.app", "qt", errors)
             if qt_app is None:
                 return 2
             return qt_app.launch(args.config, verbose=args.verbose)

@@ -14,14 +14,14 @@ from rigup.activity import ActivityBusyError, ActivityInfo
 
 from vxl._utils.files import load_yaml
 from vxl.devices.signals.generator.base import OwnClock
+from vxl.instrument.basic import BasicInstrument
+from vxl.instrument.config import new_instrument_id
+from vxl.instrument.folder import InstrumentFolder
+from vxl.instrument.samples import render
+from vxl.instrument.signals import Timeline
+from vxl.instrument.state import InstrumentState, StageFollowRule, Task
+from vxl.instrument.store import ABSENT, InstrumentStore, Merge
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
-from vxl.station.instrument.basic import BasicInstrument
-from vxl.station.instrument.config import new_instrument_id
-from vxl.station.instrument.folder import InstrumentFolder
-from vxl.station.instrument.samples import render
-from vxl.station.instrument.signals import Timeline
-from vxl.station.instrument.state import InstrumentState, StageFollowRule, Task
-from vxl.station.instrument.store import ABSENT, InstrumentStore, Merge
 
 from .support import basic, codes, load, problems, profile, rig, simulated, template
 

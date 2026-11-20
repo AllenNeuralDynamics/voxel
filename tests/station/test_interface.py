@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from rigup.interface import action, create, delete, query, update
 from vxlib.schema import Key
 
-from vxl.station.instrument.interface import check_operations, route_of
+from vxl.instrument.interface import check_operations, route_of
 
 
 class Item(BaseModel):

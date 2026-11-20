@@ -4,11 +4,11 @@ from typing import Any
 
 from vxlib.issues import Problems
 
+from vxl.instrument.basic import BasicInstrument
+from vxl.instrument.config import InstrumentConfig
+from vxl.instrument.folder import InstrumentFolder
+from vxl.instrument.state import InstrumentState
 from vxl.records import Records
-from vxl.station.instrument.basic import BasicInstrument
-from vxl.station.instrument.config import InstrumentConfig
-from vxl.station.instrument.folder import InstrumentFolder
-from vxl.station.instrument.state import InstrumentState
 from vxl.system import System
 
 _IDENTITY: dict[str, Any] = {
@@ -29,7 +29,7 @@ _RIG: dict[str, Any] = {
     "id": "5x8k2m9q4r7t1v3w6y0z2b4c8d",
     "name": "bench",
     "model": "bench.v1",
-    "target": "vxl.station.instrument.basic.BasicInstrument",
+    "target": "vxl.instrument.basic.BasicInstrument",
     "parts": {
         "galvo": {"kind": "galvo"},
         "objective": {"target": "vxl.parts.Objective", "magnification": 5},

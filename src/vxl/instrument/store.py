@@ -1,269 +1,171 @@
+"""The saved state of 1 running instrument: ``state.json``, and its defaults in ``default.yaml``."""
+
 import asyncio
-import datetime
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self
+from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import ValidationError
+from vxlib.history import Change
+from vxlib.issues import KeyPath, Problems
 from vxlib.reactivity import Cell, Readable, Subscribable
-from vxlib.schema import error_message
 
-from vxl._utils.files import atomic_write, load_and_validate_yaml, save_yaml
-
-from .config import InstrumentConfig, InstrumentDefaults, InstrumentPreset, InstrumentState
-from .errors import OperationRejectedError, StartupError, Violation
-
-PROMOTABLE_FIELDS = frozenset(InstrumentDefaults.model_fields)
-"""Baseline fields that can move between the live state and persisted instrument defaults."""
+from vxl._utils.files import atomic_write, update_yaml
+from vxl.instrument.config import InstrumentConfig
+from vxl.instrument.state import InstrumentState
+from vxl.station.errors import RejectedError
 
 
-class Loaded[T: BaseModel](BaseModel, frozen=True):
-    """A persisted model that was found, read, and fully validated."""
+class Absent(Enum):
+    """No value at a key path: the key is not there. Setting it removes the key."""
 
-    status: Literal["loaded"] = "loaded"
-    value: T
-
-
-class Missing(BaseModel, frozen=True):
-    """A persisted model whose file was not found."""
-
-    status: Literal["missing"] = "missing"
+    ABSENT = "absent"
 
 
-class Invalid[T: BaseModel](BaseModel, frozen=True):
-    """A persisted model that failed structural or semantic validation."""
-
-    status: Literal["invalid"] = "invalid"
-    value: T | None = None
-
-
-type Inspected[T: BaseModel] = Annotated[Loaded[T] | Missing | Invalid[T], Field(discriminator="status")]
-
-
-def _load_model[T: BaseModel](path: Path, model: type[T], source: str) -> tuple[Inspected[T], tuple[Violation, ...]]:
-    """Load one persisted model, returning structured violations instead of raising."""
-    try:
-        return Loaded(value=load_and_validate_yaml(path, model)), ()
-    except FileNotFoundError:
-        return Missing(), ()
-    except ValidationError as exc:
-        return Invalid[T](), tuple(
-            Violation(
-                code=f"{source}.{error['type']}",
-                msg=error_message(error),
-                loc=(source, *error["loc"]),
-            )
-            for error in exc.errors()
-        )
-    except Exception as exc:
-        return Invalid[T](), (Violation(code=f"{source}.load", msg=str(exc), loc=(source,)),)
+ABSENT = Absent.ABSENT
 
 
 @dataclass(frozen=True)
-class InstrumentSetup:
-    """A coherent, statically validated snapshot used to construct a store."""
+class Merge:
+    """Keys to add to the dict at a key path, or to replace there; its other keys stay. The dict is made when the key
+    is not there, but the rest of the path must be there."""
 
-    home: Path
-    config: InstrumentConfig
-    state: InstrumentState
-
-
-class InstrumentInspection(BaseModel, frozen=True):
-    """Fault-tolerant static inspection of an instrument's persisted configuration and state."""
-
-    config: Inspected[InstrumentConfig]
-    state: Inspected[InstrumentState] = Field(default_factory=Missing)
-    violations: tuple[Violation, ...] = ()
-
-    @model_validator(mode="after")
-    def check_blocking_status_violations(self) -> Self:
-        """Ensure every unusable artifact status has a corresponding structured violation."""
-        sources = {violation.loc[0] for violation in self.violations if violation.loc}
-        if isinstance(self.config, (Missing, Invalid)) and "config" not in sources:
-            raise ValueError("missing or invalid config must include a config violation")
-        if isinstance(self.state, Invalid) and "state" not in sources:
-            raise ValueError("invalid state must include a state violation")
-        return self
-
-    @property
-    def ok(self) -> bool:
-        """Whether the inspected artifacts can be loaded as an instrument store."""
-        return isinstance(self.config, Loaded) and not self.violations
+    values: Mapping[str, Any]
 
 
-class InstrumentStore(Subscribable[InstrumentState]):
-    """Validating persistence for one :class:`InstrumentState`."""
+type StateValues = Mapping[KeyPath, Any]
+"""A value for each key path of the state."""
 
-    @staticmethod
-    def instantiate(config: InstrumentConfig, name: str, into: Path | str) -> Path:
-        """Create ``<into>/<name>.voxel`` and persist its initial configuration."""
-        directory = Path(into) / f"{name}.voxel"
-        if directory.exists():
-            raise FileExistsError(f"Instrument '{name}' already exists at {directory}")
-        directory.mkdir(parents=True)
-        save_yaml(directory / "config.yaml", config)
-        return directory
+type StateChange = Change[dict[KeyPath, Any]]
+"""The values at each key path of the state, before and after an update."""
 
-    @staticmethod
-    def load_config(path: Path | str) -> InstrumentInspection:
-        """Load and semantically inspect one instrument configuration without raising."""
-        path = Path(path)
-        config, violations = _load_model(path, InstrumentConfig, "config")
-        if isinstance(config, Missing):
-            violations = (
-                Violation(
-                    code="config.missing",
-                    msg=f"No InstrumentConfig found at {path}",
-                    loc=("config",),
-                ),
-            )
-        elif isinstance(config, Loaded):
-            semantic_violations = tuple(config.value.semantic_violations())
-            if semantic_violations:
-                config = Invalid[InstrumentConfig](value=config.value)
-                violations = (*violations, *semantic_violations)
-        return InstrumentInspection(config=config, violations=violations)
 
-    @classmethod
-    def load(cls, home: Path | str) -> Self:
-        """Load valid instrument state, raising one structured startup error on failure."""
-        home = Path(home)
-        inspection = cls.check(home)
-        if inspection.violations:
-            raise StartupError(list(inspection.violations))
-        match inspection.config, inspection.state:
-            case Loaded(value=config), Loaded(value=state):
-                pass
-            case Loaded(value=config), Missing():
-                state = InstrumentState(**config.default.model_dump())
-            case _:
-                raise RuntimeError("Invalid instrument inspection without violations")
-        return cls(InstrumentSetup(home=home, config=config, state=state))
+class InstrumentStore[S: InstrumentState](Subscribable[S]):
+    """The saved state of 1 running instrument. Each change is checked against ``rig.yaml``, saved in
+    ``state.json``, and sent to the subscribers. Only the instrument holds it."""
 
-    @classmethod
-    def check(cls, home: Path | str) -> InstrumentInspection:
-        """Inspect an instrument directory without opening hardware or raising for invalid persisted state."""
-        home = Path(home)
-        config_inspection = cls.load_config(home / "config.yaml")
-        config = config_inspection.config
-        state, state_violations = _load_model(home / "state.json", InstrumentState, "state")
-        violations = [*config_inspection.violations, *state_violations]
-        config_value = config.value if isinstance(config, (Loaded, Invalid)) else None
-        if config_value is not None and isinstance(state, Loaded):
-            semantic_violations = tuple(state.value.semantic_violations(config_value.hal))
-            if semantic_violations:
-                state = Invalid[InstrumentState](value=state.value)
-                violations.extend(semantic_violations)
-        return InstrumentInspection(
-            config=config,
-            state=state,
-            violations=tuple(violations),
-        )
-
-    def __init__(self, setup: InstrumentSetup) -> None:
+    def __init__(self, home: Path, config: InstrumentConfig, default: S, state: S) -> None:
         super().__init__()
-        self._home = setup.home
-        self._config = setup.config
-        self._path = setup.home / "state.json"
-        self._hal = setup.config.hal
-        self._value = setup.state
-        self._default = Cell(setup.config.default)
+        self._home = home
+        self._config = config
+        self._value = state
+        saved = home / "state.json"
+        self._last_modified = datetime.fromtimestamp(saved.stat().st_mtime, tz=UTC) if saved.is_file() else None
+        self._default: Cell[S] = Cell(default)
         self._lock = asyncio.Lock()
 
     @property
     def home(self) -> Path:
-        """The instrument's on-disk home."""
         return self._home
 
     @property
     def config(self) -> InstrumentConfig:
-        """The statically validated instrument configuration."""
+        """The ``rig.yaml`` of the instrument."""
         return self._config
 
     @property
-    def default(self) -> Readable[InstrumentDefaults]:
-        """The persisted instrument defaults as a reactive read-only view."""
+    def default_state(self) -> Readable[S]:
         return self._default
 
     @property
-    def value(self) -> InstrumentState:
-        """The current committed state — frozen, safe to hand out without copying."""
+    def value(self) -> S:
+        """The saved state. It is frozen, so it is safe to hand out."""
         return self._value
 
-    async def _save(self, state: InstrumentState) -> None:
-        """Persist `state` durably off the event loop. Writes exactly `state`."""
-        await asyncio.to_thread(atomic_write, self._path, state.model_dump_json(indent=2, exclude_none=True))
+    @property
+    def last_modified(self) -> datetime | None:
+        """When the state was last saved, or ``None`` when it never was."""
+        return self._last_modified
 
-    async def set(self, candidate: InstrumentState) -> None:
-        """Validate, persist, and adopt `candidate`, notifying subscribers with the new state.
-
-        Re-runs the model validators (via a ``model_dump`` round-trip — ``model_copy`` skips them) and the
-        instrument's HAL compatibility check. Raises :class:`OperationRejectedError` and changes nothing if either
-        rejects it. A candidate identical to the current state (a no-op edit) is dropped before stamping: no save,
-        no notify (`last_modified` is excluded from the comparison so an unchanged edit doesn't churn).
-        """
+    async def set(self, candidate: S) -> None:
+        """Check, save and adopt ``candidate``. An unchanged state is dropped: no save, no notification. Raise
+        :class:`RejectedError` when it has a problem."""
         async with self._lock:
-            await self._commit(candidate)
+            await self._commit(candidate.model_dump())
 
-    async def update(self, **updates: Any) -> None:
-        """Atomically read the current state, patch top-level fields, then validate and persist.
-
-        The read-modify-write runs under the store lock, so concurrent ``update``/``set`` calls cannot
-        interleave into a lost update or a double notify.
-        """
+    async def update(self, values: StateValues) -> StateChange:
+        """Set the value at each key path of the state, as :meth:`set` does, and give the values before and after.
+        :data:`ABSENT` removes a key, and is the value of a key that is not there. :class:`Merge` adds keys to a dict.
+        Raise :class:`RejectedError` when a path leads to nothing, or a merge meets something that is not a dict."""
         async with self._lock:
-            await self._commit(self._value.model_copy(update=updates))
+            data = self._value.model_dump()
+            before: dict[KeyPath, Any] = {}
+            for path, value in values.items():
+                parent, key, before[path] = self._find(data, path)
+                match value, before[path]:
+                    case Absent(), _:
+                        parent.pop(key, None)
+                    case Merge(), Absent():
+                        parent[key] = dict(value.values)
+                    case Merge(), dict() as current:
+                        parent[key] = current | dict(value.values)
+                    case Merge(), _:
+                        problems = Problems()
+                        msg = f"'{'.'.join(map(str, path))}' holds no keys to merge into."
+                        problems.add("state.not_a_dict", msg, *path)
+                        raise RejectedError(str(problems), problems)
+                    case _:
+                        parent[key] = value
+            await self._commit(data)
+            saved = self._value.model_dump()
+            return Change(before=before, after={path: self._find(saved, path)[2] for path in values})
 
-    async def save_as_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
-        """Persist selected fields from the live state into the instrument defaults."""
-        fields = set(include)
-        if unknown := fields - PROMOTABLE_FIELDS:
-            raise OperationRejectedError(f"Cannot promote non-default fields: {sorted(unknown)}")
-
+    async def save_as_default_state(self, include: Collection[str] | None = None) -> None:
+        """Save the given fields of the state as the instrument's defaults, in ``default.yaml``. With no fields
+        given, save each field that can be a default."""
+        fields = self._default_fields(include, "save as default")
         async with self._lock:
-            new_default = self._default.value.model_copy(
-                update={field: getattr(self._value, field) for field in fields}
-            )
-            new_config = self._config.model_copy(update={"default": new_default})
-            await asyncio.to_thread(save_yaml, self._home / "config.yaml", new_config)
-            self._config = new_config
-            await self._default.set(new_default)
+            default = self._default.value.model_copy(update={field: getattr(self._value, field) for field in fields})
+            if found := default.problems(self._config):
+                raise RejectedError(f"Cannot save as default: {found}", found)
+            data = default.model_dump(mode="json", exclude_none=True, include=set(default.default_fields()))
+            await asyncio.to_thread(update_yaml, self._home / "default.yaml", data)
+            await self._default.set(default)
 
-    async def restore_default(self, include: Collection[str] = PROMOTABLE_FIELDS) -> None:
-        """Restore selected live-state fields from the persisted instrument defaults."""
-        fields = set(include)
-        if unknown := fields - PROMOTABLE_FIELDS:
-            raise OperationRejectedError(f"Cannot restore non-default fields: {sorted(unknown)}")
+    def default_values(self, include: Collection[str] | None = None) -> dict[KeyPath, Any]:
+        """The value of the given fields in the default state, or of each field that can be a default, as
+        :meth:`update` takes them."""
+        default = self._default.value.model_dump()
+        return {(field,): default[field] for field in sorted(self._default_fields(include, "restore"))}
 
-        async with self._lock:
-            default = self._default.value
-            await self._commit(self._value.model_copy(update={field: getattr(default, field) for field in fields}))
+    def _default_fields(self, include: Collection[str] | None, action: str) -> frozenset[str]:
+        allowed = self._value.default_fields()
+        if include is None:
+            return allowed
+        if unknown := set(include) - allowed:
+            raise RejectedError(f"Cannot {action}: {sorted(unknown)} cannot be a default")
+        return frozenset(include)
 
-    async def apply_preset(self, preset: InstrumentPreset) -> None:
-        """Atomically replace reusable state fields while preserving compatible specimen metadata."""
-        async with self._lock:
-            metadata = self._value.metadata if preset.metadata_cls == self._value.metadata_cls else {}
-            candidate = InstrumentState.model_validate(
-                {
-                    **preset.model_dump(),
-                    "metadata": metadata,
-                    "last_modified": self._value.last_modified,
-                }
-            )
-            await self._commit(candidate)
-
-    async def _commit(self, candidate: InstrumentState) -> None:
-        """Validate, drop no-ops, check HAL compatibility, persist, adopt, and notify."""
+    @staticmethod
+    def _find(data: Any, path: KeyPath) -> tuple[Any, str | int, Any]:
+        """In plain ``data``: the container that holds the last key of ``path``, that key, and its value."""
+        *parents, last = path
         try:
-            validated = InstrumentState.model_validate(candidate.model_dump())
-        except ValidationError as e:
-            raise OperationRejectedError("; ".join(err["msg"] for err in e.errors())) from e
-        if validated.model_copy(update={"last_modified": self._value.last_modified}) == self._value:
-            return  # no-op edit (ignoring the timestamp): no save, no notify
-        if violations := validated.semantic_violations(self._hal):
-            raise OperationRejectedError("; ".join(violation.msg for violation in violations))
-        stamped = validated.model_copy(update={"last_modified": datetime.datetime.now(tz=datetime.UTC)})
-        await self._save(stamped)
-        self._value = stamped
-        await self._notify(stamped)
+            for key in parents:
+                data = data[key]
+            value = data.get(last, ABSENT) if isinstance(data, dict) else data[last]
+        except (KeyError, IndexError, TypeError) as error:
+            problems = Problems()
+            problems.add("state.missing", f"Nothing at '{'.'.join(map(str, path))}'.", *path)
+            raise RejectedError(str(problems), problems) from error
+        return data, last, value
+
+    async def _commit(self, data: dict[str, Any]) -> None:
+        try:
+            validated = self._value.model_validate(data)
+        except ValidationError as exc:
+            problems = Problems.from_validation(exc)
+            raise RejectedError(str(problems), problems) from exc
+        if validated == self._value:
+            return
+        if found := validated.problems(self._config):
+            raise RejectedError(str(found), found)
+        await asyncio.to_thread(
+            atomic_write, self._home / "state.json", validated.model_dump_json(indent=2, exclude_none=True)
+        )
+        self._value = validated
+        self._last_modified = datetime.now(tz=UTC)
+        await self._notify(validated)

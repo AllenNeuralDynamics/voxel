@@ -1,5 +1,5 @@
 """Try-out of HTTP routes made from the interface of an open instrument: its declared operations, as
-``vxl.station.instrument.interface`` checks and routes them, run through ``Instrument.execute``.
+``vxl.instrument.interface`` checks and routes them, run through ``Instrument.execute``.
 
 Standard intents follow Google AIP-133 to 135 and RFC 9110: create is ``POST`` on the collection and answers ``201``
 with the item and a ``Location``; update is ``PATCH`` and answers the changed item; delete is ``DELETE`` and answers
@@ -33,9 +33,9 @@ from starlette.convertors import Convertor, register_url_convertor
 from starlette.exceptions import HTTPException
 from vxlib.schema import key_field
 
+from vxl.instrument.base import Instrument
+from vxl.instrument.interface import Target, in_state, route_of, target_of
 from vxl.station.errors import BusyError, NotFoundError, RejectedError
-from vxl.station.instrument.base import Instrument
-from vxl.station.instrument.interface import Target, in_state, route_of, target_of
 
 logger = logging.getLogger(__name__)
 

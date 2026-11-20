@@ -6,14 +6,14 @@ import pytest
 from rigup.activity import ActivityBusyError, ActivityInfo
 from vxlib.issues import Problems
 
+from vxl.instrument.base import Instrument
+from vxl.instrument.basic import BasicInstrument
+from vxl.instrument.config import InstrumentConfig
+from vxl.instrument.folder import InstrumentFolder
+from vxl.instrument.state import InstrumentState, ProfileFields, Task
 from vxl.metadata import ExperimentMetadata
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
-from vxl.station.instrument.base import Instrument
-from vxl.station.instrument.basic import BasicInstrument
-from vxl.station.instrument.config import InstrumentConfig
-from vxl.station.instrument.folder import InstrumentFolder
-from vxl.station.instrument.state import InstrumentState, ProfileFields, Task
 from vxl.system import System
 
 from .support import bench
@@ -21,7 +21,7 @@ from .support import bench
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from vxl.station.instrument.hal import DeviceView
+    from vxl.instrument.hal import DeviceView
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 

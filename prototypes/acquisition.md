@@ -19,7 +19,7 @@ see `records.md`.
 
 ## The loop
 
-Copied from the old loop in `src/vxl/instrument/core.py` (`start_acquisition` and its loop, lines 673 and 1505–1720):
+Copied from the old loop in `src/vxl/_legacy/instrument/core.py` (`start_acquisition` and its loop, lines 673 and 1505–1720):
 
 1. Stop the preview. Check that each camera can write to the storage.
 2. Create the record: the `Acquisition`, and each visit and image as `pending`. Open the log window.

@@ -37,19 +37,45 @@ These are the current picks, open until decided.
   reference is a choice). Points and correction rows cannot be named this way, so they cannot have knobs.
 - **No stored bounds or step.** Both only made the slider comfortable, and the system already has the real limits. They
   are worked out from existing facts (see below).
-- **The control is a ruler**, not a full slider: a fixed center line on the current value over a ruler of ticks that
-  shows a small window around it. Dragging scrolls the ruler; it stops at the bounds, with the part past them hatched.
-  The ruler follows the pointer (8 px for each step), Shift moves 10 steps at a time; the wheel and the arrow keys move 1 step; a number box takes an exact
-  value. Three looks are under test in the Lab: Track (the slider's track through the middle, ticks on it, a needle
-  fixed at the center, the reading as a fill on the track), Light (a needle fixed at the center with no track, sparse ticks that fade
-  toward the ends, a cap at each end of the range, the reading as a filled track) and Boxed (a framed ruler with a
-  tick every step and labels). A full slider stays for values whose whole range means something (power, exposure); the ruler is for small
-  moves inside a large range (focus positions, timeline offsets, a sheet-focus voltage).
+- **The control is a ruler**, not a full slider (see "The ruler" below). A full slider stays for values whose whole
+  range means something (power, exposure); the ruler is for small moves inside a large range (focus positions,
+  timeline offsets, a sheet-focus voltage).
 - **A change is sent on release** (or Enter in the box). The wheel has no release, so a short pause counts as 1.
   Loading a cycle into a running generator stops it, re-arms it and starts it again
   (`GeneratorController.load`), so sending every small move would restart it many times a second.
 - **Live panel section: "Timing".** UI words: "Add knob", "Edit knob", "Remove knob"; the star on a Timing panel row
   says "Add to the Live panel" or "Edit the knob".
+
+## The ruler
+
+Prototyped in the Lab on the Live panel's focus rows (device positions), which have the same need as timeline knobs.
+Not yet used for the knobs themselves.
+
+- **Settled: a needle.** A 2 px line with round ends, fixed at the center, marks the target. The ruler of ticks moves
+  under it. A round thumb was tried and dropped: on a slider it means "drag me and I move", but here it stays put, and
+  it hid the ticks at the value.
+- **Input.** A drag anywhere on the ruler moves it with the pointer; the value snaps to steps. Shift moves 10 steps at a
+  time. The wheel and the arrow keys move 1 step (Page Up and Down 10). The number box takes an exact value.
+- **When a change is sent.** A drag sends on release. The wheel and the keys send after a 0.4 s pause.
+- **Motion.** Each ruler keeps its drawn state by its key, so a rebuild of the panel does not reset it. The center value
+  and the reading ease toward their targets at the screen's frame rate. While dragging, the ticks follow the pointer
+  exactly, and on release the ruler glides onto the snapped value. The live loop redraws a ruler whenever its drawn
+  reading differs from the real one. A first version redrew only while its row was marked "moving", so a short move
+  that ended before the next tick left the reading mark stuck. When a page is in the background and gets few frames,
+  the live loop steps the animation itself, so it still settles.
+- **Looks under test** (Lab, Ruler):
+
+  | Look | What it draws |
+  |---|---|
+  | Fine (default) | the slider's 3 px track over the range; a tick every step: every 10th full strength, every 5th at 0.7, the rest at 0.45, all fading near the ends; the reading as a fill on the track |
+  | Track | the same track and fill; a tick every 2 steps, every 10th taller |
+  | Light | no track; a tick every 2 steps, fading toward the ends; a cap at each end of the range; the reading as a fill |
+  | Boxed | a framed ruler; a tick every step with a label every 10; hatching past the range; a straight center line; the reading as a mark at the bottom, pinned to the edge on its side when outside the window |
+
+- **Spacing.** 8 px between steps for Track, Light and Boxed. For Fine, a Lab choice (Fine spacing): Dense (about
+  5.3 px, a window 1.5 times as wide, the default), Medium (6.4 px) or Sparse (8 px). Closer ticks mean less hand
+  movement for each step, so fine moves get harder to control; ticks between steps were rejected, because they would
+  show positions the value can never stop at.
 
 ## Bounds and step, worked out
 
@@ -108,7 +134,7 @@ the generator among its resources.
 | # | Addition | Where |
 |---|---|---|
 | 1 | `Caution` and `Cautions` | `vxlib/src/vxlib/issues.py` |
-| 2 | `TuningKnob` (`label`, `generator`, `wire`, `field`) | `src/vxl/station/instrument/state.py` |
+| 2 | `TuningKnob` (`label`, `generator`, `wire`, `field`) | `src/vxl/instrument/state.py` |
 | 3 | `Profile.tuning_knobs`, default empty | `state.py` |
 | 4 | `tuning_knobs` in the base `ProfileFields`, so every kind's `update_profile` edits the list | `state.py` |
 | 5 | `Profile.cautions(config)`: the fit checks above, apart from `Profile.problems` | `state.py` |
@@ -140,7 +166,7 @@ method keeps them in 1 place for every caller (web, Qt, a script), and a client 
 
 ## Related findings from the Timing prototype
 
-- The Lab ports `render()` from `src/vxl/station/instrument/samples.py` to JS. On the templates' timelines its volts
+- The Lab ports `render()` from `src/vxl/instrument/samples.py` to JS. On the templates' timelines its volts
   and problem messages match the Python exactly.
 - `Cycle.volts` sends a plain list of volts for each pin. At 100 kHz over 544 ms with 17 wires that is about 925,000
   numbers each time a profile loads.

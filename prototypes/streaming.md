@@ -11,7 +11,7 @@ batches. See `acquisition.md` and `records.md`.
 - **The camera controller does not.** `begin_batch(n)` (`src/vxl/devices/camera/area.py:391`) waits for a free slot,
   arms the camera for `n` frames, and `_collect_batch` (`:423`) stops the camera after them. Frames that arrive
   between batches are lost, so a sweep cannot run.
-- **The old loop** (`src/vxl/instrument/core.py:1630`) starts and stops the triggers around each batch.
+- **The old loop** (`src/vxl/_legacy/instrument/core.py:1630`) starts and stops the triggers around each batch.
 - **Dropped frames are not checked.** The drivers report them (`dropped_frames` in egrabber, ximea, pco), and nothing
   reads them.
 - **Geometry in the file:** axes `c, z, y, x` and a scale from `z_step` and the magnification. No translation.

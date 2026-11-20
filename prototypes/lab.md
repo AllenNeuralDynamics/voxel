@@ -32,4 +32,9 @@ Discussed on 2026-11-18, not built. Builds on `records.md`. Replaces the copy-of
 
 - Login, and who may see which runs (large labs, later).
 - How a station finds the Lab: an address in `station.yaml` first, maybe discovery later.
-- Whether a small lab runs `vxl lab` on the station computer, and whether 1 command starts both.
+- A small lab may run the lab server on the station computer: `vxl station start --with-lab` starts both (decided
+  2026-11-19, see `station.md`).
+
+## Where it will live
+
+See the table in `station.md`.

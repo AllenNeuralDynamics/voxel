@@ -8,8 +8,8 @@ import pytest
 from vxl_instruments.spim.instrument import Microscope
 from vxl_instruments.spim.task import SPIMTask
 
+from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Records
-from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 from .support import simulated, template

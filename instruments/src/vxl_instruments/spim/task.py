@@ -12,11 +12,11 @@ from vxlib.schema import FrozenModel, repeated
 from vxlib.units import Portion
 from vxlib.vector import Span
 
-from vxl.station.instrument.config import (
+from vxl.instrument.config import (
     SpecimenAxis,
     Stage,
 )
-from vxl.station.instrument.state import Task, TaskFields
+from vxl.instrument.state import Task, TaskFields
 
 from .config import SPIMConfig
 

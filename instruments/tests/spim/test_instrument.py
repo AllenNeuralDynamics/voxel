@@ -16,10 +16,10 @@ from vxl_instruments.spim.state import SPIMProfileFields, WriterFields
 from vxl_instruments.spim.task import SPIMTask, SPIMTaskFields
 
 from vxl.devices.camera import AreaROI
+from vxl.instrument.folder import InstrumentFolder
 from vxl.live import LiveSourceEmission, LiveViewport, live_source_header
 from vxl.records import Records
 from vxl.station.errors import RejectedError, StartupError
-from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 from .support import objective_turret, simulated, template, two_cameras

@@ -7,8 +7,8 @@ from uuid import UUID
 from pydantic import ValidationError
 from vxl_records import RecordsError, SQLiteRecords
 
+from vxl._legacy.station.station import StationConfig as LegacyStationConfig
 from vxl.station.config import StationConfig
-from vxl.station_legacy.station import StationConfig as LegacyStationConfig
 from vxl.storage import StorageSpec
 from vxl.system import load_voxel_env
 

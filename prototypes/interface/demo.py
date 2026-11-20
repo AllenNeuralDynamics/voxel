@@ -14,8 +14,8 @@ from vxl_instruments.spim.instrument import Microscope
 from vxl_instruments.spim.task import SPIMTask
 
 from instruments.tests.spim.support import config_data, simulated, template
+from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Records
-from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 from .web import build_app

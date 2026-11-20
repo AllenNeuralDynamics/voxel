@@ -19,4 +19,4 @@ notes
 .old
 
 # web/station build
-src/vxl/web/static/
+src/vxl/_legacy/web/static/

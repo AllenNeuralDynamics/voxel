@@ -2,7 +2,7 @@
 
 **Status, 2026-11-18:** built. Decorators that declare an operation live in `rigup/src/rigup/interface.py` (named
 "marks" until the same day); vxl checks each kind against its state and gives routes and `InstrumentInterface` in
-`src/vxl/station/instrument/interface.py`; `Instrument.execute(name, args)` runs an operation by name. The HTTP layer
+`src/vxl/instrument/interface.py`; `Instrument.execute(name, args)` runs an operation by name. The HTTP layer
 is still a try-out in `prototypes/interface/` (`web.py`, `demo.py`), now on the real code; the real one comes with the
 web layer step. Terms: a decorator records a **declaration**; the description clients read is an
 **`OperationInfo`**; "operation" replaces "command" everywhere.
@@ -119,7 +119,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
 - `rigup`: the command declarations and the argument model builder move from `rigup.device` to a shared module
   (`rigup.interface`); devices keep `@query`, `@action`, `@failsafe`. The builder learns `**fields: Unpack[TypedDict]`:
   today `params_model` refuses `**kwargs`.
-- `vxl.station.instrument.interface`: `create`, `update`, `delete`, and the checks against the view model. Kind authors
+- `vxl.instrument.interface`: `create`, `update`, `delete`, and the checks against the view model. Kind authors
   import every declaration from here.
 - `vxl.station.web`: reads the declarations of the open instrument and registers 1 FastAPI route per declaration.
 
@@ -204,7 +204,7 @@ Built in the prototype:
   return values, or record once in a base helper.
 - **Guard, to build**: the operation runner checks that a `create`, `update` or `delete` made at most 1 history entry,
   and 1 test runs it over every shipped kind.
-- **`BasicInstrument`** (decided 2026-11-18): a ready-made kind in `vxl.station.instrument.basic` (moved from `vxl.instruments.basic` on 2026-11-19), `Instrument[InstrumentConfig,
+- **`BasicInstrument`** (decided 2026-11-18): a ready-made kind in `vxl.instrument.basic` (moved from `vxl.instruments.basic` on 2026-11-19), `Instrument[InstrumentConfig,
   InstrumentState, InstrumentView]`, that declarations `update_profile` with the base `ProfileFields`. A `rig.yaml` can name it
   and run with no code. Kinds still subclass `Instrument` and declaration their own `update_profile`. The base keeps the name
   `Instrument`, because type hints use it for "any instrument". The base helper `_update_profile` does the edit;
@@ -218,7 +218,7 @@ Built in the prototype:
   nested edit is refused with "'Update profile details' opens a state edit inside 'Spacing and label'". Found: the
   refusal comes after the outer edit already recorded, so its change stays saved. `_state_edit` should undo its own
   recorded change when its block raises, so an edit block is all or nothing.
-- **Joined edits, built 2026-11-18 in `src/vxl/station/instrument/base.py`** (replaces the refusing guard). An edit opened inside another joins it
+- **Joined edits, built 2026-11-18 in `src/vxl/instrument/base.py`** (replaces the refusing guard). An edit opened inside another joins it
   (a `ContextVar` holds the open edit). Each record saves at once, so the block reads the latest state; the edit keeps
   each path's value before its first record and after its last; the outermost block makes 1 history entry; if the
   block raises, every path goes back to its value before the edit. `StateEdit` may record more than once. Results:

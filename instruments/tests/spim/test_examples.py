@@ -4,8 +4,8 @@ import pytest
 from vxl_instruments.spim.instrument import Microscope
 
 from vxl._utils.files import load_yaml
+from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Records
-from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 from .support import TEMPLATES, load_file

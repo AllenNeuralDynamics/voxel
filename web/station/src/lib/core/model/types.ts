@@ -280,7 +280,7 @@ export interface WriterSettings {
   target_shard_gb: number;
 }
 
-/** Baseline fields that can live in `config.default` (mirrors `InstrumentDefaults` in src/vxl/instrument.py). */
+/** Baseline fields that can live in `config.default` (mirrors `InstrumentDefaults` in src/vxl/_legacy/instrument.py). */
 export interface InstrumentDefaults {
   imaging: ImagingProtocol;
   routing: Record<string, RoutingRule>;

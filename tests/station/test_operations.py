@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from vxl.station.instrument.basic import BasicInstrument
+from vxl.instrument.basic import BasicInstrument
 
 from .support import basic, profile, rig, simulated
 

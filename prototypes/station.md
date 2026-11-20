@@ -58,7 +58,8 @@ images and acquisition.json / acquisition.log.jsonl ──▶ storage (disk or S
 2. `Station.open()`: start the log journal, then end each acquisition an earlier run left open as interrupted.
 3. Start serving: the station's HTTP and its feed.
 4. Start the feed proxy, pointed at the feed.
-5. Start the share service, when `station.yaml` has `share:`.
+5. Start the share service, when `station.yaml` has `share:` and `--no-share` is not given.
+6. With `--with-lab`, start the lab server too, on this computer.
 6. Wait. A person opens an instrument session from a UI (`open_session`).
 
 On Ctrl-C or a stop signal, in reverse: stop the share service and the proxy, stop serving, `Station.close()` (closes
@@ -83,11 +84,29 @@ Agreed so far (product, then action):
 | `vxl station init` | Writes `station.yaml` | built |
 | `vxl station check` | Checks `station.yaml` and every instrument folder it finds, and shows the paths it found | not built |
 | `vxl station info` | Shows the station: id, name, folder, instruments, storage | not built |
-| `vxl station start` | Starts the processes above | not built |
+| `vxl station start` | Starts the processes above. `--with-lab` also starts the lab server; `--no-share` skips the share service even when `station.yaml` has `share:` (decided 2026-11-19) | not built |
 | `vxl node start <node_id>` | Starts a device node | built |
 | `vxl devices shell` | Tries devices from a rig file | built |
 | `vxl lab start` | Starts the lab server | not built |
 | `vxl legacy web\|qt\|check\|init\|import-catalog` | The legacy apps, frozen | built |
+
+## Where it will live
+
+Picked on 2026-11-19, for now. Each folder is made with its first code, not before.
+
+| Part | Where |
+| --- | --- |
+| Station HTTP server | `vxl.station.http` |
+| Feed (exists) | `vxl.station.feed` |
+| Feed proxy, Python | `vxl.station.proxy` |
+| Feed proxy, Rust | `proxy/`, workspace member `vxl-proxy` (maturin, `bindings = "bin"`) |
+| Share service | `vxl.station.share` |
+| Lab server | `vxl.lab`; its own package only when a lab server must install without the station |
+| Lab browser app | `web/lab/`, on `@voxel/kit` |
+| CLI | `vxl/cli/station.py` (exists), `vxl/cli/lab.py` |
+| Station browser app (new) | `web/app/`; the legacy `web/station/` stays until it is removed |
+
+The station parts sit under `vxl.station` because they run only under `vxl station start`.
 
 ## Open
 
@@ -95,9 +114,5 @@ Agreed so far (product, then action):
   to it (for example over ZMQ). This note assumes the station process serves HTTP itself.
 - **How processes are started and watched:** child processes of `vxl station start`, or a process manager. What
   happens when the proxy or the share service dies while the station runs.
-- **The share service and the lab.** `lab.md` (2026-11-18) says the read service (now the share service) connects out
-  to the lab and pushes changes. `proxy.md` (2026-11-19) says the lab is live through the feed proxy, and the share
-  service serves only stored data. These 2 must be made 1 rule.
-- **The lab on a small setup:** whether 1 command starts the station and `vxl lab` together on 1 computer.
 - **Settings:** the names of the `proxy:` and `share:` sections, and where the station's own address goes.
 - **Login and who may see what:** later, with the lab.

@@ -1,6 +1,6 @@
 import pytest
 
-from vxl.station.instrument.signals import Timeline
+from vxl.instrument.signals import Timeline
 
 
 def test_windows_follow_the_edges_they_name() -> None:

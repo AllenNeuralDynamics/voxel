@@ -1,0 +1,244 @@
+from typing import cast
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from rigup.device import DeviceHandle, DeviceInterface, PropModel, PropResults, Result
+from rigup.device.handle import Adapter, DeviceProps
+from vxlib.issues import Problem
+
+from vxl._legacy.hal.core import HAL
+from vxl._legacy.hal.errors import HALStartupError
+from vxl._legacy.hal.rig_config import DeviceConfig
+from vxl._legacy.hal.topology import (
+    DetectionAssembly,
+    HardwareTopology,
+    IlluminationAssembly,
+    OpticalRouteDefinition,
+    OpticalRouting,
+    SelectRoutingDefinition,
+    StageAxes,
+)
+
+
+class _FakeRig:
+    def __init__(
+        self,
+        *,
+        devices: dict[str, DeviceHandle] | None = None,
+        build_errors: dict[str, Problem] | None = None,
+    ) -> None:
+        self.devices = devices or {}
+        self.build_errors = build_errors or {}
+        self.opened = False
+        self.closed = False
+
+    async def open(self) -> None:
+        self.opened = True
+
+    async def close(self) -> None:
+        self.closed = True
+        self.devices.clear()
+        self.build_errors.clear()
+
+
+def _handle(
+    device_id: str, device_type: str = "area_camera", *, properties=None, property_error=None, interface_error=None
+):
+    adapter = Mock(spec=Adapter)
+    adapter.id = device_id
+    adapter.cached_interface = AsyncMock(
+        return_value=DeviceInterface(id=device_id, kind=device_type), side_effect=interface_error
+    )
+    adapter.props = Mock(spec=DeviceProps)
+    adapter.props.get = AsyncMock(return_value=properties, side_effect=property_error)
+    return DeviceHandle(adapter)
+
+
+def _hal_config() -> HardwareTopology:
+    device_ids = {"camera", "laser", "x", "y", "z", "filter"}
+    devices = {dev_id: DeviceConfig(target="builtins.object") for dev_id in device_ids}
+    return HardwareTopology(
+        devices=devices,
+        stage=StageAxes(x="x", y="y", z="z"),
+        detection={
+            "camera": DetectionAssembly(
+                filter_wheels=["filter"],
+                magnification=1,
+                rotation_deg=0,
+            )
+        },
+        illumination={"laser": IlluminationAssembly()},
+    )
+
+
+def _routed_hal_config() -> HardwareTopology:
+    config = _hal_config()
+    return config.model_copy(
+        update={
+            "devices": {
+                **config.devices,
+                "selector": DeviceConfig(
+                    target="builtins.object",
+                    init={"slots": {0: "left", 1: "right"}},
+                ),
+            },
+            "illumination": {"laser": IlluminationAssembly(routing={"excitation_side"})},
+            "optical_routing": OpticalRouting(
+                {
+                    "excitation_side": SelectRoutingDefinition(
+                        type="select",
+                        routes={
+                            "left": OpticalRouteDefinition(selectors={"selector": "left"}),
+                            "right": OpticalRouteDefinition(selectors={"selector": "right"}),
+                        },
+                    )
+                }
+            ),
+        }
+    )
+
+
+async def test_build_errors_suppress_follow_on_type_violations(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = _routed_hal_config()
+    build_errors = {
+        dev_id: Problem(code="build.import", msg="driver unavailable", loc=(dev_id,)) for dev_id in config.device_ids
+    }
+    rig = _FakeRig(build_errors=build_errors)
+    hal = HAL(config)
+    monkeypatch.setattr(hal, "_rig", rig)
+
+    with pytest.raises(HALStartupError) as raised:
+        await hal.open()
+
+    assert rig.opened
+    assert rig.closed
+    assert {violation.code for violation in raised.value.violations} == {"build.import"}
+    assert {violation.loc[-1] for violation in raised.value.violations} == config.device_ids
+
+
+async def test_optical_routing_selector_must_be_a_discrete_axis(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = _routed_hal_config()
+    unavailable = config.device_ids - {"selector"}
+    build_errors = {
+        dev_id: Problem(code="build.import", msg="driver unavailable", loc=(dev_id,)) for dev_id in unavailable
+    }
+    rig = _FakeRig(
+        devices={"selector": _handle("selector", "unsupported")},
+        build_errors=build_errors,
+    )
+    hal = HAL(config)
+    monkeypatch.setattr(hal, "_rig", rig)
+
+    with pytest.raises(HALStartupError) as raised:
+        await hal.open()
+
+    routing_violations = [
+        violation
+        for violation in raised.value.violations
+        if violation.code == "hal.optical_routing.selector.not_discrete_axis"
+    ]
+    assert len(routing_violations) == 1
+    assert routing_violations[0].loc == ("hal", "optical_routing")
+    assert "selector" in routing_violations[0].msg
+
+
+async def test_runtime_compatibility_errors_close_the_rig(monkeypatch: pytest.MonkeyPatch) -> None:
+    hal = HAL(_hal_config())
+    rig = _FakeRig()
+    monkeypatch.setattr(hal, "_rig", rig)
+
+    with pytest.raises(HALStartupError) as raised:
+        await hal.open()
+
+    assert rig.closed
+    assert {violation.code for violation in raised.value.violations} == {
+        "hal.detection.not_camera",
+        "hal.filter_wheel.not_discrete_axis",
+        "hal.illumination.not_laser",
+        "hal.stage.not_continuous_axis",
+    }
+
+
+async def test_interface_failures_are_collected_without_cascading(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = _hal_config()
+    devices = {
+        dev_id: _handle(dev_id, interface_error=RuntimeError("interface unavailable")) for dev_id in config.device_ids
+    }
+    rig = _FakeRig(devices=devices)
+    hal = HAL(config)
+    monkeypatch.setattr(hal, "_rig", rig)
+
+    with pytest.raises(HALStartupError) as raised:
+        await hal.open()
+
+    assert rig.closed
+    assert {violation.code for violation in raised.value.violations} == {"hal.device.interface"}
+    assert {violation.loc[-1] for violation in raised.value.violations} == config.device_ids
+
+
+async def test_camera_geometry_transport_failures_are_collected_and_close_the_rig(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _hal_config()
+    config = config.model_copy(
+        update={
+            "devices": {**config.devices, "camera_b": config.devices["camera"]},
+            "detection": {
+                **config.detection,
+                "camera_b": DetectionAssembly(filter_wheels=[], magnification=1, rotation_deg=0),
+            },
+        }
+    )
+    cameras = {
+        "camera": _handle("camera", property_error=RuntimeError("first failure")),
+        "camera_b": _handle("camera_b", property_error=RuntimeError("second failure")),
+    }
+    rig = _FakeRig(
+        devices=dict(cameras),
+        build_errors={
+            device_id: Problem(code="build.import", msg="unavailable", loc=(device_id,))
+            for device_id in config.device_ids - cameras.keys()
+        },
+    )
+    hal = HAL(config)
+    monkeypatch.setattr(hal, "_rig", rig)
+
+    with pytest.raises(HALStartupError) as raised:
+        await hal.open()
+    violations = [v for v in raised.value.violations if v.code == "hal.camera.geometry"]
+    assert rig.closed
+    assert {v.code for v in raised.value.violations} == {"build.import", "hal.camera.geometry"}
+    assert {v.loc[-1] for v in violations} == {"camera", "camera_b"}
+    assert any("first failure" in v.msg for v in violations)
+    assert any("second failure" in v.msg for v in violations)
+    for camera in cameras.values():
+        cast("AsyncMock", camera.props.get).assert_awaited_once_with("sensor")
+
+
+async def test_camera_geometry_reports_failed_and_missing_properties(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = _hal_config()
+    camera = _handle(
+        "camera",
+        properties=PropResults(
+            results={
+                "sensor": Result[PropModel].err("sensor unavailable"),
+            }
+        ),
+    )
+    rig = _FakeRig(
+        devices={"camera": camera},
+        build_errors={
+            dev_id: Problem(code="build.import", msg="unavailable", loc=(dev_id,))
+            for dev_id in config.device_ids - {"camera"}
+        },
+    )
+    hal = HAL(config)
+    monkeypatch.setattr(hal, "_rig", rig)
+
+    with pytest.raises(HALStartupError) as raised:
+        await hal.open()
+    assert rig.closed
+    assert {v.code for v in raised.value.violations} == {"build.import", "hal.camera.geometry"}
+    assert {v.loc for v in raised.value.violations if v.code == "hal.camera.geometry"} == {
+        ("hal", "devices", "camera", "sensor"),
+    }

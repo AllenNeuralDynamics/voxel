@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 from vxl_instruments.spim.instrument import Microscope
 
+from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Records
-from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 from .support import simulated, template

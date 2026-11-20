@@ -72,7 +72,7 @@ a `Station`; callers provide persistent records and retain explicit control of h
 ```python
 from pathlib import Path
 
-from vxl.instrument import Instrument
+from vxl._legacy.instrument import Instrument
 from vxl_records import SQLiteRecords
 
 records = SQLiteRecords(
@@ -125,7 +125,7 @@ interfaces; the other distributions have narrower library boundaries.
 | [`vxl-records`](records/) | SQLite-backed acquisition, preset, and log records |
 | [`ome-zarr-writer`](omezarr/) | Streaming multiscale OME-Zarr writing |
 | [`vxlib`](vxlib/) | Shared reactive primitives, schemas, and utilities |
-| [`web/station`](web/station/) | SvelteKit frontend compiled into `vxl.web` package data |
+| [`web/station`](web/station/) | SvelteKit frontend compiled into `vxl._legacy.web` package data |
 | [`web/kit`](web/kit/) | Shared Svelte UI kit used by the web apps |
 
 The non-published [`bench`](bench/) workspace contains OME-Zarr performance and behavior benchmarks.

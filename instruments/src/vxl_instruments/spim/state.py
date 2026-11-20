@@ -7,11 +7,11 @@ from ome_zarr_writer import Compression, DownscaleType, ScaleLevel, WriterSettin
 from pydantic import Field, PositiveFloat
 from vxlib.issues import Problems
 
-from vxl.station.instrument.config import (
+from vxl.instrument.config import (
     InstrumentConfig,
     NotDefault,
 )
-from vxl.station.instrument.state import InstrumentState, ProfileFields, ProfileId, StageFollowRule
+from vxl.instrument.state import InstrumentState, ProfileFields, ProfileId, StageFollowRule
 
 from .config import SPIMConfig, SPIMProfile
 from .task import SPIMTask, TaskDefaults

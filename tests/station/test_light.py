@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
+from vxl.instrument.basic import BasicInstrument
 from vxl.station.errors import RejectedError
-from vxl.station.instrument.basic import BasicInstrument
 
 from .support import basic, rig, simulated
 

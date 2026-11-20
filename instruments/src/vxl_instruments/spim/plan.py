@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from vxlib.vector import Span, Transform, Vec3D
 
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.station.instrument.config import AxisPosition, DeviceId, SpecimenAxis, Stage
-from vxl.station.instrument.geometry import AxisRun, camera_frame
-from vxl.station.instrument.state import ProfileId, TaskId
+from vxl.instrument.config import AxisPosition, DeviceId, SpecimenAxis, Stage
+from vxl.instrument.geometry import AxisRun, camera_frame
+from vxl.instrument.state import ProfileId, TaskId
 
 from .config import Scan, SPIMConfig, SPIMProfile
 from .state import SPIMState

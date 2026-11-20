@@ -14,9 +14,9 @@ from typing import Any
 from vxl_instruments.spim.instrument import Microscope
 
 from instruments.tests.spim.support import config_data, simulated, template
+from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Records
 from vxl.station.errors import RejectedError
-from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
 _DIGITAL = {"kind": "digital", "off": "0 V", "on": "5 V"}
