@@ -10,7 +10,6 @@ from scipy.interpolate import PchipInterpolator
 from vxlib.issues import Problems
 from vxlib.vector import Span
 
-from vxl.instrument.config import AnalogWire, DigitalWire, WireConfig, WireName
 from vxl.instrument.signals import (
     AnalogConstant,
     AnalogFollow,
@@ -23,6 +22,7 @@ from vxl.instrument.signals import (
     Signal,
     Timeline,
 )
+from vxl.wiring import AnalogWire, DigitalWire, WireConfig, WireName
 
 _TOLERANCE = 1e-9
 

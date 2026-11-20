@@ -9,8 +9,8 @@ from vxlib.reactivity import Emitter
 from vxlib.schema import FrozenModel
 from vxlib.vector import Transform, Vec3D
 
+from vxl.devices.base import DeviceId
 from vxl.devices.camera import AreaCameraHandle
-from vxl.instrument.config import DeviceId
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
 from vxl.live.protocol import StagePosition
 

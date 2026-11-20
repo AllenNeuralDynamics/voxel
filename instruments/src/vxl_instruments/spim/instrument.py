@@ -10,9 +10,9 @@ from vxlib.asyncio import gather_all
 from vxlib.issues import Problems
 from vxlib.reactivity import Cell, Readable
 
+from vxl.devices.base import DeviceId
 from vxl.devices.camera import AreaROI
 from vxl.instrument.base import Instrument, InstrumentView
-from vxl.instrument.config import DeviceId
 from vxl.instrument.state import ProfileId, TaskId
 from vxl.instrument.store import ABSENT
 from vxl.records import Records

@@ -4,9 +4,9 @@ import pytest
 from vxlib.vector import IVec2D, Transform, Vec2D, Vec3D
 
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.instrument.config import Detector
 from vxl.instrument.geometry import camera_frame
 from vxl.instrument.live import Picture, planes_of
+from vxl.optics import Detector
 
 _SENSOR = CameraSensor(pixel_um=Vec2D(x=1.0, y=1.0), size_px=IVec2D(x=1000, y=800))
 _FULL = AreaROI(x=0, y=0, w=1000, h=800)

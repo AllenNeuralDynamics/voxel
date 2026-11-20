@@ -19,14 +19,16 @@ from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.continuous.linear import LinearAxisHandle
 from vxl.devices.axes.continuous.rotation import RotationAxisHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
-from vxl.devices.base import Pin
+from vxl.devices.base import DeviceId, Pin
 from vxl.devices.camera import AreaCameraHandle
 from vxl.devices.camera.line import LineCameraHandle
 from vxl.devices.light import ControlMode, DimmableHandle, LaserHandle, ModulatorHandle, ShutterHandle
 from vxl.devices.node import NodeMonitorHandle
 from vxl.devices.signals.generator.handle import GeneratorHandle
-from vxl.instrument.config import DeviceId, InstrumentConfig, LightPath, PinRef, SpecimenAxis
+from vxl.instrument.config import InstrumentConfig
+from vxl.optics import LightPath, SpecimenAxis
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
+from vxl.wiring import PinRef
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown

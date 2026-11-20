@@ -27,18 +27,37 @@ rig:
     BP600:              {target: vxl.parts.Filter, band: [575 nm, 625 nm]}
     BP700:              {target: vxl.parts.Filter, band: [663 nm, 737 nm]}
 
+  wiring: &wiring                                 # every wire on the bench, grouped by the device that sends it
+    ao_main:
+      camera_trigger: {pin: ao21, to: [camera/trigger_in],     kind: digital, off: 0 V, on: 5 V}
+      laser_488:      {pin: ao17, to: [laser_488/ttl_in],      kind: digital, off: 0 V, on: 5 V}
+      laser_561:      {pin: ao13, to: [laser_561/ttl_in],      kind: digital, off: 0 V, on: 5 V}
+      laser_640:      {pin: ao9,  to: [laser_640/ttl_in],      kind: digital, off: 0 V, on: 5 V}
+      lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
+      lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
+      galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
+    z_axis:
+      z_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while Z sweeps
+
   devices:                                        # simulated drivers: swap each target for the driver of your hardware
+    sim_wiring:                                   # plays the wires above for the simulated devices
+      target: vxl.devices.simulated.SimulatedWiring
+      init: {wiring: *wiring}
+
     nidaq_1:
       target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init: {device_name: Dev3}
 
     ao_main:
       target: vxl.devices.signals.generator.simulated.SimulatedGenerator
-      init: {hub: nidaq_1}
+      init: {hub: nidaq_1, wiring: sim_wiring}
 
     camera:                                       # a 151-megapixel sensor, as on exaSPIM
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
+        wiring: sim_wiring
         frame_source: {sensor_size_px: {x: 14192, y: 10640}, pixel_size_um: {x: 3.76, y: 3.76}}
 
     laser_488:
@@ -68,10 +87,16 @@ rig:
           "0": {label: left, position: 0}
           "1": {label: right, position: 100}
 
-    x_axis:      &stage {target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis, init: {lower: 0, upper: 50000, speed: 10000}}
-    y_axis:      *stage
-    z_axis:      *stage
-    left_focus:  *stage
+    x_axis: &stage
+      target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis
+      init:
+        lower: 0
+        upper: 50000
+        speed: 10000
+        wiring: sim_wiring
+    y_axis: *stage
+    z_axis: *stage
+    left_focus: *stage
     right_focus: *stage
     camera_focus: *stage
 
@@ -82,20 +107,6 @@ rig:
     x: {device: x_axis}
     y: {device: y_axis}
     z: {device: z_axis}
-
-  wiring:                                         # every wire on the bench, grouped by the device that sends it
-    ao_main:
-      camera_trigger: {pin: ao21, to: [camera/trigger_in],     kind: digital, off: 0 V, on: 5 V}
-      laser_488:      {pin: ao17, to: [laser_488/ttl_in],      kind: digital, off: 0 V, on: 5 V}
-      laser_561:      {pin: ao13, to: [laser_561/ttl_in],      kind: digital, off: 0 V, on: 5 V}
-      laser_640:      {pin: ao9,  to: [laser_640/ttl_in],      kind: digital, off: 0 V, on: 5 V}
-      lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
-      lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
-      galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
-      galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
-      z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
-    z_axis:
-      z_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while Z sweeps
 
   optics:                                         # where the light goes: light sources → specimen → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from vxlib.vector import Transform, Vec3D
 
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.instrument.config import SpecimenAxis
+from vxl.optics import SpecimenAxis
 
 _ZERO = Vec3D(z=0.0, y=0.0, x=0.0)
 

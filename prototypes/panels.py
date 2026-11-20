@@ -15,8 +15,8 @@ from vxlib.vector import IVec2D, Transform, Vec2D, Vec3D
 
 from instruments.tests.spim.support import load_file
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.instrument.config import Detector
 from vxl.instrument.geometry import camera_frame
+from vxl.optics import Detector
 
 _FILES = Path("instruments/src/vxl_instruments/spim/templates")
 _SAME_PLANE_DEG = 1.0

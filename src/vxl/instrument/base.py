@@ -24,8 +24,9 @@ from vxlib.units import Quantity
 
 from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
+from vxl.devices.base import DeviceId
 from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
-from vxl.instrument.config import AxisPosition, DeviceId, InstrumentConfig, SpecimenAxis
+from vxl.instrument.config import InstrumentConfig
 from vxl.instrument.geometry import camera_frame
 from vxl.instrument.hal import HAL, DeviceView
 from vxl.instrument.interface import InstrumentInterface, check_operations
@@ -47,6 +48,7 @@ from vxl.instrument.store import InstrumentStore, Merge, StateValues
 from vxl.live import LiveSourceEmission, LiveViewport
 from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
+from vxl.optics import AxisPosition, SpecimenAxis
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.system import Remote, System, remote_store_fingerprint

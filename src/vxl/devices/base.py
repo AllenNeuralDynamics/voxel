@@ -2,7 +2,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator
-from vxlib.schema import FrozenModel, check_identifier
+from vxlib.schema import FrozenModel, check_identifier, identifier
 
 
 class DeviceType(StrEnum):
@@ -31,6 +31,9 @@ def _check_pin_name(value: str) -> str:
 
 
 PinName = Annotated[str, AfterValidator(_check_pin_name)]
+
+DeviceId = Annotated[str, identifier("Device ID")]
+"""The name of a device of the rig."""
 """The name of a pin as on the hardware, such as ``ao0``, or ``port0/line1`` when the hardware names it in parts."""
 
 

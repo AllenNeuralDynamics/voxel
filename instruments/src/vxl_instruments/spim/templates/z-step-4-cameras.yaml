@@ -37,13 +37,37 @@ rig:
     QB_A:               {target: vxl.parts.Filter, band: [420 nm, 740 nm]}   # wide, for the shared wheel
     QB_B:               {target: vxl.parts.Filter, band: [460 nm, 740 nm]}   # wide, for the shared wheel
 
+  wiring: &wiring
+    ao_main:
+      cam_1_trigger: {pin: ao20, to: [cam_1/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      cam_2_trigger: {pin: ao21, to: [cam_2/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      cam_3_trigger: {pin: ao22, to: [cam_3/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      cam_4_trigger: {pin: ao23, to: [cam_4/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      aom_405:       {pin: ao10, to: [aom_405/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_445:       {pin: ao11, to: [aom_445/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_488:       {pin: ao12, to: [aom_488/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_514:       {pin: ao13, to: [aom_514/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_561:       {pin: ao14, to: [aom_561/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_594:       {pin: ao15, to: [aom_594/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_640:       {pin: ao16, to: [aom_640/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_685:       {pin: ao17, to: [aom_685/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
+      lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
+      galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
+
   devices:                                        # simulated drivers: swap each target for the driver of your hardware
+    sim_wiring:                                   # plays the wires above for the simulated devices
+      target: vxl.devices.simulated.SimulatedWiring
+      init: {wiring: *wiring}
+
     nidaq_1:
       target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init: {device_name: Dev3}
     ao_main:
       target: vxl.devices.signals.generator.simulated.SimulatedGenerator
-      init: {hub: nidaq_1}
+      init: {hub: nidaq_1, wiring: sim_wiring}
 
     laser_405: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 405}}
     laser_445: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 445}}
@@ -99,30 +123,40 @@ rig:
     cam_1:
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
+        wiring: sim_wiring
         frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
     cam_2:
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
+        wiring: sim_wiring
         frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
     cam_3:
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
+        wiring: sim_wiring
         frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
     cam_4:
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
+        wiring: sim_wiring
         frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
 
-    x_axis:          &stage {target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis, init: {lower: 0, upper: 50000, speed: 10000}}
-    y_axis:          *stage
-    z_axis:          *stage
-    left_focus:      *stage
-    right_focus:     *stage
+    x_axis: &stage
+      target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis
+      init:
+        lower: 0
+        upper: 50000
+        speed: 10000
+        wiring: sim_wiring
+    y_axis: *stage
+    z_axis: *stage
+    left_focus: *stage
+    right_focus: *stage
     detection_focus: *stage                       # moves all 4 cameras' focus together
-    cam_1_focus:     *stage
-    cam_2_focus:     *stage
-    cam_3_focus:     *stage
-    cam_4_focus:     *stage
+    cam_1_focus: *stage
+    cam_2_focus: *stage
+    cam_3_focus: *stage
+    cam_4_focus: *stage
 
   autosave:
     cam_1: [exposure_time_ms]
@@ -134,26 +168,6 @@ rig:
     x: {device: x_axis}
     y: {device: y_axis}
     z: {device: z_axis}
-
-  wiring:
-    ao_main:
-      cam_1_trigger: {pin: ao20, to: [cam_1/trigger_in], kind: digital, off: 0 V, on: 5 V}
-      cam_2_trigger: {pin: ao21, to: [cam_2/trigger_in], kind: digital, off: 0 V, on: 5 V}
-      cam_3_trigger: {pin: ao22, to: [cam_3/trigger_in], kind: digital, off: 0 V, on: 5 V}
-      cam_4_trigger: {pin: ao23, to: [cam_4/trigger_in], kind: digital, off: 0 V, on: 5 V}
-      aom_405:       {pin: ao10, to: [aom_405/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_445:       {pin: ao11, to: [aom_445/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_488:       {pin: ao12, to: [aom_488/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_514:       {pin: ao13, to: [aom_514/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_561:       {pin: ao14, to: [aom_561/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_594:       {pin: ao15, to: [aom_594/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_640:       {pin: ao16, to: [aom_640/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      aom_685:       {pin: ao17, to: [aom_685/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
-      lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
-      galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
-      galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
-      z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
 
   optics:
     laser_405: {to: aom_405}

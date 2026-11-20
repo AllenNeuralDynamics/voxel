@@ -13,18 +13,13 @@ from vxlib.issues import Problem, Problems
 from vxlib.schema import FrozenModel, Key, UniqueList, identifier, repeated
 from vxlib.units import Quantity
 
-from vxl.instrument.config import (
-    AxisPosition,
-    DeviceId,
-    InstrumentConfig,
-    NotDefault,
-    PinRef,
-    SpecimenAxis,
-    Wire,
-)
+from vxl.devices.base import DeviceId
+from vxl.instrument.config import InstrumentConfig, NotDefault
 from vxl.instrument.samples import render
 from vxl.instrument.signals import Timeline
 from vxl.metadata import ExperimentMetadata, MetadataCls, get_path_from_class
+from vxl.optics import AxisPosition, SpecimenAxis
+from vxl.wiring import PinRef, Wire
 
 ProfileId = Annotated[str, identifier("Profile id")]
 

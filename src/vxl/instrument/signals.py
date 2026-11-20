@@ -11,7 +11,7 @@ from vxlib.schema import FrozenModel
 from vxlib.units import Angle, Frequency, Percent, Quantity, Time, Voltage
 from vxlib.vector import Span
 
-from vxl.instrument.config import AnalogWire, DigitalWire, WireConfig, WireName
+from vxl.wiring import AnalogWire, DigitalWire, WireConfig, WireName
 
 type EdgeName = Literal["start", "end"]
 

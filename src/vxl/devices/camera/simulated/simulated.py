@@ -1,12 +1,14 @@
 import math
+import threading
 import time
 from collections.abc import Mapping
 from random import randint
 from typing import ClassVar, cast, final
 
 import numpy as np
-from rigup.interface import choice, integer, number
+from rigup.interface import choice, fact, integer, number
 
+from vxl.devices.base import Pin
 from vxl.devices.camera.area import AreaCamera, AreaROI, ROIGrid
 from vxl.devices.camera.base import (
     BINNING_OPTIONS,
@@ -20,6 +22,7 @@ from vxl.devices.camera.base import (
     TriggerPolarity,
 )
 from vxl.devices.camera.simulated.frame_source import FrameSource, FrameSourceConfig, create_frame_source
+from vxl.devices.simulated import SimulatedWiring
 
 
 @final
@@ -29,6 +32,10 @@ class SimulatedCamera(AreaCamera):
     Buffer occupancy walks by at most one frame per update interval while streaming.
     Counts do not model a queue or allocate frame storage.
     Fill-range percentages are rounded to whole frames; equal endpoints give a fixed fill.
+
+    With ``wiring`` and the trigger on, each frame waits for a rising edge at ``trigger_in``, as a real camera does.
+    Edges that come before the camera starts are lost; a frame that gets no edge within ``trigger_timeout_s``
+    raises ``TimeoutError``. Without ``wiring``, frames come at ``frame_rate_hz`` whatever the trigger.
     """
 
     _min_width: ClassVar[int] = 64
@@ -59,6 +66,8 @@ class SimulatedCamera(AreaCamera):
         buffer_size_frames: int = 16,
         buffer_fill_range_percent: tuple[float, float] = (50.0, 75.0),
         buffer_update_interval_s: float = 5.0,
+        wiring: SimulatedWiring | None = None,
+        trigger_timeout_s: float = 10.0,
     ) -> None:
         if any(not math.isfinite(delay) or delay < 0 for delay in (start_delay_s, stop_delay_s)):
             raise ValueError("Camera operation delays must be finite and non-negative")
@@ -93,6 +102,10 @@ class SimulatedCamera(AreaCamera):
         # Track actual frame timing for diagnostics
         self._last_grab_frame_time: float = 0
         self._actual_frame_rate_fps: float = 0
+        self._wiring = wiring
+        self._trigger_timeout_s = trigger_timeout_s
+        self._triggers = threading.Semaphore(0)
+        self._waits_for_triggers = False
 
     @property
     def readout_time_ms(self) -> float:
@@ -190,6 +203,14 @@ class SimulatedCamera(AreaCamera):
             frame_rate_fps=fps,
         )
 
+    @property
+    @fact(desc="The pin whose rising edges start a frame while the trigger is on")
+    def pins(self) -> list[Pin]:
+        return [Pin(name="trigger_in", direction="in", kind="digital")]
+
+    def _on_trigger(self) -> None:
+        self._triggers.release()
+
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
         self.log.debug("trigger mode set to %s", mode)
 
@@ -216,6 +237,10 @@ class SimulatedCamera(AreaCamera):
         self._requested_frame_count = frame_count if frame_count is not None else -1
         self._last_grab_frame_time = 0
         self._last_buffer_update = time.monotonic()
+        self._waits_for_triggers = self._wiring is not None and self.trigger_mode == TriggerMode.ON
+        if self._wiring is not None and self._waits_for_triggers:
+            self._triggers = threading.Semaphore(0)
+            self._wiring.listen(self.id, "trigger_in", self._on_trigger)
         frame_msg = f"{frame_count}" if frame_count else "infinite"
         self.log.debug("started, acquiring %s frames", frame_msg)
 
@@ -237,8 +262,11 @@ class SimulatedCamera(AreaCamera):
         if self._requested_frame_count > 0 and self._frame_count >= self._requested_frame_count:
             raise RuntimeError(f"Reached requested frame count: {self._requested_frame_count}")
 
+        if self._waits_for_triggers:
+            if not self._triggers.acquire(timeout=self._trigger_timeout_s):
+                raise TimeoutError(f"{self.id} got no trigger within {self._trigger_timeout_s} s")
         # Simulate real camera frame rate by blocking until next frame is ready
-        if self._frame_count > 0 and self._frame_rate_hz > 0:
+        elif self._frame_count > 0 and self._frame_rate_hz > 0:
             frame_interval_s = 1.0 / self._frame_rate_hz
             current_time = time.perf_counter()
             elapsed = current_time - self._last_grab_frame_time
@@ -272,6 +300,9 @@ class SimulatedCamera(AreaCamera):
             self.log.warning("Camera is not running. Ignoring stop command.")
             return
 
+        if self._wiring is not None and self._waits_for_triggers:
+            self._wiring.unlisten(self.id, "trigger_in", self._on_trigger)
+        self._waits_for_triggers = False
         time.sleep(self._stop_delay_s)
         self.log.debug("stopped after %d frames", self._frame_count)
         self._frame_count = -1

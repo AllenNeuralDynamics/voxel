@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 from pydantic import TypeAdapter
 
-from vxl.instrument.config import WireConfig
 from vxl.instrument.samples import render
 from vxl.instrument.signals import Timeline
+from vxl.wiring import WireConfig
 
 _WIRE = TypeAdapter(WireConfig)
 

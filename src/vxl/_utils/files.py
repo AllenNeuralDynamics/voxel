@@ -102,18 +102,28 @@ class _FlowMapEmitter(RoundTripEmitter):
         super().expect_flow_mapping_key()
 
 
+def _load(path: Path, reader: YAML) -> Any:
+    try:
+        return reader.load(path.read_text(encoding="utf-8"))
+    except MarkedYAMLError as exc:
+        mark = exc.problem_mark or exc.context_mark
+        line = f" line {mark.line + 1}" if mark is not None else ""
+        raise ValueError(f"{path.name}{line}: {exc.problem or exc.context}") from exc
+
+
 def load_yaml(path: Path) -> Any:
     """Parse a YAML file as plain data; repeated keys and syntax errors raise a one-line ``ValueError``.
 
     Reading uses the same YAML 1.2 rules and Python parser as :func:`save_yaml`, so saved values such as
     ``no`` or ``1e-05`` load back unchanged.
     """
-    try:
-        return YAML(typ="safe", pure=True).load(path.read_text(encoding="utf-8"))
-    except MarkedYAMLError as exc:
-        mark = exc.problem_mark or exc.context_mark
-        line = f" line {mark.line + 1}" if mark is not None else ""
-        raise ValueError(f"{path.name}{line}: {exc.problem or exc.context}") from exc
+    return _load(path, YAML(typ="safe", pure=True))
+
+
+def load_editable_yaml(path: Path) -> Any:
+    """Parse a YAML file to change or copy it: the data keeps its comments and anchors, so :func:`update_yaml`
+    writes them back. Errors raise like :func:`load_yaml`."""
+    return _load(path, _round_trip())
 
 
 def load_and_validate_yaml[T: BaseModel](path: Path, model_cls: type[T]) -> T:

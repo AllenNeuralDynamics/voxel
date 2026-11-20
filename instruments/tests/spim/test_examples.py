@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from vxl_instruments.spim.instrument import Microscope
 
-from vxl._utils.files import load_yaml
+from vxl._utils.files import load_editable_yaml
 from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Records
 from vxl.system import System
@@ -43,8 +43,10 @@ def test_a_template_has_no_problems_and_a_full_chain(name: str) -> None:
 
 @pytest.mark.parametrize("name", _SIMULATED)
 async def test_a_simulated_template_opens(name: str, tmp_path: Path) -> None:
-    folder = InstrumentFolder.create(load_yaml(TEMPLATES / name), "left", tmp_path)
+    folder = InstrumentFolder.create(load_editable_yaml(TEMPLATES / name), "left", tmp_path)
     assert folder.ok, folder.problems
+    rig = (folder.home / "rig.yaml").read_text()
+    assert (rig.count("&wiring"), rig.count("*wiring"), "# simulated drivers" in rig) == (1, 1, True)
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     microscope = Microscope(folder, records=records, system=system)

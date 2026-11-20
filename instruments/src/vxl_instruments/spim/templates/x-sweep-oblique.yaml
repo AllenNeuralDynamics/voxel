@@ -23,18 +23,32 @@ rig:
     BP525:       {target: vxl.parts.Filter, band: [500 nm, 550 nm]}
     LP650:       {target: vxl.parts.Filter, band: [650 nm, null]}    # a long-pass filter: open at the top
 
+  wiring: &wiring                                 # every wire on the bench, grouped by the device that sends it
+    ao_main:
+      camera_trigger: {pin: ao0, to: [camera/trigger_in],   kind: digital, off: 0 V, on: 5 V}
+      laser_488:      {pin: ao1, to: [laser_488/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      laser_638:      {pin: ao2, to: [laser_638/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      galvo_sheet:    {pin: ao3, to: [sheet_galvo/in],      kind: analog, limits: {V: [-2, 2]}, park: 0 V}   # scans the beam to make the sheet
+    x_axis:
+      x_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while X sweeps
+
   devices:                                        # simulated drivers: swap each target for the driver of your hardware
+    sim_wiring:                                   # plays the wires above for the simulated devices
+      target: vxl.devices.simulated.SimulatedWiring
+      init: {wiring: *wiring}
+
     nidaq_1:
       target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init: {device_name: Dev1}
 
     ao_main:
       target: vxl.devices.signals.generator.simulated.SimulatedGenerator
-      init: {hub: nidaq_1}
+      init: {hub: nidaq_1, wiring: sim_wiring}
 
     camera:                                       # 2048 × 2048 px of 6.5 µm, as an ORCA-Flash4.0
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
+        wiring: sim_wiring
         frame_source: {sensor_size_px: {x: 2048, y: 2048}, pixel_size_um: {x: 6.5, y: 6.5}}
 
     laser_488:
@@ -49,7 +63,13 @@ rig:
       init:
         slots: {"0": BP525, "1": LP650}
 
-    x_axis: &stage {target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis, init: {lower: -25000, upper: 25000, speed: 10000}}
+    x_axis: &stage
+      target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis
+      init:
+        lower: -25000
+        upper: 25000
+        speed: 10000
+        wiring: sim_wiring
     y_axis: *stage
     z_axis: *stage
 
@@ -61,15 +81,6 @@ rig:
     y: {device: y_axis}
     z: {device: z_axis}
   # z_axis: this motor counts up as the specimen goes up, but +z is deeper: its direction will be set on the device
-
-  wiring:                                         # every wire on the bench, grouped by the device that sends it
-    ao_main:
-      camera_trigger: {pin: ao0, to: [camera/trigger_in],   kind: digital, off: 0 V, on: 5 V}
-      laser_488:      {pin: ao1, to: [laser_488/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      laser_638:      {pin: ao2, to: [laser_638/ttl_in],    kind: digital, off: 0 V, on: 5 V}
-      galvo_sheet:    {pin: ao3, to: [sheet_galvo/in],      kind: analog, limits: {V: [-2, 2]}, park: 0 V}   # scans the beam to make the sheet
-    x_axis:
-      x_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while X sweeps
 
   optics:                                         # where the light goes: light sources → specimen → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
