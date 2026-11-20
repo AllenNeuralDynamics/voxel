@@ -14,7 +14,7 @@ from vxl.devices.camera import AreaROI
 from vxl.records import Records
 from vxl.station.errors import RejectedError
 from vxl.station.instrument.base import Instrument, InstrumentView
-from vxl.station.instrument.config import DeviceUid
+from vxl.station.instrument.config import DeviceId
 from vxl.station.instrument.state import ProfileId, TaskId
 from vxl.station.instrument.store import ABSENT
 from vxl.system import System
@@ -36,18 +36,18 @@ class _Preview:
     """A running preview: its activity, and the devices it started."""
 
     activity: Activity
-    cameras: tuple[DeviceUid, ...]
-    generators: tuple[DeviceUid, ...]
+    cameras: tuple[DeviceId, ...]
+    generators: tuple[DeviceId, ...]
 
 
-type DeviceUids = Sequence[DeviceUid]
+type DeviceIds = Sequence[DeviceId]
 
 
 class SPIMView(InstrumentView[SPIMConfig, SPIMState]):
     """A SPIM microscope as a screen sees it: also the channels that a preview of the active profile shows, by camera,
     whether or not a preview runs."""
 
-    preview_channels: tuple[DeviceUid, ...]
+    preview_channels: tuple[DeviceId, ...]
 
 
 class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
@@ -61,8 +61,8 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
 
     def __init__(self, folder: SPIMInstrumentFolder, *, records: Records, system: System) -> None:
         super().__init__(folder, records=records, system=system)
-        self._preview_choices: dict[ProfileId, frozenset[DeviceUid]] = {}
-        self._preview_channels = Cell[tuple[DeviceUid, ...]](self._preview_choice(self._active_profile.value))
+        self._preview_choices: dict[ProfileId, frozenset[DeviceId]] = {}
+        self._preview_channels = Cell[tuple[DeviceId, ...]](self._preview_choice(self._active_profile.value))
         self._preview: _Preview | None = None
 
     @action(on="preview", verb="start")
@@ -79,7 +79,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
             await self._end_preview()
 
     @action(on="preview", verb="set_channels")
-    async def set_preview_channels(self, channels: list[DeviceUid]) -> None:
+    async def set_preview_channels(self, channels: list[DeviceId]) -> None:
         """Choose the channels, by camera, that a preview of the active profile shows. A running preview restarts
         with them when they differ."""
         async with self._scheduler.run("set the preview channels", requires=()):
@@ -99,7 +99,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 await self._begin_preview()
 
     @action(on="cameras", key="camera", verb="set_region")
-    async def set_camera_region(self, camera: DeviceUid, region: AreaROI | None) -> AreaROI:
+    async def set_camera_region(self, camera: DeviceId, region: AreaROI | None) -> AreaROI:
         """Set a camera's region, or its full frame when ``region`` is ``None``, and give back the region the camera
         applied after snapping it to its grid. When the camera is a channel of the active profile, save that region
         as its ``fov`` there, or drop its ``fov`` for the full frame. A save cannot be undone."""
@@ -175,7 +175,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         await gather_all(*regions, message="camera regions")
         await self._preview_channels.set(self._preview_choice(profile_id))
 
-    def _preview_choice(self, profile_id: ProfileId) -> tuple[DeviceUid, ...]:
+    def _preview_choice(self, profile_id: ProfileId) -> tuple[DeviceId, ...]:
         """The channels a preview of a profile shows: those it chose that it still has, in its order, or else its
         first channel."""
         channels = self._store.value.profiles[profile_id].lights()
@@ -229,7 +229,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         finally:
             await preview.activity.end()
 
-    async def _stop_preview_devices(self, cameras: DeviceUids, generators: DeviceUids) -> None:
+    async def _stop_preview_devices(self, cameras: DeviceIds, generators: DeviceIds) -> None:
         """Stop a preview's devices, in order: every light dark, generators, cameras. Each step runs even when one
         fails; raise every failure together."""
         hal = self._hal

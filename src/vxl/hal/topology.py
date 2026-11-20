@@ -39,7 +39,7 @@ class DetectionAssembly(OpticalAssembly):
     @field_validator("filter_wheels")
     @classmethod
     def _validate_unique_filter_wheels(cls, value: list[str]) -> list[str]:
-        if duplicates := sorted({uid for uid in value if value.count(uid) > 1}):
+        if duplicates := sorted({dev_id for dev_id in value if value.count(dev_id) > 1}):
             raise ValueError(f"filter wheels must be unique (duplicates: {duplicates})")
         return value
 
@@ -114,14 +114,14 @@ class HardwareTopology(RigConfig, frozen=True):
     def check_discrete_axis_positions(self, positions: DiscreteAxisPositions, *, loc: ViolationLoc) -> list[Violation]:
         """Check device references and requested labels without importing device classes."""
         violations = []
-        for device_uid, position in positions.items():
-            device = self.device_configs.get(device_uid)
+        for device_id, position in positions.items():
+            device = self.device_configs.get(device_id)
             if device is None:
                 violations.append(
                     Violation(
                         code="discrete_axis.device_missing",
-                        msg=f"Device '{device_uid}' is not configured.",
-                        loc=(*loc, device_uid),
+                        msg=f"Device '{device_id}' is not configured.",
+                        loc=(*loc, device_id),
                     )
                 )
                 continue
@@ -131,8 +131,8 @@ class HardwareTopology(RigConfig, frozen=True):
                 violations.append(
                     Violation(
                         code="discrete_axis.positions_missing",
-                        msg=f"Device '{device_uid}' does not declare discrete-axis positions.",
-                        loc=(*loc, device_uid),
+                        msg=f"Device '{device_id}' does not declare discrete-axis positions.",
+                        loc=(*loc, device_id),
                     )
                 )
                 continue
@@ -149,10 +149,10 @@ class HardwareTopology(RigConfig, frozen=True):
                     Violation(
                         code="discrete_axis.position_missing",
                         msg=(
-                            f"Position '{position}' is not configured for device '{device_uid}' "
+                            f"Position '{position}' is not configured for device '{device_id}' "
                             f"(available: {sorted(configured)})."
                         ),
-                        loc=(*loc, device_uid),
+                        loc=(*loc, device_id),
                     )
                 )
         return violations
@@ -166,7 +166,7 @@ class HardwareTopology(RigConfig, frozen=True):
         ]
 
     def _stage_violations(self, loc: ViolationLoc) -> list[Violation]:
-        devices = self.device_uids
+        devices = self.device_ids
         violations = []
 
         # Explicit mapping ensures type-safety and allows safe IDE refactoring
@@ -185,7 +185,7 @@ class HardwareTopology(RigConfig, frozen=True):
         return violations
 
     def _assembly_violations(self, loc: ViolationLoc) -> list[Violation]:
-        devices = self.device_uids
+        devices = self.device_ids
         violations = []
 
         for assembly_id, assembly in self.detection.items():
@@ -303,8 +303,8 @@ class HardwareTopology(RigConfig, frozen=True):
                         loc=(*routes_loc, route, "selectors"),
                     )
                 )
-                for selector_uid in positions.selectors:
-                    selector_owners.setdefault(selector_uid, {}).setdefault(dimension, route)
+                for selector_id in positions.selectors:
+                    selector_owners.setdefault(selector_id, {}).setdefault(dimension, route)
         return violations, selector_owners
 
     def _selector_ownership_violations(
@@ -313,7 +313,7 @@ class HardwareTopology(RigConfig, frozen=True):
         selector_owners: RoutingSelectorOwners,
     ) -> list[Violation]:
         violations = []
-        for selector_uid, owners in selector_owners.items():
+        for selector_id, owners in selector_owners.items():
             first_dimension = next(iter(owners))
             for dimension, route in list(owners.items())[1:]:
                 routes_loc = (*loc, "optical_routing", dimension, "routes")
@@ -321,20 +321,20 @@ class HardwareTopology(RigConfig, frozen=True):
                     Violation(
                         code="hal.optical_routing.selector_shared",
                         msg=(
-                            f"Selector '{selector_uid}' is also used by routing dimension "
+                            f"Selector '{selector_id}' is also used by routing dimension "
                             f"'{first_dimension}'; selectors may belong to only one dimension."
                         ),
-                        loc=(*routes_loc, route, "selectors", selector_uid),
+                        loc=(*routes_loc, route, "selectors", selector_id),
                     )
                 )
-            if selector_uid in self.filter_wheels:
+            if selector_id in self.filter_wheels:
                 for dimension, route in owners.items():
                     routes_loc = (*loc, "optical_routing", dimension, "routes")
                     violations.append(
                         Violation(
                             code="hal.optical_routing.selector_is_filter_wheel",
-                            msg=f"Selector '{selector_uid}' is already assigned as a filter wheel.",
-                            loc=(*routes_loc, route, "selectors", selector_uid),
+                            msg=f"Selector '{selector_id}' is already assigned as a filter wheel.",
+                            loc=(*routes_loc, route, "selectors", selector_id),
                         )
                     )
         return violations

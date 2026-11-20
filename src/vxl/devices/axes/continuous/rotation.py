@@ -19,7 +19,7 @@ class RotationAxisController(ContinuousAxisNewController["RotationAxis"]):
     def _check_inside(self, low: float, high: float) -> None:
         limits = self.device.limits
         if limits is not None and (min(low, high) < limits.low or max(low, high) > limits.high):
-            raise ValueError(f"{self.device.uid} cannot reach {min(low, high)}..{max(low, high)}° (limits {limits})")
+            raise ValueError(f"{self.device.id} cannot reach {min(low, high)}..{max(low, high)}° (limits {limits})")
 
 
 class RotationAxis(ContinuousAxisNew, kind=DeviceType.ROTATION_AXIS, controller=RotationAxisController):

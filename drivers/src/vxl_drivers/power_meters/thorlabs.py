@@ -45,10 +45,10 @@ _OVERFLOW = 1e30  # SCPI instruments may encode invalid or overflow results as l
 class ThorlabsPowerMeter(PowerMeter):
     """PM100-series meter; configure writable settings through rigup defaults."""
 
-    def __init__(self, uid: str, resource: str, *, timeout_s: float = 2.0, visa_library: str = "") -> None:
+    def __init__(self, device_id: str, resource: str, *, timeout_s: float = 2.0, visa_library: str = "") -> None:
         if not isfinite(timeout_s) or timeout_s <= 0:
             raise ValueError("timeout_s must be finite and positive")
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         self._lock = RLock()
         self._inst: MessageBasedResource | None = None
         # PyVISA shares managers per backend. Closing it here could disconnect other devices.

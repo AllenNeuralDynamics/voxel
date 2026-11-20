@@ -35,8 +35,8 @@ class SkyraError(ConnectionError):
 class SkyraHub(Device, kind="generic"):
     """Own the Skyra port, discover its lines, and reserve each line for one SkyraLaser."""
 
-    def __init__(self, uid: str, port: str, *, baud: int = 115200, timeout_s: float = 1.0) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, port: str, *, baud: int = 115200, timeout_s: float = 1.0) -> None:
+        super().__init__(device_id=device_id)
         if baud <= 0 or not isfinite(timeout_s) or timeout_s <= 0:
             raise ValueError("baud and timeout must be positive")
         self._lock = threading.RLock()

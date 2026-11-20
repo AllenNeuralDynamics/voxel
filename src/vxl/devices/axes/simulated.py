@@ -54,7 +54,7 @@ class SimulatedTTLStepper(TTLStepper):
 class SimulatedContinuousAxis(ContinuousAxis):
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         units: str = "um",
         lower_limit: float = 0.0,
         upper_limit: float = 25000.0,
@@ -62,7 +62,7 @@ class SimulatedContinuousAxis(ContinuousAxis):
         acceleration: float = 100000.0,
         has_ttl_stepper: bool = True,
     ):
-        super().__init__(uid=uid, units=units)
+        super().__init__(device_id=device_id, units=units)
         self._position = 0.0
         self._lower_limit = lower_limit
         self._upper_limit = upper_limit
@@ -271,13 +271,13 @@ class SimulatedContinuousAxis(ContinuousAxis):
 class SimulatedDiscreteAxis(DiscreteAxis):
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         slots: Mapping[int | str, SlotContent],  # e.g. {0: "GFP", 1: "RFP", 2: "Cy5"}
         slot_count: int | None = None,
         start_pos: int = 0,
         settle_seconds: float = 0.05,
     ) -> None:
-        super().__init__(uid=uid, slots=slots, slot_count=slot_count)
+        super().__init__(device_id=device_id, slots=slots, slot_count=slot_count)
 
         if not (0 <= start_pos < self.slot_count):
             raise ValueError("start_pos out of range")
@@ -289,7 +289,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         self._settle_deadline: float | None = None
         self.log.debug(
             "SimulatedDiscreteAxis %s: Initialized at position %s with %s slots",
-            uid,
+            device_id,
             start_pos,
             self.slot_count,
         )
@@ -318,7 +318,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
             self.await_movement(timeout_s)
 
     def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        self.log.debug("SimulatedDiscreteAxis %s: home() called - moving to slot 0", self.uid)
+        self.log.debug("SimulatedDiscreteAxis %s: home() called - moving to slot 0", self.id)
         self.move_to_slot(0, wait=wait, timeout_s=timeout_s)
 
     def halt(self) -> None:

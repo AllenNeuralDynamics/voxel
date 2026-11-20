@@ -20,7 +20,7 @@ def _make_generator(
 ) -> tuple[SimulatedDaqmx, SimulatedSignalGenerator]:
     hub = SimulatedDaqmx(num_ao=8, num_pfi=4, num_counters=2)
     generator = SimulatedSignalGenerator(
-        uid="ao_main",
+        device_id="ao_main",
         hub=hub,
         ports=ports or {"galvo": "ao0", "etl": "ao1"},
     )

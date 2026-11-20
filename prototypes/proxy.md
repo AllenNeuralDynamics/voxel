@@ -13,7 +13,7 @@ on many computers, and the lab watches too.
 
 ```text
 station ──1 feed──▶ feed proxy ──▶ station UIs, on any computer
-                         └──────▶ lab screens
+                         └──connects out, pushes──▶ vxl lab
 ```
 
 - The station has 1 subscriber, the proxy, whatever the number of screens.
@@ -22,7 +22,8 @@ station ──1 feed──▶ feed proxy ──▶ station UIs, on any computer
 - Read-only. Operations go from each UI straight to the station, never through the proxy. `ETag` / `If-Match` and
   the activity lock keep many editors safe.
 - The UI gets every topic. The lab gets a fixed list of topics: the public contract.
-- The lab is live through the proxy. The share service then serves only stored data: `acquisition.json`, the full
+- The lab is live through the proxy. The proxy connects out to `vxl lab` and pushes; the lab never connects in
+  (decided 2026-11-19, see `lab.md`). The share service then serves only stored data: `acquisition.json`, the full
   log and history.
 
 ## How it works

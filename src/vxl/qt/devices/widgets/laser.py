@@ -109,12 +109,12 @@ class LaserControl(QWidget):
         """Handle enable toggle change."""
         command = "enable" if checked else "disable"
         spawn(self._adapter.call(command), log=log)
-        log.debug("Laser %s: %s", self._adapter.uid, command)
+        log.debug("Laser %s: %s", self._adapter.id, command)
 
     def _on_power_changed(self, value: float) -> None:
         """Handle power setpoint change from slider."""
         spawn(self._adapter.set("power_setpoint", value), log=log)
-        log.debug("Laser %s: set power_setpoint = %.1f", self._adapter.uid, value)
+        log.debug("Laser %s: set power_setpoint = %.1f", self._adapter.id, value)
 
     def update_power_range(self, min_val: float, max_val: float) -> None:
         """Update the power slider range (call after fetching device interface)."""

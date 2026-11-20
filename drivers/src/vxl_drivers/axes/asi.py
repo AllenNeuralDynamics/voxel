@@ -73,8 +73,8 @@ class TigerLinearAxis(ContinuousAxis):
     POS_MULT = 10
     _MM_TO_UM = 1000.0
 
-    def __init__(self, *, hub: "TigerHub", axis_label: str, uid: str, units: str = "um") -> None:
-        super().__init__(uid=uid, units=units)
+    def __init__(self, *, hub: "TigerHub", axis_label: str, device_id: str, units: str = "um") -> None:
+        super().__init__(device_id=device_id, units=units)
         self.hub = hub
         self._axis_label = axis_label.upper()
         self._info = self.hub.reserve_axis(axis_label)
@@ -256,7 +256,7 @@ if __name__ == "__main__":
     PORT = "COM3"
 
     def log_axis_info(ax: ContinuousAxis) -> None:
-        logger.info("%s axis state:", ax.uid)
+        logger.info("%s axis state:", ax.id)
         logger.info("\tposition: %s %s", ax.position, ax.units)
         logger.info("\tvelocity: %s %s/s", ax.speed, ax.units)
         logger.info("\tacceleration: %s %s/s²", ax.acceleration, ax.units)
@@ -267,9 +267,9 @@ if __name__ == "__main__":
     hub = TigerHub(PORT)
     rprint("Connected axes: %s", hub.box.info().axes)
 
-    x_axis = TigerLinearAxis(hub=hub, uid="x_axis", axis_label="X")
+    x_axis = TigerLinearAxis(hub=hub, device_id="x_axis", axis_label="X")
     logger.info("X axis initialized", extra=x_axis.info.to_dict())
-    y_axis = TigerLinearAxis(hub=hub, uid="y_axis", axis_label="V")
+    y_axis = TigerLinearAxis(hub=hub, device_id="y_axis", axis_label="V")
     logger.info("Y axis initialized", extra=y_axis.info.to_dict())
 
     log_axis_info(x_axis)

@@ -24,7 +24,7 @@ class GenesisMXLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         serial: str,
         wavelength: float,
         *,
@@ -33,7 +33,7 @@ class GenesisMXLaser(Laser):
         startup_delay_s: float = 0.0,
         setpoint_tolerance_mw: float = 0.05,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if isinstance(wavelength, bool) or not isfinite(wavelength) or wavelength <= 0:
             raise ValueError("wavelength must be finite and positive in nm")
         if not all(isfinite(value) for value in (min_power_mw, max_power_mw, startup_delay_s)):
@@ -145,7 +145,7 @@ class GenesisMXLaser(Laser):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode != "software":
-            raise ValueError(f"{self.uid} does only software control")
+            raise ValueError(f"{self.id} does only software control")
         self._inst.analog_input_enable = False
 
     @property

@@ -23,12 +23,12 @@ class NodeMonitorController(DeviceController["NodeMonitor"], streaming={"slow": 
 
 class NodeMonitor(Device, kind="node_monitor", controller=NodeMonitorController):
     """The process of a node and the machine it runs on, as Voxel uses them. A rig adds one to each node it wants
-    reported. While open, it registers its process in the machine's registry under its own uid."""
+    reported. While open, it registers its process in the machine's registry under its own id."""
 
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str) -> None:
+        super().__init__(device_id=device_id)
         self._system = System()
-        self._system.registry.join(uid)
+        self._system.registry.join(device_id)
 
     def dispose(self) -> None:
         self._system.registry.leave()
@@ -95,7 +95,7 @@ class NodeMonitor(Device, kind="node_monitor", controller=NodeMonitorController)
     @stream("slow", desc="Voxel processes registered on the machine, with what each claims of the shared resources")
     def processes(self) -> list[ProcessEntry]:
         registry = self._system.registry
-        registry.join(self.uid)  # restores this process after the registry file was rebuilt
+        registry.join(self.id)  # restores this process after the registry file was rebuilt
         return registry.processes()
 
 

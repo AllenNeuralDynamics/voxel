@@ -121,8 +121,8 @@ class CameraController[D: Camera](DeviceController[D]):
             dest = self._system.resolve_storage(storage)
             root = dest.target  # client-bound path for S3, plain path for local
             root.mkdir(parents=True, exist_ok=True)
-            marker = root / f".voxel_write_check-{self.device.uid}"
-            marker.write_text(self.device.uid)  # raises on missing creds / no permission / unreachable
+            marker = root / f".voxel_write_check-{self.device.id}"
+            marker.write_text(self.device.id)  # raises on missing creds / no permission / unreachable
             marker.unlink(missing_ok=True)
             free = shutil.disk_usage(root).free if isinstance(root, Path) else -1
             return StorageStatus(host=self._system.hostname(), root=str(root), free_bytes=free)

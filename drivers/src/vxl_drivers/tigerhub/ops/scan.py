@@ -38,14 +38,14 @@ class ScanRConfig:
         if self.retrace_speed_percent is not None and not (0 <= int(self.retrace_speed_percent) <= 100):
             raise ValueError("retrace_speed_percent must be in [0, 100].")
 
-    def to_kv(self, info: BoxInfo, fast_axis_uid: str) -> tuple[dict[str, object], float]:
+    def to_kv(self, info: BoxInfo, fast_axis_id: str) -> tuple[dict[str, object], float]:
         """Returns (kv, actual_interval_um).
-        Uses BoxInfo.axes[fast_axis_uid].enc_cnts_per_mm to compute Z (ticks/pulse).
+        Uses BoxInfo.axes[fast_axis_id].enc_cnts_per_mm to compute Z (ticks/pulse).
         """
         self.validate()
-        ax = info.axes.get(fast_axis_uid.upper())
+        ax = info.axes.get(fast_axis_id.upper())
         if ax is None or ax.enc_cnts_per_mm is None:
-            err = f"Missing enc_cnts_per_mm for axis {fast_axis_uid!r}."
+            err = f"Missing enc_cnts_per_mm for axis {fast_axis_id!r}."
             raise RuntimeError(err)
 
         ticks_per_mm = ax.enc_cnts_per_mm

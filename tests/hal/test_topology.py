@@ -11,8 +11,8 @@ def _hal_config(
     illumination_routing: set[str] | None = None,
 ) -> HardwareTopology:
     devices = {
-        uid: DeviceConfig(target="builtins.object")
-        for uid in ("camera", "laser", "transmitted", "x_axis", "y_axis", "z_axis")
+        device_id: DeviceConfig(target="builtins.object")
+        for device_id in ("camera", "laser", "transmitted", "x_axis", "y_axis", "z_axis")
     }
     devices["selector"] = DeviceConfig(
         target="vxl.devices.axes.simulated.SimulatedDiscreteAxis",

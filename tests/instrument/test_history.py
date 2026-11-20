@@ -83,7 +83,7 @@ async def test_replay_checks_capture_mode_after_acquiring_lock(instrument: Instr
 async def test_profile_edit_replays_against_original_profile_after_switch(opened_instrument: Instrument) -> None:
     instrument = opened_instrument
     original_id = instrument.active_profile_id.value
-    other_id = next(uid for uid in instrument.state.value.imaging.profiles if uid != original_id)
+    other_id = next(dev_id for dev_id in instrument.state.value.imaging.profiles if dev_id != original_id)
     original = instrument.active_profile
     other = instrument.state.value.imaging.profiles[other_id]
 

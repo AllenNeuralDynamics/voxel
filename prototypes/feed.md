@@ -37,7 +37,7 @@ Instrument topics, for SPIM:
 | `instrument.history`, `instrument.active_profile`, `instrument.power_mode`, `instrument.activities`, `instrument.remote_stores` | when they change |
 | `instrument.live` (planes, stream revision), `instrument.alerts` | when what they come from changes |
 | `instrument.preview_channels` | a SPIM field |
-| `instrument.devices.<uid>` | per device, when its properties change |
+| `instrument.devices.<id>` | per device, when its properties change |
 
 Rename on the way: the view field `device_views` becomes `devices` (`InstrumentView`, `_view_sources()`). The HAL
 keeps `device_views`, since its other names give handles.

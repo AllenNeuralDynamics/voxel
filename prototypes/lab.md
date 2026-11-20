@@ -8,17 +8,19 @@ Discussed on 2026-11-18, not built. Builds on `records.md`. Replaces the copy-of
 | Part | Runs where | Does |
 | --- | --- | --- |
 | `vxl station` | each station computer | runs the microscope and owns its records |
-| read service | each station computer, its own capped process | serves the public contract and pushes change events |
+| feed proxy | each station computer, or another computer | fans out the station feed; connects out to the Lab and pushes its topics (`proxy.md`) |
+| share service | each station computer, its own capped process | serves stored data: `acquisition.json`, the full log, history |
 | `vxl lab` | 1 station computer or a lab server | FastAPI: keeps an index of all stations' runs, serves the Lab app |
 | `web/lab` | the browser | the Lab app: SvelteKit on `@voxel/kit`, like the station app |
 
 ## Decided
 
 - **The Lab keeps an index, not a copy.** It is built only from the public contract, and can be rebuilt from the
-  read services or from the `run.json` files in storage.
-- **The read service connects out to the Lab and pushes changes.** It passes firewalls that block incoming
-  connections, and the station decides when it joins. The push runs in the read service, so the station pays nothing.
-  When the Lab is down, waiting changes merge, newest per run; the Lab catches up when it returns.
+  share services or from the `acquisition.json` files in storage.
+- **The feed proxy connects out to the Lab and pushes the Lab's topics** (decided 2026-11-19). It passes firewalls
+  that block incoming connections, and the station decides when it joins. The push runs in the proxy, so the station
+  pays nothing. When the Lab is down, waiting changes merge, newest per topic; the Lab catches up when it returns.
+- **The Lab reads stored data from the share service.** It never subscribes to the station feed itself.
 
 ## Proposed, not confirmed
 

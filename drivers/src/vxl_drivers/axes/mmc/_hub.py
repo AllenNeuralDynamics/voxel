@@ -28,11 +28,11 @@ class MMCHub(Device, kind="generic"):
         self,
         port: str,
         *,
-        uid: str = "mmc",
+        device_id: str = "mmc",
         baud: int = DEFAULT_BAUD,
         timeout_s: float = DEFAULT_TIMEOUT_S,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if timeout_s <= 0:
             raise ValueError(f"MMC timeout_s must be positive, got {timeout_s}")
 
@@ -104,7 +104,7 @@ class MMCHub(Device, kind="generic"):
         self._validate_axis_id(axis_id)
         with self._reservation_lock:
             if axis_id in self._reserved:
-                raise MMCAxisAlreadyReservedError(f"MMC axis {axis_id} is already reserved on {self.uid}")
+                raise MMCAxisAlreadyReservedError(f"MMC axis {axis_id} is already reserved on {self.id}")
             self._reserved.add(axis_id)
 
     def release_axis(self, axis_id: int) -> None:

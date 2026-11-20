@@ -142,25 +142,25 @@ class OxxiusHub(Device, kind="generic"):
     multi-laser combiners. Similar pattern to TigerHub.
 
     Example:
-        hub = OxxiusHub(uid="oxxius", port="COM3", model="L6cc")
-        laser1 = hub.make_lbx_laser(uid="488nm", prefix="L1", wavelength=488)
-        laser2 = hub.make_lcx_laser(uid="561nm", prefix="L2", wavelength=561)
+        hub = OxxiusHub(id="oxxius", port="COM3", model="L6cc")
+        laser1 = hub.make_lbx_laser(id="488nm", prefix="L1", wavelength=488)
+        laser2 = hub.make_lcx_laser(id="561nm", prefix="L2", wavelength=561)
     """
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         port: str | Serial,
         model: Literal["L4cc", "L6cc"] = "L6cc",
     ) -> None:
         """Initialize the Oxxius hub.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             port: Serial port name or Serial object.
             model: Combiner model ("L4cc" or "L6cc").
         """
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
 
         self._ser = Serial(port, **_SERIAL_CONFIG) if isinstance(port, str) else port
         self._ser.reset_input_buffer()
@@ -309,31 +309,31 @@ class OxxiusHub(Device, kind="generic"):
 
     # ==================== Factory Methods ====================
 
-    def make_lbx_laser(self, uid: str, prefix: str, wavelength: int) -> "OxxiusLBX":
+    def make_lbx_laser(self, device_id: str, prefix: str, wavelength: int) -> "OxxiusLBX":
         """Create and reserve an LBX laser.
 
         Args:
-            uid: Unique identifier for the laser device.
+            device_id: Unique identifier for the laser device.
             prefix: Laser prefix (e.g., "L1").
             wavelength: Wavelength in nm.
 
         Returns:
             Configured OxxiusLBX instance.
         """
-        return OxxiusLBX(uid=uid, wavelength=wavelength, prefix=prefix, hub=self)
+        return OxxiusLBX(device_id=device_id, wavelength=wavelength, prefix=prefix, hub=self)
 
-    def make_lcx_laser(self, uid: str, prefix: str, wavelength: int) -> "OxxiusLCX":
+    def make_lcx_laser(self, device_id: str, prefix: str, wavelength: int) -> "OxxiusLCX":
         """Create and reserve an LCX laser.
 
         Args:
-            uid: Unique identifier for the laser device.
+            device_id: Unique identifier for the laser device.
             prefix: Laser prefix (e.g., "L1").
             wavelength: Wavelength in nm.
 
         Returns:
             Configured OxxiusLCX instance.
         """
-        return OxxiusLCX(uid=uid, wavelength=wavelength, prefix=prefix, hub=self)
+        return OxxiusLCX(device_id=device_id, wavelength=wavelength, prefix=prefix, hub=self)
 
     # ==================== Lifecycle ====================
 
@@ -356,7 +356,7 @@ class OxxiusLBX(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         prefix: str,
         hub: OxxiusHub,
@@ -364,7 +364,7 @@ class OxxiusLBX(Laser):
         """Initialize the Oxxius LBX laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             wavelength: Wavelength of the laser in nm.
             prefix: Command prefix for the laser (e.g., "L1", "L2").
             hub: OxxiusHub instance managing this laser.
@@ -375,7 +375,7 @@ class OxxiusLBX(Laser):
         # Reserve the laser on the hub
         self._hub.reserve_laser(self._prefix)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
 
         # Initialize to safe state
         self.disable()
@@ -490,7 +490,7 @@ class OxxiusLCX(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         prefix: str,
         hub: OxxiusHub,
@@ -498,7 +498,7 @@ class OxxiusLCX(Laser):
         """Initialize the Oxxius LCX laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             wavelength: Wavelength of the laser in nm.
             prefix: Command prefix for the laser (e.g., "L1", "L2").
             hub: OxxiusHub instance managing this laser.
@@ -509,7 +509,7 @@ class OxxiusLCX(Laser):
         # Reserve the laser on the hub
         self._hub.reserve_laser(self._prefix)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
         self.log.info(f"Initialized Oxxius LCX laser: prefix={prefix}, wavelength={wavelength}nm")
 
     def enable(self) -> None:

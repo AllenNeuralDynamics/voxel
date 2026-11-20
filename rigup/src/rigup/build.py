@@ -15,6 +15,8 @@ from typing import Any, Literal, Union, cast, get_args, get_origin, get_type_hin
 from pydantic import BaseModel, ConfigDict, Field
 from vxlib.issues import Problem
 
+from rigup.component import Part
+
 logger = logging.getLogger(__name__)
 
 type _BaseClass[T] = type[T] | tuple[type[T], ...]
@@ -69,8 +71,8 @@ class BuildErrorCode(StrEnum):
     INTERNAL = "internal"
 
 
-def _problem(uid: str, kind: BuildErrorCode, msg: str, detail: str | None = None) -> Problem:
-    return Problem(code=f"build.{kind}", msg=msg, loc=(uid,), detail=detail)
+def _problem(device_id: str, kind: BuildErrorCode, msg: str, detail: str | None = None) -> Problem:
+    return Problem(code=f"build.{kind}", msg=msg, loc=(device_id,), detail=detail)
 
 
 type BuildGroupSpec = Mapping[str, BuildConfig]
@@ -106,7 +108,7 @@ def _item_hint(hint: Any) -> Any:
     return None
 
 
-def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, object]) -> str | None:
+def _misfit(device_id: str, cls: type, init: Mapping[str, Any], built: Mapping[str, object]) -> str | None:
     """Return why an object named in ``init`` does not fit the type hint of its ``cls`` argument, or ``None``."""
     given = {
         name: [
@@ -121,7 +123,7 @@ def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, ob
         hints = get_type_hints(cls.__init__)
     except Exception:
         logger.warning(
-            "Cannot read the type hints of %s: what %s gives to %s is not checked", cls.__name__, uid, list(given)
+            "Cannot read the type hints of %s: what %s gives to %s is not checked", cls.__name__, device_id, list(given)
         )
         return None
     for name, named in given.items():
@@ -130,30 +132,31 @@ def _misfit(uid: str, cls: type, init: Mapping[str, Any], built: Mapping[str, ob
         for other in named:
             if allowed is not None and not isinstance(built[other], allowed):
                 wanted = " or ".join(found.__name__ for found in allowed)
-                return f"'{uid}.{name}' needs a {wanted}, and '{other}' is a {type(built[other]).__name__}"
+                return f"'{device_id}.{name}' needs a {wanted}, and '{other}' is a {type(built[other]).__name__}"
     return None
 
 
-def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: _BaseClass) -> T | Problem:
+def _make[T](component_id: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: _BaseClass) -> T | Problem:
     try:
         cls = import_class(cfg.target, base_cls)
     except Exception as e:
         return _problem(
-            uid,
+            component_id,
             BuildErrorCode.IMPORT,
             f"Failed to import '{cfg.target}': {e}",
             traceback.format_exc(),
         )
 
-    if misfit := _misfit(uid, cls, cfg.init, built):
-        return _problem(uid, BuildErrorCode.DEPENDENCY, misfit)
+    if misfit := _misfit(component_id, cls, cfg.init, built):
+        return _problem(component_id, BuildErrorCode.DEPENDENCY, misfit)
 
     make = cast("Callable[..., T]", cls)
     try:
-        obj = make(**{"uid": uid, **_resolve(cfg.init, built)})
+        key = "id" if issubclass(cls, Part) else "device_id"
+        obj = make(**{key: component_id, **_resolve(cfg.init, built)})
     except Exception as e:
         return _problem(
-            uid,
+            component_id,
             BuildErrorCode.INSTANTIATION,
             f"Failed to instantiate {cfg.target.rsplit('.', 1)[-1]}: {e}",
             detail=traceback.format_exc(),
@@ -168,9 +171,9 @@ def _make[T](uid: str, cfg: BuildConfig, built: Mapping[str, object], base_cls: 
             setattr(obj, name, value)
         except Exception as e:
             return _problem(
-                uid,
+                component_id,
                 BuildErrorCode.DEFAULTS,
-                f"Failed to set default {name}={value!r} on {uid}: {e}",
+                f"Failed to set default {name}={value!r} on {component_id}: {e}",
                 traceback.format_exc(),
             )
     return obj
@@ -186,62 +189,64 @@ def build_objects[T](
     """
     built: dict[str, Any] = dict(ready or {})
     errors = {
-        uid: _problem(uid, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{uid}'")
-        for uid in _find_cyclic_uids(cfgs)
+        device_id: _problem(device_id, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{device_id}'")
+        for device_id in _find_cyclic_ids(cfgs)
     }
     building: set[str] = set()
 
-    def _build_one(uid: str) -> T | Problem:
-        if uid in built:
-            return built[uid]
+    def _build_one(device_id: str) -> T | Problem:
+        if device_id in built:
+            return built[device_id]
 
-        if uid in errors:
-            return errors[uid]
+        if device_id in errors:
+            return errors[device_id]
 
-        if uid in building:
-            error = _problem(uid, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{uid}'")
-            errors[uid] = error
+        if device_id in building:
+            error = _problem(device_id, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{device_id}'")
+            errors[device_id] = error
             return error
 
-        building.add(uid)
+        building.add(device_id)
         try:
-            for dep_uid in dependencies(cfgs, uid):
-                if dep_uid in errors:
-                    error = _problem(uid, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_uid}' failed to build")
-                    errors[uid] = error
+            for dep_id in dependencies(cfgs, device_id):
+                if dep_id in errors:
+                    error = _problem(device_id, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_id}' failed to build")
+                    errors[device_id] = error
                     return error
 
-                dep_result = _build_one(dep_uid)
+                dep_result = _build_one(dep_id)
                 if isinstance(dep_result, Problem):
-                    error = _problem(uid, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_uid}' failed: {dep_result.msg}")
-                    errors[uid] = error
+                    error = _problem(
+                        device_id, BuildErrorCode.DEPENDENCY, f"Dependency '{dep_id}' failed: {dep_result.msg}"
+                    )
+                    errors[device_id] = error
                     return error
 
-            result = _make(uid, cfgs[uid], built, base_cls)
+            result = _make(device_id, cfgs[device_id], built, base_cls)
             if isinstance(result, Problem):
-                errors[uid] = result
+                errors[device_id] = result
             else:
-                built[uid] = result
+                built[device_id] = result
             return result
 
         finally:
-            building.discard(uid)
+            building.discard(device_id)
 
-    for uid in cfgs:
-        if uid not in built and uid not in errors:
-            _build_one(uid)
+    for device_id in cfgs:
+        if device_id not in built and device_id not in errors:
+            _build_one(device_id)
 
-    return {uid: obj for uid, obj in built.items() if uid in cfgs}, errors
+    return {device_id: obj for device_id, obj in built.items() if device_id in cfgs}, errors
 
 
-def dependencies(cfgs: BuildGroupSpec, uid: str) -> set[str]:
-    """Return the entries of ``cfgs`` that the ``init`` of ``uid`` names, at any depth."""
+def dependencies(cfgs: BuildGroupSpec, device_id: str) -> set[str]:
+    """Return the entries of ``cfgs`` that the ``init`` of ``id`` names, at any depth."""
     found: set[str] = set()
-    pending: list[Any] = [cfgs[uid].init]
+    pending: list[Any] = [cfgs[device_id].init]
     while pending:
         value = pending.pop()
         if isinstance(value, str):
-            if value in cfgs and value != uid:
+            if value in cfgs and value != device_id:
                 found.add(value)
         elif isinstance(value, list):
             pending.extend(value)
@@ -250,18 +255,18 @@ def dependencies(cfgs: BuildGroupSpec, uid: str) -> set[str]:
     return found
 
 
-def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
+def _find_cyclic_ids(cfgs: BuildGroupSpec) -> set[str]:
     """Return the UIDs that are part of a dependency cycle, not those that only depend on one."""
     state: dict[str, Literal["visiting", "visited"]] = {}
     stack: list[str] = []
     stack_index: dict[str, int] = {}
     cyclic: set[str] = set()
 
-    def visit(uid: str) -> None:
-        state[uid] = "visiting"
-        stack_index[uid] = len(stack)
-        stack.append(uid)
-        for dependency in dependencies(cfgs, uid):
+    def visit(device_id: str) -> None:
+        state[device_id] = "visiting"
+        stack_index[device_id] = len(stack)
+        stack.append(device_id)
+        for dependency in dependencies(cfgs, device_id):
             match state.get(dependency):
                 case None:
                     visit(dependency)
@@ -270,42 +275,42 @@ def _find_cyclic_uids(cfgs: BuildGroupSpec) -> set[str]:
                 case "visited":
                     pass
         stack.pop()
-        stack_index.pop(uid)
-        state[uid] = "visited"
+        stack_index.pop(device_id)
+        state[device_id] = "visited"
 
-    for uid in cfgs:
-        if uid not in state:
-            visit(uid)
+    for device_id in cfgs:
+        if device_id not in state:
+            visit(device_id)
     return cyclic
 
 
 def _topological_layers(cfgs: BuildGroupSpec) -> list[list[list[str]]]:
     """Sort the UIDs into dependency layers, and each layer into groups that share a target."""
-    deps_map: dict[str, set[str]] = {uid: dependencies(cfgs, uid) for uid in cfgs}
+    deps_map: dict[str, set[str]] = {dev_id: dependencies(cfgs, dev_id) for dev_id in cfgs}
     in_degree: dict[str, int] = dict.fromkeys(cfgs, 0)
-    for uid, deps in deps_map.items():
-        in_degree[uid] = len(deps)
+    for device_id, deps in deps_map.items():
+        in_degree[device_id] = len(deps)
 
     remaining = set(cfgs.keys())
     layers: list[list[list[str]]] = []
 
     while remaining:
-        ready = [uid for uid in remaining if in_degree[uid] == 0]
+        ready = [dev_id for dev_id in remaining if in_degree[dev_id] == 0]
         if not ready:
             logger.warning("Circular dependency detected among: %s", remaining)
             layers.append([list(remaining)])
             break
 
         by_target: dict[str, list[str]] = defaultdict(list)
-        for uid in ready:
-            by_target[cfgs[uid].target].append(uid)
+        for device_id in ready:
+            by_target[cfgs[device_id].target].append(device_id)
 
         layers.append(list(by_target.values()))
 
-        for uid in ready:
-            remaining.discard(uid)
-        for uid in remaining:
-            in_degree[uid] = len(deps_map[uid] & remaining)
+        for device_id in ready:
+            remaining.discard(device_id)
+        for device_id in remaining:
+            in_degree[device_id] = len(deps_map[device_id] & remaining)
 
     return layers
 
@@ -318,10 +323,10 @@ def _build_group_sync[T](
 ) -> list[tuple[str, T | Problem]]:
     # Runs in a worker thread beside other groups, so it only reads ``built``.
     results: list[tuple[str, T | Problem]] = []
-    for uid in group:
-        cfg = cfgs[uid]
-        logger.info("Building device: %s (%s)", uid, cfg.target.rsplit(".", 1)[-1])
-        results.append((uid, _make(uid, cfg, built, base_cls)))
+    for device_id in group:
+        cfg = cfgs[device_id]
+        logger.info("Building device: %s (%s)", device_id, cfg.target.rsplit(".", 1)[-1])
+        results.append((device_id, _make(device_id, cfg, built, base_cls)))
     return results
 
 
@@ -344,36 +349,37 @@ async def build_objects_async[T](
     if not cfgs:
         return {}, {}
 
-    cyclic = _find_cyclic_uids(cfgs)
+    cyclic = _find_cyclic_ids(cfgs)
     errors = {
-        uid: _problem(uid, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{uid}'") for uid in cyclic
+        dev_id: _problem(dev_id, BuildErrorCode.CIRCULAR, f"Circular dependency detected for obj '{dev_id}'")
+        for dev_id in cyclic
     }
-    buildable = {uid: cfg for uid, cfg in cfgs.items() if uid not in cyclic}
+    buildable = {device_id: cfg for device_id, cfg in cfgs.items() if device_id not in cyclic}
     layers = _topological_layers(buildable)
     built: dict[str, Any] = dict(ready or {})
 
     for layer in layers:
         valid_groups: list[list[str]] = []
         for group in layer:
-            valid_uids: list[str] = []
-            for uid in group:
-                deps = dependencies(cfgs, uid)
+            valid_ids: list[str] = []
+            for device_id in group:
+                deps = dependencies(cfgs, device_id)
                 failed_deps = deps & errors.keys()
                 if failed_deps:
-                    errors[uid] = _problem(
-                        uid,
+                    errors[device_id] = _problem(
+                        device_id,
                         BuildErrorCode.DEPENDENCY,
                         f"Dependency failed: {', '.join(sorted(failed_deps))}",
                     )
                 else:
-                    valid_uids.append(uid)
-            if valid_uids:
-                valid_groups.append(valid_uids)
+                    valid_ids.append(device_id)
+            if valid_ids:
+                valid_groups.append(valid_ids)
 
         if not valid_groups:
             continue
 
-        valid_configs = {uid: cfgs[uid] for group in valid_groups for uid in group}
+        valid_configs = {dev_id: cfgs[dev_id] for group in valid_groups for dev_id in group}
         _prewarm_parent_modules(valid_configs)
 
         group_results = await asyncio.gather(
@@ -387,18 +393,18 @@ async def build_objects_async[T](
                 formatted_traceback = "".join(
                     traceback.format_exception(type(group_result), group_result, group_result.__traceback__)
                 )
-                for uid in group:
-                    errors[uid] = _problem(
-                        uid,
+                for device_id in group:
+                    errors[device_id] = _problem(
+                        device_id,
                         BuildErrorCode.INTERNAL,
                         f"Unexpected error during device build: {group_result}",
                         formatted_traceback,
                     )
                 continue
-            for uid, result in group_result:
+            for device_id, result in group_result:
                 if isinstance(result, Problem):
-                    errors[uid] = result
+                    errors[device_id] = result
                 else:
-                    built[uid] = result
+                    built[device_id] = result
 
-    return {uid: obj for uid, obj in built.items() if uid in cfgs}, errors
+    return {device_id: obj for device_id, obj in built.items() if device_id in cfgs}, errors

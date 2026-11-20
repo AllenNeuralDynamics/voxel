@@ -109,8 +109,8 @@ class LaserBase(Device, ABC, kind="laser"):
 
 
 class SimulatedLaser(Recorded, LaserBase):
-    def __init__(self, uid: str, max_power: float) -> None:
-        super().__init__(uid)
+    def __init__(self, device_id: str, max_power: float) -> None:
+        super().__init__(device_id)
         self.hardware = Hardware(P=0.0, MODE="cw", BT=24.5, L=False, MOD="digital")
         self.max_power = max_power
 
@@ -232,8 +232,8 @@ class CameraBase(Device, ABC, kind="camera"):
 
 
 class SimulatedCamera(Recorded, CameraBase):
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid)
+    def __init__(self, device_id: str) -> None:
+        super().__init__(device_id)
         self.hardware = Hardware(EXP=10.0, BIN=1, TEMP=-10.0, STATE="idle", FRAMES=0)
 
     @number(minimum=0.1, maximum=1000.0, step=0.1)
@@ -303,8 +303,8 @@ type Waveform = Annotated[Square | Sine, Field(discriminator="kind")]
 class SignalCard(Recorded, Device, kind="signal_card"):
     """Digital lines and an analog output, with operations only."""
 
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid)
+    def __init__(self, device_id: str) -> None:
+        super().__init__(device_id)
         self.hardware = Hardware()
 
     @action()

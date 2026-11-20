@@ -12,7 +12,7 @@ from vxlib.vector import Transform, Vec3D
 from vxl.devices.camera import AreaCameraHandle
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
 from vxl.live.protocol import StagePosition
-from vxl.station.instrument.config import DeviceUid
+from vxl.station.instrument.config import DeviceId
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown
@@ -66,10 +66,10 @@ class Plane(FrozenModel):
 
     right: Vec3D
     down: Vec3D
-    pictures: dict[DeviceUid, Picture]
+    pictures: dict[DeviceId, Picture]
 
 
-def planes_of(frames: Mapping[DeviceUid, Transform]) -> tuple[Plane, ...]:
+def planes_of(frames: Mapping[DeviceId, Transform]) -> tuple[Plane, ...]:
     """The planes of some cameras' frames at stage position 0, each with the pictures that lie in it."""
     planes: list[Plane] = []
     for normal, members in _same_plane_groups(frames):
@@ -85,10 +85,10 @@ def _normal(frame: Transform) -> Vec3D:
     return across / across.length()
 
 
-def _same_plane_groups(frames: Mapping[DeviceUid, Transform]) -> list[tuple[Vec3D, dict[DeviceUid, Transform]]]:
+def _same_plane_groups(frames: Mapping[DeviceId, Transform]) -> list[tuple[Vec3D, dict[DeviceId, Transform]]]:
     """The frames grouped by the plane they lie in: a frame joins the first group whose plane is within
     ``_SAME_PLANE_DEG`` of its own."""
-    groups: list[tuple[Vec3D, dict[DeviceUid, Transform]]] = []
+    groups: list[tuple[Vec3D, dict[DeviceId, Transform]]] = []
     for camera, frame in frames.items():
         normal = _normal(frame)
         group = next((members for known, members in groups if abs(normal.dot(known)) > _SAME_PLANE), None)
@@ -145,28 +145,28 @@ class LiveRelay:
 
     def __init__(
         self,
-        cameras: Mapping[DeviceUid, AreaCameraHandle],
+        cameras: Mapping[DeviceId, AreaCameraHandle],
         stage: Callable[[], StagePosition | None],
         frames: Emitter[LiveSourceEmission],
     ) -> None:
         self._cameras = cameras
         self._stage = stage
         self._frames = frames
-        self._streams: dict[DeviceUid, str] = {}
-        self._positions: dict[DeviceUid, dict[int, StagePosition | None]] = {}
+        self._streams: dict[DeviceId, str] = {}
+        self._positions: dict[DeviceId, dict[int, StagePosition | None]] = {}
         self._teardowns: list[Teardown] = []
         self._resetting = asyncio.Lock()
 
     @property
-    def streaming(self) -> tuple[DeviceUid, ...]:
+    def streaming(self) -> tuple[DeviceId, ...]:
         """The cameras that have a stream from the last :meth:`reset`."""
         return tuple(self._streams)
 
     def start(self) -> None:
         """Listen to every camera's live topics."""
-        for uid, camera in self._cameras.items():
+        for device_id, camera in self._cameras.items():
             for topic, layer in (("live", LiveLayer.OVERVIEW), ("live_viewport", LiveLayer.VIEWPORT)):
-                self._teardowns.append(camera.subscribe(topic, self._forward(uid, layer)))
+                self._teardowns.append(camera.subscribe(topic, self._forward(device_id, layer)))
 
     def stop(self) -> None:
         """Stop listening, and forget every stream."""
@@ -176,7 +176,7 @@ class LiveRelay:
         self._streams.clear()
         self._positions.clear()
 
-    async def reset(self, cameras: Mapping[DeviceUid, AreaCameraHandle]) -> None:
+    async def reset(self, cameras: Mapping[DeviceId, AreaCameraHandle]) -> None:
         """Start a new stream on each of ``cameras``, and drop every other stream with its positions. 1 reset runs at
         a time, so the streams kept are always those of the last reset to run."""
         async with self._resetting:
@@ -185,21 +185,21 @@ class LiveRelay:
             ids = await asyncio.gather(*(camera.reset_live_stream() for camera in cameras.values()))
             self._streams = dict(zip(cameras, ids, strict=True))
 
-    def _forward(self, uid: DeviceUid, layer: LiveLayer) -> Callable[[bytes], Any]:
+    def _forward(self, device_id: DeviceId, layer: LiveLayer) -> Callable[[bytes], Any]:
         async def forward(frame: bytes) -> None:
             try:
                 header = live_source_header(frame)
             except ValueError:
                 return  # not a live frame; the camera logs its own errors
-            if header.camera_id != uid or header.source_stream_id != self._streams.get(uid):
+            if header.camera_id != device_id or header.source_stream_id != self._streams.get(device_id):
                 return
-            await self._frames.emit((uid, layer, frame, self._position(uid, header.frame_idx)))
+            await self._frames.emit((device_id, layer, frame, self._position(device_id, header.frame_idx)))
 
         return forward
 
-    def _position(self, uid: DeviceUid, frame_idx: int) -> StagePosition | None:
+    def _position(self, device_id: DeviceId, frame_idx: int) -> StagePosition | None:
         """The stage position of a frame: read when its number is new, kept for the latest frames."""
-        positions = self._positions.setdefault(uid, {})
+        positions = self._positions.setdefault(device_id, {})
         if frame_idx > max(positions, default=-1):
             positions[frame_idx] = self._stage()
             if len(positions) > _KEPT_POSITIONS:

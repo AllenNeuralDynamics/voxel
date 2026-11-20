@@ -77,7 +77,7 @@ class BuildReport:
         )
 
     def rows(self):
-        """Yield aligned BU X rows as tuples (uid, type_code, card_index, card_hex, props)."""
+        """Yield aligned BU X rows as tuples (id, type_code, card_index, card_hex, props)."""
         if not self.motor_axes:
             return
 

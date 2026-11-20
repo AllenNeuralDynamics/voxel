@@ -378,8 +378,8 @@ export class Instrument {
     return this.edits.run(() => this.#client.patch<Change<[string, ProfilePatch]>>(`${this.#base}/profile`, patch));
   }
 
-  updateSignals(generatorUid: string, signals: Signals): Promise<void> {
-    return this.#client.patch(`${this.#base}/profile/sync/${encodeURIComponent(generatorUid)}`, signals);
+  updateSignals(generatorId: string, signals: Signals): Promise<void> {
+    return this.#client.patch(`${this.#base}/profile/sync/${encodeURIComponent(generatorId)}`, signals);
   }
 
   applySettings(): Promise<void> {
@@ -520,7 +520,7 @@ export class Instrument {
     }
 
     const selectorIds = [...new SvelteSet(Object.values(assignments).flatMap((route) => Object.keys(route.selectors)))];
-    const selector = (uid: string) => this.discreteAxes.get(uid);
+    const selector = (id: string) => this.discreteAxes.get(id);
     const position = () => (axis ? this.stage.axis(axis).position?.value : undefined);
     return {
       id,
@@ -535,21 +535,21 @@ export class Instrument {
       },
       get current() {
         const positions = new SvelteMap<string, string>();
-        for (const uid of selectorIds) {
-          const handle = selector(uid);
+        for (const id of selectorIds) {
+          const handle = selector(id);
           const state = handle?.state;
           if (!handle || !state || state.is_moving || state.position === null) return undefined;
           const label = handle.labelAt(state.position);
           if (label == null) return undefined;
-          positions.set(uid, label);
+          positions.set(id, label);
         }
         const matches = routes.filter((route) =>
-          Object.entries(assignments[route].selectors).every(([uid, label]) => positions.get(uid) === label)
+          Object.entries(assignments[route].selectors).every(([id, label]) => positions.get(id) === label)
         );
         return matches.length === 1 ? matches[0] : undefined;
       },
       get moving() {
-        return selectorIds.some((uid) => selector(uid)?.state?.is_moving === true);
+        return selectorIds.some((id) => selector(id)?.state?.is_moving === true);
       }
     };
   }

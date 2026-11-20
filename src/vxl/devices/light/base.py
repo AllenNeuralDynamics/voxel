@@ -63,7 +63,7 @@ class Dimmable(Device):
     def set_power(self, value: float) -> None:
         span = self.power_range
         if not span.low <= value <= span.high:
-            raise ValueError(f"{self.uid} cannot do {value} {self.unit} (it can do {span.low}..{span.high})")
+            raise ValueError(f"{self.id} cannot do {value} {self.unit} (it can do {span.low}..{span.high})")
         self._set_power(value)
 
     @action(desc="Choose what controls it")
@@ -71,7 +71,7 @@ class Dimmable(Device):
         needs = {"software": [], "digital": ["digital"], "analog": ["analog"], "mixed": ["digital", "analog"]}[mode]
         has = {pin.kind for pin in self.pins if pin.receives}
         if missing := [kind for kind in needs if kind not in has]:
-            raise ValueError(f"{self.uid} has no {' or '.join(missing)} pin for {mode} control")
+            raise ValueError(f"{self.id} has no {' or '.join(missing)} pin for {mode} control")
         self._set_control_mode(mode)
 
     @action(desc="Let the light on")

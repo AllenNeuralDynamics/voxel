@@ -14,7 +14,7 @@ def _hal(optics: dict[str, Any], *, parts: dict[str, Any], devices: list[str]) -
     return bench(
         {
             "parts": parts,
-            "devices": {uid: {"target": "builtins.object"} for uid in (*axes, *devices)},
+            "devices": {dev_id: {"target": "builtins.object"} for dev_id in (*axes, *devices)},
             "stage": {axis: {"device": device} for axis, device in zip("xyz", axes, strict=True)},
             "optics": optics,
         }

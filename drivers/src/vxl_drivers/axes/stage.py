@@ -222,9 +222,9 @@ if __name__ == "__main__":
     PORT = "COM3"
     hub = TigerHub(PORT)
 
-    x_axis = TigerLinearAxis(hub=hub, uid="x-axis", axis_label="X")
-    y_axis = TigerLinearAxis(hub=hub, uid="y-axis", axis_label="Y")
-    z_axis = TigerLinearAxis(hub=hub, uid="z-axis", axis_label="Z")
+    x_axis = TigerLinearAxis(hub=hub, device_id="x-axis", axis_label="X")
+    y_axis = TigerLinearAxis(hub=hub, device_id="y-axis", axis_label="Y")
+    z_axis = TigerLinearAxis(hub=hub, device_id="z-axis", axis_label="Z")
 
     stage = TigerXYZStage(x_axis, y_axis, z_axis)
 

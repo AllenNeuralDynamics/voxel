@@ -39,8 +39,11 @@ These are the current picks, open until decided.
   are worked out from existing facts (see below).
 - **The control is a ruler**, not a full slider: a fixed center line on the current value over a ruler of ticks that
   shows a small window around it. Dragging scrolls the ruler; it stops at the bounds, with the part past them hatched.
-  1 px of drag is 1 step, Shift is 10 steps; the wheel and the arrow keys move 1 step; a number box takes an exact
-  value. A full slider stays for values whose whole range means something (power, exposure); the ruler is for small
+  The ruler follows the pointer (8 px for each step), Shift moves 10 steps at a time; the wheel and the arrow keys move 1 step; a number box takes an exact
+  value. Three looks are under test in the Lab: Track (the slider's track through the middle, ticks on it, a needle
+  fixed at the center, the reading as a fill on the track), Light (a needle fixed at the center with no track, sparse ticks that fade
+  toward the ends, a cap at each end of the range, the reading as a filled track) and Boxed (a framed ruler with a
+  tick every step and labels). A full slider stays for values whose whole range means something (power, exposure); the ruler is for small
   moves inside a large range (focus positions, timeline offsets, a sheet-focus voltage).
 - **A change is sent on release** (or Enter in the box). The wheel has no release, so a short pause counts as 1.
   Loading a cycle into a running generator stops it, re-arms it and starts it again

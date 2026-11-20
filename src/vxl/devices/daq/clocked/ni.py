@@ -73,16 +73,16 @@ class NiSignalGenerator(SignalGenerator):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         hub: NiDaqmx,
         ports: Mapping[str, str],
         trigger: Trigger | Mapping[str, object] | None = None,
     ) -> None:
-        super().__init__(uid=uid, ports=ports)
+        super().__init__(device_id=device_id, ports=ports)
         self._hub = hub
         self._trigger = CounterTrigger() if trigger is None else _TRIGGER_ADAPTER.validate_python(trigger)
-        self._log = logging.getLogger(f"{uid}.NiSignalGenerator")
+        self._log = logging.getLogger(f"{device_id}.NiSignalGenerator")
 
         # Hardware handles — populated on setup, cleared on teardown
         self._ao_task: NiTask | None = None
@@ -118,7 +118,7 @@ class NiSignalGenerator(SignalGenerator):
         physical_input_pins = (trigger.source,) if isinstance(trigger, InputTrigger) else ()
 
         lease = self._hub.reserve_ao_task(
-            self.uid,
+            self.id,
             tuple(self._ports.values()),
             hardware_timed=True,
             needs_counter=isinstance(trigger, CounterTrigger),
@@ -138,7 +138,7 @@ class NiSignalGenerator(SignalGenerator):
         try:
             # Acquire the complete lease before creating any NI task. Keep task
             # handles on self immediately so cleanup can retry a failed close.
-            self._ao_task = NiTask(f"{self.uid}_ao")
+            self._ao_task = NiTask(f"{self.id}_ao")
             for port_name, path in zip(self._ports, lease.ao_paths, strict=True):
                 self._ao_task.ao_channels.add_ao_voltage_chan(path)
                 self._ao_channel_order.append(port_name)
@@ -194,7 +194,7 @@ class NiSignalGenerator(SignalGenerator):
         terminal via ``co_pulse_term``, making the cycle trigger visible to downstream
         devices.
         """
-        co_task = NiTask(f"{self.uid}_clock")
+        co_task = NiTask(f"{self.id}_clock")
         self._co_task = co_task
         chan = co_task.co_channels.add_co_pulse_chan_freq(
             counter_path,
@@ -284,7 +284,7 @@ class NiSignalGenerator(SignalGenerator):
             # InternalOutput as the AO start trigger, so the AO only arms for the
             # first N external edges. Not yet implemented.
             raise NotImplementedError(
-                f"{self.uid}: input-trigger repeat bounding is not supported yet. "
+                f"{self.id}: input-trigger repeat bounding is not supported yet. "
                 "Use repeat=None and count cycles externally, or switch to a counter trigger."
             )
 
@@ -297,7 +297,7 @@ class NiSignalGenerator(SignalGenerator):
     def wait_until_done(self, timeout_s: float) -> None:
         if self._finite_repeat is None:
             raise RuntimeError(
-                f"{self.uid}: wait_until_done requires a finite acquisition "
+                f"{self.id}: wait_until_done requires a finite acquisition "
                 "(start was called with repeat=None or not at all)"
             )
         # The CO task is the finite one when repeat is set; retriggerable AO tasks
@@ -306,7 +306,7 @@ class NiSignalGenerator(SignalGenerator):
             self._co_task.wait_until_done(timeout=timeout_s)
         else:
             # Defensive: should not reach here — InputTrigger + repeat raises in start().
-            raise RuntimeError(f"{self.uid}: no CO task to wait on (input-trigger path)")
+            raise RuntimeError(f"{self.id}: no CO task to wait on (input-trigger path)")
 
     def stop(self) -> None:
         # NI AO tasks hold the last written sample on the DAC after stop. Waveforms are

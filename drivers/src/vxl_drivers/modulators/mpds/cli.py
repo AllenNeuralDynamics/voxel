@@ -51,16 +51,16 @@ class CalibrationConfig(FrozenModel):
         if set(self.devices) != {"source", "mpds", "meter"}:
             raise ValueError("devices must contain exactly source, mpds, and meter")
         for config in self.devices.values():
-            if "uid" in config.init:
-                raise ValueError("device UIDs are supplied by the source/mpds/meter role names")
+            if "device_id" in config.init:
+                raise ValueError("device IDs are supplied by the source/mpds/meter role names")
         return self
 
 
-def _open_device[D: Device](uid: str, config: BuildConfig, expected: type[D], stack: ExitStack) -> D:
+def _open_device[D: Device](device_id: str, config: BuildConfig, expected: type[D], stack: ExitStack) -> D:
     driver = config.get_obj_class()
     if not issubclass(driver, expected):
-        raise TypeError(f"{uid} must implement {expected.__name__}")
-    device = driver(uid=uid, **config.init)
+        raise TypeError(f"{device_id} must implement {expected.__name__}")
+    device = driver(device_id=device_id, **config.init)
     stack.callback(device.dispose)
     for name, value in (config.defaults or {}).items():
         setattr(device, name, value)

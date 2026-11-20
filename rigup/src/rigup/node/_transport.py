@@ -36,11 +36,11 @@ class TransportAdapter[D: Device](Adapter[D]):
     A topic is subscribed on the transport while it has at least one subscriber.
     """
 
-    def __init__(self, uid: str, transport: TransportClient) -> None:
+    def __init__(self, device_id: str, transport: TransportClient) -> None:
         super().__init__()
-        self._uid = uid
+        self._id = device_id
         self._transport = transport
-        self._log = logging.getLogger(f"{uid}.TransportAdapter")
+        self._log = logging.getLogger(f"{device_id}.TransportAdapter")
         self._signals: dict[str, TopicDispatcher] = {}
         self._zmq_unsubs: dict[str, Teardown] = {}
 
@@ -48,15 +48,17 @@ class TransportAdapter[D: Device](Adapter[D]):
         """Do nothing; topics are subscribed on the transport on first ``subscribe``."""
 
     @property
-    def uid(self) -> str:
-        return self._uid
+    def id(self) -> str:
+        return self._id
 
     @property
     def device(self) -> D | None:
         return None
 
     async def interface(self) -> DeviceInterface:
-        return await call(self._transport, Action.GET_INTERFACE, GetInterfaceRequest(uid=self._uid), DeviceInterface)
+        return await call(
+            self._transport, Action.GET_INTERFACE, GetInterfaceRequest(id=self._id), DeviceInterface
+        )
 
     async def execute(self, operation: str, *args: Any, **kwargs: Any) -> Result:
         results = await self.execute_many([OperationRequest(attr=operation, args=list(args), kwargs=kwargs)])
@@ -68,7 +70,7 @@ class TransportAdapter[D: Device](Adapter[D]):
         return await call(
             self._transport,
             Action.EXECUTE,
-            ExecuteRequest(uid=self._uid, operations=operations),
+            ExecuteRequest(id=self._id, operations=operations),
             Results,
         )
 
@@ -76,12 +78,14 @@ class TransportAdapter[D: Device](Adapter[D]):
         return await call(
             self._transport,
             Action.GET_PROPS,
-            GetPropsRequest(uid=self._uid, props=list(props)),
+            GetPropsRequest(id=self._id, props=list(props)),
             PropResults,
         )
 
     async def set_props(self, **props: Any) -> PropResults:
-        return await call(self._transport, Action.SET_PROPS, SetPropsRequest(uid=self._uid, props=props), PropResults)
+        return await call(
+            self._transport, Action.SET_PROPS, SetPropsRequest(id=self._id, props=props), PropResults
+        )
 
     @overload
     def subscribe(self, topic: str, cb: StreamCallback[bytes]) -> Teardown: ...
@@ -96,7 +100,7 @@ class TransportAdapter[D: Device](Adapter[D]):
         *,
         schema: type[BaseModel] | None = None,
     ) -> Teardown:
-        full_topic = f"{self._uid}.{topic}"
+        full_topic = f"{self._id}.{topic}"
         sig = self._ensure_signal(full_topic)
         inner_unsub = sig.subscribe(cb, schema=schema) if schema is not None else sig.subscribe(cb)
 
@@ -179,28 +183,28 @@ class TransportNode(Node):
 
         errors = dict(response.errors)
         handles: dict[str, DeviceHandle] = {}
-        for uid in response.built:
-            adapter: TransportAdapter = TransportAdapter(uid, self._transport)
+        for device_id in response.built:
+            adapter: TransportAdapter = TransportAdapter(device_id, self._transport)
             await adapter.start()
             handle = DeviceHandle(adapter)
-            self._adapters[uid] = adapter
-            self._handles[uid] = handle
+            self._adapters[device_id] = adapter
+            self._handles[device_id] = handle
             if (problem := await first_read(handle)) is not None:
-                errors[uid] = problem
-                await self.close_device(uid)
+                errors[device_id] = problem
+                await self.close_device(device_id)
                 continue
-            handles[uid] = handle
+            handles[device_id] = handle
 
-        for uid, err in errors.items():
-            self._log.error("Remote build failed for %s: %s", uid, err.msg)
+        for device_id, err in errors.items():
+            self._log.error("Remote build failed for %s: %s", device_id, err.msg)
 
         return handles, errors
 
-    async def close_device(self, uid: str) -> None:
+    async def close_device(self, device_id: str) -> None:
         with suppress(Exception):
-            await call(self._transport, Action.CLOSE_DEVICE, CloseDeviceRequest(uid=uid), Empty)
-        adapter = self._adapters.pop(uid, None)
-        self._handles.pop(uid, None)
+            await call(self._transport, Action.CLOSE_DEVICE, CloseDeviceRequest(id=device_id), Empty)
+        adapter = self._adapters.pop(device_id, None)
+        self._handles.pop(device_id, None)
         if adapter is not None:
             await adapter.close()
 

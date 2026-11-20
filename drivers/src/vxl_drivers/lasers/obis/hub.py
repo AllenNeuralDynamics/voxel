@@ -13,8 +13,10 @@ _ABSENT = ("ERR-100", "ERR-241")
 class ObisHub(Device, kind="generic"):
     """Own the link to the box, discover its lasers, and reserve each channel for one ObisLaser."""
 
-    def __init__(self, uid: str, port: str, *, channels: int = 6, baud: int = 115200, timeout_s: float = 1.0) -> None:
-        super().__init__(uid=uid)
+    def __init__(
+        self, device_id: str, port: str, *, channels: int = 6, baud: int = 115200, timeout_s: float = 1.0
+    ) -> None:
+        super().__init__(device_id=device_id)
         if isinstance(channels, bool) or not isinstance(channels, int) or channels < 1:
             raise ValueError("channels must be a positive integer")
         self._lock = threading.RLock()

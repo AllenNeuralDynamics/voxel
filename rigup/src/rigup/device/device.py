@@ -41,11 +41,11 @@ class Device[T: StrEnum]:
             with contextlib.suppress(NameError):
                 check_pairing(cls, controller)
 
-    def __init__(self, uid: str):
+    def __init__(self, device_id: str):
         if not self.__kind:
             raise TypeError(f"{type(self).__name__} does not say its kind")
-        self.__uid = uid
-        self.log = logging.getLogger(uid)
+        self.__id = device_id
+        self.log = logging.getLogger(device_id)
 
     def call_soon(self, call: Callable[[], object]) -> None:
         """Schedule ``call`` on this device's thread from any thread, such as a vendor callback thread.
@@ -57,8 +57,8 @@ class Device[T: StrEnum]:
             loop.call_soon(call)
 
     @property
-    def uid(self) -> str:
-        return self.__uid
+    def id(self) -> str:
+        return self.__id
 
     @property
     def kind(self) -> str:

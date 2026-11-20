@@ -25,33 +25,33 @@ class Cube(Part, frozen=True):
 
 
 class Wheel(Device, kind="wheel"):
-    def __init__(self, uid: str, slots: Mapping[str, RigComponent | str]):
-        super().__init__(uid)
+    def __init__(self, device_id: str, slots: Mapping[str, RigComponent | str]):
+        super().__init__(device_id)
         self.slots = dict(slots)
 
 
 class Reader(Device, kind="reader"):
-    def __init__(self, uid: str, glass: Filter, spares: Sequence[Filter] = ()):
-        super().__init__(uid)
+    def __init__(self, device_id: str, glass: Filter, spares: Sequence[Filter] = ()):
+        super().__init__(device_id)
         self.glass = glass
         self.spares = list(spares)
 
 
 class Loose(Device, kind="loose"):
-    def __init__(self, uid: str, glass: "Decimal"):
-        super().__init__(uid)
+    def __init__(self, device_id: str, glass: "Decimal"):
+        super().__init__(device_id)
         self.glass = glass
 
 
 class Plain:
-    def __init__(self, uid: str, value: int = 0):
-        self.uid = uid
+    def __init__(self, device_id: str, value: int = 0):
+        self.id = device_id
         self.value = value
 
 
 class ReadOnly:
-    def __init__(self, uid: str):
-        self.uid = uid
+    def __init__(self, device_id: str):
+        self.id = device_id
 
     @property
     def locked(self) -> bool:
@@ -59,8 +59,8 @@ class ReadOnly:
 
 
 class Dependent:
-    def __init__(self, uid: str, dependency: object):
-        self.uid = uid
+    def __init__(self, device_id: str, dependency: object):
+        self.id = device_id
         self.dependency = dependency
 
 
@@ -87,7 +87,7 @@ def test_build_makes_each_object_from_its_init() -> None:
     built, errors = build_objects(configs, Plain)
 
     assert errors == {}
-    assert {uid: obj.value for uid, obj in built.items()} == {"a": 1, "b": 2}
+    assert {device_id: obj.value for device_id, obj in built.items()} == {"a": 1, "b": 2}
 
 
 async def test_async_build_makes_each_object_from_its_init() -> None:
@@ -96,7 +96,7 @@ async def test_async_build_makes_each_object_from_its_init() -> None:
     built, errors = await build_objects_async(configs, Plain)
 
     assert errors == {}
-    assert {uid: obj.value for uid, obj in built.items()} == {"a": 1, "b": 2}
+    assert {device_id: obj.value for device_id, obj in built.items()} == {"a": 1, "b": 2}
 
 
 def test_defaults_are_set_after_the_object_is_made() -> None:
@@ -145,7 +145,7 @@ def test_a_part_is_passed_to_a_device_and_to_a_part() -> None:
     assert isinstance(cube, Cube)
     assert wheel.slots == {"0": glass, "1": cube, "2": "empty"}
     assert cube.emission is glass
-    assert {uid: component.kind for uid, component in built.items()} == {
+    assert {device_id: component.kind for device_id, component in built.items()} == {
         "wheel": "wheel",
         "cube": "cube",
         "glass": "filter",
@@ -172,7 +172,7 @@ def test_a_part_with_a_wrong_value_is_not_built() -> None:
 
 
 def test_a_ready_object_is_passed_and_not_built_again() -> None:
-    glass = Filter(uid="glass", band=(500, 550))
+    glass = Filter(id="glass", band=(500, 550))
     configs = {"wheel": config("Wheel", slots={"0": "glass", "1": "empty"}), "reader": config("Reader", glass="glass")}
 
     built, errors = build_objects(configs, Device, ready={"glass": glass})
@@ -184,7 +184,9 @@ def test_a_ready_object_is_passed_and_not_built_again() -> None:
 
 
 async def test_a_ready_object_is_checked_against_the_hint() -> None:
-    cube = Cube(uid="cube", excitation=Filter(uid="a", band=(1, 2)), emission=Filter(uid="b", band=(3, 4)))
+    cube = Cube(
+        id="cube", excitation=Filter(id="a", band=(1, 2)), emission=Filter(id="b", band=(3, 4))
+    )
     configs = {"reader": config("Reader", glass="cube"), "wheel": config("Wheel", slots={"0": "cube"})}
 
     built, errors = await build_objects_async(configs, Device, ready={"cube": cube})
@@ -247,7 +249,7 @@ async def test_a_failed_dependency_fails_every_dependent() -> None:
     built, errors = await build_objects_async(configs)
 
     assert built == {}
-    assert {uid: error.code for uid, error in errors.items()} == {
+    assert {device_id: error.code for device_id, error in errors.items()} == {
         "root": "build.import",
         "middle": "build.dependency",
         "leaf": "build.dependency",
@@ -259,7 +261,7 @@ def test_a_cycle_is_reported_as_circular() -> None:
     built, errors = build_objects(CYCLE)
 
     assert built == {}
-    assert {uid: error.code for uid, error in errors.items()} == {
+    assert {device_id: error.code for device_id, error in errors.items()} == {
         "a": "build.circular",
         "b": "build.circular",
         "downstream": "build.dependency",
@@ -272,7 +274,7 @@ async def test_async_build_reports_a_cycle_and_builds_the_rest() -> None:
     built, errors = await build_objects_async(configs)
 
     assert set(built) == {"independent"}
-    assert {uid: error.code for uid, error in errors.items()} == {
+    assert {device_id: error.code for device_id, error in errors.items()} == {
         "a": "build.circular",
         "b": "build.circular",
         "downstream": "build.dependency",

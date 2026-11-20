@@ -13,12 +13,12 @@ class _Rig(BaseModel, frozen=True):
     def _check(self) -> Self:
         found = Problems()
         seen: dict[str, str] = {}
-        for node, uids in self.nodes.items():
-            for uid in uids:
-                if uid in seen:
-                    msg = f"'{uid}' is also on node '{seen[uid]}'"
-                    found.add("duplicate_uid", msg, "nodes", node, uid, detail=f"first on {seen[uid]}")
-                seen[uid] = node
+        for node, device_ids in self.nodes.items():
+            for device_id in device_ids:
+                if device_id in seen:
+                    msg = f"'{device_id}' is also on node '{seen[device_id]}'"
+                    found.add("duplicate_id", msg, "nodes", node, device_id, detail=f"first on {seen[device_id]}")
+                seen[device_id] = node
         found.raise_if_any(type(self).__name__)
         return self
 
@@ -35,13 +35,13 @@ def test_a_validator_raises_every_problem_at_once_and_each_comes_back_with_its_p
 
     assert found == [
         Problem(
-            code="file.duplicate_uid",
+            code="file.duplicate_id",
             msg="'x' is also on node 'a'",
             loc=("file", "rig", "nodes", "b", "x"),
             detail="first on a",
         ),
         Problem(
-            code="file.duplicate_uid",
+            code="file.duplicate_id",
             msg="'y' is also on node 'a'",
             loc=("file", "rig", "nodes", "b", "y"),
             detail="first on a",

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from vxlib.vector import Span, Transform, Vec3D
 
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.station.instrument.config import AxisPosition, DeviceUid, SpecimenAxis, Stage
+from vxl.station.instrument.config import AxisPosition, DeviceId, SpecimenAxis, Stage
 from vxl.station.instrument.geometry import AxisRun, camera_frame
 from vxl.station.instrument.state import ProfileId, TaskId
 
@@ -29,15 +29,15 @@ class Volume:
     profile: ProfileId
     start: Vec3D
     scan: AxisRun
-    positions: Mapping[DeviceUid, AxisPosition]
-    transforms: Mapping[DeviceUid, Transform]
+    positions: Mapping[DeviceId, AxisPosition]
+    transforms: Mapping[DeviceId, Transform]
 
 
 def plan_task(
     task: SPIMTask,
     config: SPIMConfig,
     state: SPIMState,
-    sensors: Mapping[DeviceUid, CameraSensor],
+    sensors: Mapping[DeviceId, CameraSensor],
 ) -> list[Volume]:
     """The volumes of 1 task, in the order they run. ``state`` is the instrument's state or its defaults. The open
     devices give ``sensors``. The smallest area that the task's profiles see sets the tile, with the devices set as
@@ -51,8 +51,8 @@ def plan_task(
     }
 
     span = _scan_span(region, scan, tile)
-    stops: list[tuple[dict[SpecimenAxis, float], Mapping[DeviceUid, AxisPosition]]] = []
-    previous: Mapping[DeviceUid, AxisPosition] = {}
+    stops: list[tuple[dict[SpecimenAxis, float], Mapping[DeviceId, AxisPosition]]] = []
+    previous: Mapping[DeviceId, AxisPosition] = {}
     for stage in _tile_positions(region, scan, task, tile):
         previous = state.positions_at({**stage, scan.axis: span.middle}, previous)
         stops.append((stage, previous))
@@ -77,14 +77,14 @@ def _light(
     config: SPIMConfig,
     profile: SPIMProfile,
     picks: Mapping[str, AxisPosition],
-    sensors: Mapping[DeviceUid, CameraSensor],
-) -> tuple[dict[DeviceUid, AxisPosition], dict[DeviceUid, Transform]]:
+    sensors: Mapping[DeviceId, CameraSensor],
+) -> tuple[dict[DeviceId, AxisPosition], dict[DeviceId, Transform]]:
     """What 1 profile needs with the instrument's devices at ``picks``: the positions to set, and each camera's
     frame at stage position 0. Raise ``ValueError`` when a camera gets no light, or the paths from the sample to it
     do not agree on 1 magnification."""
     chosen = {**picks, **profile.positions}
-    positions: dict[DeviceUid, AxisPosition] = {}
-    frames: dict[DeviceUid, Transform] = {}
+    positions: dict[DeviceId, AxisPosition] = {}
+    frames: dict[DeviceId, Transform] = {}
     for camera, light in profile.lights().items():
         lit = config.optics.paths_from(light, chosen)
         seen = config.optics.paths_to(camera, chosen)
@@ -102,7 +102,7 @@ def _light(
     return positions, frames
 
 
-def _footprint(frames: Mapping[DeviceUid, Transform]) -> dict[SpecimenAxis, Span]:
+def _footprint(frames: Mapping[DeviceId, Transform]) -> dict[SpecimenAxis, Span]:
     """The span on each axis that some camera sees, around the stage position."""
     seen = [frame.bounds() for frame in frames.values()]
     return {axis: Span(min(s[axis].low for s in seen), max(s[axis].high for s in seen)) for axis in ("z", "y", "x")}

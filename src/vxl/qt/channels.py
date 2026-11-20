@@ -53,9 +53,9 @@ class ChannelSection(QWidget):
 
         camera = devices.get_adapter(config.detection)
         if camera is None:
-            raise ValueError(f"Channel '{channel.uid}': no adapter for detection device '{config.detection}'")
+            raise ValueError(f"Channel '{channel.id}': no adapter for detection device '{config.detection}'")
 
-        label = (config.label or channel.uid).upper()
+        label = (config.label or channel.id).upper()
         color = Color.from_wavelength(config.emission) if config.emission else Colors.TEXT
         layout.addWidget(Flex.hstack(Text.section(label, color=color), Stretch(), spacing=Spacing.SM))
 
@@ -63,7 +63,7 @@ class ChannelSection(QWidget):
 
         laser = devices.get_adapter(config.illumination)
         if laser is None:
-            raise ValueError(f"Channel '{channel.uid}': no adapter for illumination device '{config.illumination}'")
+            raise ValueError(f"Channel '{channel.id}': no adapter for illumination device '{config.illumination}'")
         layout.addWidget(LaserControl(laser))
 
 
@@ -132,7 +132,7 @@ class ChannelsPanel(QWidget):
         if channels and self._devices.adapters:
             configs = self._instrument.state.value.imaging.channels
             for channel in channels.values():
-                config = configs.get(channel.uid)
+                config = configs.get(channel.id)
                 if config is not None:
                     self._channels_box.add(ChannelSection(channel, config, self._devices))
         self._channels_box.add_stretch()

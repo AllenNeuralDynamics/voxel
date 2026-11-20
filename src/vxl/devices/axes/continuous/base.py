@@ -115,7 +115,7 @@ class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], A
             speed.maximum is not None and sweep.speed > speed.maximum
         ):
             can = f"{speed.minimum}..{speed.maximum}"
-            raise ValueError(f"{self.device.uid} cannot hold a speed of {sweep.speed} steady (it can do {can})")
+            raise ValueError(f"{self.device.id} cannot hold a speed of {sweep.speed} steady (it can do {can})")
         run_up = self.device.run_up(sweep.speed)
         self._check_inside(sweep.start(run_up), sweep.last + sweep.direction * run_up)
         return self.device.sweep(sweep)
@@ -134,20 +134,20 @@ class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], A
 
     def _check_ready(self, action: str) -> None:
         if (state := self.device.scan_state) != "idle":
-            raise RuntimeError(f"{self.device.uid} cannot {action} while {state}: halt it first")
+            raise RuntimeError(f"{self.device.id} cannot {action} while {state}: halt it first")
         if (fault := self.device.fault) is not None:
-            raise RuntimeError(f"{self.device.uid} cannot {action}: {fault}")
+            raise RuntimeError(f"{self.device.id} cannot {action}: {fault}")
 
     def _check_able(self, ability: ScanAbility) -> None:
         if ability not in self.device.abilities:
-            raise NotImplementedError(f"{self.device.uid} cannot scan with {ability}")
+            raise NotImplementedError(f"{self.device.id} cannot scan with {ability}")
 
     def _check_pin(self, name: str, direction: Literal["in", "out"]) -> None:
         pins = {pin.name: pin for pin in self.device.pins}
         if (pin := pins.get(name)) is None:
-            raise ValueError(f"{self.device.uid} has no pin '{name}' (it has {sorted(pins)})")
+            raise ValueError(f"{self.device.id} has no pin '{name}' (it has {sorted(pins)})")
         if not (pin.receives if direction == "in" else pin.sends):
-            raise ValueError(f"pin '{name}' of {self.device.uid} cannot {'receive' if direction == 'in' else 'send'}")
+            raise ValueError(f"pin '{name}' of {self.device.id} cannot {'receive' if direction == 'in' else 'send'}")
 
 
 class ContinuousAxisNew(Device):
@@ -320,7 +320,7 @@ class ContinuousAxisNewHandle[D: ContinuousAxisNew](DeviceHandle[D]):
         deadline = None if timeout_s is None else time.monotonic() + timeout_s
         while await self.is_moving.get():
             if deadline is not None and time.monotonic() > deadline:
-                raise TimeoutError(f"{self.uid} still moves after {timeout_s} s")
+                raise TimeoutError(f"{self.id} still moves after {timeout_s} s")
             await asyncio.sleep(_POLL_S)
 
     async def get_abilities(self) -> list[ScanAbility]:

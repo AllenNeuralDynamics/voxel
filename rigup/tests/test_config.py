@@ -67,7 +67,7 @@ def test_parts_survive_a_build_request_roundtrip() -> None:
 
 
 @pytest.mark.parametrize(
-    ("uid", "location"),
+    ("component_id", "location"),
     [
         ("glass", ("parts", "glass")),
         ("camera", ("devices", "camera")),
@@ -75,22 +75,22 @@ def test_parts_survive_a_build_request_roundtrip() -> None:
     ],
     ids=["part", "device", "node-device"],
 )
-def test_component_location_says_where_a_component_is_written(uid: str, location: tuple[str, ...]) -> None:
+def test_component_location_says_where_a_component_is_written(component_id: str, location: tuple[str, ...]) -> None:
     config = RigConfig.model_validate(NESTED)
 
-    assert config.component_location(uid) == location
+    assert config.component_location(component_id) == location
 
 
 def test_a_part_with_a_target_is_made_from_that_class() -> None:
     glass = RigConfig.model_validate(NESTED).parts["glass"]
 
-    assert (type(glass).__name__, glass.uid, glass.kind) == ("MockPart", "glass", "mock_part")
+    assert (type(glass).__name__, glass.id, glass.kind) == ("MockPart", "glass", "mock_part")
 
 
 def test_a_part_without_a_target_is_a_plain_part() -> None:
     glass = RigConfig.model_validate(MAIN).parts["glass"]
 
-    assert (type(glass), glass.uid, glass.kind) == (Part, "glass", "filter")
+    assert (type(glass), glass.id, glass.kind) == (Part, "glass", "filter")
 
 
 @pytest.mark.parametrize("raw", [NESTED, MAIN], ids=["targeted", "plain"])
@@ -136,7 +136,7 @@ def test_each_rig_problem_has_its_code_and_its_place() -> None:
         RigConfig.model_validate(raw)
 
     assert [(error["type"], error["loc"]) for error in caught.value.errors()] == [
-        ("duplicate_uid", ("devices", "camera")),
+        ("duplicate_id", ("devices", "camera")),
         ("cross_node_reference", ("nodes", "detection", "devices", "wheel")),
     ]
 
@@ -153,7 +153,7 @@ def test_a_remote_node_without_an_address_is_a_problem_at_its_address() -> None:
     ]
 
 
-def test_a_device_uid_used_on_two_nodes_is_refused() -> None:
+def test_a_device_id_used_on_two_nodes_is_refused() -> None:
     raw = {
         "devices": {"camera": {"target": "some.Camera"}},
         "nodes": {"remote": {"kind": "subprocess", "devices": {"camera": {"target": "some.OtherCamera"}}}},
@@ -196,11 +196,11 @@ def test_a_device_naming_a_device_on_another_node_is_refused() -> None:
 
 
 @pytest.mark.parametrize(
-    ("uid", "expected"),
+    ("component_id", "expected"),
     [("hub", set()), ("axis", {"hub"}), ("pair", {"axis", "hub"})],
     ids=["none", "direct", "nested"],
 )
-def test_dependencies_are_the_devices_that_init_names(uid: str, expected: set[str]) -> None:
+def test_dependencies_are_the_devices_that_init_names(component_id: str, expected: set[str]) -> None:
     config = RigConfig.model_validate(
         {
             "devices": {
@@ -211,7 +211,7 @@ def test_dependencies_are_the_devices_that_init_names(uid: str, expected: set[st
         }
     )
 
-    assert dependencies(config.devices, uid) == expected
+    assert dependencies(config.devices, component_id) == expected
 
 
 def test_an_empty_nodes_value_is_refused() -> None:

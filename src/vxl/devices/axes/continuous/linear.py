@@ -18,7 +18,7 @@ class LinearAxisController(ContinuousAxisNewController["LinearAxis"]):
     def _check_inside(self, low: float, high: float) -> None:
         limits = self.device.limits
         if min(low, high) < limits.low or max(low, high) > limits.high:
-            raise ValueError(f"{self.device.uid} cannot reach {min(low, high)}..{max(low, high)} µm (limits {limits})")
+            raise ValueError(f"{self.device.id} cannot reach {min(low, high)}..{max(low, high)} µm (limits {limits})")
 
 
 class LinearAxis(ContinuousAxisNew, kind=DeviceType.LINEAR_AXIS, controller=LinearAxisController):

@@ -101,7 +101,7 @@ async def instrument(tmp_path: Path) -> AsyncIterator[_Bench]:
 
 async def test_open_asks_every_device_what_it_is(instrument: _Bench) -> None:
     views = instrument.view.value.devices
-    kinds = {uid: view.interface.kind for uid, view in views.items()}
+    kinds = {device_id: view.interface.kind for device_id, view in views.items()}
 
     assert set(kinds) == set(_RIG["devices"])
     assert (kinds["camera"], kinds["laser_488"], kinds["x_axis"]) == ("area_camera", "laser", "linear_axis")

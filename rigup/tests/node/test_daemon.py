@@ -118,12 +118,12 @@ async def test_build_reports_a_bad_target_as_an_error(served: Served) -> None:
 async def test_build_sends_a_part_to_the_device(served: Served) -> None:
     configs = {"holder": DeviceConfig(target="rigup_fakes.MockHolder", init={"held": "glass"})}
 
-    _, errors = await served.node.build_devices(configs, {"glass": MockPart(uid="glass", value=1.5)})
+    _, errors = await served.node.build_devices(configs, {"glass": MockPart(id="glass", value=1.5)})
 
     assert errors == {}
     holder = served.daemon._controllers["holder"].device
     assert isinstance(holder, MockHolder)
-    assert holder.held == MockPart(uid="glass", value=1.5)
+    assert holder.held == MockPart(id="glass", value=1.5)
 
 
 async def test_a_device_config_streaming_reaches_the_daemon(served: Served) -> None:

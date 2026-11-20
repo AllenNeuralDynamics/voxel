@@ -34,8 +34,8 @@ from rigup.interface import action, fact, number, stream
 
 
 class Laser(Device, kind="laser"):
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid)
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
         self._power = 0.0
         self._enabled = False
 
@@ -113,7 +113,7 @@ subscribable property.
 
 `rigup.activity` is for the code that orchestrates a rig. An operation is short work, such as a stage move; one runs
 at a time. An activity is long-running work, such as a preview or a capture. Both declare the resources they
-require: device uids, or any hashable value that identifies a resource.
+require: device ids, or any hashable value that identifies a resource.
 
 ```python
 from rigup.activity import ActivityInfo, ActivityScheduler

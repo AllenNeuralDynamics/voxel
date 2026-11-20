@@ -11,7 +11,7 @@ from rigup.node._broadcast import pack, unpack
 from rigup.transport import TransportClient, TransportServer
 
 LOG_TOPIC = "__log__"
-"""Broadcast topic for forwarded log records; it cannot collide with a device topic ``{uid}.{topic}``."""
+"""Broadcast topic for forwarded log records; it cannot collide with a device topic ``{id}.{topic}``."""
 
 _QUEUE_MAX = 4096
 _FORMATTER = logging.Formatter()

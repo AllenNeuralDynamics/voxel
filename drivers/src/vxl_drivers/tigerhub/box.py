@@ -370,7 +370,7 @@ class TigerBox:
         """
         per_card = [(ax.label, ax.card_index) for ax in self.info().axes.values() if ax.card_hex == card]
         per_card.sort(key=lambda t: t[1] if t[1] is not None else 10_000)
-        order = [uid for uid, _ in per_card]
+        order = [device_id for device_id, _ in per_card]
         if not order:
             err = f"Card {card} has no axes."
             raise RuntimeError(err)
@@ -533,7 +533,7 @@ class TigerBox:
             session = self._check_scanrv_is_setup()
             fa = session.fast_axis
             card_addr = session.card_addr
-            kv, actual_um = cfg.to_kv(self.info(), fast_axis_uid=fa.label)
+            kv, actual_um = cfg.to_kv(self.info(), fast_axis_id=fa.label)
             transact(self.t, ScanROp.request(card_hex=card_addr, kv=kv))
         except Exception as e:
             raise RuntimeError("Failed to configure SCANR.") from e
@@ -636,7 +636,7 @@ class TigerBox:
             transact(self.t, JoystickSetMappingOp.request(card, mapping=mp))
         return self.get_joystick_mapping(refresh=True)
 
-    def _build_axis_uids_by_card(self, axes: Sequence[str]) -> dict[int, list[str]]:
+    def _build_axis_ids_by_card(self, axes: Sequence[str]) -> dict[int, list[str]]:
         by_card: dict[int, list[str]] = {}
         for ax in axes:
             a = self.info().axes.get(ax.upper())
@@ -650,7 +650,7 @@ class TigerBox:
         """
         if axes is None:
             axes = list(self.info().axes.keys())
-        by_card = self._build_axis_uids_by_card(axes)
+        by_card = self._build_axis_ids_by_card(axes)
         for card, axlist in by_card.items():
             transact(self.t, JoystickEnableOp.request(card, enable_axes=axlist, disable_axes=[]))
         if self._cached_joystick_mapping:
@@ -668,7 +668,7 @@ class TigerBox:
         Caches current mapping so a later enable can restore user bindings.
         """
         self._cached_joystick_mapping = self.get_joystick_mapping(refresh=True)
-        by_card = self._build_axis_uids_by_card(axes or list(self.info().axes.keys()))
+        by_card = self._build_axis_ids_by_card(axes or list(self.info().axes.keys()))
         for card, axlist in by_card.items():
             transact(self.t, JoystickEnableOp.request(card, enable_axes=[], disable_axes=axlist))
         return self._cached_joystick_mapping

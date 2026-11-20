@@ -219,14 +219,14 @@ owners: weakref.WeakKeyDictionary[Any, DeviceLoop] = weakref.WeakKeyDictionary()
 def take(device: Any, loop: DeviceLoop) -> None:
     """Make ``loop`` the owner of ``device``, refusing it while another owner is still open."""
     if (current := owners.get(device)) is not None and not current.closed:
-        raise TypeError(f"{device.uid} is already taken by a controller: close that controller first")
+        raise TypeError(f"{device.id} is already taken by a controller: close that controller first")
     owners[device] = loop
 
 
 def hop_target(device: Any, name: str) -> DeviceLoop | None:
     """The loop a call into ``device`` must hop onto, or ``None`` when it runs where it is."""
     owner = owners.get(device)
-    return owner if owner is not None and owner.must_hop(f"{device.uid}.{name}") else None
+    return owner if owner is not None and owner.must_hop(f"{device.id}.{name}") else None
 
 
 def thread_checked(name: str, declared: object) -> object | None:

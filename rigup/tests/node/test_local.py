@@ -77,7 +77,7 @@ async def test_build_reports_a_bad_target_as_an_error(node: LocalNode) -> None:
 
 
 async def test_build_gives_a_device_the_part_itself(node: LocalNode) -> None:
-    glass = MockPart(uid="glass", value=1.5)
+    glass = MockPart(id="glass", value=1.5)
     configs = {"holder": DeviceConfig(target="rigup_fakes.MockHolder", init={"held": "glass"})}
 
     handles, errors = await node.build_devices(configs, {"glass": glass})
@@ -212,7 +212,7 @@ async def test_close_device_removes_only_that_device(node: LocalNode) -> None:
     assert set(node.devices) == {"dev_b"}
 
 
-async def test_close_device_ignores_an_unknown_uid(node: LocalNode) -> None:
+async def test_close_device_ignores_an_unknown_id(node: LocalNode) -> None:
     await node.close_device("nonexistent")
 
     assert node.devices == {}

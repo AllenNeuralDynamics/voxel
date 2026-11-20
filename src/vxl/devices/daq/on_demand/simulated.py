@@ -14,10 +14,10 @@ class SimulatedOnDemandAO(OnDemandAO):
     ``levels`` exposes the current held voltage per port for assertions.
     """
 
-    def __init__(self, uid: str, *, hub: SimulatedDaqmx, ports: Mapping[str, str]) -> None:
-        super().__init__(uid=uid, ports=ports)
+    def __init__(self, device_id: str, *, hub: SimulatedDaqmx, ports: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.SimulatedOnDemandAO")
+        self._log = logging.getLogger(f"{device_id}.SimulatedOnDemandAO")
         self._levels: dict[str, float] = {}  # port -> currently held voltage
 
     @property
@@ -33,19 +33,19 @@ class SimulatedOnDemandAO(OnDemandAO):
         for port, volts in port_values.items():
             if port not in self._levels:
                 # First touch of this port claims its pin; held until reset().
-                self._hub.assign_pin(self.uid, self._ports[port])
+                self._hub.assign_pin(self.id, self._ports[port])
             self._levels[port] = volts
 
     def reset(self) -> None:
         self._levels = {}
-        self._hub.release_pins_for_owner(self.uid)
+        self._hub.release_pins_for_owner(self.id)
 
 
 class SimulatedOnDemandDO(OnDemandDO):
     """Digital output simulator that records the currently held state per line."""
 
-    def __init__(self, uid: str, *, hub: SimulatedDaqmx, lines: Mapping[str, str]) -> None:
-        super().__init__(uid=uid, lines=lines)
+    def __init__(self, device_id: str, *, hub: SimulatedDaqmx, lines: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id, lines=lines)
         self._hub = hub
         self._states: dict[str, bool] = {}
         self._configured = False
@@ -59,7 +59,7 @@ class SimulatedOnDemandDO(OnDemandDO):
         if not states:
             return
         if not self._configured:
-            self._hub.assign_digital_lines(self.uid, self._lines.values())
+            self._hub.assign_digital_lines(self.id, self._lines.values())
             self._states = dict.fromkeys(self._lines, False)
             self._configured = True
         self._states.update(states)
@@ -67,7 +67,7 @@ class SimulatedOnDemandDO(OnDemandDO):
     def reset(self) -> None:
         self._states = {}
         self._configured = False
-        self._hub.release_pins_for_owner(self.uid)
+        self._hub.release_pins_for_owner(self.id)
 
 
 __all__ = ["SimulatedOnDemandAO", "SimulatedOnDemandDO"]

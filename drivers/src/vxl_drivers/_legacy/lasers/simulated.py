@@ -11,7 +11,7 @@ from vxl_drivers._legacy.lasers.base import Laser
 class SimulatedLaser(Laser):
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         wavelength: int,
         max_power_mw: float = 1000.0,
@@ -24,7 +24,7 @@ class SimulatedLaser(Laser):
         self._power_setpoint_mw = 10.0
         self._is_enabled = False
         self._temperature = 20.0
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
 
     def enable(self) -> None:
         if self.is_enabled:
@@ -69,7 +69,7 @@ class SimulatedAOTFShutteredLaser(Laser):
     The laser stays "hot" when disabled - only blocked by the AOTF.
 
     Args:
-        uid: Unique identifier for this laser device.
+        device_id: Unique identifier for this laser device.
         wavelength: Laser wavelength in nm.
         aotf: Reference to the AOTF device (resolved by rigup from device ID).
         aotf_channel: Channel number on the AOTF (1-indexed).
@@ -79,7 +79,7 @@ class SimulatedAOTFShutteredLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         aotf: AOTF,
         aotf_channel: int,
@@ -94,17 +94,17 @@ class SimulatedAOTFShutteredLaser(Laser):
         self._temperature = 25.0
 
         # Register with the AOTF
-        self._aotf.register_channel(uid, aotf_channel)
+        self._aotf.register_channel(device_id, aotf_channel)
 
         # Set the calibrated frequency and max power for passthrough
         self._aotf.set_frequency(aotf_channel, aotf_frequency_mhz)
         self._aotf.set_power_dbm(aotf_channel, self._aotf.max_power_dbm)  # Max transmission
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
 
         self.log.info(
             f"Initialized SimulatedAOTFShutteredLaser: wavelength={wavelength}nm, "
-            f"aotf={aotf.uid} channel={aotf_channel}",
+            f"aotf={aotf.id} channel={aotf_channel}",
         )
 
     def get_aotf(self) -> "AOTF":
@@ -113,7 +113,7 @@ class SimulatedAOTFShutteredLaser(Laser):
     @property
     def aotf(self) -> "str":
         """Get the AOTF device controlling this laser."""
-        return self._aotf.uid
+        return self._aotf.id
 
     @property
     def aotf_channel(self) -> int:
@@ -167,7 +167,7 @@ class SimulatedAOTFModulatedLaser(Laser):
     power modulation via its RF power setting.
 
     Args:
-        uid: Unique identifier for this laser device.
+        device_id: Unique identifier for this laser device.
         wavelength: Laser wavelength in nm.
         aotf: Reference to the AOTF device (resolved by rigup from device ID).
         aotf_channel: Channel number on the AOTF (1-indexed).
@@ -176,7 +176,7 @@ class SimulatedAOTFModulatedLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         aotf: AOTF,
         aotf_channel: int,
@@ -188,16 +188,16 @@ class SimulatedAOTFModulatedLaser(Laser):
         self._power_setpoint_dbm: float = 0.0
 
         # Register with the AOTF
-        self._aotf.register_channel(uid, aotf_channel)
+        self._aotf.register_channel(device_id, aotf_channel)
 
         # Set the calibrated frequency
         self._aotf.set_frequency(aotf_channel, aotf_frequency_mhz)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
 
         self.log.info(
             f"Initialized SimulatedAOTFModulatedLaser: wavelength={wavelength}nm, "
-            f"aotf={aotf.uid} channel={aotf_channel}, "
+            f"aotf={aotf.id} channel={aotf_channel}, "
             f"frequency={aotf_frequency_mhz}MHz",
         )
 
@@ -207,7 +207,7 @@ class SimulatedAOTFModulatedLaser(Laser):
     @property
     def aotf(self) -> "str":
         """Get the AOTF device controlling this laser."""
-        return self._aotf.uid
+        return self._aotf.id
 
     @property
     def aotf_channel(self) -> int:

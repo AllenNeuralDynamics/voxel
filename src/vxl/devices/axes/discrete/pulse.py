@@ -35,7 +35,7 @@ class PulseDiscreteAxis(DiscreteAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         generator: OnDemandAO | OnDemandDO,
         slots: Mapping[int | str, SlotContent],
@@ -46,7 +46,7 @@ class PulseDiscreteAxis(DiscreteAxis):
         """Initialize a pulse-driven discrete axis.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             generator: On-demand output with one channel per slot, keyed by slot index.
             slots: Slot index to label, e.g. ``{0: "GFP", 1: "RFP"}``.
             slot_count: Total slots; inferred from ``slots`` when None.
@@ -56,7 +56,7 @@ class PulseDiscreteAxis(DiscreteAxis):
         Raises:
             ValueError: If ``generator`` lacks a port for any slot index.
         """
-        super().__init__(uid=uid, slots=slots, slot_count=slot_count)
+        super().__init__(device_id=device_id, slots=slots, slot_count=slot_count)
         self._generator = generator
         if (active is None) != (inactive is None):
             raise ValueError("active and inactive must be provided together or both omitted")
@@ -96,7 +96,7 @@ class PulseDiscreteAxis(DiscreteAxis):
 
         missing = [i for i in range(self.slot_count) if str(i) not in available]
         if missing:
-            raise ValueError(f"{generator.uid} has no output for slot(s) {missing}; outputs: {sorted(available)}")
+            raise ValueError(f"{generator.id} has no output for slot(s) {missing}; outputs: {sorted(available)}")
 
         self._target: int | None = None
         self._is_moving = False

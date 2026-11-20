@@ -160,7 +160,7 @@ class Channel:
     stable hardware handles resolved from that config.
     """
 
-    uid: str
+    id: str
     camera: AreaCameraHandle
     laser: DeviceHandle
 
@@ -345,7 +345,10 @@ class Instrument:
                 await self._apply_profile(self._active_profile_id.value)
                 # Start warming imaging sources without waiting or permitting output.
                 await _gather_hardware(
-                    *(self._hal.lasers[uid].call("source_enable", wait=False) for uid in self._imaging_laser_ids())
+                    *(
+                        self._hal.lasers[dev_id].call("source_enable", wait=False)
+                        for dev_id in self._imaging_laser_ids()
+                    )
                 )
                 for cam_id, camera in self._hal.cameras.items():
                     await self._subscribe_camera(cam_id, camera)
@@ -403,7 +406,7 @@ class Instrument:
             channels = self.active_profile.channels
             if unknown := sorted(set(channel_ids) - set(channels)):
                 raise OperationRejectedError(f"Not in the active profile: {', '.join(unknown)}")
-            excluded = frozenset(uid for uid in channels if uid not in channel_ids)
+            excluded = frozenset(dev_id for dev_id in channels if dev_id not in channel_ids)
             if excluded == self._preview_excluded.value:
                 return
             previewing = isinstance(self._activity.value, PreviewActivity)
@@ -511,9 +514,9 @@ class Instrument:
             stage = self._hal.stage
             x, y = await asyncio.gather(stage.x.position.get(), stage.y.position.get())
             routes = self._store.value.resolve_routes(self._hal.topology, x=x, y=y)
-            if missing := [uid for uid in dimensions if uid not in routes]:
+            if missing := [dev_id for dev_id in dimensions if dev_id not in routes]:
                 raise OperationRejectedError(f"No routing rule for: {', '.join(missing)}")
-            await self._ensure_routes({uid: routes[uid] for uid in dimensions})
+            await self._ensure_routes({dev_id: routes[dev_id] for dev_id in dimensions})
 
     async def set_active_profile(self, profile_id: str) -> str:
         """Apply a saved profile to hardware, restarting preview if it was running."""
@@ -532,16 +535,16 @@ class Instrument:
             async with self._pause_preview_for_reconfiguration():
                 await self._apply_settings()
 
-    async def update_signals(self, generator_uid: str, signals: Signals) -> None:
+    async def update_signals(self, generator_id: str, signals: Signals) -> None:
         """Apply a signal-generator configuration and save it in the active profile."""
         async with self._lock:
             self._ensure_idle("update synchronized outputs")
-            handle = self._hal.signal_generators.get(generator_uid)
+            handle = self._hal.signal_generators.get(generator_id)
             if handle is None:
-                raise OperationRejectedError(f"Signal generator '{generator_uid}' not provisioned")
+                raise OperationRejectedError(f"Signal generator '{generator_id}' not provisioned")
             await handle.load(signals)
             await self._update_active_profile_config(
-                self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_uid: signals}})
+                self.active_profile.model_copy(update={"sync": {**self.active_profile.sync, generator_id: signals}})
             )
 
     async def update_profile(self, patch: ProfilePatch) -> Change[tuple[str, ProfilePatch]]:
@@ -818,8 +821,8 @@ class Instrument:
 
     def _laser_modulation_violations(self) -> list[Violation]:
         violations = []
-        for uid in sorted(self._imaging_laser_ids()):
-            laser = self._hal.lasers.get(uid)
+        for device_id in sorted(self._imaging_laser_ids()):
+            laser = self._hal.lasers.get(device_id)
             if laser is None:  # HAL reports unavailable or incorrectly classified devices.
                 continue
             mode = laser.props.cache.get("modulation_mode")
@@ -827,8 +830,8 @@ class Instrument:
                 violations.append(
                     Violation(
                         code="imaging.laser.digital_unsupported",
-                        msg=f"Imaging laser '{uid}' must support digital modulation.",
-                        loc=("hal", "illumination", uid),
+                        msg=f"Imaging laser '{device_id}' must support digital modulation.",
+                        loc=("hal", "illumination", device_id),
                     )
                 )
         return violations
@@ -836,7 +839,7 @@ class Instrument:
     def _autosave_policy_violations(self, interfaces: Mapping[str, DeviceInterface]) -> list[Violation]:
         """Reject explicit autosave names that cannot be persisted as writable properties."""
         topology = self._hal.topology
-        groups = [(None, topology.devices), *((uid, node.devices) for uid, node in topology.nodes.items())]
+        groups = [(None, topology.devices), *((device_id, node.devices) for device_id, node in topology.nodes.items())]
         violations = []
         for node_id, devices in groups:
             for device_id, config in devices.items():
@@ -862,14 +865,14 @@ class Instrument:
         violations = []
         for profile_id, profile in self._store.value.imaging.profiles.items():
             profile_loc = ("state", "imaging", "profiles", profile_id)
-            for uid in profile.sync:
-                interface = interfaces.get(uid)
+            for device_id in profile.sync:
+                interface = interfaces.get(device_id)
                 if interface is not None and interface.kind != "signal_generator":
                     violations.append(
                         Violation(
                             code="imaging.profile.sync.not_signal_generator",
-                            msg=f"Device '{uid}' is a '{interface.kind}', not a signal generator.",
-                            loc=(*profile_loc, "sync", uid),
+                            msg=f"Device '{device_id}' is a '{interface.kind}', not a signal generator.",
+                            loc=(*profile_loc, "sync", device_id),
                         )
                     )
 
@@ -930,22 +933,22 @@ class Instrument:
         profiles = self._store.value.imaging.profiles
         violations = []
         for profile_id, profile in profiles.items():
-            for uid, signals in profile.sync.items():
-                if (generator := self._hal.signal_generators.get(uid)) is None:
+            for device_id, signals in profile.sync.items():
+                if (generator := self._hal.signal_generators.get(device_id)) is None:
                     continue
                 ports = generator.ports.value
                 for port in sorted(signals.waveforms.keys() - ports.keys()):
                     violations.append(
                         Violation(
                             code="imaging.profile.sync.port_missing",
-                            msg=f"Signal generator '{uid}' has no port '{port}'.",
+                            msg=f"Signal generator '{device_id}' has no port '{port}'.",
                             loc=(
                                 "state",
                                 "imaging",
                                 "profiles",
                                 profile_id,
                                 "sync",
-                                uid,
+                                device_id,
                                 "waveforms",
                                 port,
                             ),
@@ -1001,12 +1004,12 @@ class Instrument:
 
     def _build_channels(self) -> dict[str, Channel]:
         return {
-            uid: Channel(
-                uid=uid,
+            device_id: Channel(
+                id=device_id,
                 camera=self._hal.cameras[config.detection],
                 laser=self._hal.lasers[config.illumination],
             )
-            for uid, config in self._store.value.imaging.channels.items()
+            for device_id, config in self._store.value.imaging.channels.items()
         }
 
     def _device(self, device_id: str) -> DeviceHandle:
@@ -1070,12 +1073,12 @@ class Instrument:
             logger.warning("Preview or Acquisition already running")
             return
         channels = self.active_channels
-        chans = [channels[uid] for uid in self._preview_channels.value if uid in channels]
+        chans = [channels[dev_id] for dev_id in self._preview_channels.value if dev_id in channels]
         if not chans:
             raise OperationRejectedError("No channels to preview")
         routing = self._hal.routing
         current = await asyncio.gather(*(dimension.current_route() for dimension in routing.values()))
-        if unsettled := [uid for uid, route in zip(routing, current, strict=True) if route is None]:
+        if unsettled := [device_id for device_id, route in zip(routing, current, strict=True) if route is None]:
             raise OperationRejectedError(
                 f"Select a known, settled route before starting preview: {', '.join(unsettled)}"
             )
@@ -1091,7 +1094,7 @@ class Instrument:
                 await self._hal.stage.scanning_axis.reset_ttl_stepper()
             await _gather_hardware(*(ch.enable_laser_output() for ch in chans))
             await self._start_signal_generators()
-            await self._activity.set(PreviewActivity(channels=tuple(ch.uid for ch in chans)))
+            await self._activity.set(PreviewActivity(channels=tuple(ch.id for ch in chans)))
         except BaseException:
             try:
                 await self._teardown_preview(chans)
@@ -1109,7 +1112,7 @@ class Instrument:
         if not isinstance(activity, PreviewActivity):
             return
         try:
-            await self._teardown_preview([self._channels[uid] for uid in activity.channels])
+            await self._teardown_preview([self._channels[dev_id] for dev_id in activity.channels])
         finally:
             await self._activity.set(IdleActivity())
         logger.info("Preview stopped")
@@ -1127,7 +1130,7 @@ class Instrument:
         self._preview_source_ids.clear()
         self._preview_positions.clear()
         await self._stream_revision.set(self._stream_revision.value + 1)
-        cameras = {channel.camera.uid: channel.camera for channel in self.active_channels.values()}
+        cameras = {channel.camera.id: channel.camera for channel in self.active_channels.values()}
         source_ids = await asyncio.gather(*(camera.reset_live_stream() for camera in cameras.values()))
         self._preview_source_ids = dict(zip(cameras, source_ids, strict=True))
 
@@ -1188,13 +1191,15 @@ class Instrument:
         if not routes:
             return
         requested = list(routes.items())
-        current = await asyncio.gather(*(self._hal.routing[uid].current_route() for uid, _ in requested))
-        routes = {uid: route for (uid, route), actual in zip(requested, current, strict=True) if actual != route}
+        current = await asyncio.gather(*(self._hal.routing[device_id].current_route() for device_id, _ in requested))
+        routes = {
+            device_id: route for (device_id, route), actual in zip(requested, current, strict=True) if actual != route
+        }
         if not routes:
             return
 
         async with self._pause_preview_for_reconfiguration():
-            await _gather_hardware(*(self._hal.routing[uid].select(route) for uid, route in routes.items()))
+            await _gather_hardware(*(self._hal.routing[device_id].select(route) for device_id, route in routes.items()))
 
     async def _apply_profile(self, profile_id: str) -> None:
         """Drive hardware to a saved profile config and invalidate the previous preview stream.
@@ -1248,15 +1253,15 @@ class Instrument:
         await asyncio.gather(*(self._hal.fws[fw_id].move_to(label, wait=True) for fw_id, label in desired.items()))
 
     async def _apply_signals(self) -> None:
-        for uid, signals in self.active_profile.sync.items():
-            await self._hal.signal_generators[uid].load(signals)
+        for device_id, signals in self.active_profile.sync.items():
+            await self._hal.signal_generators[device_id].load(signals)
 
     async def _start_signal_generators(self) -> None:
-        handles = [self._hal.signal_generators[uid] for uid in self.active_profile.sync]
+        handles = [self._hal.signal_generators[dev_id] for dev_id in self.active_profile.sync]
         await _gather_hardware(*(h.start() for h in handles))
 
     async def _stop_signal_generators(self) -> None:
-        handles = [self._hal.signal_generators[uid] for uid in self.active_profile.sync]
+        handles = [self._hal.signal_generators[dev_id] for dev_id in self.active_profile.sync]
         await _gather_hardware(*(h.stop() for h in handles))
 
     async def _run_setup_commands(self) -> None:
@@ -1392,7 +1397,7 @@ class Instrument:
         if profile is None:
             return ()
         excluded = self._preview_excluded.value
-        return tuple(uid for uid in profile.channels if uid not in excluded)
+        return tuple(dev_id for dev_id in profile.channels if dev_id not in excluded)
 
     def _compute_profile_fovs(self) -> dict[str, dict[str, Bounds]]:
         """Resolve each saved profile ROI into specimen-space detection FOVs."""
@@ -1585,7 +1590,9 @@ class Instrument:
             frames_captured=0,
         )
         settings = self._store.value.output
-        channels = {uid: self._channels[uid] for uid in self._store.value.imaging.profiles[volume.profile].channels}
+        channels = {
+            dev_id: self._channels[dev_id] for dev_id in self._store.value.imaging.profiles[volume.profile].channels
+        }
         scanning_axis = self._hal.stage.scanning_axis
         num_frames = volume.frames_total
         batch_frames = settings.batch_frames
@@ -1711,7 +1718,7 @@ class Instrument:
             errors: list[Exception] = []
             for ch, result in zip(chans, results, strict=True):
                 if isinstance(result, BaseException):
-                    logger.error("cleanup: %s failed for %s", label, ch.uid, exc_info=result)
+                    logger.error("cleanup: %s failed for %s", label, ch.id, exc_info=result)
                     if collect:
                         errors.append(result if isinstance(result, Exception) else RuntimeError(str(result)))
             return errors
@@ -1736,7 +1743,7 @@ class Instrument:
             still_closing = []
             for ch, state in zip(pending, states, strict=True):
                 if isinstance(state, BaseException):
-                    logger.error("cleanup: close_image failed for %s", ch.uid, exc_info=state)
+                    logger.error("cleanup: close_image failed for %s", ch.id, exc_info=state)
                     errors.append(state if isinstance(state, Exception) else RuntimeError(str(state)))
                 elif state is not CaptureState.CLOSED:
                     still_closing.append(ch)

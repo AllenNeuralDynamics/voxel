@@ -62,7 +62,7 @@ class GeneratorController(DeviceController["Generator"], streaming={"fast": 0.1}
         super().__init__(device, streaming=streaming)
         self._state: GeneratorState = "empty"
         self._loaded: Cycle | None = None
-        self._log = logging.getLogger(f"{device.uid}.GeneratorController")
+        self._log = logging.getLogger(f"{device.id}.GeneratorController")
 
     @property
     @stream(desc="empty, loaded or running")
@@ -80,9 +80,9 @@ class GeneratorController(DeviceController["Generator"], streaming={"fast": 0.1}
             return
         pins = await self._run(lambda: self.device.pins)
         if unknown := sorted(set(cycle.volts) - {pin.name for pin in pins if pin.sends}):
-            raise ValueError(f"{self.device.uid} has no output pins {unknown}")
+            raise ValueError(f"{self.device.id} has no output pins {unknown}")
         if isinstance(cycle.start, InputEdges) and cycle.start.pin not in {pin.name for pin in pins if pin.receives}:
-            raise ValueError(f"{self.device.uid} has no input pin '{cycle.start.pin}'")
+            raise ValueError(f"{self.device.id} has no input pin '{cycle.start.pin}'")
         running = self._state == "running"
         try:
             if running:
@@ -102,7 +102,7 @@ class GeneratorController(DeviceController["Generator"], streaming={"fast": 0.1}
     @action(desc="Play the loaded cycle a number of times, or until stopped")
     async def start(self, count: int | None = None) -> None:
         if self._state == "empty":
-            raise RuntimeError(f"{self.device.uid} has no cycle to start: load one first")
+            raise RuntimeError(f"{self.device.id} has no cycle to start: load one first")
         if count is not None and count < 1:
             raise ValueError(f"a count of cycles must be at least 1, got {count}")
         if self._state == "running":
@@ -120,7 +120,7 @@ class GeneratorController(DeviceController["Generator"], streaming={"fast": 0.1}
     @action(label="Wait until done", desc="Wait until a counted run ends")
     async def wait_until_done(self, timeout_s: float) -> None:
         if self._state != "running":
-            raise RuntimeError(f"{self.device.uid} is not running")
+            raise RuntimeError(f"{self.device.id} is not running")
         await self._run(self.device.wait_until_done, timeout_s)
         await self.stop()
 

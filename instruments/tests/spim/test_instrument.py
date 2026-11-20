@@ -134,7 +134,9 @@ async def _live(microscope: Microscope) -> dict[str, object]:
     """What a preview has started: each camera's mode, if the laser is on, the generator's state, the activities."""
     hal = microscope._hal
     return {
-        "cameras": {uid: (await camera.props.get_value("mode")) for uid, camera in hal.area_cameras.items()},
+        "cameras": {
+            device_id: (await camera.props.get_value("mode")) for device_id, camera in hal.area_cameras.items()
+        },
         "laser": await hal.device("laser").props.get_value("is_on"),
         "generator": await hal.signal_generators["ao_main"].state.get(),
         "activities": [activity.kind for activity in microscope.view.value.activities],

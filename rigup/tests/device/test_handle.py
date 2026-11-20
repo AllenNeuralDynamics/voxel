@@ -148,7 +148,9 @@ async def test_changed_options_are_published_without_a_value_change() -> None:
     assert [emitted["level"].options for emitted in observed] == [[0.0, 100.0]]
 
 
-async def test_a_typed_property_view_raises_until_a_value_has_come(handle: DeviceHandle[MockDevice]) -> None:
+async def test_a_typed_property_view_raises_until_a_value_has_come() -> None:
+    controller = DeviceController(MockDevice("mock", initial_value=1.0))
+    handle = DeviceHandle(LocalAdapter(controller))
     typed = TypedMockHandle.wrap(handle)
 
     with pytest.raises(NotObservedError, match="Property 'value' has not been observed yet"):
@@ -159,3 +161,4 @@ async def test_a_typed_property_view_raises_until_a_value_has_come(handle: Devic
     await handle.props.refresh()
 
     assert (typed.value.value, typed.value.model.value) == (1.0, 1.0)
+    await controller.close()

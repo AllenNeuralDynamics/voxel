@@ -13,8 +13,8 @@ from rigup_fakes import write
 
 
 class Panel(Device, kind="panel"):
-    def __init__(self, uid: str = "panel", top: float = 10.0) -> None:
-        super().__init__(uid)
+    def __init__(self, device_id: str = "panel", top: float = 10.0) -> None:
+        super().__init__(device_id)
         self.top = top
         self._level, self._count, self._mode = 0.0, 1, "auto"
 

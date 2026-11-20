@@ -104,7 +104,7 @@ class Rig:
                 _, errors = await node.build_devices(node_devices, self._config.parts)
                 self._build_errors.update(
                     {
-                        uid: found.model_copy(update={"loc": self._config.component_location(uid)})
-                        for uid, found in errors.items()
+                        device_id: found.model_copy(update={"loc": self._config.component_location(device_id)})
+                        for device_id, found in errors.items()
                     }
                 )

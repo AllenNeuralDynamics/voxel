@@ -18,7 +18,7 @@ class MFF101(DiscreteAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         conn: str,
         slots: Mapping[int | str, SlotContent] | None = None,
@@ -26,7 +26,7 @@ class MFF101(DiscreteAxis):
     ) -> None:
         if any(int(index) not in (0, 1) for index in (slots or {})):
             raise ValueError("MFF101 slots must be 0 or 1")
-        super().__init__(uid=uid, slots=slots or {}, slot_count=2)
+        super().__init__(device_id=device_id, slots=slots or {}, slot_count=2)
         self._target: int | None = None
         self._inst = MFF(conn)
         try:
@@ -65,7 +65,7 @@ class MFF101(DiscreteAxis):
             if position is not None and (slot is None or position == slot):
                 return
             if deadline is not None and monotonic() >= deadline:
-                raise TimeoutError(f"MFF101 {self.uid} movement timed out")
+                raise TimeoutError(f"MFF101 {self.id} movement timed out")
             sleep(0.05)
 
     @integer(minimum=500, maximum=2800, step=100)

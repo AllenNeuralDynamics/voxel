@@ -404,12 +404,12 @@ class StageControls(QWidget):
         super().__init__(parent)
         self._devices = devices
         cfg = instrument.hardware_config.stage
-        self._axis_uids = {"X": cfg.x, "Y": cfg.y, "Z": cfg.z}
+        self._axis_ids = {"X": cfg.x, "Y": cfg.y, "Z": cfg.z}
         self._sliders: dict[str, SliderSpinBox] = {}
         self._bound = False
 
         layout = vbox(self, spacing=Spacing.XS, margins=(Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM))
-        for name in self._axis_uids:
+        for name in self._axis_ids:
             slider = SliderSpinBox(value=0.0, decimals=1, step=10.0, size=ControlSize.SM)  # range set on bind
             self._sliders[name] = slider
             layout.addWidget(Flex.hstack(Text.muted(name), (slider, 1), spacing=Spacing.SM))
@@ -423,8 +423,8 @@ class StageControls(QWidget):
         if self._bound:
             return
         self._bound = True
-        for name, uid in self._axis_uids.items():
-            if (adapter := self._devices.get_adapter(uid)) is not None:
+        for name, device_id in self._axis_ids.items():
+            if (adapter := self._devices.get_adapter(device_id)) is not None:
                 bind_slider_spinbox(self._sliders[name], adapter, "position", command="move_to")
 
     def teardown(self) -> None:

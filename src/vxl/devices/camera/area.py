@@ -97,14 +97,14 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         self._mode = CameraMode.IDLE
         self._preview_task: asyncio.Task | None = None
         self._frame_idx = 0
-        self._live = LiveGenerator(sink=self._on_live_frame, uid=device.uid)
+        self._live = LiveGenerator(sink=self._on_live_frame, device_id=device.id)
         self._writer: ImageWriter[WriterSettings, Storage] | None = None
         self._task: asyncio.Task[None] | None = None
         self._task_kind: Literal["batch", "close"] | None = None
         self._publish_tasks: dict[LiveLayer, asyncio.Task[None]] = {}
         # Preview-publish counters (best-effort publish is skip-if-busy); reported per image.
         self._ram = self._system.ram
-        self._ram.reserve(self.device.uid, weight=1.0)
+        self._ram.reserve(self.device.id, weight=1.0)
 
     async def close(self) -> None:
         self._publish_fn = None
@@ -115,13 +115,13 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         if self._writer is not None:  # free the writer's buffers (its workers and shared memory)
             await self._run(self._writer.release)
             self._writer = None
-        self._ram.release(self.device.uid)
+        self._ram.release(self.device.id)
         await super().close()
 
     @query()
     def ram_budget_bytes(self) -> int:
         """Return this camera's current share of the host RAM budget."""
-        return self._ram.reserved(self.device.uid)
+        return self._ram.reserved(self.device.id)
 
     @property
     @stream(label="Camera Mode")
@@ -239,7 +239,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
             # Allocate the camera's buffers now, after its region is set, so every batch starts fast.
             started = time.perf_counter()
             await self._run(self.device.allocate_buffer)
-            log.info("allocate_buffer for %s took %.1fs", self.device.uid, time.perf_counter() - started)
+            log.info("allocate_buffer for %s took %.1fs", self.device.id, time.perf_counter() - started)
 
             target = self._system.resolve_storage(storage, subpath)
             size, dtype = await self._run(lambda: (self.device.frame_size_px, self.device.pixel_type))
@@ -252,7 +252,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
                 )
             )
             log.info(
-                "Image opened for %s at %s in %.1fs", self.device.uid, written.target, time.perf_counter() - started
+                "Image opened for %s at %s in %.1fs", self.device.id, written.target, time.perf_counter() - started
             )
         except BaseException:
             await self._run(self.device.free_buffer)
@@ -288,14 +288,14 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         finally:
             await self._run(self.device.free_buffer)
             self._mode = CameraMode.IDLE
-        log.info("Image closed for %s", self.device.uid)
+        log.info("Image closed for %s", self.device.id)
         # Preview health for the image: how many frames got an overview vs were dropped (best-effort),
         # overview gen-time, and publish drops. overview_busy_drops climbing means gen can't hold 6fps.
         pv = self._live.health.snapshot()
         log.info(
             "Preview health %s: frames=%d overview_gen=%d overview_busy_drops=%d "
             "gen_ms(avg=%.1f max=%.1f) | publish_sent=%d publish_busy_drops=%d",
-            self.device.uid,
+            self.device.id,
             pv.frames,
             pv.overviews_generated,
             pv.overview_busy_drops,
@@ -321,7 +321,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
             self._live.clear_frame()
             await self._run(self._writer.release)
             self._writer = None
-            log.info("Writer ring released for %s", self.device.uid)
+            log.info("Writer ring released for %s", self.device.id)
 
     @property
     @stream("fast")

@@ -31,7 +31,7 @@ class SkyraLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         hub: SkyraHub,
         line: int,
         wavelength: float,
@@ -40,7 +40,7 @@ class SkyraLaser(Laser):
         startup_delay_s: float = 0.0,
         setpoint_tolerance_mw: float = 0.1,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if isinstance(line, bool) or not isinstance(line, int):
             raise ValueError("line must be an integer")
         if isinstance(wavelength, bool) or not isfinite(wavelength) or wavelength <= 0:
@@ -59,7 +59,7 @@ class SkyraLaser(Laser):
         self._closed = False
         self._hub = hub
         self._line = line
-        hub.reserve(line, uid)
+        hub.reserve(line, device_id)
         try:
             self._initialize()
         except Exception as error:
@@ -67,7 +67,7 @@ class SkyraLaser(Laser):
                 self.off()
             except Exception as cleanup_error:
                 raise ExceptionGroup("Skyra initialization and inhibition failed", [error, cleanup_error]) from None
-            hub.release(line, uid)
+            hub.release(line, device_id)
             raise
         self.log.info(f"Initialized Skyra line {line}: {self._wavelength} nm, max_power={max_power_mw} mW")
 
@@ -165,7 +165,7 @@ class SkyraLaser(Laser):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode not in _MODE_COMMANDS:
-            raise ValueError(f"{self.uid} does not do {mode} control")
+            raise ValueError(f"{self.id} does not do {mode} control")
         with self._hub.transaction():
             if self.control_mode == mode:
                 return
@@ -212,7 +212,7 @@ class SkyraLaser(Laser):
         if self._closed:
             return
         self.off()
-        self._hub.release(self._line, self.uid)
+        self._hub.release(self._line, self.id)
         self._closed = True
 
     def _ensure_open(self) -> None:

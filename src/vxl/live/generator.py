@@ -105,12 +105,12 @@ class LiveGenerator:
     def __init__(
         self,
         sink: _Sink,
-        uid: str,
+        device_id: str,
         *,
         viewport: LiveViewport | None = None,
         target_width: int = OVERVIEW_WIDTH,
     ) -> None:
-        self._camera_id = uid
+        self._camera_id = device_id
         self._sink = sink
         self._target_width: int = target_width
         self._viewport = viewport or LiveViewport()

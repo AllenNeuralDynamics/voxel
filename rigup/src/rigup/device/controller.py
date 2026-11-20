@@ -48,13 +48,13 @@ class DeviceController[D: "Device"]:
         self._publish_bytes_fn: PublishBytesFn | None = None
         # Most hardware libraries are not thread-safe, so everything that touches the device runs on one thread.
         check_pairing(type(device), type(self))
-        self._device_loop = DeviceLoop(device.uid)
+        self._device_loop = DeviceLoop(device.id)
         try:
             take(device, self._device_loop)
         except TypeError:
             self._device_loop.close()
             raise
-        self.log = logging.getLogger(f"{device.uid}.{self.__class__.__name__}")
+        self.log = logging.getLogger(f"{device.id}.{self.__class__.__name__}")
 
         device_operations = bind_operations(device)
         self._device_operations = set(device_operations)
@@ -65,7 +65,7 @@ class DeviceController[D: "Device"]:
         all_properties = {**self._device_props, **self._ctrl_props}
 
         self._interface = DeviceInterface(
-            uid=device.uid,
+            id=device.id,
             kind=device.kind,
             streaming=dict(self.__streaming),
             operations={name: cmd.info for name, cmd in self._operations.items()},
@@ -89,8 +89,8 @@ class DeviceController[D: "Device"]:
         return self._device
 
     @property
-    def uid(self) -> str:
-        return self._device.uid
+    def id(self) -> str:
+        return self._device.id
 
     @property
     def interface(self) -> DeviceInterface:
@@ -193,7 +193,7 @@ class DeviceController[D: "Device"]:
         """Start one polling task per stream tier in use. Does nothing if streaming has started."""
         if not self._stream_tasks:
             self._stream_tasks = [
-                asyncio.create_task(self._stream_loop(tier, names), name=f"{self.uid}-{tier}")
+                asyncio.create_task(self._stream_loop(tier, names), name=f"{self.id}-{tier}")
                 for tier, names in self._stream_props.items()
             ]
 

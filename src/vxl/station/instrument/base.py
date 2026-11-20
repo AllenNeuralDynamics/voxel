@@ -30,7 +30,7 @@ from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
-from vxl.station.instrument.config import AxisPosition, DeviceUid, InstrumentConfig, SpecimenAxis
+from vxl.station.instrument.config import AxisPosition, DeviceId, InstrumentConfig, SpecimenAxis
 from vxl.station.instrument.geometry import camera_frame
 from vxl.station.instrument.hal import HAL, DeviceView
 from vxl.station.instrument.interface import InstrumentInterface, check_operations
@@ -76,7 +76,7 @@ class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     active_profile: ProfileId
     power_mode: PowerMode
     activities: tuple[ActivityInfo, ...]
-    devices: dict[DeviceUid, DeviceView]
+    devices: dict[DeviceId, DeviceView]
     remote_stores: dict[str, Remote]
     live: LiveView
 
@@ -134,7 +134,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._live_view = Cell(LiveView())
         self._live: LiveRelay | None = None
         self._planes: Computed[tuple[Plane, ...]] | None = None
-        self._boxes: dict[DeviceUid, Box | None] = {}
+        self._boxes: dict[DeviceId, Box | None] = {}
         self._view: Computed[V] | None = None
 
     @property
@@ -160,7 +160,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """Each live frame of every camera, unopened: its camera, layer, packed bytes, and the stage position for it."""
         return self._live_frames
 
-    async def update_viewport(self, cameras: Collection[DeviceUid], box: Box | None) -> None:
+    async def update_viewport(self, cameras: Collection[DeviceId], box: Box | None) -> None:
         """Zoom the live image of ``cameras`` to ``box``, a box in their shared plane in µm from the stage position;
         ``None`` shows each whole picture. Each camera keeps its part of the box until the next zoom, also after new
         streams or new planes. Refused when the cameras do not lie in 1 plane. It changes only what the live image
@@ -222,14 +222,14 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     # === Devices ===
 
-    async def get_device_properties(self, device_id: DeviceUid, names: Collection[str] | None = None) -> PropResults:
+    async def get_device_properties(self, device_id: DeviceId, names: Collection[str] | None = None) -> PropResults:
         """Read the named properties of a device, or each property it has when ``names`` is left out."""
         handle = self._hal.device(device_id)
         if names is None:
             return await handle.props.refresh()
         return await handle.props.get(*names)
 
-    async def set_device_properties(self, device_id: DeviceUid, properties: Mapping[str, Any]) -> PropResults:
+    async def set_device_properties(self, device_id: DeviceId, properties: Mapping[str, Any]) -> PropResults:
         """Write properties of a device. Save each value that the device accepted into the active profile, as the
         device reports it, when the device is on the profile's light paths and the property is on its autosave list.
         A save cannot be undone. It waits for the command before it, and touches only the saved state."""
@@ -249,7 +249,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     async def execute_device_command(
         self,
-        device_id: DeviceUid,
+        device_id: DeviceId,
         command: str,
         args: Sequence[Any] = (),
         kwargs: Mapping[str, Any] | None = None,
@@ -304,7 +304,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             await self._apply_profile(profile_id)
 
     @action(on="generators", key="generator", verb="set_timeline")
-    async def set_generator_timeline(self, generator: DeviceUid, timeline: Timeline) -> None:
+    async def set_generator_timeline(self, generator: DeviceId, timeline: Timeline) -> None:
         """Load a timeline into a signal generator, and save it into the active profile. Then set what controls each
         laser and modulator, as the timelines now say. The profile's checks run first, so a timeline that does not fit
         is refused before the generator changes. A save cannot be undone."""
@@ -385,7 +385,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     @action(on="positions", key="device_id", verb="set")
     async def set_position_rule(
         self,
-        device_id: DeviceUid,
+        device_id: DeviceId,
         rule: PositionRule,
         *,
         edit_id: str | None = None,
@@ -397,13 +397,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     # === Light ===
 
     @action(on="lights", key="device", verb="set_power")
-    async def set_power(self, device: DeviceUid, value: float) -> None:
+    async def set_power(self, device: DeviceId, value: float) -> None:
         """Set the full power of a laser or a modulator in the active profile, in the device's own unit, and save it.
         When the profile has 1 power for each position of a device, set the one for the position it is at now."""
         await self._edit_power("full", device, value)
 
     @action(on="lights", key="device", verb="set_dim_power")
-    async def set_dim_power(self, device: DeviceUid, value: float) -> None:
+    async def set_dim_power(self, device: DeviceId, value: float) -> None:
         """Set the dim power of a laser or a modulator in the active profile, as :meth:`set_power` does."""
         await self._edit_power("dim", device, value)
 
@@ -524,11 +524,11 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         await self._active_profile.set(profile_id)
         await self._reset_live(())
 
-    async def _reset_live(self, cameras: Collection[DeviceUid]) -> None:
+    async def _reset_live(self, cameras: Collection[DeviceId]) -> None:
         """Start a new live stream on each of ``cameras`` and end every other: older frames are no longer valid."""
         if self._live is None:
             return
-        await self._live.reset({uid: self._hal.area_cameras[uid] for uid in cameras})
+        await self._live.reset({dev_id: self._hal.area_cameras[dev_id] for dev_id in cameras})
         planes = () if self._planes is None else self._planes.value
         await self._live_view.set(LiveView(stream_revision=self._live_view.value.stream_revision + 1, planes=planes))
         self._apply_boxes(self._boxes)
@@ -544,15 +544,15 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         disagree on the magnification, or that has not reported its sensor and region yet has no picture."""
         hal, profile = self._hal, self._store.value.profiles[self._active_profile.value]
         positions: dict[str, AxisPosition] = dict(profile.positions)
-        for uid, router in hal.routers.items():
+        for device_id, router in hal.routers.items():
             try:
                 labels = {str(slot): label for slot, label in router.props.cache["labels"].value.items()}
                 slot = labels.get(str(router.state.value.position))
             except (KeyError, NotObservedError):
                 continue
             if slot is not None:
-                positions[uid] = slot
-        frames: dict[DeviceUid, Transform] = {}
+                positions[device_id] = slot
+        frames: dict[DeviceId, Transform] = {}
         for camera in profile.lights():
             try:
                 axes = self._config.camera_axes(camera, positions)
@@ -562,7 +562,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             frames[camera] = camera_frame(axes, sensor, roi)  # binning changes a pixel's size, not the place
         return planes_of(frames)
 
-    def _apply_boxes(self, cameras: Collection[DeviceUid]) -> None:
+    def _apply_boxes(self, cameras: Collection[DeviceId]) -> None:
         """Send each of ``cameras`` its part of its last box. A camera that its box does not touch is left as it is."""
         pictures = {
             camera: picture for plane in self._live_view.value.planes for camera, picture in plane.pictures.items()
@@ -643,7 +643,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         finally:
             _OPEN_EDIT.reset(token)
 
-    def _generator_cycle(self, generator: DeviceUid, timeline: Timeline, start: OwnClock | InputEdges) -> Cycle:
+    def _generator_cycle(self, generator: DeviceId, timeline: Timeline, start: OwnClock | InputEdges) -> Cycle:
         """``timeline`` as the cycle that ``generator`` plays: each wire's volts on that wire's pin. Raise
         :class:`RejectedError` when the timeline has problems with the generator's wires."""
         wires = self._config.wiring.outputs(generator)
@@ -653,7 +653,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         volts = {wires[name].pin: samples.volts.tolist() for name, samples in rendered.wires.items()}
         return Cycle(sample_rate=timeline.sample_rate, volts=volts, start=start)
 
-    async def _move_axis(self, device: DeviceUid, position: AxisPosition) -> None:
+    async def _move_axis(self, device: DeviceId, position: AxisPosition) -> None:
         """Move 1 device to a position, and wait until it is there: a name for a discrete axis, a number for a
         continuous one."""
         match self._hal.device(device), position:
@@ -693,7 +693,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     # === Helpers of this class ===
 
-    async def _edit_power(self, mode: PowerMode, device: DeviceUid, value: float) -> None:
+    async def _edit_power(self, mode: PowerMode, device: DeviceId, value: float) -> None:
         async with self._scheduler.run("set a power", requires={self._store}):
             hal = self._hal
             ranges = await hal.light_power_ranges()
@@ -731,14 +731,14 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """Set each power of the profile in a power mode, for the position each device that sends the light a
         different way is at now."""
         where = await self._hal.router_positions()
-        numbers: dict[DeviceUid, float] = {}
+        numbers: dict[DeviceId, float] = {}
         for device, power in profile.power.items():
             position = where.get(power.router) if power.router is not None else None
             if (found := power.at(mode, position)) is not None:
                 numbers[device] = found.number
         await self._hal.set_light_powers(numbers)
 
-    def _profile_devices(self, profile: Profile) -> set[DeviceUid]:
+    def _profile_devices(self, profile: Profile) -> set[DeviceId]:
         """The devices that a profile uses: those on its light paths, and those it sets."""
         on_paths = profile.path_nodes(self._config) & set(self._config.all_devices)
         named = (profile.lights(), profile.positions, profile.props, profile.setup, profile.timelines)
@@ -752,7 +752,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """The saved positions that their device cannot take: a name that is not one of a discrete axis's slots, or a
         position for a device that is not an axis of that kind."""
         state = self._store.value
-        wanted: list[tuple[KeyPath, DeviceUid, AxisPosition]] = []
+        wanted: list[tuple[KeyPath, DeviceId, AxisPosition]] = []
         for device, rule in state.positions.items():
             names = rule.order if isinstance(rule, StageFollowRule) else [rule]
             wanted += [(("positions", device), device, name) for name in names]
@@ -791,13 +791,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     async def _discover_remote_stores(self) -> None:
         """Keep each object store that every camera's computer has with the same connection as this computer."""
         local = self._system.remotes
-        cameras: dict[DeviceUid, CameraHandle[Any]] = {**self._hal.area_cameras, **self._hal.line_cameras}
+        cameras: dict[DeviceId, CameraHandle[Any]] = {**self._hal.area_cameras, **self._hal.line_cameras}
         reported = await asyncio.gather(
             *(camera.remote_stores() for camera in cameras.values()), return_exceptions=True
         )
-        for uid, stores in zip(cameras, reported, strict=True):
+        for device_id, stores in zip(cameras, reported, strict=True):
             if isinstance(stores, BaseException):
-                logger.warning("Could not discover remote stores for camera %s: %s", uid, stores)
+                logger.warning("Could not discover remote stores for camera %s: %s", device_id, stores)
         shared = {
             name: remote
             for name, remote in sorted(local.items())
@@ -813,18 +813,18 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     def _devices_resource_map(config: InstrumentConfig) -> dict[Resource, set[Resource]]:
         """Each device that other devices need, such as a hub, and every device that needs it, all the way down."""
         devices = config.all_devices
-        needed_by: dict[str, set[str]] = {uid: set() for uid in devices}
-        for uid in devices:
-            for dependency in dependencies(devices, uid):
-                needed_by[dependency].add(uid)
+        needed_by: dict[str, set[str]] = {dev_id: set() for dev_id in devices}
+        for device_id in devices:
+            for dependency in dependencies(devices, device_id):
+                needed_by[dependency].add(device_id)
         covers: dict[Resource, set[Resource]] = {}
-        for uid in devices:
+        for device_id in devices:
             found: set[Resource] = set()
-            pending = list(needed_by[uid])
+            pending = list(needed_by[device_id])
             while pending:
                 if (other := pending.pop()) not in found:
                     found.add(other)
                     pending.extend(needed_by[other])
             if found:
-                covers[uid] = found
+                covers[device_id] = found
         return covers

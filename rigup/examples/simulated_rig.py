@@ -24,7 +24,7 @@ CONFIG = RigConfig(
 
 async def show_interface(handle: DeviceHandle) -> None:
     found = await handle.interface()
-    print(f"{found.uid} ({found.kind})")
+    print(f"{found.id} ({found.kind})")
     for name, info in found.props.items():
         details = [info.dtype + (f" {info.units}" if info.units else ""), info.access]
         details += [f"streams {info.stream}"] if info.stream else []
@@ -36,15 +36,15 @@ async def show_interface(handle: DeviceHandle) -> None:
 async def call(handle: DeviceHandle, operation: str, **arguments: Any) -> None:
     result = await handle.execute(operation, **arguments)
     shown = f"refused: {result.error}" if result.error else f"-> {result.unwrap()!r}"
-    print(f"  {handle.uid}.{operation} {shown}")
+    print(f"  {handle.id}.{operation} {shown}")
 
 
 async def write(handle: DeviceHandle, **values: Any) -> None:
     found = await handle.props.set(**values)
     for name, model in found.ok.items():
-        print(f"  {handle.uid}.{name} = {model.value!r} (limits {model.minimum}..{model.maximum})")
+        print(f"  {handle.id}.{name} = {model.value!r} (limits {model.minimum}..{model.maximum})")
     for name, error in found.errors.items():
-        print(f"  {handle.uid}.{name} refused: {error}")
+        print(f"  {handle.id}.{name} refused: {error}")
 
 
 async def main() -> None:

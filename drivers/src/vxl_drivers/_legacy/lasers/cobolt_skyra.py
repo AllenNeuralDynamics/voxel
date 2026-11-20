@@ -68,7 +68,7 @@ class CoboltSkyra(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         port: str,
         prefix: str,
@@ -79,7 +79,7 @@ class CoboltSkyra(Laser):
         """Initialize the Cobolt Skyra laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             wavelength: Wavelength of the laser line in nm.
             port: Serial port for communication.
             prefix: Command prefix for the laser line.
@@ -94,7 +94,7 @@ class CoboltSkyra(Laser):
         self._max_current_ma = max_current_ma
         self._current_setpoint_ma = min_current_ma
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
         self.log.info(f"Initialized Cobolt Skyra laser: port={port}, prefix={prefix}, wavelength={wavelength}nm")
 
     def enable(self) -> None:

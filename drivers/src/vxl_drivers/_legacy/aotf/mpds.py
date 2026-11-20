@@ -18,7 +18,7 @@ class MpdsAotf(AOTF):
     for laser modulation in microscopy applications.
 
     Args:
-        uid: Unique identifier for this device.
+        device_id: Unique identifier for this device.
         com_port: Serial port name (e.g., "/dev/ttyUSB0" or "COM3").
         blanking_mode: Initial blanking mode ("internal" or "external").
             Use "external" for TTL synchronization with camera/DAQ.
@@ -29,7 +29,7 @@ class MpdsAotf(AOTF):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         com_port: str,
         blanking_mode: str = "external",
         default_input_mode: str = "external",
@@ -49,7 +49,7 @@ class MpdsAotf(AOTF):
             self._mpds.set_channel_input_mode(channel, imode)
 
         # Initialize base class after hardware is ready
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
 
         self.log.info(
             f"Initialized MPDS AOTF on {com_port} with {self._mpds.num_channels} channels, "

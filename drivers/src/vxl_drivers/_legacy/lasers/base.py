@@ -7,9 +7,9 @@ from rigup.interface import action, fact, failsafe, number, stream
 class Laser(Device, kind="laser_archived"):
     """Legacy laser interface, discoverable separately from canonical lasers."""
 
-    def __init__(self, uid: str, wavelength: int) -> None:
+    def __init__(self, device_id: str, wavelength: int) -> None:
         self._wavelength = wavelength
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
 
     @property
     @fact(label="Wavelength", units="nm", desc="The wavelength of the laser.")

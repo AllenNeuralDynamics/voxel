@@ -100,7 +100,7 @@ class MPDSHub(Device, kind="generic"):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         port: str,
         *,
         min_frequency_mhz: float,
@@ -111,7 +111,7 @@ class MPDSHub(Device, kind="generic"):
         baud: int = 57600,
         timeout_s: float = 0.5,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         self._validate_limits(min_frequency_mhz, max_frequency_mhz, "frequency")
         self._validate_limits(min_power_dbm, max_power_dbm, "power")
         if min_frequency_mhz <= 0 or min_power_dbm < 0:

@@ -23,8 +23,8 @@ class MockPart(Part, frozen=True):
 
 
 class MockDevice(Device[MockState], kind="mock"):
-    def __init__(self, uid: str, initial_value: float = 0.0):
-        super().__init__(uid)
+    def __init__(self, device_id: str, initial_value: float = 0.0):
+        super().__init__(device_id)
         self._value = initial_value
         self._enabled = False
 
@@ -67,16 +67,16 @@ class MockDevice(Device[MockState], kind="mock"):
 class MockHolder(MockDevice):
     """A mock device that is given 1 other component."""
 
-    def __init__(self, uid: str, held: RigComponent):
-        super().__init__(uid)
+    def __init__(self, device_id: str, held: RigComponent):
+        super().__init__(device_id)
         self.held = held
 
 
 class Probe(Device, kind="probe"):
     """Records what runs where. ``bump`` reads, pauses, then writes, like a library unsafe from 2 threads."""
 
-    def __init__(self, uid: str = "probe", close_mode: str = "ok", maximum: float = 10.0) -> None:
-        super().__init__(uid)
+    def __init__(self, device_id: str = "probe", close_mode: str = "ok", maximum: float = 10.0) -> None:
+        super().__init__(device_id)
         self.close_mode = close_mode
         self.maximum = maximum
         self._level = 1.0
@@ -130,7 +130,7 @@ class Probe(Device, kind="probe"):
 
     @action()
     def log_it(self) -> None:
-        logging.getLogger(f"{self.uid}.dev").warning("hello-from-device")
+        logging.getLogger(f"{self.id}.dev").warning("hello-from-device")
 
     @failsafe()
     def safe(self) -> None:

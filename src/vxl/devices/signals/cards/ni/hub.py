@@ -15,15 +15,15 @@ from .resources import NiDaqModel, NiTaskLease, _NiResourceManager, capabilities
 class NiDaqmx(Device, kind="generic"):
     """NI-DAQmx hub owning one card's topology and task reservations."""
 
-    def __init__(self, uid: str, *, device_name: str) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, *, device_name: str) -> None:
+        super().__init__(device_id=device_id)
         self._device_name = device_name
         self._system = NiSystem.local()
         self._inst, self._model = self._connect(device_name)
         self._resource_manager = self._initialize_resource_manager()
 
     def __repr__(self) -> str:
-        return f"NiDaqmx(uid={self.uid}, device={self._device_name}, model={self._model})"
+        return f"NiDaqmx(id={self.id}, device={self._device_name}, model={self._model})"
 
     def _connect(self, name: str) -> tuple[NiDevice, NiDaqModel]:
         try:
@@ -138,7 +138,7 @@ class NiDaqmx(Device, kind="generic"):
 
     def reserve_ao_task(
         self,
-        owner_uid: str,
+        owner_id: str,
         ao_terminals: Sequence[str],
         *,
         hardware_timed: bool,
@@ -148,7 +148,7 @@ class NiDaqmx(Device, kind="generic"):
     ) -> NiTaskLease:
         """Atomically reserve all NI resources needed for one configured AO task."""
         return self._resource_manager.reserve_ao_task(
-            owner_uid=owner_uid,
+            owner_id=owner_id,
             ao_terminals=ao_terminals,
             hardware_timed=hardware_timed,
             needs_counter=needs_counter,
@@ -158,14 +158,14 @@ class NiDaqmx(Device, kind="generic"):
 
     def reserve_do_task(
         self,
-        owner_uid: str,
+        owner_id: str,
         do_terminals: Sequence[str],
         *,
         hardware_timed: bool = False,
     ) -> NiTaskLease:
         """Atomically reserve the lines and optional timing engine for one NI DO task."""
         return self._resource_manager.reserve_do_task(
-            owner_uid=owner_uid,
+            owner_id=owner_id,
             do_terminals=do_terminals,
             hardware_timed=hardware_timed,
         )

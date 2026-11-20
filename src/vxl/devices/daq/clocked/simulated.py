@@ -24,14 +24,14 @@ class SimulatedSignalGenerator(SignalGenerator):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         hub: SimulatedDaqmx,
         ports: Mapping[str, str],
     ) -> None:
-        super().__init__(uid=uid, ports=ports)
+        super().__init__(device_id=device_id, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.SimulatedSignalGenerator")
+        self._log = logging.getLogger(f"{device_id}.SimulatedSignalGenerator")
 
         # Driver-local state
         self._sim_state: GeneratorState = "fresh"
@@ -62,11 +62,11 @@ class SimulatedSignalGenerator(SignalGenerator):
 
         # Reserve AO pins on the hub (fails if another engine already owns one)
         for port_name, physical_pin in self._ports.items():
-            self._hub.assign_pin(self.uid, physical_pin)
+            self._hub.assign_pin(self.id, physical_pin)
             self._log.debug("reserved port %s -> %s", port_name, physical_pin)
 
         # Simulated clocked output is always internally paced.
-        self._counter_reserved = self._hub.reserve_counter(self.uid)
+        self._counter_reserved = self._hub.reserve_counter(self.id)
 
         self._sim_state = "ready"
 
@@ -75,11 +75,11 @@ class SimulatedSignalGenerator(SignalGenerator):
             raise RuntimeError("write() requires setup() first")
         for name in port_arrays:
             if name not in self._ports:
-                raise ValueError(f"Unknown port '{name}' on {self.uid}")
+                raise ValueError(f"Unknown port '{name}' on {self.id}")
         self._last_arrays = {name: np.asarray(arr, dtype=np.float64) for name, arr in port_arrays.items()}
 
     def teardown(self) -> None:
-        self._hub.release_pins_for_owner(self.uid)
+        self._hub.release_pins_for_owner(self.id)
         self._last_arrays = {}
         self._counter_reserved = None
         self._finite_repeat = None
@@ -95,7 +95,7 @@ class SimulatedSignalGenerator(SignalGenerator):
         del timeout_s  # simulated tasks complete instantly
         if self._finite_repeat is None:
             raise RuntimeError(
-                f"{self.uid}: wait_until_done requires a finite acquisition "
+                f"{self.id}: wait_until_done requires a finite acquisition "
                 "(start was called with repeat=None or not at all)"
             )
 

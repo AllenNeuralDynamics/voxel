@@ -546,7 +546,7 @@ export interface InstrumentInspection {
 
 /** One named group of display colormaps. */
 export interface ColormapGroup {
-  uid: string;
+  id: string;
   label: string;
   desc: string;
   colormaps: Record<string, string[]>;
@@ -678,7 +678,7 @@ export interface OperationInfo {
 
 /** A device's introspected surface: identity, streaming periods, operations, and properties. */
 export interface DeviceInterface {
-  uid: string;
+  id: string;
   kind: string;
   streaming: Record<StreamTier, number>;
   operations: Record<string, OperationInfo>;

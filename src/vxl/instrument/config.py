@@ -161,7 +161,11 @@ class ImagingProtocol(FrozenModel):
                 expected_filters = set(detection.filter_wheels)
                 violations.extend(
                     hal.check_discrete_axis_positions(
-                        {uid: position for uid, position in ch.filters.items() if uid in expected_filters},
+                        {
+                            device_id: position
+                            for device_id, position in ch.filters.items()
+                            if device_id in expected_filters
+                        },
                         loc=(*loc, "channels", ch_id, "filters"),
                     )
                 )
@@ -176,13 +180,13 @@ class ImagingProtocol(FrozenModel):
                 )
 
         for profile_id, profile in self.profiles.items():
-            for generator_uid in profile.sync:
-                if generator_uid not in hal.device_uids:
+            for generator_id in profile.sync:
+                if generator_id not in hal.device_ids:
                     violations.append(
                         Violation(
                             code="imaging.profile.sync_device_missing",
-                            msg=f"Signal generator '{generator_uid}' is not configured.",
-                            loc=(*loc, "profiles", profile_id, "sync", generator_uid),
+                            msg=f"Signal generator '{generator_id}' is not configured.",
+                            loc=(*loc, "profiles", profile_id, "sync", generator_id),
                         )
                     )
 

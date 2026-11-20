@@ -244,14 +244,14 @@ class Colormap(RootModel[str | list[str]]):
 class ColormapGroup(BaseModel):
     """A named group of colormaps."""
 
-    uid: str
+    id: str
     label: str
     desc: str = ""
     colormaps: dict[str, Colormap]
 
 
 _BASIC = ColormapGroup(
-    uid="basic",
+    id="basic",
     label="Basic Colors",
     desc="Simple single-color ramps",
     colormaps={
@@ -268,7 +268,7 @@ _BASIC = ColormapGroup(
 )
 
 _FLUORESCENT_PROTEINS = ColormapGroup(
-    uid="fluorescent_proteins",
+    id="fluorescent_proteins",
     label="Fluorescent Proteins",
     desc="Common genetically encoded fluorescent proteins",
     colormaps={
@@ -292,7 +292,7 @@ _FLUORESCENT_PROTEINS = ColormapGroup(
 )
 
 _NUCLEAR_STAINS = ColormapGroup(
-    uid="nuclear_stains",
+    id="nuclear_stains",
     label="Nuclear Stains",
     desc="DNA-binding fluorescent dyes",
     colormaps={
@@ -304,7 +304,7 @@ _NUCLEAR_STAINS = ColormapGroup(
 )
 
 _ALEXA_DYES = ColormapGroup(
-    uid="alexa_dyes",
+    id="alexa_dyes",
     label="Alexa Dyes",
     desc="Alexa Fluor conjugated dyes",
     colormaps={
@@ -316,7 +316,7 @@ _ALEXA_DYES = ColormapGroup(
 )
 
 _CY_DYES = ColormapGroup(
-    uid="cy_dyes",
+    id="cy_dyes",
     label="Cy Dyes",
     desc="Cyanine family fluorescent dyes",
     colormaps={
@@ -327,7 +327,7 @@ _CY_DYES = ColormapGroup(
 )
 
 _ATTO_DYES = ColormapGroup(
-    uid="atto_dyes",
+    id="atto_dyes",
     label="ATTO Dyes",
     desc="ATTO-TEC fluorescent labels",
     colormaps={
@@ -338,7 +338,7 @@ _ATTO_DYES = ColormapGroup(
 )
 
 _CLASSIC_FLUOROPHORES = ColormapGroup(
-    uid="classic_fluorophores",
+    id="classic_fluorophores",
     label="Classic Fluorophores",
     desc="Traditional organic fluorescent dyes",
     colormaps={
@@ -350,7 +350,7 @@ _CLASSIC_FLUOROPHORES = ColormapGroup(
 )
 
 _FUNCTIONAL_INDICATORS = ColormapGroup(
-    uid="functional_indicators",
+    id="functional_indicators",
     label="Functional Indicators",
     desc="Activity-dependent fluorescent reporters",
     colormaps={
@@ -369,7 +369,7 @@ _FUNCTIONAL_INDICATORS = ColormapGroup(
 )
 
 _ORGANELLE_STAINS = ColormapGroup(
-    uid="organelle_stains",
+    id="organelle_stains",
     label="Organelle Stains",
     desc="Membrane and organelle-selective dyes",
     colormaps={
@@ -381,7 +381,7 @@ _ORGANELLE_STAINS = ColormapGroup(
 )
 
 _GRADIENTS = ColormapGroup(
-    uid="gradients",
+    id="gradients",
     label="Gradients",
     desc="Perceptually uniform and classic scientific colormaps",
     colormaps={

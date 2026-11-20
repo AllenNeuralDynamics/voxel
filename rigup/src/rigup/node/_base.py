@@ -38,8 +38,8 @@ class Node(ABC):
         """
 
     @abstractmethod
-    async def close_device(self, uid: str) -> None:
-        """Close and remove one device; do nothing if ``uid`` is unknown."""
+    async def close_device(self, device_id: str) -> None:
+        """Close and remove one device; do nothing if ``id`` is unknown."""
 
     @abstractmethod
     async def close_all_devices(self) -> None:
@@ -48,7 +48,7 @@ class Node(ABC):
     @property
     @abstractmethod
     def devices(self) -> dict[str, DeviceHandle]:
-        """Return the built device handles by uid."""
+        """Return the built device handles by id."""
 
 
 async def first_read(handle: DeviceHandle) -> Problem | None:
@@ -61,18 +61,18 @@ async def first_read(handle: DeviceHandle) -> Problem | None:
     if not failed:
         return None
     msg = "Unable to read " + "; ".join(f"'{name}': {reason}" for name, reason in failed.items())
-    return Problem(code="build.properties", msg=msg, loc=(handle.uid,))
+    return Problem(code="build.properties", msg=msg, loc=(handle.id,))
 
 
-async def close_each(uids: Iterable[str], close: Callable[[str], Awaitable[None]], log: logging.Logger) -> None:
-    """Close every device in ``uids`` in reverse, so a device closes before those it was given, even when one fails;
+async def close_each(device_ids: Iterable[str], close: Callable[[str], Awaitable[None]], log: logging.Logger) -> None:
+    """Close every device in ``ids`` in reverse, so a device closes before those it was given, even when one fails;
     then raise the first failure."""
     errors: list[Exception] = []
-    for uid in reversed(list(uids)):
+    for device_id in reversed(list(device_ids)):
         try:
-            await close(uid)
+            await close(device_id)
         except Exception as e:
-            log.exception("Closing device %s failed", uid)
+            log.exception("Closing device %s failed", device_id)
             errors.append(e)
     if errors:
         raise errors[0]

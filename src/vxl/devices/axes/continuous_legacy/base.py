@@ -111,7 +111,7 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"], streaming={"f
     @action(label="Configure TTL Stepper")
     def configure_ttl_stepper(self, cfg: TTLStepperConfig) -> None:
         if not (stepper := self._stepper()):
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+            raise NotImplementedError(f"Axis {self.device.id} does not support TTL stepping")
         if self._scan_mode != ScanMode.IDLE:
             raise RuntimeError(f"Cannot configure TTL stepper while in {self._scan_mode} mode")
 
@@ -121,7 +121,7 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"], streaming={"f
     @action()
     def queue_absolute_move(self, position: float) -> None:
         if not (stepper := self._stepper()):
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+            raise NotImplementedError(f"Axis {self.device.id} does not support TTL stepping")
         if self._scan_mode != ScanMode.TTL_STEPPING:
             raise RuntimeError("TTL stepper not configured")
 
@@ -130,7 +130,7 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"], streaming={"f
     @action()
     def queue_relative_move(self, delta: float) -> None:
         if not (stepper := self._stepper()):
-            raise NotImplementedError(f"Axis {self.device.uid} does not support TTL stepping")
+            raise NotImplementedError(f"Axis {self.device.id} does not support TTL stepping")
         if self._scan_mode != ScanMode.TTL_STEPPING:
             raise RuntimeError("TTL stepper not configured")
 
@@ -139,7 +139,7 @@ class ContinuousAxisController(DeviceController["ContinuousAxis"], streaming={"f
     @action(label="Reset TTL Stepper")
     def reset_ttl_stepper(self) -> None:
         if not (stepper := self._stepper()):
-            self.log.warning("reset_ttl_stepper called but axis %s has no TTL stepper", self.device.uid)
+            self.log.warning("reset_ttl_stepper called but axis %s has no TTL stepper", self.device.id)
             return
 
         stepper.reset()
@@ -161,8 +161,8 @@ class ContinuousAxis(Axis[float], kind=DeviceType.CONTINUOUS_AXIS, controller=Co
         - Kinematics: speed, acceleration (optional: backlash, home)
     """
 
-    def __init__(self, uid: str, units: str = "um") -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, units: str = "um") -> None:
+        super().__init__(device_id=device_id)
         if units not in SUPPORTED_UNITS:
             msg = f"Unsupported unit '{units}' — expected one of {SUPPORTED_UNITS}"
             raise ValueError(msg)

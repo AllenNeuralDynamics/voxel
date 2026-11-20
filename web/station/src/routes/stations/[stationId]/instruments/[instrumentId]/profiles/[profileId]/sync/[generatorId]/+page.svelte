@@ -62,7 +62,7 @@
 
   const defaultTiming: Timing = { sample_rate: 100000, duration: 0.01, rest_time: 0 };
 
-  const selectedGeneratorUid = $derived(params.generatorId);
+  const selectedGeneratorId = $derived(params.generatorId);
   const profileItem = $derived({
     label: profile?.label || displayName(params.profileId),
     href: profileHref(selected.params, params.profileId)
@@ -75,17 +75,17 @@
   let repeatMode = $state<RepeatMode>('cycles');
 
   const generatorConfigured = $derived(
-    Boolean(profile && selectedGeneratorUid && Object.hasOwn(profile.sync, selectedGeneratorUid))
+    Boolean(profile && selectedGeneratorId && Object.hasOwn(profile.sync, selectedGeneratorId))
   );
 
   const loadedSignals = $derived.by<Signals | null>(() => {
-    if (!selectedGeneratorUid) return null;
-    return instrument?.signalGenerators.get(selectedGeneratorUid)?.loaded ?? null;
+    if (!selectedGeneratorId) return null;
+    return instrument?.signalGenerators.get(selectedGeneratorId)?.loaded ?? null;
   });
 
   const configSignals = $derived.by<Signals | null>(() => {
-    if (!profile || !selectedGeneratorUid) return null;
-    return profile.sync[selectedGeneratorUid] ?? null;
+    if (!profile || !selectedGeneratorId) return null;
+    return profile.sync[selectedGeneratorId] ?? null;
   });
 
   const baseWaveforms = $derived<Record<string, Waveform>>(loadedSignals?.waveforms ?? {});
@@ -105,8 +105,8 @@
   });
 
   const voltageRange = $derived.by<{ min: number; max: number } | null>(() => {
-    if (!selectedGeneratorUid) return null;
-    return instrument?.signalGenerators.get(selectedGeneratorUid)?.voltageRange ?? null;
+    if (!selectedGeneratorId) return null;
+    return instrument?.signalGenerators.get(selectedGeneratorId)?.voltageRange ?? null;
   });
 
   const waveformColors = $derived.by<Record<string, string>>(() => {
@@ -188,7 +188,7 @@
   );
 
   watch(
-    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorUid}`,
+    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorId}`,
     () => {
       discardPendingWaveformPatch();
       selectedWaveformId = null;
@@ -221,7 +221,7 @@
   );
 
   watch(
-    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorUid}`,
+    () => `${instrument?.activeProfileId ?? ''}:${selectedGeneratorId}`,
     () => {
       if (timingTimer) clearTimeout(timingTimer);
       timingTimer = null;
@@ -250,18 +250,18 @@
       timingTimer = setTimeout(() => void commitTiming(), 150);
       return;
     }
-    if (!canEdit || !timingDirty || !selectedGeneratorUid || !configSignals) return;
+    if (!canEdit || !timingDirty || !selectedGeneratorId || !configSignals) return;
 
-    const generatorUid = selectedGeneratorUid;
+    const generatorId = selectedGeneratorId;
     const revision = timingRevision;
     const signals: Signals = { ...localTiming, waveforms: configSignals.waveforms };
     timingCommitInFlight = true;
     try {
-      await instrument?.updateSignals(generatorUid, signals);
-      if (selectedGeneratorUid === generatorUid && timingRevision === revision) timingDirty = false;
+      await instrument?.updateSignals(generatorId, signals);
+      if (selectedGeneratorId === generatorId && timingRevision === revision) timingDirty = false;
     } catch (error) {
       reportFailure(error);
-      if (selectedGeneratorUid === generatorUid && timingRevision === revision) {
+      if (selectedGeneratorId === generatorId && timingRevision === revision) {
         timingDirty = false;
         syncTiming(configSignals);
       }
@@ -299,7 +299,7 @@
     duration,
     restTime,
     voltageRange,
-    syncKey: `sync:${selectedGeneratorUid ?? 'none'}`
+    syncKey: `sync:${selectedGeneratorId ?? 'none'}`
   });
 
   const editFingerprint = $derived.by<string | null>(() => {
@@ -311,7 +311,7 @@
   });
 
   interface PendingWaveformPatch {
-    generatorUid: string;
+    generatorId: string;
     waveformId: string;
     waveform: Waveform;
     base: Signals;
@@ -327,7 +327,7 @@
       rest_time: patch.base.rest_time,
       waveforms: { ...patch.base.waveforms, [patch.waveformId]: patch.waveform }
     };
-    reportFailure(instrument?.updateSignals(patch.generatorUid, signals));
+    reportFailure(instrument?.updateSignals(patch.generatorId, signals));
   }
 
   function discardPendingWaveformPatch() {
@@ -350,7 +350,7 @@
       if (
         !fingerprint ||
         !canEdit ||
-        !selectedGeneratorUid ||
+        !selectedGeneratorId ||
         !selectedWaveformId ||
         !editingWaveform ||
         !configSignals
@@ -360,7 +360,7 @@
       }
       if (waveformPatchTimer) clearTimeout(waveformPatchTimer);
       pendingWaveformPatch = {
-        generatorUid: selectedGeneratorUid,
+        generatorId: selectedGeneratorId,
         waveformId: selectedWaveformId,
         waveform: cloneWaveform(editingWaveform),
         base: configSignals
@@ -476,7 +476,7 @@
 </script>
 
 {#if profile && generatorConfigured}
-  <PageHeader items={[profileItem, { label: displayName(selectedGeneratorUid) }]}>
+  <PageHeader items={[profileItem, { label: displayName(selectedGeneratorId) }]}>
     {#snippet trailing()}
       <Select
         prefix="Group by"
@@ -836,8 +836,8 @@
     </div>
   </footer>
 {:else}
-  <PageFallback items={[profileItem, { label: displayName(selectedGeneratorUid) }]}>
-    Generator “{displayName(selectedGeneratorUid)}” is not configured for this profile.
+  <PageFallback items={[profileItem, { label: displayName(selectedGeneratorId) }]}>
+    Generator “{displayName(selectedGeneratorId)}” is not configured for this profile.
   </PageFallback>
 {/if}
 

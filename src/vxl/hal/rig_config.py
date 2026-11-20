@@ -20,7 +20,7 @@ from vxlib.schema import duplicate_keys, identifier
 from rigup import BuildConfig
 
 NodeKind = Literal["subprocess", "remote"]
-DeviceUid = Annotated[str, identifier("Device UID")]
+DeviceId = Annotated[str, identifier("Device UID")]
 NodeId = Annotated[str, identifier("Node id")]
 
 
@@ -82,7 +82,7 @@ class NodeConfig(BaseModel):
 
     kind: NodeKind
     address: str | None = None
-    devices: dict[DeviceUid, DeviceConfig] = Field(default_factory=dict)
+    devices: dict[DeviceId, DeviceConfig] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -105,7 +105,7 @@ class NodeConfig(BaseModel):
 
     def to_rig(self) -> rigup.config.NodeConfig:
         """The config that rigup builds this node from."""
-        devices = {uid: config.to_rig() for uid, config in self.devices.items()}
+        devices = {device_id: config.to_rig() for device_id, config in self.devices.items()}
         return rigup.config.NodeConfig.model_construct(kind=self.kind, address=self.address, devices=devices)
 
 
@@ -119,11 +119,11 @@ class RigConfig(BaseModel, frozen=True):
 
     model_config = ConfigDict(extra="forbid")
 
-    devices: dict[DeviceUid, DeviceConfig] = Field(default_factory=dict)
+    devices: dict[DeviceId, DeviceConfig] = Field(default_factory=dict)
     nodes: dict[NodeId, NodeConfig] = Field(default_factory=dict)
 
     @property
-    def device_configs(self) -> dict[DeviceUid, DeviceConfig]:
+    def device_configs(self) -> dict[DeviceId, DeviceConfig]:
         """Every device of the rig, in-process and on each node, by UID."""
         configs = dict(self.devices)
         for node in self.nodes.values():
@@ -131,14 +131,14 @@ class RigConfig(BaseModel, frozen=True):
         return configs
 
     @property
-    def device_uids(self) -> set[DeviceUid]:
+    def device_ids(self) -> set[DeviceId]:
         """The UID of every device of the rig, in-process and on each node."""
         return set(self.device_configs)
 
     def to_rig(self) -> rigup.config.RigConfig:
         """The config that rigup builds from."""
         return rigup.config.RigConfig.model_construct(
-            devices={uid: config.to_rig() for uid, config in self.devices.items()},
+            devices={device_id: config.to_rig() for device_id, config in self.devices.items()},
             nodes={node_id: node.to_rig() for node_id, node in self.nodes.items()},
         )
 
@@ -148,19 +148,26 @@ class RigConfig(BaseModel, frozen=True):
         scopes = {"local": self.devices, **{f"node:{node_id}": node.devices for node_id, node in self.nodes.items()}}
         duplicates = duplicate_keys(scopes)
         errors = [
-            f"Device UID '{uid}' is duplicated across scopes: {', '.join(device_scopes)}"
-            for uid, device_scopes in duplicates.items()
+            f"Device UID '{device_id}' is duplicated across scopes: {', '.join(device_scopes)}"
+            for device_id, device_scopes in duplicates.items()
         ]
 
-        unique_owner = {uid: scope for scope, devices in scopes.items() for uid in devices if uid not in duplicates}
-        unique = {uid: config for devices in scopes.values() for uid, config in devices.items() if uid in unique_owner}
+        unique_owner = {
+            dev_id: scope for scope, devices in scopes.items() for dev_id in devices if dev_id not in duplicates
+        }
+        unique = {
+            device_id: config
+            for devices in scopes.values()
+            for device_id, config in devices.items()
+            if device_id in unique_owner
+        }
 
-        for uid, scope in unique_owner.items():
-            for dependency in dependencies(unique, uid):
+        for device_id, scope in unique_owner.items():
+            for dependency in dependencies(unique, device_id):
                 owner = unique_owner[dependency]
                 if owner != scope:
                     errors.append(
-                        f"Device '{uid}' in scope '{scope}' references device '{dependency}' in scope '{owner}'; "
+                        f"Device '{device_id}' in scope '{scope}' references device '{dependency}' in scope '{owner}'; "
                         "constructor-injected device dependencies must be on the same node"
                     )
 

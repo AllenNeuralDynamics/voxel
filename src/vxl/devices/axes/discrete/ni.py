@@ -33,7 +33,7 @@ class NiDiscreteAxis(PulseDiscreteAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         hub: NiDaqmx,
         slots: Mapping[int | str, SlotSpec],
@@ -45,7 +45,7 @@ class NiDiscreteAxis(PulseDiscreteAxis):
         """Initialize an NI-DAQmx-driven discrete axis.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             hub: NI-DAQmx hub owning the card the slot pins live on.
             slots: Slot index to ``{pin, label}``, e.g. ``{0: {pin: ao6, label: GFP}}``.
             slot_count: Total slots; inferred from ``slots`` when None.
@@ -56,15 +56,15 @@ class NiDiscreteAxis(PulseDiscreteAxis):
         specs = {int(k): SlotSpec.model_validate(v) for k, v in slots.items()}
         terminals = {str(i): spec.pin for i, spec in specs.items()}
         if output == "ao":
-            generator = NiOnDemandAO(uid=f"{uid}_od", hub=hub, ports=terminals)
+            generator = NiOnDemandAO(device_id=f"{device_id}_od", hub=hub, ports=terminals)
         elif output == "do":
-            generator = NiOnDemandDO(uid=f"{uid}_od", hub=hub, lines=terminals)
+            generator = NiOnDemandDO(device_id=f"{device_id}_od", hub=hub, lines=terminals)
         else:
             raise ValueError(f"output must be 'ao' or 'do', got {output!r}")
 
         try:
             super().__init__(
-                uid=uid,
+                device_id=device_id,
                 generator=generator,
                 slots={i: s.label for i, s in specs.items()},
                 slot_count=slot_count,

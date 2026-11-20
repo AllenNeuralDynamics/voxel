@@ -16,7 +16,7 @@ from vxlib.units import Quantity
 from vxl.metadata import ExperimentMetadata, MetadataCls, get_path_from_class
 from vxl.station.instrument.config import (
     AxisPosition,
-    DeviceUid,
+    DeviceId,
     InstrumentConfig,
     NotDefault,
     PinRef,
@@ -35,7 +35,7 @@ PropertyName = Annotated[str, Field(min_length=1)]
 ChannelName = Annotated[str, identifier("Channel name")]
 """The name of a channel of a profile, such as ``gfp``: what its cameras image."""
 
-type ChannelCameras = Annotated[dict[DeviceUid, DeviceUid], Field(min_length=1)]
+type ChannelCameras = Annotated[dict[DeviceId, DeviceId], Field(min_length=1)]
 """The cameras of 1 channel, each with the light it uses."""
 
 
@@ -50,7 +50,7 @@ class Power(FrozenModel):
 
     full: dict[str, Quantity] | Quantity
     dim: dict[str, Quantity] | Quantity | None = None
-    router: DeviceUid | None = None
+    router: DeviceId | None = None
 
     @model_validator(mode="after")
     def _positions_need_a_router(self) -> Self:
@@ -105,15 +105,15 @@ class Profile(FrozenModel):
     signal generator plays. A kind of instrument adds its own fields in a subclass."""
 
     channels: dict[ChannelName, ChannelCameras] = Field(min_length=1)
-    positions: dict[DeviceUid, AxisPosition] = Field(default_factory=dict)
-    power: dict[DeviceUid, Power] = Field(default_factory=dict)
-    props: dict[DeviceUid, dict[PropertyName, Any]] = Field(default_factory=dict)
-    setup: dict[DeviceUid, list[OperationRequest]] = Field(default_factory=dict)
-    timelines: dict[DeviceUid, Timeline] = Field(default_factory=dict)
+    positions: dict[DeviceId, AxisPosition] = Field(default_factory=dict)
+    power: dict[DeviceId, Power] = Field(default_factory=dict)
+    props: dict[DeviceId, dict[PropertyName, Any]] = Field(default_factory=dict)
+    setup: dict[DeviceId, list[OperationRequest]] = Field(default_factory=dict)
+    timelines: dict[DeviceId, Timeline] = Field(default_factory=dict)
     desc: str = ""
     label: str | None = None
 
-    def lights(self) -> dict[DeviceUid, DeviceUid]:
+    def lights(self) -> dict[DeviceId, DeviceId]:
         """Each camera of the profile, with the light it uses."""
         return {camera: light for cameras in self.channels.values() for camera, light in cameras.items()}
 
@@ -210,7 +210,7 @@ class Profile(FrozenModel):
         any position."""
         cameras, sources = config.optics.detectors(), config.optics.sources()
         problems = Problems()
-        seen: set[DeviceUid] = set()
+        seen: set[DeviceId] = set()
         for name, channel in self.channels.items():
             for camera, light in channel.items():
                 where = ("channels", name, camera)
@@ -325,7 +325,7 @@ class StageFollowRule(FrozenModel):
 type PositionRule = AxisPosition | StageFollowRule
 """How a device gets its position for every profile: always 1 position, or by following the stage."""
 
-type _DevicePositions = Mapping[DeviceUid, AxisPosition]
+type _DevicePositions = Mapping[DeviceId, AxisPosition]
 
 
 class InstrumentState(BaseModel, frozen=True):
@@ -338,7 +338,7 @@ class InstrumentState(BaseModel, frozen=True):
 
     metadata_cls: MetadataCls = Field(default=get_path_from_class(ExperimentMetadata), validate_default=True)
     profiles: Mapping[ProfileId, Profile] = Field(min_length=1)
-    positions: dict[DeviceUid, PositionRule] = Field(default_factory=dict)
+    positions: dict[DeviceId, PositionRule] = Field(default_factory=dict)
     plan: Annotated[Sequence[Task], NotDefault] = Field(default_factory=list)
 
     @field_validator("plan")
@@ -374,7 +374,7 @@ class InstrumentState(BaseModel, frozen=True):
     def positions_at(self, stage: Mapping[SpecimenAxis, float], previous: _DevicePositions) -> _DevicePositions:
         """The position of each device in ``positions``, with the stage at ``stage``. ``previous`` gives the positions
         at the stop before, which a device that follows the stage keeps within its margin."""
-        found: dict[DeviceUid, AxisPosition] = {}
+        found: dict[DeviceId, AxisPosition] = {}
         for device, rule in self.positions.items():
             if isinstance(rule, StageFollowRule):
                 before = previous.get(device)
@@ -448,7 +448,7 @@ class InstrumentState(BaseModel, frozen=True):
         that follows the stage is checked at each position of its rule."""
         problems = Problems()
         for profile_id, profile in self.profiles.items():
-            messages: dict[DeviceUid, str] = {}
+            messages: dict[DeviceId, str] = {}
             for held in self._held_positions():
                 for camera in profile.lights():
                     where = {**held, **profile.positions}
@@ -466,7 +466,7 @@ class InstrumentState(BaseModel, frozen=True):
                 problems.add("profile.channel.magnification", msg, profile_id, "channels", names[camera], camera)
         return problems
 
-    def _held_positions(self) -> list[dict[DeviceUid, AxisPosition]]:
+    def _held_positions(self) -> list[dict[DeviceId, AxisPosition]]:
         """Each set of positions that the instrument can give its devices. A device that follows the stage takes
         each position of its rule."""
         choices: list[Sequence[AxisPosition]] = [

@@ -23,7 +23,7 @@ class SignalGeneratorController(DeviceController["SignalGenerator"], streaming={
         super().__init__(device, streaming=streaming)
         self._state: GeneratorState = "fresh"
         self._loaded: Signals | None = None
-        self._log = logging.getLogger(f"{device.uid}.SignalGeneratorController")
+        self._log = logging.getLogger(f"{device.id}.SignalGeneratorController")
 
     @property
     @stream(desc="Signal generator state")
@@ -116,8 +116,8 @@ class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=Signa
     surface accepts per-port voltage waveforms sharing one sample rate and cycle.
     """
 
-    def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, *, ports: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id)
         self._ports: dict[str, str] = dict(ports)
 
     @property
@@ -195,7 +195,7 @@ class SignalGenerator(Device, kind=DeviceType.SIGNAL_GENERATOR, controller=Signa
         port_names = set(self.ports)
         waveform_names = set(signals.waveforms)
         if unknown := waveform_names - port_names:
-            raise ValueError(f"Waveform keys not declared as ports on {self.uid}: {sorted(unknown)}")
+            raise ValueError(f"Waveform keys not declared as ports on {self.id}: {sorted(unknown)}")
 
         return signals.arrays(self.voltage_range)
 

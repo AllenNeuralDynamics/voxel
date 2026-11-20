@@ -51,7 +51,7 @@ class SimulatedCamera(AreaCamera):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         frame_source: FrameSource | FrameSourceConfig | Mapping[str, object] | None = None,
         start_delay_s: float = 2.0,
@@ -69,7 +69,7 @@ class SimulatedCamera(AreaCamera):
             raise ValueError("buffer_fill_range_percent must satisfy 0 <= low <= high <= 100")
         if not math.isfinite(buffer_update_interval_s) or buffer_update_interval_s <= 0:
             raise ValueError("buffer_update_interval_s must be finite and positive")
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         # Model blocking hardware calls; set both to zero for fast simulations.
         self._start_delay_s = start_delay_s
         self._stop_delay_s = stop_delay_s

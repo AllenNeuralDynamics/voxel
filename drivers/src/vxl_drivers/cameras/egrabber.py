@@ -141,11 +141,11 @@ class VieworksCamera(AreaCamera):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         serial: str,
         pixel_size_um: Vec2D | Mapping[str, float] = DEFAULT_PIXEL_SIZE_UM,
     ):
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         self._pixel_size_um = Vec2D.parse(pixel_size_um)
         self._dev = get_dev_by_serial(serial)
 

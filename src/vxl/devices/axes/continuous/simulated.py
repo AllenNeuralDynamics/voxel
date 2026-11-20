@@ -32,7 +32,7 @@ class SimulatedContinuousAxis(ContinuousAxisNew):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         speed: float,
         speeds: Span,
@@ -40,7 +40,7 @@ class SimulatedContinuousAxis(ContinuousAxisNew):
         max_acceleration: float,
         abilities: list[ScanAbility] | None,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         self._speed = speed
         self._speeds = speeds
         self._acceleration = acceleration
@@ -163,7 +163,7 @@ class SimulatedLinearAxis(SimulatedContinuousAxis, LinearAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         lower: float = -50_000.0,
         upper: float = 50_000.0,
@@ -172,7 +172,7 @@ class SimulatedLinearAxis(SimulatedContinuousAxis, LinearAxis):
         abilities: list[ScanAbility] | None = None,
     ) -> None:
         super().__init__(
-            uid,
+            device_id,
             speed=speed,
             speeds=Span(1.0, 100_000.0),
             acceleration=acceleration,
@@ -192,7 +192,7 @@ class SimulatedRotationAxis(SimulatedContinuousAxis, RotationAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         lower: float | None = None,
         upper: float | None = None,
@@ -201,9 +201,9 @@ class SimulatedRotationAxis(SimulatedContinuousAxis, RotationAxis):
         abilities: list[ScanAbility] | None = None,
     ) -> None:
         if (lower is None) != (upper is None):
-            raise ValueError(f"{uid} needs both a lower and an upper limit, or neither")
+            raise ValueError(f"{device_id} needs both a lower and an upper limit, or neither")
         super().__init__(
-            uid,
+            device_id,
             speed=speed,
             speeds=Span(0.1, 3_600.0),
             acceleration=acceleration,

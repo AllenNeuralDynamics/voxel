@@ -30,7 +30,7 @@ from vxl.instrument import (
 
 class _Writer:
     def __init__(self, root: Path, *, close_error: bool = False) -> None:
-        self.uid = "camera_1"
+        self.id = "camera_1"
         self._root = root
         self._close_error = close_error
         self._closing = False

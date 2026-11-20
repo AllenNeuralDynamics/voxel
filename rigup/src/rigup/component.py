@@ -6,10 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class RigComponent(Protocol):
-    """A device or a part. ``uid`` is its name in the rig and ``kind`` says what it is; neither changes."""
+    """A device or a part. ``id`` is its name in the rig and ``kind`` says what it is; neither changes."""
 
     @property
-    def uid(self) -> str: ...
+    def id(self) -> str: ...
 
     @property
     def kind(self) -> str: ...
@@ -23,6 +23,6 @@ class Part(BaseModel, frozen=True):
 
     model_config = ConfigDict(extra="forbid")
 
-    uid: str
+    id: str
     kind: str
     details: dict[str, Any] = Field(default_factory=dict)

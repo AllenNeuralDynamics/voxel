@@ -16,10 +16,10 @@ from .base import OnDemandAO, OnDemandDO
 class NiOnDemandAO(OnDemandAO):
     """On-demand voltage output on an NI card: one AO task, all ports held together."""
 
-    def __init__(self, uid: str, *, hub: NiDaqmx, ports: Mapping[str, str]) -> None:
-        super().__init__(uid=uid, ports=ports)
+    def __init__(self, device_id: str, *, hub: NiDaqmx, ports: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id, ports=ports)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiOnDemandAO")
+        self._log = logging.getLogger(f"{device_id}.NiOnDemandAO")
         self._task: NiTask | None = None
         self._lease: NiTaskLease | None = None
         self._order: list[str] = []  # port names in AO channel order
@@ -34,13 +34,13 @@ class NiOnDemandAO(OnDemandAO):
         if self._task is not None:
             return self._task
         lease = self._hub.reserve_ao_task(
-            self.uid,
+            self.id,
             tuple(self._ports.values()),
             hardware_timed=False,
         )
         self._lease = lease
         try:
-            self._task = NiTask(f"{self.uid}_od")
+            self._task = NiTask(f"{self.id}_od")
             for port, path in zip(self._ports, lease.ao_paths, strict=True):
                 # No cfg_samp_clk_timing: on-demand mode, writes go straight to the DAC.
                 self._task.ao_channels.add_ao_voltage_chan(path)
@@ -93,10 +93,10 @@ class NiOnDemandDO(OnDemandDO):
     into a complete task write so lines omitted by the caller keep their state.
     """
 
-    def __init__(self, uid: str, *, hub: NiDaqmx, lines: Mapping[str, str]) -> None:
-        super().__init__(uid=uid, lines=lines)
+    def __init__(self, device_id: str, *, hub: NiDaqmx, lines: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id, lines=lines)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiOnDemandDO")
+        self._log = logging.getLogger(f"{device_id}.NiOnDemandDO")
         self._task: NiTask | None = None
         self._lease: NiTaskLease | None = None
         self._order: list[str] = []
@@ -107,13 +107,13 @@ class NiOnDemandDO(OnDemandDO):
             return self._task
 
         lease = self._hub.reserve_do_task(
-            self.uid,
+            self.id,
             tuple(self._lines.values()),
             hardware_timed=False,
         )
         self._lease = lease
         try:
-            self._task = NiTask(f"{self.uid}_do")
+            self._task = NiTask(f"{self.id}_do")
             for line, path in zip(self._lines, lease.do_paths, strict=True):
                 self._task.do_channels.add_do_chan(path, line_grouping=LineGrouping.CHAN_PER_LINE)
                 self._order.append(line)

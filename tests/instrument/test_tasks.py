@@ -147,7 +147,7 @@ async def test_remove_tasks_restores_plan_order(instrument: Instrument, indices:
 async def test_update_task_replays_only_the_affected_task(instrument: Instrument) -> None:
     profiles = list(instrument.state.value.imaging.profiles)
     profile = instrument.active_profile_id.value
-    other_profile = next(uid for uid in profiles if uid != profile)
+    other_profile = next(dev_id for dev_id in profiles if dev_id != profile)
     for index in range(3):
         await instrument.add_task(_task(f"task-{index}", [(index, index)], [profile]))
     original = instrument.state.value.plan

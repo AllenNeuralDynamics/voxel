@@ -37,7 +37,10 @@ _RIG: dict[str, Any] = {
         "RFP": {"target": "vxl.parts.Filter", "band": ["575 nm", "625 nm"]},
     },
     "devices": {
-        **{uid: {"target": "builtins.object"} for uid in ("ao_main", "camera", "laser", "x_axis", "y_axis", "z_axis")},
+        **{
+            dev_id: {"target": "builtins.object"}
+            for dev_id in ("ao_main", "camera", "laser", "x_axis", "y_axis", "z_axis")
+        },
         "fw": {"target": "builtins.object", "init": {"slots": {"0": "GFP", "1": "RFP"}}},
     },
     "wiring": {

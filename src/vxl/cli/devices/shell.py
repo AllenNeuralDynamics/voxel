@@ -47,16 +47,16 @@ class DeviceShell(cmd.Cmd):
         super().__init__()
         self._session = session
         self._output = output
-        self._uid: str | None = None
+        self._id: str | None = None
         self._controller: DeviceController[Any] | None = None
         self._properties: dict[str, PropInfo] = {}
         self._commands: dict[str, OperationInfo] = {}
 
-    def open(self, uids: Iterable[str]) -> None:
+    def open(self, device_ids: Iterable[str]) -> None:
         """Open devices before the loop starts; the first that opens becomes active."""
-        for uid in uids:
-            if self._open(uid) and self._uid is None:
-                self._activate(uid)
+        for device_id in device_ids:
+            if self._open(device_id) and self._id is None:
+                self._activate(device_id)
 
     def run(self) -> None:
         while True:
@@ -82,8 +82,8 @@ class DeviceShell(cmd.Cmd):
             return super().onecmd(line)
         except KeyboardInterrupt:
             self._output.print("Interrupted", style="yellow")
-            if self._uid is not None:
-                self._stop(self._uid)
+            if self._id is not None:
+                self._stop(self._id)
         except Exception as error:
             self._report(error)
         return False
@@ -96,14 +96,14 @@ class DeviceShell(cmd.Cmd):
         elif name in self._commands:
             self._command(name, tokens)
         else:
-            raise ValueError(f"{self._uid} has no property or operation {name!r}; see 'info'")
+            raise ValueError(f"{self._id} has no property or operation {name!r}; see 'info'")
 
     def completenames(self, text: str, *ignored: Any) -> list[str]:
         members = [name for name in (*self._properties, *self._commands) if name.startswith(text)]
         return super().completenames(text, *ignored) + members
 
     def complete_use(self, text: str, *_ignored: Any) -> list[str]:
-        return [uid for uid in self._session.configs if uid.startswith(text)]
+        return [dev_id for dev_id in self._session.configs if dev_id.startswith(text)]
 
     def complete_watch(self, text: str, *_ignored: Any) -> list[str]:
         return [name for name in self._properties if name.startswith(text)]
@@ -139,7 +139,7 @@ class DeviceShell(cmd.Cmd):
         if not names:
             raise ValueError("watch needs at least one property")
         if unknown := [name for name in names if name not in self._properties]:
-            raise ValueError(f"{self._uid} has no property {', '.join(unknown)}")
+            raise ValueError(f"{self._id} has no property {', '.join(unknown)}")
         try:
             while True:
                 stamp = f"{datetime.now():%H:%M:%S}"
@@ -151,27 +151,27 @@ class DeviceShell(cmd.Cmd):
 
     def do_stop(self, _arg: str) -> None:
         """stop: run the failsafe operations of every open device."""
-        for uid in reversed(self._session.controllers):
-            self._stop(uid)
+        for device_id in reversed(self._session.controllers):
+            self._stop(device_id)
 
     def do_quit(self, _arg: str) -> bool:
         """quit: close every open device and exit. Ctrl+D does the same."""
         return True
 
-    def _open(self, uid: str) -> bool:
-        opened, errors = self._session.open(uid)
+    def _open(self, device_id: str) -> bool:
+        opened, errors = self._session.open(device_id)
         if opened:
             self._output.print(f"Opened {', '.join(opened)}")
         for name, error in errors.items():
             self._output.print(f"Could not open {name}: {error.msg}", style="red")
-        return uid in self._session.devices
+        return device_id in self._session.devices
 
-    def _activate(self, uid: str) -> None:
-        self._uid = uid
-        self._controller = self._session.controllers[uid]
+    def _activate(self, device_id: str) -> None:
+        self._id = device_id
+        self._controller = self._session.controllers[device_id]
         self._properties = dict(self._controller.interface.props)
         self._commands = dict(self._controller.interface.operations)
-        self.prompt = f"{uid}> "
+        self.prompt = f"{device_id}> "
 
     def _active(self) -> DeviceController[Any]:
         if self._controller is None:
@@ -180,10 +180,10 @@ class DeviceShell(cmd.Cmd):
 
     def _list(self) -> None:
         table = Table("Device", "Class", "Open")
-        for uid, config in self._session.configs.items():
-            is_open = "yes" if uid in self._session.devices else "no"
-            style = "bold" if uid == self._uid else None
-            table.add_row(uid, config.target.rsplit(".", 1)[-1], is_open, style=style)
+        for device_id, config in self._session.configs.items():
+            is_open = "yes" if device_id in self._session.devices else "no"
+            style = "bold" if device_id == self._id else None
+            table.add_row(device_id, config.target.rsplit(".", 1)[-1], is_open, style=style)
         self._output.print(table)
 
     def _property(self, controller: DeviceController[Any], name: str, tokens: list[str]) -> None:
@@ -216,10 +216,10 @@ class DeviceShell(cmd.Cmd):
         units = self._properties[name].units
         return f"{value} {units}" if value is not None and units else str(value)
 
-    def _stop(self, uid: str) -> None:
+    def _stop(self, device_id: str) -> None:
         try:
-            if self._session.run(stop(self._session.controllers[uid])):
-                self._output.print(f"Stopped {uid}")
+            if self._session.run(stop(self._session.controllers[device_id])):
+                self._output.print(f"Stopped {device_id}")
         except Exception as error:
             self._report(error)
 
@@ -261,7 +261,7 @@ def run(config: Path, devices: Sequence[str] = (), *, log: Path | None = None) -
         except (OSError, ValueError) as error:
             output.print(str(error), style="red")
             return 1
-        if unknown := [uid for uid in devices if uid not in session.configs]:
+        if unknown := [dev_id for dev_id in devices if dev_id not in session.configs]:
             output.print(f"Unknown devices: {', '.join(unknown)}", style="red")
             return 1
 
@@ -284,8 +284,8 @@ def _configure_logging(console: Console, transcript: TextIO | None) -> None:
 
 
 def _close(session: Session, output: Output) -> None:
-    for uid, error in session.close().items():
-        output.print(f"Could not close {uid}: {error}", style="red")
+    for device_id, error in session.close().items():
+        output.print(f"Could not close {device_id}: {error}", style="red")
 
 
 def _value(text: str) -> Any:

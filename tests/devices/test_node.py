@@ -31,7 +31,7 @@ async def rig() -> AsyncIterator[Rig]:
 
 async def test_each_monitor_reports_its_own_process_and_the_shared_machine(rig: Rig) -> None:
     assert rig.build_errors == {}
-    here, there = (NodeMonitorHandle.wrap(rig.devices[uid]) for uid in ("monitor", "cam_monitor"))
+    here, there = (NodeMonitorHandle.wrap(rig.devices[dev_id]) for dev_id in ("monitor", "cam_monitor"))
 
     assert (await here.interface()).kind == "node_monitor"
     assert (await here.interface()).operations == {}

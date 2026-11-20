@@ -19,8 +19,8 @@ class SimulatedDimmable(Dimmable):
     """A dimmable device that keeps what it is told. It starts off, at its highest power, with ``pins`` to follow:
     ``ttl_in`` is digital, any other is analog."""
 
-    def __init__(self, uid: str, *, low: float, high: float, pins: list[str]) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, *, low: float, high: float, pins: list[str]) -> None:
+        super().__init__(device_id=device_id)
         self._range = Span(low, high)
         self._pins = [Pin(name=pin, direction="in", kind="digital" if pin == "ttl_in" else "analog") for pin in pins]
         self._power = high
@@ -66,9 +66,9 @@ class SimulatedLaser(SimulatedDimmable, Laser):
     unit: ClassVar[str] = "mW"
 
     def __init__(
-        self, uid: str, *, wavelength: float, low: float = 1, high: float = 100, pins: list[str] | None = None
+        self, device_id: str, *, wavelength: float, low: float = 1, high: float = 100, pins: list[str] | None = None
     ) -> None:
-        super().__init__(uid, low=low, high=high, pins=["ttl_in", "analog_in"] if pins is None else pins)
+        super().__init__(device_id, low=low, high=high, pins=["ttl_in", "analog_in"] if pins is None else pins)
         self._wavelength = wavelength
 
     @property
@@ -79,15 +79,15 @@ class SimulatedLaser(SimulatedDimmable, Laser):
 class SimulatedModulator(SimulatedDimmable, Modulator):
     """A modulator that lets ``low`` to 100 % of the light through."""
 
-    def __init__(self, uid: str, *, low: float = 0.5, pins: list[str] | None = None) -> None:
-        super().__init__(uid, low=low, high=100, pins=["ttl_in", "analog_in"] if pins is None else pins)
+    def __init__(self, device_id: str, *, low: float = 0.5, pins: list[str] | None = None) -> None:
+        super().__init__(device_id, low=low, high=100, pins=["ttl_in", "analog_in"] if pins is None else pins)
 
 
 class SimulatedShutter(Shutter):
     """A shutter that keeps what it is told. It starts closed."""
 
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str) -> None:
+        super().__init__(device_id=device_id)
         self._open = False
 
     @property
@@ -105,8 +105,8 @@ class SimulatedPowerMeter(PowerMeter):
     """An ideal meter that reads the power it is given. It starts at 0 mW and 532 nm, and the wavelength does not
     change its reading. Once disposed, every read raises."""
 
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str) -> None:
+        super().__init__(device_id=device_id)
         self._incident_power = 0.0
         self._wavelength = 532.0
         self._closed = False

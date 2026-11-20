@@ -22,7 +22,7 @@ class SimulatedLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         wavelength: float,
         max_power_mw: float = 100.0,
@@ -40,7 +40,7 @@ class SimulatedLaser(Laser):
             raise ValueError("power_noise_percent must be finite and non-negative")
         if not modulation_modes or any(mode not in tuple(ModulationMode) for mode in modulation_modes):
             raise ValueError("modulation_modes must contain software, digital, or analog choices")
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         self._wavelength = float(wavelength)
         self._max_power_mw = max_power_mw
         self._modulation_modes = tuple(ModulationMode(mode) for mode in modulation_modes)

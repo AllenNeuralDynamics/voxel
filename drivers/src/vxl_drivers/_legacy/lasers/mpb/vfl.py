@@ -90,7 +90,7 @@ class MpbVfl(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         port: str,
         wavelength: int = DEFAULT_WAVELENGTH_NM,
         max_power_mw: float = DEFAULT_MAX_POWER_MW,
@@ -100,7 +100,7 @@ class MpbVfl(Laser):
         """Initialize the MPB VFL laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             port: Serial port for communication.
             wavelength: Wavelength of the laser in nm.
             max_power_mw: Maximum optical output power in mW.
@@ -111,7 +111,7 @@ class MpbVfl(Laser):
         self._max_current_ma = max_current_ma
         self._t = SerialTransport(port, baud=baud)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
 
         self._idn = self._query(Query.MODEL)
         self._query(f"{Cmd.POWER_ENABLE} {_MODE_TO_WIRE[ControlMode.APC]}")

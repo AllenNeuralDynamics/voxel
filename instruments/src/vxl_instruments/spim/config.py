@@ -11,7 +11,7 @@ from vxlib.units import Portion
 
 from vxl.devices.camera import AreaROI
 from vxl.station.instrument.config import (
-    DeviceUid,
+    DeviceId,
     DigitalWire,
     InstrumentConfig,
     SpecimenAxis,
@@ -34,7 +34,7 @@ class Scan(FrozenModel):
 
     axis: SpecimenAxis
     motion: Motion
-    pacer: DeviceUid | Literal["software"]
+    pacer: DeviceId | Literal["software"]
     margin: Portion | None = None
 
     @model_validator(mode="after")
@@ -61,9 +61,9 @@ class TriggerChain:
     generator when the program paces. ``waits`` gives the wire whose pulses start each other device. ``unstarted``
     lists each camera, generator or stepping axis that nothing starts."""
 
-    starters: tuple[DeviceUid, ...]
-    waits: Mapping[DeviceUid, Wire]
-    unstarted: tuple[DeviceUid, ...]
+    starters: tuple[DeviceId, ...]
+    waits: Mapping[DeviceId, Wire]
+    unstarted: tuple[DeviceId, ...]
 
 
 class SPIMConfig(InstrumentConfig, frozen=True):
@@ -97,7 +97,7 @@ class SPIMProfile(Profile):
     the sensor region that a channel's camera reads out; a camera that it leaves out reads its whole sensor."""
 
     spacing: PositiveFloat
-    fov: dict[DeviceUid, AreaROI] = Field(default_factory=dict)
+    fov: dict[DeviceId, AreaROI] = Field(default_factory=dict)
 
     def problems(self, config: InstrumentConfig) -> Problems:
         if not isinstance(config, SPIMConfig):
@@ -122,7 +122,7 @@ class SPIMProfile(Profile):
         starters = tuple(sorted(self.timelines)) if by_program else (config.scan.pacer,)
         pulses = [(pin, wire) for pin, wire in self.live_inputs(config).items() if isinstance(wire.config, DigitalWire)]
 
-        waits: dict[DeviceUid, Wire] = {}
+        waits: dict[DeviceId, Wire] = {}
         reached, pending = set(starters), list(starters)
         while pending:
             sender = pending.pop(0)

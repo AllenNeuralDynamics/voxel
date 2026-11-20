@@ -45,7 +45,7 @@ InstrumentModel = Annotated[str, Field(min_length=1, max_length=64)]
 InstrumentTarget = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")]
 """The class that runs the instrument, as a dotted path such as ``vxl_instruments.spim.Microscope``."""
 
-DeviceUid = Annotated[str, identifier("Device UID")]
+DeviceId = Annotated[str, identifier("Device UID")]
 """The name of a device of the rig."""
 
 type AxisPosition = Annotated[float, Field(allow_inf_nan=False)] | str
@@ -80,7 +80,7 @@ class StageAxis(FrozenModel):
     """1 specimen axis: the ``device`` that drives it, and the ``specimen`` range, in µm, where the specimen can be
     imaged on it. Without ``specimen``, the device's own limits bound imaging."""
 
-    device: DeviceUid
+    device: DeviceId
     specimen: Span | None = None
 
     @field_validator("specimen")
@@ -106,10 +106,10 @@ class Stage(FrozenModel):
     def axis(self, axis: SpecimenAxis) -> StageAxis:
         return getattr(self, axis)
 
-    def device(self, axis: SpecimenAxis) -> DeviceUid:
+    def device(self, axis: SpecimenAxis) -> DeviceId:
         return self.axis(axis).device
 
-    def devices(self) -> dict[SpecimenAxis, DeviceUid]:
+    def devices(self) -> dict[SpecimenAxis, DeviceId]:
         """The device of each axis."""
         return {axis: self.device(axis) for axis in self.axes()}
 
@@ -123,7 +123,7 @@ class PinRef(NamedTuple):
     """A pin of a device or a part, written ``camera/trigger_in``. Everything after the first ``/`` is the pin, so
     ``card/port0/line1`` is pin ``port0/line1`` of ``card``."""
 
-    device: DeviceUid
+    device: DeviceId
     pin: PinName
 
     def __str__(self) -> str:
@@ -293,7 +293,7 @@ class Wire:
         return problems
 
 
-class Wiring(RootModel[dict[DeviceUid, dict[WireName, WireConfig]]]):
+class Wiring(RootModel[dict[DeviceId, dict[WireName, WireConfig]]]):
     """``wiring``: each sending device's wires, by name."""
 
     model_config = ConfigDict(frozen=True)
@@ -538,7 +538,7 @@ class InstrumentConfig(RigConfig, frozen=True):
     stage: Stage
     wiring: Wiring = Field(default_factory=lambda: Wiring({}))
     optics: OpticalGraph
-    autosave: dict[DeviceUid, Literal["*"] | list[str]] = Field(default_factory=dict)
+    autosave: dict[DeviceId, Literal["*"] | list[str]] = Field(default_factory=dict)
 
     def problems(self) -> Problems:
         """Return the problems of the bench that the file shows."""
@@ -554,7 +554,7 @@ class InstrumentConfig(RigConfig, frozen=True):
         found = [part.magnification for part in self._parts_on(path, positions) if isinstance(part, Objective)]
         return math.prod(found) if found else None
 
-    def camera_axes(self, camera: DeviceUid, positions: Mapping[str, AxisPosition]) -> tuple[Vec3D, Vec3D]:
+    def camera_axes(self, camera: DeviceId, positions: Mapping[str, AxisPosition]) -> tuple[Vec3D, Vec3D]:
         """Where 1 µm along ``camera``'s sensor width and height lands in the specimen, with each device in
         ``positions`` at its position there: the detector's sides divided by the magnification. Raise ``ValueError``
         when no light path reaches the camera, or its paths do not agree on 1 magnification."""

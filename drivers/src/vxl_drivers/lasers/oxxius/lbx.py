@@ -26,7 +26,7 @@ class OxxiusLBXLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         hub: OxxiusHub,
         prefix: str,
         wavelength: float,
@@ -35,7 +35,7 @@ class OxxiusLBXLaser(Laser):
         nominal_current_ma: float,
         startup_delay_s: float = 0.0,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if not all(isfinite(v) for v in (wavelength, nominal_current_ma, startup_delay_s)):
             raise ValueError("wavelength, nominal current, and startup delay must be finite")
         if wavelength <= 0 or nominal_current_ma <= 0 or startup_delay_s < 0:
@@ -48,7 +48,7 @@ class OxxiusLBXLaser(Laser):
         self._enabled_at: float | None = None
         self._closed = False
         self._hub = hub
-        self._prefix = hub.reserve(prefix, uid, family="LBX")
+        self._prefix = hub.reserve(prefix, device_id, family="LBX")
         try:
             self._initialize()
         except Exception as error:
@@ -56,7 +56,7 @@ class OxxiusLBXLaser(Laser):
                 hub.disable(self._prefix)
             except Exception as cleanup_error:
                 raise ExceptionGroup("LBX initialization and inhibition failed", [error, cleanup_error]) from None
-            hub.release(self._prefix, uid)
+            hub.release(self._prefix, device_id)
             raise
 
     def _initialize(self) -> None:
@@ -150,7 +150,7 @@ class OxxiusLBXLaser(Laser):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode == "mixed":
-            raise ValueError(f"{self.uid} does not do mixed control")
+            raise ValueError(f"{self.id} does not do mixed control")
         with self._hub.transaction():
             if self.control_mode == mode:
                 return
@@ -214,7 +214,7 @@ class OxxiusLBXLaser(Laser):
         """Turn the laser off and release its slot; the rig closes the hub."""
         if not self._closed:
             self.off()
-            self._hub.release(self._prefix, self.uid)
+            self._hub.release(self._prefix, self.id)
             self._closed = True
 
     def _ensure_open(self) -> None:

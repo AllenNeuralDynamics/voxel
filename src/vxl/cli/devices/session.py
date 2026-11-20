@@ -36,9 +36,9 @@ class Session:
         """Wait for a controller call."""
         return self._runner.run(call)
 
-    def open(self, uid: str) -> tuple[list[str], dict[str, Problem]]:
+    def open(self, device_id: str) -> tuple[list[str], dict[str, Problem]]:
         """Build a device and its unopened dependencies; open dependencies are passed in as objects."""
-        pending = {name: self._inject(config) for name, config in self._pending(uid).items()}
+        pending = {name: self._inject(config) for name, config in self._pending(device_id).items()}
         built, errors = build_objects(pending, Device)
         self.devices.update(built)
         for name, device in built.items():
@@ -48,15 +48,15 @@ class Session:
     def close(self) -> dict[str, Exception]:
         """Close dependents before their dependencies and return failures by UID."""
         errors: dict[str, Exception] = {}
-        for uid, controller in reversed(self.controllers.items()):
+        for device_id, controller in reversed(self.controllers.items()):
             try:
                 self.run(controller.close())
             except Exception as error:
-                errors[uid] = error
+                errors[device_id] = error
         self._runner.close()
         return errors
 
-    def _pending(self, uid: str) -> dict[str, DeviceConfig]:
+    def _pending(self, device_id: str) -> dict[str, DeviceConfig]:
         pending: dict[str, DeviceConfig] = {}
 
         def visit(name: str) -> None:
@@ -68,7 +68,7 @@ class Session:
             for dependency in _references(self.configs[name].init, self.configs):
                 visit(dependency)
 
-        visit(uid)
+        visit(device_id)
         return pending
 
     def _inject(self, config: DeviceConfig) -> DeviceConfig:
@@ -91,7 +91,7 @@ def _references(value: Any, configs: Mapping[str, DeviceConfig]) -> set[str]:
         items = value.values()
     else:
         return {value} if isinstance(value, str) and value in configs else set()
-    return {uid for item in items for uid in _references(item, configs)}
+    return {dev_id for item in items for dev_id in _references(item, configs)}
 
 
 def _resolve(value: Any, devices: Mapping[str, Device]) -> Any:

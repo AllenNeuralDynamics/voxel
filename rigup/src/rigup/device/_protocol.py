@@ -165,7 +165,7 @@ class PropResults(Results[PropModel]):
 class DeviceInterface(BaseModel):
     """A built device with its controller. ``streaming`` gives the seconds between sends for each stream tier."""
 
-    uid: str
+    id: str
     kind: str
     streaming: dict[StreamTier, float] = Field(default_factory=dict)
     operations: dict[str, OperationInfo] = Field(default_factory=dict)

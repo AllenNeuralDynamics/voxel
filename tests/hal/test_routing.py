@@ -38,7 +38,7 @@ async def test_current_route_reads_all_selectors_and_requires_a_unique_stationar
         "right": OpticalRouteDefinition(selectors={"a": "right", "b": "right"}),
     }
     dimension = RouteDimension(
-        uid="side",
+        id="side",
         selectors={
             "a": cast("DiscreteAxisHandle", _selector(0, False)),
             "b": cast("DiscreteAxisHandle", _selector(position, moving)),
@@ -54,7 +54,7 @@ async def test_selection_requires_feedback_even_when_target_matches() -> None:
     selector = _selector(None, False, target=0)
     selector.move_to = AsyncMock()
     dimension = RouteDimension(
-        uid="side",
+        id="side",
         selectors={"a": cast("DiscreteAxisHandle", selector)},
         _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )
@@ -68,7 +68,7 @@ async def test_current_route_propagates_read_failure() -> None:
     selector = _selector(0, False)
     selector.props.get.side_effect = RuntimeError("connection lost")
     dimension = RouteDimension(
-        uid="side",
+        id="side",
         selectors={"a": cast("DiscreteAxisHandle", selector)},
         _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )
@@ -86,7 +86,7 @@ async def test_selection_waits_for_all_failures_and_identifies_the_selectors() -
         raise RuntimeError("second failure")
 
     dimension = RouteDimension(
-        uid="side",
+        id="side",
         selectors={
             "a": cast(
                 "DiscreteAxisHandle", SimpleNamespace(move_to=AsyncMock(side_effect=ValueError("first failure")))
@@ -111,7 +111,7 @@ async def test_selection_waits_for_all_failures_and_identifies_the_selectors() -
 
 async def test_selection_preserves_cancellation() -> None:
     dimension = RouteDimension(
-        uid="side",
+        id="side",
         selectors={
             "a": cast("DiscreteAxisHandle", SimpleNamespace(move_to=AsyncMock(side_effect=asyncio.CancelledError))),
         },
@@ -124,7 +124,7 @@ async def test_selection_preserves_cancellation() -> None:
 async def test_unknown_route_is_rejected_without_moving_selectors() -> None:
     select = AsyncMock()
     dimension = RouteDimension(
-        uid="side",
+        id="side",
         selectors={"a": cast("DiscreteAxisHandle", SimpleNamespace(move_to=select))},
         _definitions={"left": OpticalRouteDefinition(selectors={"a": "left"})},
     )

@@ -21,7 +21,7 @@ from .component import Part
 from .interface import StreamTier
 
 NodeKind = Literal["subprocess", "remote"]
-ComponentUid = Annotated[str, identifier("Component UID")]
+ComponentId = Annotated[str, identifier("Component UID")]
 NodeId = Annotated[str, identifier("Node id")]
 
 
@@ -48,26 +48,26 @@ def _read_part(data: Any) -> Part:
 
 
 def _write_part(part: Part, info: SerializationInfo) -> dict[str, Any]:
-    data = part.model_dump(mode=info.mode, exclude={"uid"}, exclude_defaults=True)
+    data = part.model_dump(mode=info.mode, exclude={"id"}, exclude_defaults=True)
     if type(part) is Part:
         return data
     return {"target": f"{type(part).__module__}.{type(part).__qualname__}", **data}
 
 
-def _with_uids(data: Any) -> Any:
+def _with_ids(data: Any) -> Any:
     if not isinstance(data, dict):
         return data
     entries: dict[Any, Any] = {}
-    for uid, entry in data.items():
-        if isinstance(entry, Part) and entry.uid != uid:
-            raise ValueError(f"the part '{entry.uid}' is under the key '{uid}'")
-        entries[uid] = {**entry, "uid": uid} if isinstance(entry, dict) else entry
+    for device_id, entry in data.items():
+        if isinstance(entry, Part) and entry.id != device_id:
+            raise ValueError(f"the part '{entry.id}' is under the key '{device_id}'")
+        entries[device_id] = {**entry, "id": device_id} if isinstance(entry, dict) else entry
     return entries
 
 
 Parts = Annotated[
-    dict[ComponentUid, Annotated[Part, PlainValidator(_read_part), PlainSerializer(_write_part)]],
-    BeforeValidator(_with_uids),
+    dict[ComponentId, Annotated[Part, PlainValidator(_read_part), PlainSerializer(_write_part)]],
+    BeforeValidator(_with_ids),
 ]
 """The parts of a rig by UID; an entry names its class in ``target`` when it is not ``Part``."""
 
@@ -102,7 +102,7 @@ class NodeConfig(BaseModel, frozen=True):
 
     kind: NodeKind
     address: str | None = None
-    devices: dict[ComponentUid, DeviceConfig] = Field(default_factory=dict)
+    devices: dict[ComponentId, DeviceConfig] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -129,31 +129,34 @@ class RigConfig(BaseModel, frozen=True):
     model_config = ConfigDict(extra="forbid")
 
     parts: Parts = Field(default_factory=dict)
-    devices: dict[ComponentUid, DeviceConfig] = Field(default_factory=dict)
+    devices: dict[ComponentId, DeviceConfig] = Field(default_factory=dict)
     nodes: dict[NodeId, NodeConfig] = Field(default_factory=dict)
 
     @property
-    def all_devices(self) -> dict[ComponentUid, DeviceConfig]:
-        return {**self.devices, **{uid: config for node in self.nodes.values() for uid, config in node.devices.items()}}
+    def all_devices(self) -> dict[ComponentId, DeviceConfig]:
+        return {
+            **self.devices,
+            **{device_id: config for node in self.nodes.values() for device_id, config in node.devices.items()},
+        }
 
-    def component_location(self, uid: ComponentUid) -> KeyPath:
-        """Return the key path of ``uid`` in the rig file, or raise ``KeyError``."""
-        if uid in self.parts:
-            return ("parts", uid)
-        if uid in self.devices:
-            return ("devices", uid)
+    def component_location(self, device_id: ComponentId) -> KeyPath:
+        """Return the key path of ``id`` in the rig file, or raise ``KeyError``."""
+        if device_id in self.parts:
+            return ("parts", device_id)
+        if device_id in self.devices:
+            return ("devices", device_id)
         for node_id, node in self.nodes.items():
-            if uid in node.devices:
-                return ("nodes", node_id, "devices", uid)
-        raise KeyError(uid)
+            if device_id in node.devices:
+                return ("nodes", node_id, "devices", device_id)
+        raise KeyError(device_id)
 
-    def _component_locations(self) -> dict[ComponentUid, list[KeyPath]]:
-        found: dict[ComponentUid, list[KeyPath]] = {uid: [("parts", uid)] for uid in self.parts}
-        for uid in self.devices:
-            found.setdefault(uid, []).append(("devices", uid))
+    def _component_locations(self) -> dict[ComponentId, list[KeyPath]]:
+        found: dict[ComponentId, list[KeyPath]] = {dev_id: [("parts", dev_id)] for dev_id in self.parts}
+        for device_id in self.devices:
+            found.setdefault(device_id, []).append(("devices", device_id))
         for node_id, node in self.nodes.items():
-            for uid in node.devices:
-                found.setdefault(uid, []).append(("nodes", node_id, "devices", uid))
+            for device_id in node.devices:
+                found.setdefault(device_id, []).append(("nodes", node_id, "devices", device_id))
         return found
 
     @model_validator(mode="after")
@@ -161,24 +164,24 @@ class RigConfig(BaseModel, frozen=True):
         """Require unique UIDs, and each device that a device names to run in the same process."""
         found = Problems()
         places = self._component_locations()
-        for uid, (first, *others) in places.items():
+        for device_id, (first, *others) in places.items():
             for place in others:
-                msg = f"Component UID '{uid}' is duplicated: it is also written at {'.'.join(map(str, first))}"
-                found.add("duplicate_uid", msg, *place)
+                msg = f"Component UID '{device_id}' is duplicated: it is also written at {'.'.join(map(str, first))}"
+                found.add("duplicate_id", msg, *place)
 
-        process = {uid: node_id for node_id, node in self.nodes.items() for uid in node.devices}
-        unique = {uid: config for uid, config in self.all_devices.items() if len(places[uid]) == 1}
-        for uid in unique:
-            for dependency in dependencies(unique, uid):
-                if process.get(dependency) != process.get(uid):
+        process = {dev_id: node_id for node_id, node in self.nodes.items() for dev_id in node.devices}
+        unique = {device_id: config for device_id, config in self.all_devices.items() if len(places[device_id]) == 1}
+        for device_id in unique:
+            for dependency in dependencies(unique, device_id):
+                if process.get(dependency) != process.get(device_id):
                     msg = (
-                        f"Device '{uid}' references device '{dependency}', which runs in another process; "
+                        f"Device '{device_id}' references device '{dependency}', which runs in another process; "
                         "constructor-injected dependencies must be in the same process"
                     )
-                    found.add("cross_node_reference", msg, *places[uid][0])
+                    found.add("cross_node_reference", msg, *places[device_id][0])
 
         found.raise_if_any(type(self).__name__)
         return self
 
 
-__all__ = ["ComponentUid", "DeviceConfig", "NodeConfig", "NodeKind", "Parts", "RigConfig"]
+__all__ = ["ComponentId", "DeviceConfig", "NodeConfig", "NodeKind", "Parts", "RigConfig"]

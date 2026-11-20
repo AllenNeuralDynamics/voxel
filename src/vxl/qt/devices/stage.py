@@ -105,7 +105,7 @@ class StageStore(QObject):
         y_adapter.replay_cached_properties()
         z_adapter.replay_cached_properties()
 
-        log.info("StageStore bound to adapters: x=%s, y=%s, z=%s", x_adapter.uid, y_adapter.uid, z_adapter.uid)
+        log.info("StageStore bound to adapters: x=%s, y=%s, z=%s", x_adapter.id, y_adapter.id, z_adapter.id)
 
     def unbind(self) -> None:
         """Disconnect from adapters and reset state."""

@@ -50,9 +50,15 @@ class OxxiusHub(Device, kind="generic"):
     """Own the serial connection and exclusive reservations of populated slots."""
 
     def __init__(
-        self, uid: str, port: str, *, model: Literal["L4cc", "L6cc"] = "L6cc", baud: int = 9600, timeout_s: float = 1.0
+        self,
+        device_id: str,
+        port: str,
+        *,
+        model: Literal["L4cc", "L6cc"] = "L6cc",
+        baud: int = 9600,
+        timeout_s: float = 1.0,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if model not in ("L4cc", "L6cc"):
             raise ValueError("model must be L4cc or L6cc")
         if baud <= 0 or not isfinite(timeout_s) or timeout_s <= 0:

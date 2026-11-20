@@ -84,25 +84,25 @@ class BuildDevicesResponse(BaseModel):
 
 
 class CloseDeviceRequest(BaseModel):
-    uid: str
+    id: str
 
 
 class GetInterfaceRequest(BaseModel):
-    uid: str
+    id: str
 
 
 class ExecuteRequest(BaseModel):
-    uid: str
+    id: str
     operations: list[OperationRequest]
 
 
 class GetPropsRequest(BaseModel):
-    uid: str
+    id: str
     props: list[str] = Field(default_factory=list)
 
 
 class SetPropsRequest(BaseModel):
-    uid: str
+    id: str
     props: dict[str, object]
 
 
@@ -118,7 +118,7 @@ class HeartbeatPayload(BaseModel):
 
 
 class DeviceErrorPayload(BaseModel):
-    uid: str
+    id: str
     message: str
 
 

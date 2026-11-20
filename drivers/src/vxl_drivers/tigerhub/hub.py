@@ -24,8 +24,8 @@ class AxisAlreadyReservedError(ValueError):
 class TigerHub(Device, kind="generic"):
     """Hub wrapper around a single TigerBox. Manages axis reservations."""
 
-    def __init__(self, box: TigerBox | str, uid: str = "tiger_controller") -> None:
-        super().__init__(uid=uid)
+    def __init__(self, box: TigerBox | str, device_id: str = "tiger_controller") -> None:
+        super().__init__(device_id=device_id)
         if isinstance(box, str):
             box = TigerBox(box)
         self._box = box
@@ -134,9 +134,9 @@ class TigerHub(Device, kind="generic"):
         with self._lock:
             return [a for a in axes if a.upper() not in self._reserved]
 
-    def reserve_axis(self, uid: str) -> ASIAxisInfo:
-        self.log.info("Reserving axis %s", uid)
-        u = uid.upper()
+    def reserve_axis(self, device_id: str) -> ASIAxisInfo:
+        self.log.info("Reserving axis %s", device_id)
+        u = device_id.upper()
         info = self._box.info()
         axis_info = info.axes.get(u)
         if not axis_info:
@@ -147,9 +147,9 @@ class TigerHub(Device, kind="generic"):
             self._reserved.add(u)
             return axis_info
 
-    def release_axis(self, uid: str) -> None:
-        self.log.info("Releasing axis %s", uid)
-        u = uid.upper()
+    def release_axis(self, device_id: str) -> None:
+        self.log.info("Releasing axis %s", device_id)
+        u = device_id.upper()
         with self._lock:
             self._reserved.discard(u)
         # Drop the cache too, or a later reservation of the same axis reads values polled before it

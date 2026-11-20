@@ -299,8 +299,8 @@ async def test_a_slow_device_does_not_delay_another(take: Callable[[Probe], Devi
 
 
 class Holder(Device, kind="holder"):
-    def __init__(self, uid: str, held: Probe) -> None:
-        super().__init__(uid)
+    def __init__(self, device_id: str, held: Probe) -> None:
+        super().__init__(device_id)
         self.held = held
 
     @action()

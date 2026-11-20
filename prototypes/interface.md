@@ -92,7 +92,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     async def update_writer(self, **fields: Unpack[WriterFields]) -> None: ...
 
     @update("preview")
-    async def update_preview(self, *, channels: Collection[DeviceUid]) -> None: ...
+    async def update_preview(self, *, channels: Collection[DeviceId]) -> None: ...
 
     @action
     async def start_preview(self) -> None: ...
@@ -127,7 +127,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
 
 - Conflicts: send the store revision as an `ETag` and accept `If-Match`, as AIP-154 suggests.
 - Status codes: `201` for create, `204` for no content, or `200` everywhere.
-- Device commands over the same server: `/devices/{uid}/:name` from each device's interface.
+- Device commands over the same server: `/devices/{id}/:name` from each device's interface.
 
 ## Prototype and review, 2026-11-18
 
@@ -234,9 +234,9 @@ Built in the prototype:
    says no `x-`. The value is an opaque Structured Field String (RFC 9651, which obsoletes RFC 8941), since the feed
    cursor is `{stream_id, seq}`. Do not reuse `Last-Event-ID`: the SSE spec defines it as a request header only. A
    browser client needs `Access-Control-Expose-Headers` to read it. The header is `Vxl-Feed-Cursor`.
-2. **Device routes stay, and always go through the instrument**: `PATCH /devices/{uid}` calls
-   `set_device_properties`, `POST /devices/{uid}:{operation}` calls `execute_device_command`, both through the
-   scheduler. Each request is checked against that device's interface (`view.devices[uid].interface`) and refused with
+2. **Device routes stay, and always go through the instrument**: `PATCH /devices/{id}` calls
+   `set_device_properties`, `POST /devices/{id}:{operation}` calls `execute_device_command`, both through the
+   scheduler. Each request is checked against that device's interface (`view.devices[id].interface`) and refused with
    `422` before it reaches the device. They exist for device control during a session; `vxl devices shell` covers
    devices outside an instrument.
 3. **`If-Match` is optional** for now (AIP-154 makes the etag optional too); the UI always sends it. Require it (`428`,
@@ -246,7 +246,7 @@ Built in the prototype:
    methods keep "replace these fields".
 5. **Instrument operations at the root get a noun**: `@action(on="preview", verb="start")` gives
    `POST /preview:start`. `on` is checked against the state only when it names a state path. Devices are unaffected:
-   their noun is the device (`/devices/{uid}:{operation}`), and the options default to nothing.
+   their noun is the device (`/devices/{id}:{operation}`), and the options default to nothing.
 6. **An action that starts an activity answers `202` with a `Location`** to the activity or the run (AIP-151,
    Azure `operation-location`); the adapter sees it from the method's return type, no flag. Short actions answer
    `200` or `204`.

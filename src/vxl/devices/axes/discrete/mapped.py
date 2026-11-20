@@ -29,7 +29,7 @@ class MappedDiscreteAxis(DiscreteAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         axis: ContinuousAxis,
         slots: Mapping[int | str, MappedSlot | Mapping[str, object]],
@@ -39,7 +39,7 @@ class MappedDiscreteAxis(DiscreteAxis):
         self._validate_specs(specs, tolerance)
 
         super().__init__(
-            uid=uid,
+            device_id=device_id,
             slots={index: spec.label for index, spec in specs.items()},
             slot_count=len(specs),
         )
@@ -127,29 +127,29 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         axis: BuildConfig | Mapping[str, object],
         slots: Mapping[int | str, MappedSlot | Mapping[str, object]],
         tolerance: float,
     ) -> None:
         axis_config = axis if isinstance(axis, BuildConfig) else BuildConfig.model_validate(axis)
-        axis_uid = f"{uid}_axis"
-        built, errors = build_objects({axis_uid: axis_config}, base_cls=ContinuousAxis)
-        if error := errors.get(axis_uid):
-            raise RuntimeError(f"Unable to build owned axis for '{uid}' ({error.code}): {error.msg}")
+        axis_id = f"{device_id}_axis"
+        built, errors = build_objects({axis_id: axis_config}, base_cls=ContinuousAxis)
+        if error := errors.get(axis_id):
+            raise RuntimeError(f"Unable to build owned axis for '{device_id}' ({error.code}): {error.msg}")
 
-        child = built.get(axis_uid)
+        child = built.get(axis_id)
         if not isinstance(child, ContinuousAxis):
             if child is not None:
                 with suppress(Exception):
                     child.dispose()
             actual = type(child).__name__ if child is not None else "None"
-            raise TypeError(f"Owned axis for '{uid}' must be a ContinuousAxis, got {actual}")
+            raise TypeError(f"Owned axis for '{device_id}' must be a ContinuousAxis, got {actual}")
 
         try:
             super().__init__(
-                uid=uid,
+                device_id=device_id,
                 axis=child,
                 slots=slots,
                 tolerance=tolerance,

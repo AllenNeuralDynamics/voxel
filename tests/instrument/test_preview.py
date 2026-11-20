@@ -24,7 +24,7 @@ def preview_operations(opened_instrument: Instrument, monkeypatch: pytest.Monkey
         original = laser.call
 
         async def call(command, *args, **kwargs):
-            events.append(f"{laser.uid}.{command}")
+            events.append(f"{laser.id}.{command}")
             if command in {"source_enable", "output_enable"}:
                 assert kwargs["wait"] is True
             return await original(command, *args, **kwargs)

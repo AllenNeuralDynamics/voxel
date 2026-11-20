@@ -33,20 +33,20 @@ class VortranStradus(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         port: str,
     ) -> None:
         """Initialize the Vortran Stradus laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             wavelength: Wavelength of the laser in nm.
             port: Serial port for communication.
         """
         self._inst = StradusDriver(port)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
         self.log.info(f"Initialized Vortran Stradus laser: port={port}, wavelength={wavelength}nm")
 
     def enable(self) -> None:

@@ -49,7 +49,7 @@ def main() -> None:  # noqa: C901, PLR0915 - keep hardware exercise and recovery
     motion_completed = False
     communication_failed = False
     try:
-        axis = MMCLinearAxis(hub=hub, axis_id=args.axis, uid=f"mmc_axis_{args.axis}", units=args.units)
+        axis = MMCLinearAxis(hub=hub, axis_id=args.axis, device_id=f"mmc_axis_{args.axis}", units=args.units)
         reading = axis.position_reading
         log.info("Firmware: %s", axis.firmware_version)
         log.info(

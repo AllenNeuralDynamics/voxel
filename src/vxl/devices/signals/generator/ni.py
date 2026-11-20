@@ -28,10 +28,10 @@ class NiGenerator(Generator):
     Arming reserves the cycle's pins and input on the card. The task itself is built when the generator starts, so
     its timing and samples are set once, before it runs."""
 
-    def __init__(self, uid: str, *, hub: NiDaqmx) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, *, hub: NiDaqmx) -> None:
+        super().__init__(device_id=device_id)
         self._hub = hub
-        self._log = logging.getLogger(f"{uid}.NiGenerator")
+        self._log = logging.getLogger(f"{device_id}.NiGenerator")
         self._armed: Cycle | None = None
         self._lease: NiTaskLease | None = None
         self._task: Task | None = None
@@ -49,18 +49,18 @@ class NiGenerator(Generator):
 
     def arm(self, cycle: Cycle) -> None:
         if self._armed is not None:
-            raise RuntimeError(f"{self.uid} already has a cycle armed: release it first")
+            raise RuntimeError(f"{self.id} already has a cycle armed: release it first")
         inputs = (cycle.start.pin,) if isinstance(cycle.start, InputEdges) else ()
-        self._lease = self._hub.reserve_ao_task(self.uid, tuple(cycle.volts), hardware_timed=True, input_pfis=inputs)
+        self._lease = self._hub.reserve_ao_task(self.id, tuple(cycle.volts), hardware_timed=True, input_pfis=inputs)
         self._armed = cycle
 
     def start(self, count: int | None) -> None:
         cycle, lease = self._armed, self._lease
         if cycle is None or lease is None:
-            raise RuntimeError(f"{self.uid} has no cycle armed")
+            raise RuntimeError(f"{self.id} has no cycle armed")
         if count is not None and isinstance(cycle.start, InputEdges):
-            raise NotImplementedError(f"{self.uid} cannot count cycles that input edges start yet")
-        task = Task(f"{self.uid}_ao")
+            raise NotImplementedError(f"{self.id} cannot count cycles that input edges start yet")
+        task = Task(f"{self.id}_ao")
         self._task = task
         try:
             for path in lease.ao_paths:
@@ -107,7 +107,7 @@ class NiGenerator(Generator):
 
     def wait_until_done(self, timeout_s: float) -> None:
         if self._task is None or not self._counted:
-            raise RuntimeError(f"{self.uid} is not playing a counted run")
+            raise RuntimeError(f"{self.id} is not playing a counted run")
         self._task.wait_until_done(timeout=timeout_s)
         self.stop()
 

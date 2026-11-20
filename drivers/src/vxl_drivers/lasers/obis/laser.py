@@ -44,7 +44,7 @@ class ObisLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         conn: str | ObisChannel,
         wavelength: float,
         *,
@@ -52,7 +52,7 @@ class ObisLaser(Laser):
         setpoint_tolerance_mw: float = 0.05,
         baud: int = 115200,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if isinstance(wavelength, bool) or not isfinite(wavelength) or wavelength <= 0:
             raise ValueError("wavelength must be finite and positive in nm")
         if not isfinite(startup_delay_s) or startup_delay_s < 0:
@@ -74,7 +74,7 @@ class ObisLaser(Laser):
             self._hub, self._channel = _parse_channel(conn)
             self._address = str(self._channel)
             self._link = self._hub.link
-            self._hub.reserve(self._channel, uid)
+            self._hub.reserve(self._channel, device_id)
         try:
             self._initialize()
         except Exception as error:
@@ -193,7 +193,7 @@ class ObisLaser(Laser):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode not in _MODE_COMMANDS:
-            raise ValueError(f"{self.uid} does not do {mode} control")
+            raise ValueError(f"{self.id} does not do {mode} control")
         with self._link.transaction():
             if self.control_mode == mode:
                 return
@@ -287,7 +287,7 @@ class ObisLaser(Laser):
         if self._hub is None:
             self._link.close()
         elif self._channel is not None:
-            self._hub.release(self._channel, self.uid)
+            self._hub.release(self._channel, self.id)
 
     def _confirmed_off(self) -> bool:
         if self._hub is None or self._channel is None:

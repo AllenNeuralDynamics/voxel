@@ -41,7 +41,7 @@ class Adapter[D: Device](ABC):
 
     @property
     @abstractmethod
-    def uid(self) -> str: ...
+    def id(self) -> str: ...
 
     @property
     @abstractmethod
@@ -239,8 +239,8 @@ class DeviceHandle[D: Device]:
         return self._adapter
 
     @property
-    def uid(self) -> str:
-        return self._adapter.uid
+    def id(self) -> str:
+        return self._adapter.id
 
     @property
     def props(self) -> DeviceProps:

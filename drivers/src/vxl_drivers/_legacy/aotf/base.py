@@ -27,8 +27,8 @@ class AOTF(Device, kind="aotf"):
     which tracks channel assignments and prevents collisions.
     """
 
-    def __init__(self, uid: str) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str) -> None:
+        super().__init__(device_id=device_id)
         # Maps channel number -> device_id that owns it
         self._channel_registrations: dict[int, str] = {}
 
@@ -46,13 +46,13 @@ class AOTF(Device, kind="aotf"):
         :raises IndexError: If channel number is out of range.
         """
         if channel < 1 or channel > self.num_channels:
-            raise IndexError(f"Channel {channel} out of range (1-{self.num_channels}) on AOTF {self.uid}")
+            raise IndexError(f"Channel {channel} out of range (1-{self.num_channels}) on AOTF {self.id}")
 
         if channel in self._channel_registrations:
             existing_owner = self._channel_registrations[channel]
             if existing_owner != device_id:
                 raise ChannelCollisionError(
-                    f"AOTF {self.uid} channel {channel} is already registered to "
+                    f"AOTF {self.id} channel {channel} is already registered to "
                     f"'{existing_owner}', cannot register '{device_id}'",
                 )
             # Same device re-registering is a no-op

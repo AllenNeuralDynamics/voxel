@@ -24,14 +24,14 @@ class MPDSModulator(Modulator):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         hub: MPDSHub,
         *,
         line: int,
         settings: MPDSSettings | dict[str, Any],
         mod_in: Literal["digital", "analog"] = "digital",
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if mod_in not in ("digital", "analog"):
             raise ValueError("mod_in must be digital or analog")
         self._settings = MPDSSettings.model_validate(settings)
@@ -45,7 +45,7 @@ class MPDSModulator(Modulator):
         self._mode: ControlMode = "software"
         self._closed = False
         with hub.transaction():
-            hub.reserve_line(line, uid)
+            hub.reserve_line(line, device_id)
             try:
                 hub.inhibit_line(line)
                 hub.set_frequency(line, self._settings.frequency_mhz)
@@ -59,7 +59,7 @@ class MPDSModulator(Modulator):
                     raise ExceptionGroup(
                         "MPDS line initialization and inhibition failed", [error, cleanup_error]
                     ) from None
-                hub.release_line(line, uid)
+                hub.release_line(line, device_id)
                 raise
 
     @property
@@ -130,7 +130,7 @@ class MPDSModulator(Modulator):
         if self._closed:
             return
         self.off()
-        self._hub.release_line(self._line, self.uid)
+        self._hub.release_line(self._line, self.id)
         self._closed = True
 
     def _ensure_open(self) -> None:

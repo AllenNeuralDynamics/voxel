@@ -21,7 +21,7 @@ class SimulatedDaqmx(Device, kind="generic"):
 
     def __init__(
         self,
-        uid: str = "sim_daqmx",
+        device_id: str = "sim_daqmx",
         *,
         device_name: str = "SimDev",
         num_ao: int = 32,
@@ -30,7 +30,7 @@ class SimulatedDaqmx(Device, kind="generic"):
         digital_port_line_counts: tuple[int, ...] | None = None,
         voltage_range: VoltageRange | None = None,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         self._device_name = device_name
         self._ao_pins = [f"ao{i}" for i in range(num_ao)]
         self._pfi_pins = [f"pfi{i}" for i in range(num_pfi)]
@@ -44,7 +44,7 @@ class SimulatedDaqmx(Device, kind="generic"):
             raise ValueError("digital ports after Port 0 must contain exactly one line per simulated PFI")
         self._digital_port_line_counts = digital_port_line_counts
         self._voltage_range = voltage_range or VoltageRange(min=Voltage(-10.0), max=Voltage(10.0))
-        self._assigned: dict[str, str] = {}  # pin -> owner_uid
+        self._assigned: dict[str, str] = {}  # pin -> owner_id
 
     @property
     def device_name(self) -> str:
@@ -68,7 +68,7 @@ class SimulatedDaqmx(Device, kind="generic"):
 
     @property
     def assigned_pins(self) -> dict[str, str]:
-        """Snapshot of currently-claimed pins (pin_name -> owner_uid)."""
+        """Snapshot of currently-claimed pins (pin_name -> owner_id)."""
         return dict(self._assigned)
 
     @property
@@ -78,8 +78,8 @@ class SimulatedDaqmx(Device, kind="generic"):
         all_pins = self._ao_pins + port0_pins + self._pfi_pins + self._counter_pins
         return [p for p in all_pins if p not in self._assigned]
 
-    def assign_pin(self, owner_uid: str, pin: str) -> str:
-        """Claim ``pin`` for ``owner_uid``. Returns a simulated physical path."""
+    def assign_pin(self, owner_id: str, pin: str) -> str:
+        """Claim ``pin`` for ``owner_id``. Returns a simulated physical path."""
         pin_lower = pin.lower()
         if pin_lower in self._assigned:
             existing = self._assigned[pin_lower]
@@ -92,10 +92,10 @@ class SimulatedDaqmx(Device, kind="generic"):
             path = f"/{self._device_name}/{pin_lower}"
         else:
             raise ValueError(f"Unknown pin '{pin}' on simulated device '{self._device_name}'")
-        self._assigned[pin_lower] = owner_uid
+        self._assigned[pin_lower] = owner_id
         return path
 
-    def assign_digital_lines(self, owner_uid: str, lines: Iterable[str]) -> tuple[str, ...]:
+    def assign_digital_lines(self, owner_id: str, lines: Iterable[str]) -> tuple[str, ...]:
         """Atomically claim digital lines and return simulated ``port/line`` paths."""
         requested = tuple(lines)
         resolved = tuple(self._resolve_digital_line(line) for line in requested)
@@ -106,7 +106,7 @@ class SimulatedDaqmx(Device, kind="generic"):
             if name in self._assigned:
                 raise ValueError(f"Pin '{name}' already assigned to '{self._assigned[name]}'")
         for name in canonical:
-            self._assigned[name] = owner_uid
+            self._assigned[name] = owner_id
         return tuple(path for _name, path in resolved)
 
     def _resolve_digital_line(self, terminal: str) -> tuple[str, str]:
@@ -151,9 +151,9 @@ class SimulatedDaqmx(Device, kind="generic"):
             offset += line_count
         raise AssertionError(f"PFI index {pfi_index} has no simulated digital alias")
 
-    def release_pins_for_owner(self, owner_uid: str) -> None:
-        """Release every pin assigned to ``owner_uid``."""
-        for pin in [p for p, owner in self._assigned.items() if owner == owner_uid]:
+    def release_pins_for_owner(self, owner_id: str) -> None:
+        """Release every pin assigned to ``owner_id``."""
+        for pin in [p for p, owner in self._assigned.items() if owner == owner_id]:
             del self._assigned[pin]
 
     def get_pfi_path(self, pin: str) -> str:
@@ -162,10 +162,10 @@ class SimulatedDaqmx(Device, kind="generic"):
             return f"/{self._device_name}/{pin_upper}"
         raise ValueError(f"Pin '{pin}' is not a valid PFI pin on {self._device_name}")
 
-    def reserve_counter(self, owner_uid: str) -> str:
-        """Reserve the first free counter for ``owner_uid``. Returns its path."""
+    def reserve_counter(self, owner_id: str) -> str:
+        """Reserve the first free counter for ``owner_id``. Returns its path."""
         for ctr in self._counter_pins:
             if ctr not in self._assigned:
-                self._assigned[ctr] = owner_uid
+                self._assigned[ctr] = owner_id
                 return f"/{self._device_name}/{ctr}"
         raise RuntimeError(f"No free counters on {self._device_name}")

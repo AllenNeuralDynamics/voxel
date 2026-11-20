@@ -102,9 +102,9 @@ def test_simulated_device_rejects_invalid_delays(create_device: Callable[[float]
 
 
 def test_a_slot_that_holds_a_part_takes_its_name() -> None:
-    glass = Filter.model_validate({"uid": "BP525", "band": ["500 nm", "550 nm"]})
+    glass = Filter.model_validate({"id": "BP525", "band": ["500 nm", "550 nm"]})
 
-    wheel = SimulatedDiscreteAxis(uid="fw", slots={0: glass, 1: "empty"}, settle_seconds=0)
+    wheel = SimulatedDiscreteAxis(device_id="fw", slots={0: glass, 1: "empty"}, settle_seconds=0)
 
     assert wheel.labels == {0: "BP525", 1: "empty"}
     wheel.move_to("BP525", wait=True)

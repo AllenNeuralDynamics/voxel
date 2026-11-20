@@ -124,7 +124,7 @@ class NodeDaemon:
         return ReleaseResponse(released=False)
 
     async def _handle_list_devices(self, _req: Empty) -> ListDevicesResponse:
-        devices = {uid: ctrl.interface for uid, ctrl in self._controllers.items()}
+        devices = {device_id: ctrl.interface for device_id, ctrl in self._controllers.items()}
         return ListDevicesResponse(devices=devices)
 
     async def _handle_build(self, req: BuildDevicesRequest) -> BuildDevicesResponse:
@@ -133,42 +133,42 @@ class NodeDaemon:
         built, errors = result
 
         built_interfaces: dict[str, DeviceInterface] = {}
-        for uid, device in built.items():
-            controller = device.make_controller(streaming=req.devices[uid].streaming)
-            controller.set_typed_publisher(self._make_typed_publisher(uid))
-            controller.set_bytes_publisher(self._make_bytes_publisher(uid))
+        for device_id, device in built.items():
+            controller = device.make_controller(streaming=req.devices[device_id].streaming)
+            controller.set_typed_publisher(self._make_typed_publisher(device_id))
+            controller.set_bytes_publisher(self._make_bytes_publisher(device_id))
             controller.start_streaming()
-            self._controllers[uid] = controller
-            built_interfaces[uid] = controller.interface
-            self._log.info("Built device %s (%s)", uid, device.__class__.__name__)
+            self._controllers[device_id] = controller
+            built_interfaces[device_id] = controller.interface
+            self._log.info("Built device %s (%s)", device_id, device.__class__.__name__)
 
-        for uid, err in errors.items():
-            self._log.error("Failed to build %s: %s", uid, err.msg)
+        for device_id, err in errors.items():
+            self._log.error("Failed to build %s: %s", device_id, err.msg)
 
         return BuildDevicesResponse(built=built_interfaces, errors=errors)
 
-    def _make_typed_publisher(self, device_uid: str) -> PublishTypedFn:
+    def _make_typed_publisher(self, device_id: str) -> PublishTypedFn:
 
         async def publish(topic: str, body: BaseModel) -> None:
-            await self._transport.publish(f"{device_uid}.{topic}", pack(body))
+            await self._transport.publish(f"{device_id}.{topic}", pack(body))
 
         return publish
 
-    def _make_bytes_publisher(self, device_uid: str) -> PublishBytesFn:
+    def _make_bytes_publisher(self, device_id: str) -> PublishBytesFn:
 
         async def publish(topic: str, data: bytes) -> None:
-            await self._transport.publish(f"{device_uid}.{topic}", data)
+            await self._transport.publish(f"{device_id}.{topic}", data)
 
         return publish
 
     async def _handle_close_device(self, req: CloseDeviceRequest) -> Empty:
-        await self._close_controller(req.uid)
+        await self._close_controller(req.id)
         return Empty()
 
-    async def _close_controller(self, uid: str) -> None:
-        if (controller := self._controllers.pop(uid, None)) is not None:
+    async def _close_controller(self, device_id: str) -> None:
+        if (controller := self._controllers.pop(device_id, None)) is not None:
             await controller.close()
-            self._log.info("Closed device %s", uid)
+            self._log.info("Closed device %s", device_id)
 
     async def _handle_close_all(self, _req: Empty) -> Empty:
         await self._close_all_controllers()
@@ -177,23 +177,23 @@ class NodeDaemon:
     async def _close_all_controllers(self) -> None:
         await close_each(self._controllers, self._close_controller, self._log)
 
-    def _get_controller(self, uid: str) -> DeviceController:
-        controller = self._controllers.get(uid)
+    def _get_controller(self, device_id: str) -> DeviceController:
+        controller = self._controllers.get(device_id)
         if controller is None:
-            raise ValueError(f"No device with uid {uid!r}")
+            raise ValueError(f"No device with id {device_id!r}")
         return controller
 
     async def _handle_get_interface(self, req: GetInterfaceRequest) -> DeviceInterface:
-        return self._get_controller(req.uid).interface
+        return self._get_controller(req.id).interface
 
     async def _handle_execute(self, req: ExecuteRequest) -> Results:
-        return await self._get_controller(req.uid).execute_many(req.operations)
+        return await self._get_controller(req.id).execute_many(req.operations)
 
     async def _handle_get_props(self, req: GetPropsRequest) -> PropResults:
-        return await self._get_controller(req.uid).get_props(*req.props)
+        return await self._get_controller(req.id).get_props(*req.props)
 
     async def _handle_set_props(self, req: SetPropsRequest) -> PropResults:
-        return await self._get_controller(req.uid).set_props(**req.props)
+        return await self._get_controller(req.id).set_props(**req.props)
 
     async def _handle_ping(self, req: PingPayload) -> PingPayload:
         return PingPayload(timestamp=req.timestamp)

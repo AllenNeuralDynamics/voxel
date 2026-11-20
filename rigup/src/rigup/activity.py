@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from vxlib.reactivity import Cell, Readable
 
 type Resource = Hashable
-"""Something an operation or an activity requires: a device uid, or any hashable value that identifies a resource."""
+"""Something an operation or an activity requires: a device id, or any hashable value that identifies a resource."""
 
 type Restart = Callable[[], AbstractAsyncContextManager[None]]
 """Returns a context manager that ends an activity on entry and starts a new one on a clean exit."""

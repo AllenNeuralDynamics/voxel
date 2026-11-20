@@ -181,21 +181,21 @@ class Footer(QWidget):
     def _on_devices_ready(self) -> None:
         self._laser_box.clear()
         self._indicators.clear()
-        for uid, adapter in self._devices.get_lasers().items():
+        for device_id, adapter in self._devices.get_lasers().items():
             dot = Text.default("●", color=Colors.TEXT_DISABLED, size=FontSize.XS)
             self._laser_box.add(dot)
-            self._indicators[uid] = dot
-            adapter.properties_changed.connect(lambda props, u=uid: self._on_laser_props(u, props))
+            self._indicators[device_id] = dot
+            adapter.properties_changed.connect(lambda props, u=device_id: self._on_laser_props(u, props))
             adapter.replay_cached_properties()
 
-    def _on_laser_props(self, uid: str, props: dict[str, Any]) -> None:
-        dot = self._indicators.get(uid)
+    def _on_laser_props(self, device_id: str, props: dict[str, Any]) -> None:
+        dot = self._indicators.get(device_id)
         if dot is None:
             return
         if "wavelength" in props:
             dot.setToolTip(f"{int(props['wavelength'])}nm")
         if "is_enabled" in props:
-            wavelength = self._devices.get_property(uid, "wavelength")
+            wavelength = self._devices.get_property(device_id, "wavelength")
             color = (
                 Color.from_wavelength(int(wavelength)) if props["is_enabled"] and wavelength else Colors.TEXT_DISABLED
             )

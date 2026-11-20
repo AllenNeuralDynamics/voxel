@@ -191,15 +191,15 @@
               <ListFilter width="14" height="14" />
             </DropdownMenu.Trigger>
             <DropdownMenu.Content class="z-60" side="top" sideOffset={4} align="end">
-              {#each previewer.catalog as group (group.uid)}
+              {#each previewer.catalog as group (group.id)}
                 <DropdownMenu.CheckboxItem
                   closeOnSelect={false}
                   indicator={false}
-                  checked={!hiddenGroups.has(group.uid)}
+                  checked={!hiddenGroups.has(group.id)}
                   onCheckedChange={(checked) => {
                     const next = new SvelteSet(hiddenGroups);
-                    if (checked) next.delete(group.uid);
-                    else next.add(group.uid);
+                    if (checked) next.delete(group.id);
+                    else next.add(group.id);
                     hiddenGroups = next;
                   }}
                   class="gap-1.5 px-1.5 py-1 text-xs text-fg-muted data-highlighted:bg-element-hover data-highlighted:text-fg"
@@ -231,8 +231,8 @@
               <div class="pb-2 text-xs text-fg-muted">No matches</div>
             {/if}
           {:else}
-            {#each previewer.catalog as group (group.uid)}
-              {#if !hiddenGroups.has(group.uid)}
+            {#each previewer.catalog as group (group.id)}
+              {#if !hiddenGroups.has(group.id)}
                 <div class="pt-1 pb-0.5 text-xs font-medium tracking-wide text-fg-muted uppercase">
                   {group.label}
                 </div>

@@ -9,7 +9,7 @@ from vxl.devices.axes.simulated import SimulatedContinuousAxis
 
 def make_axis() -> SimulatedContinuousAxis:
     return SimulatedContinuousAxis(
-        uid="continuous",
+        device_id="continuous",
         lower_limit=0,
         upper_limit=100,
         speed=1_000_000,
@@ -20,7 +20,7 @@ def make_axis() -> SimulatedContinuousAxis:
 def test_mapped_axis_delegates_motion_and_resolves_slot() -> None:
     continuous = make_axis()
     mapped = MappedDiscreteAxis(
-        uid="selector",
+        device_id="selector",
         axis=continuous,
         slots={
             0: {"label": "left", "position": 0},
@@ -40,7 +40,7 @@ def test_mapped_axis_delegates_motion_and_resolves_slot() -> None:
 def test_mapped_axis_reports_unknown_position_and_preserves_commanded_target() -> None:
     continuous = make_axis()
     mapped = MappedDiscreteAxis(
-        uid="selector",
+        device_id="selector",
         axis=continuous,
         slots={
             0: {"label": "left", "position": 0},
@@ -64,7 +64,7 @@ def test_mapped_axis_rejects_overlapping_slots_and_extra_fields() -> None:
 
     with pytest.raises(ValueError, match="overlap"):
         MappedDiscreteAxis(
-            uid="selector",
+            device_id="selector",
             axis=continuous,
             slots={
                 0: {"label": "left", "position": 0},
@@ -75,7 +75,7 @@ def test_mapped_axis_rejects_overlapping_slots_and_extra_fields() -> None:
 
     with pytest.raises(ValidationError):
         MappedDiscreteAxis(
-            uid="selector",
+            device_id="selector",
             axis=continuous,
             slots={0: {"label": "left", "position": 0, "unknown": True}},
             tolerance=0.5,
@@ -84,7 +84,7 @@ def test_mapped_axis_rejects_overlapping_slots_and_extra_fields() -> None:
 
 def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch: pytest.MonkeyPatch) -> None:
     mapped = OwnedMappedDiscreteAxis(
-        uid="selector",
+        device_id="selector",
         axis=BuildConfig(
             target="vxl.devices.axes.simulated.SimulatedContinuousAxis",
             init={
@@ -121,7 +121,7 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
 def test_owned_mapped_axis_preserves_nested_build_failure() -> None:
     with pytest.raises(RuntimeError, match=r"\(build\.import\).*does_not_exist"):
         OwnedMappedDiscreteAxis(
-            uid="selector",
+            device_id="selector",
             axis=BuildConfig(target="does_not_exist.Axis"),
             slots={0: {"label": "left", "position": 0}},
             tolerance=0.5,
@@ -131,7 +131,7 @@ def test_owned_mapped_axis_preserves_nested_build_failure() -> None:
 def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
     continuous = make_axis()
     mapped = MappedDiscreteAxis(
-        uid="selector",
+        device_id="selector",
         axis=continuous,
         slots={0: {"position": 0}, 1: {"position": 100}},
         tolerance=0.5,
@@ -156,10 +156,10 @@ def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(mo
 
 
 def test_mapped_axis_takes_the_name_of_a_part_in_a_slot() -> None:
-    mirror = Part(uid="side_mirror", kind="mirror")
+    mirror = Part(id="side_mirror", kind="mirror")
 
     axis = MappedDiscreteAxis(
-        uid="side",
+        device_id="side",
         axis=make_axis(),
         slots={0: {"label": "left", "position": 0}, 1: {"label": mirror, "position": 100}},
         tolerance=1,

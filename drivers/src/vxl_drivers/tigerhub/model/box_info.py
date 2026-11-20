@@ -27,7 +27,7 @@ class BoxInfo:
         self._axis_ids = {k.upper(): v for k, v in (axis_ids or {}).items()}
         self._enc_cnts = {k.upper(): v for k, v in (enc_cnts_per_mm or {}).items()}
 
-        self._axes_by_uid = _build_axes_map(self._who, self._build, self._axis_ids, self._enc_cnts)
+        self._axes_by_id = _build_axes_map(self._who, self._build, self._axis_ids, self._enc_cnts)
         self._diagnostics = self._compute_diagnostics()
 
     # ---- raw reports ----
@@ -64,33 +64,33 @@ class BoxInfo:
 
     @property
     def axes(self) -> dict[str, ASIAxisInfo]:
-        return dict(self._axes_by_uid)
+        return dict(self._axes_by_id)
 
     @property
     def motor_axes(self) -> dict[str, ASIAxisInfo]:
-        return {uid: ax for uid, ax in self._axes_by_uid.items() if ax.is_motor}
+        return {device_id: ax for device_id, ax in self._axes_by_id.items() if ax.is_motor}
 
     @property
     def axes_by_card(self) -> dict[int, set[ASIAxisInfo]]:
         """Group ASIAxis objects by hex card address."""
         axes_by_card: dict[int, set[ASIAxisInfo]] = {}
-        for axis in self._axes_by_uid.values():
+        for axis in self._axes_by_id.values():
             if axis.card_hex is not None:
                 axes_by_card.setdefault(axis.card_hex, set()).add(axis)
         return axes_by_card
 
     def axes_for_card(self, hex_addr: int) -> set[ASIAxisInfo]:
-        return {ax for ax in self._axes_by_uid.values() if ax.card_hex == hex_addr}
+        return {ax for ax in self._axes_by_id.values() if ax.card_hex == hex_addr}
 
-    def card_for_axis(self, uid: str) -> CardInfo | None:
-        uid = uid.upper()
+    def card_for_axis(self, device_id: str) -> CardInfo | None:
+        device_id = device_id.upper()
         for card in self._who:
-            if uid in card.axes:
+            if device_id in card.axes:
                 return card
         return None
 
-    def are_cards_on_same_axis(self, *uids: str) -> int | None:
-        cards = [self.card_for_axis(uid) for uid in uids]
+    def are_cards_on_same_axis(self, *device_ids: str) -> int | None:
+        cards = [self.card_for_axis(dev_id) for dev_id in device_ids]
         if any(card is None for card in cards):
             return None
         hex_addrs = {card.addr for card in cards if card and card.addr is not None}
@@ -108,10 +108,10 @@ class BoxInfo:
     def _compute_diagnostics(self) -> list[str]:
         # precompute WHO views for the rules
         who_axes_by_card: dict[int, set[str]] = {}
-        for ax in self._axes_by_uid.values():
+        for ax in self._axes_by_id.values():
             if ax.card_hex is not None:
                 who_axes_by_card.setdefault(ax.card_hex, set()).add(ax.label)
-        who_axes = {uid for s in who_axes_by_card.values() for uid in s}
+        who_axes = {dev_id for s in who_axes_by_card.values() for dev_id in s}
 
         # quick presence checks first (allows fast return)
         issues = _rule_presence(self._build, who_axes)
@@ -222,20 +222,20 @@ def _rule_index_alignment(build: BuildReport | None, who_axes_by_card: dict[int,
     if not build or not build.motor_axes:
         return []
     issues: list[str] = []
-    for i, (uid, t, idx, hx, pr) in enumerate(build.rows()):
+    for i, (device_id, t, idx, hx, pr) in enumerate(build.rows()):
         if not isinstance(hx, int):
-            issues.append(f"BU X[{i}] {uid}: missing/invalid Hex Addr")
+            issues.append(f"BU X[{i}] {device_id}: missing/invalid Hex Addr")
             continue
         if hx not in who_axes_by_card:
-            issues.append(f"BU X[{i}] {uid}: Hex Addr {hx} not in WHO cards")
-        elif uid not in who_axes_by_card[hx]:
-            issues.append(f"BU X[{i}] {uid}: WHO says card {hx} axes={sorted(who_axes_by_card[hx])}")
+            issues.append(f"BU X[{i}] {device_id}: Hex Addr {hx} not in WHO cards")
+        elif device_id not in who_axes_by_card[hx]:
+            issues.append(f"BU X[{i}] {device_id}: WHO says card {hx} axes={sorted(who_axes_by_card[hx])}")
         if isinstance(t, str) and t.lower() not in ASIDeviceType._value2member_map_:
-            issues.append(f"BU X[{i}] {uid}: unusual Axis Type '{t}'")
+            issues.append(f"BU X[{i}] {device_id}: unusual Axis Type '{t}'")
         if not isinstance(idx, int) or idx <= 0:
-            issues.append(f"BU X[{i}] {uid}: suspicious Axis Addr '{idx}'")
+            issues.append(f"BU X[{i}] {device_id}: suspicious Axis Addr '{idx}'")
         if pr is None:
-            issues.append(f"BU X[{i}] {uid}: missing Axis Props")
+            issues.append(f"BU X[{i}] {device_id}: missing Axis Props")
     return issues
 
 

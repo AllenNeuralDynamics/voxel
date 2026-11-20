@@ -23,7 +23,7 @@ class LocalAdapter[D: Device](Adapter[D]):
     def __init__(self, controller: DeviceController[D]) -> None:
         super().__init__()
         self._controller = controller
-        self._log = logging.getLogger(f"{controller.uid}.LocalAdapter")
+        self._log = logging.getLogger(f"{controller.id}.LocalAdapter")
         self._signals: defaultdict[str, TopicDispatcher] = defaultdict(TopicDispatcher)
 
         controller.set_typed_publisher(self._on_typed)
@@ -38,8 +38,8 @@ class LocalAdapter[D: Device](Adapter[D]):
             await sig.emit_bytes(data)
 
     @property
-    def uid(self) -> str:
-        return self._controller.uid
+    def id(self) -> str:
+        return self._controller.id
 
     @property
     def device(self) -> D | None:
@@ -107,26 +107,26 @@ class LocalNode(Node):
         built, errors = result[0], dict(result[1])
 
         handles: dict[str, DeviceHandle] = {}
-        for uid, device in built.items():
-            controller = device.make_controller(streaming=devices[uid].streaming)
+        for device_id, device in built.items():
+            controller = device.make_controller(streaming=devices[device_id].streaming)
             handle: DeviceHandle = DeviceHandle(LocalAdapter(controller))
             if (problem := await first_read(handle)) is not None:
-                errors[uid] = problem
+                errors[device_id] = problem
                 await handle.close()
                 continue
             controller.start_streaming()
-            self._controllers[uid] = controller
-            self._handles[uid] = handle
-            handles[uid] = handle
+            self._controllers[device_id] = controller
+            self._handles[device_id] = handle
+            handles[device_id] = handle
 
-        for uid, err in errors.items():
-            self._log.error("Failed to build %s: %s", uid, err.msg)
+        for device_id, err in errors.items():
+            self._log.error("Failed to build %s: %s", device_id, err.msg)
 
         return handles, errors
 
-    async def close_device(self, uid: str) -> None:
-        controller = self._controllers.pop(uid, None)
-        self._handles.pop(uid, None)
+    async def close_device(self, device_id: str) -> None:
+        controller = self._controllers.pop(device_id, None)
+        self._handles.pop(device_id, None)
         if controller is not None:
             await controller.close()
 

@@ -467,9 +467,9 @@ async def update_profile(patch: ProfilePatch, instrument: InstrumentDep) -> Chan
     return await instrument.update_profile(patch)
 
 
-@instrument_router.patch("/profile/sync/{generator_uid}", status_code=204)
-async def update_signals(generator_uid: str, signals: Signals, instrument: InstrumentDep) -> None:
-    await instrument.update_signals(generator_uid, signals)
+@instrument_router.patch("/profile/sync/{generator_id}", status_code=204)
+async def update_signals(generator_id: str, signals: Signals, instrument: InstrumentDep) -> None:
+    await instrument.update_signals(generator_id, signals)
 
 
 @instrument_router.post("/settings/apply", status_code=204)

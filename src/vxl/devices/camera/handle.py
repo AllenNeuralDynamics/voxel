@@ -72,8 +72,8 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         if isinstance(result, str):
             return result
         if isinstance(result, dict):
-            raise RuntimeError(f"{self.uid} failed to start preview: {result.get('msg', result)}")
-        raise RuntimeError(f"{self.uid} failed to start preview: returned unexpected type {type(result)}: {result}")
+            raise RuntimeError(f"{self.id} failed to start preview: {result.get('msg', result)}")
+        raise RuntimeError(f"{self.id} failed to start preview: returned unexpected type {type(result)}: {result}")
 
     async def stop_preview(self) -> None:
         """Stop camera preview mode."""
@@ -87,7 +87,7 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         """End the current preview source stream and return its replacement identity."""
         result = await self.call("reset_live_stream")
         if not isinstance(result, str):
-            raise RuntimeError(f"{self.uid} returned an invalid preview source-stream identity")
+            raise RuntimeError(f"{self.id} returned an invalid preview source-stream identity")
         return result
 
     async def _set_live_viewport(self, viewport: LiveViewport) -> None:

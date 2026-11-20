@@ -27,7 +27,7 @@ class OnDemandAOController(DeviceController["OnDemandAO"], streaming={"fast": 0.
 
     def __init__(self, device: "OnDemandAO", *, streaming: Mapping[StreamTier, float] | None = None) -> None:
         super().__init__(device, streaming=streaming)
-        self._log = logging.getLogger(f"{device.uid}.OnDemandAOController")
+        self._log = logging.getLogger(f"{device.id}.OnDemandAOController")
 
     @action(desc="Drive a port to a static voltage; it holds until changed")
     async def set_voltage(self, port: str, volts: float) -> None:
@@ -56,8 +56,8 @@ class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController
     an on-demand output neither watches for nor emits a clock edge.
     """
 
-    def __init__(self, uid: str, *, ports: Mapping[str, str]) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, *, ports: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id)
         self._ports: dict[str, str] = dict(ports)
 
     @property
@@ -75,13 +75,13 @@ class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController
     def _resolve_port(self, port: str) -> str:
         """Return the physical pin for ``port`` or raise if it isn't a declared port."""
         if port not in self._ports:
-            raise ValueError(f"Unknown port '{port}' on {self.uid}: {sorted(self._ports)}")
+            raise ValueError(f"Unknown port '{port}' on {self.id}: {sorted(self._ports)}")
         return self._ports[port]
 
     def _check_voltage(self, volts: float) -> None:
         rng = self.voltage_range
         if volts < rng.min or volts > rng.max:
-            raise ValueError(f"Voltage {volts}V out of range [{rng.min}, {rng.max}]V on {self.uid}")
+            raise ValueError(f"Voltage {volts}V out of range [{rng.min}, {rng.max}]V on {self.id}")
 
     def _validate(self, port_values: Mapping[str, float]) -> None:
         """Check every port + voltage, so a bad entry raises before any pin is driven."""
@@ -207,8 +207,8 @@ class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController
     omitted lines retain their current state.
     """
 
-    def __init__(self, uid: str, *, lines: Mapping[str, str]) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, *, lines: Mapping[str, str]) -> None:
+        super().__init__(device_id=device_id)
         self._lines: dict[str, str] = dict(lines)
 
     @property
@@ -219,7 +219,7 @@ class OnDemandDO(Device, kind=DeviceType.DAQ_DO, controller=OnDemandDOController
     def _validate(self, states: Mapping[str, bool]) -> None:
         for line, state in states.items():
             if line not in self._lines:
-                raise ValueError(f"Unknown line '{line}' on {self.uid}: {sorted(self._lines)}")
+                raise ValueError(f"Unknown line '{line}' on {self.id}: {sorted(self._lines)}")
             if not isinstance(state, bool):
                 raise TypeError(f"State for line '{line}' must be bool, got {type(state).__name__}")
 

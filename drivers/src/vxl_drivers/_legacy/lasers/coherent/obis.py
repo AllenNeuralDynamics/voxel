@@ -45,7 +45,7 @@ class ObisLX(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         port: Serial | str,
         prefix: str | None = None,
@@ -53,7 +53,7 @@ class ObisLX(Laser):
         """Initialize the OBIS LX laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             wavelength: Wavelength of the laser in nm.
             port: Serial port for communication.
             prefix: Command prefix for the laser (for multi-laser setups).
@@ -61,7 +61,7 @@ class ObisLX(Laser):
         self._prefix = prefix
         self._inst = ObisLXDriver(port, self._prefix)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
         self.log.info(f"Initialized OBIS LX laser: port={port}, wavelength={wavelength}nm")
 
     def enable(self) -> None:
@@ -140,7 +140,7 @@ class ObisLS(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         wavelength: int,
         port: Serial | str,
         prefix: str | None = None,
@@ -148,7 +148,7 @@ class ObisLS(Laser):
         """Initialize the OBIS LS laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             wavelength: Wavelength of the laser in nm.
             port: Serial port for communication.
             prefix: Command prefix for the laser (for multi-laser setups).
@@ -156,7 +156,7 @@ class ObisLS(Laser):
         self._prefix = prefix
         self._inst = ObisLSDriver(port, self._prefix)
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
         self.log.info(f"Initialized OBIS LS laser: port={port}, wavelength={wavelength}nm")
 
     def enable(self) -> None:

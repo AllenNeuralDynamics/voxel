@@ -42,15 +42,15 @@ class DeviceHandleQt(QObject):
         super().__init__(parent)
         self._instrument = instrument
         self._interface = interface
-        self._uid = interface.uid
+        self._id = interface.id
         self._started = False
         self._models: dict[str, PropModel] = {}  # latest full model per property (value + options/bounds)
-        self.log = logging.getLogger(f"{self.__class__.__name__}[{self._uid}]")
+        self.log = logging.getLogger(f"{self.__class__.__name__}[{self._id}]")
 
     @property
-    def uid(self) -> str:
+    def id(self) -> str:
         """Device unique identifier."""
-        return self._uid
+        return self._id
 
     @property
     def kind(self) -> str:
@@ -119,7 +119,7 @@ class DeviceHandleQt(QObject):
             Exception: If command fails
         """
         try:
-            result = await self._instrument.execute_device_command(self._uid, command, args, kwargs)
+            result = await self._instrument.execute_device_command(self._id, command, args, kwargs)
             return result.unwrap()
         except Exception as e:
             self.log.exception(f"Command {command} failed")
@@ -135,7 +135,7 @@ class DeviceHandleQt(QObject):
         Returns:
             Property value
         """
-        props = await self._instrument.get_device_properties(self._uid, [property_name])
+        props = await self._instrument.get_device_properties(self._id, [property_name])
         self.merge_properties(props.ok)
         return props[property_name].unwrap().value
 
@@ -146,7 +146,7 @@ class DeviceHandleQt(QObject):
             property_name: Property name
             value: New value
         """
-        results = await self._instrument.set_device_properties(self._uid, {property_name: value})
+        results = await self._instrument.set_device_properties(self._id, {property_name: value})
         results.unwrap()
 
     async def interface(self) -> DeviceInterface:
@@ -207,14 +207,14 @@ class DevicesStore(QObject):
         self._instrument = instrument
         log.info("Starting DevicesStore with %d devices", len(session.instrument.devices))
 
-        for uid, state in session.instrument.devices.items():
+        for device_id, state in session.instrument.devices.items():
             adapter = DeviceHandleQt(instrument, state.interface, parent=self)
-            adapter.properties_changed.connect(lambda props, uid=uid: self._on_properties(uid, props))
+            adapter.properties_changed.connect(lambda props, device_id=device_id: self._on_properties(device_id, props))
 
-            self._property_cache[uid] = {}
+            self._property_cache[device_id] = {}
             adapter.start(state.props)
-            self._adapters[uid] = adapter
-            self.device_added.emit(uid)
+            self._adapters[device_id] = adapter
+            self.device_added.emit(device_id)
 
         self._started = True
         self.ready.emit()
@@ -222,8 +222,8 @@ class DevicesStore(QObject):
 
     def apply_session(self, session: SessionView) -> None:
         """Apply a later complete StationFeed session view."""
-        for uid, state in session.instrument.devices.items():
-            if adapter := self._adapters.get(uid):
+        for device_id, state in session.instrument.devices.items():
+            if adapter := self._adapters.get(device_id):
                 adapter.apply_properties(state.props)
 
     def stop(self) -> None:
@@ -233,9 +233,9 @@ class DevicesStore(QObject):
 
         log.info("Stopping DevicesStore")
 
-        for uid, adapter in self._adapters.items():
+        for device_id, adapter in self._adapters.items():
             adapter.stop()
-            self.device_removed.emit(uid)
+            self.device_removed.emit(device_id)
 
         self._adapters.clear()
         self._property_cache.clear()
@@ -268,18 +268,20 @@ class DevicesStore(QObject):
 
     def get_lasers(self) -> dict[str, DeviceHandleQt]:
         """Get all laser device adapters."""
-        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "laser_legacy"}
+        return {device_id: adapter for device_id, adapter in self._adapters.items() if adapter.kind == "laser_legacy"}
 
     def get_cameras(self) -> dict[str, DeviceHandleQt]:
         """Get all camera device adapters."""
-        return {uid: adapter for uid, adapter in self._adapters.items() if adapter.kind == "area_camera"}
+        return {device_id: adapter for device_id, adapter in self._adapters.items() if adapter.kind == "area_camera"}
 
     def get_filter_wheels(self) -> dict[str, DeviceHandleQt]:
         """Get all filter wheel device adapters."""
         if self._instrument is None:
             return {}
         return {
-            uid: self._adapters[uid] for uid in self._instrument.hardware_config.filter_wheels if uid in self._adapters
+            dev_id: self._adapters[dev_id]
+            for dev_id in self._instrument.hardware_config.filter_wheels
+            if dev_id in self._adapters
         }
 
     def get_stage_axes(self) -> dict[str, DeviceHandleQt]:
@@ -288,4 +290,4 @@ class DevicesStore(QObject):
             return {}
         stage = self._instrument.hardware_config.stage
         stage_ids = [stage.x, stage.y, stage.z]
-        return {uid: self._adapters[uid] for uid in stage_ids if uid in self._adapters}
+        return {dev_id: self._adapters[dev_id] for dev_id in stage_ids if dev_id in self._adapters}

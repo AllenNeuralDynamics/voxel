@@ -24,7 +24,7 @@ class FD(Device, kind="fd"):
         self.calls = []
 
     @integer(minimum=0, maximum=10, step=2)
-    @stream(units=lambda self: self.uid + "-u")
+    @stream(units=lambda self: self.id + "-u")
     def count(self) -> int:
         return self.v
 

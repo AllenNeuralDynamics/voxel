@@ -199,7 +199,7 @@ class NiTaskLease:
         *,
         manager: "_NiResourceManager",
         lease_id: int,
-        owner_uid: str,
+        owner_id: str,
         ao_paths: tuple[str, ...],
         do_paths: tuple[str, ...],
         counter_name: str | None,
@@ -209,7 +209,7 @@ class NiTaskLease:
     ) -> None:
         self._manager = manager
         self.lease_id = lease_id
-        self.owner_uid = owner_uid
+        self.owner_id = owner_id
         self.ao_paths = ao_paths
         self.do_paths = do_paths
         self.counter_name = counter_name
@@ -307,7 +307,7 @@ class _NiResourceManager:
     def assigned_pins(self) -> dict[str, str]:
         with self._lock:
             return {
-                str(name): self._leases[lease_id].owner_uid
+                str(name): self._leases[lease_id].owner_id
                 for (kind, name), lease_id in self._claims.items()
                 if kind == "terminal"
             }
@@ -322,7 +322,7 @@ class _NiResourceManager:
     def reserve_ao_task(
         self,
         *,
-        owner_uid: str,
+        owner_id: str,
         ao_terminals: Sequence[str],
         hardware_timed: bool,
         needs_counter: bool = False,
@@ -380,7 +380,7 @@ class _NiResourceManager:
             lease = NiTaskLease(
                 manager=self,
                 lease_id=lease_id,
-                owner_uid=owner_uid,
+                owner_id=owner_id,
                 ao_paths=tuple(terminal.physical_path for terminal in resolved_ao),
                 do_paths=(),
                 counter_name=counter.canonical_name if counter is not None else None,
@@ -399,7 +399,7 @@ class _NiResourceManager:
     def reserve_do_task(
         self,
         *,
-        owner_uid: str,
+        owner_id: str,
         do_terminals: Sequence[str],
         hardware_timed: bool,
     ) -> NiTaskLease:
@@ -438,7 +438,7 @@ class _NiResourceManager:
             lease = NiTaskLease(
                 manager=self,
                 lease_id=lease_id,
-                owner_uid=owner_uid,
+                owner_id=owner_id,
                 ao_paths=(),
                 do_paths=tuple(self._digital_path_locked(terminal) for terminal in resolved_do),
                 counter_name=None,
@@ -507,7 +507,7 @@ class _NiResourceManager:
         for resource in resources:
             lease_id = self._claims.get(resource)
             if lease_id is not None:
-                owner = self._leases[lease_id].owner_uid
+                owner = self._leases[lease_id].owner_id
                 raise ValueError(f"NI resource {self._format_resource(resource)} is already assigned to '{owner}'")
 
     @staticmethod

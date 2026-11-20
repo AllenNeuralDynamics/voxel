@@ -20,9 +20,9 @@ class _Bench:
         self.log: list[str] = []
         self.preview: Activity | None = None
 
-    async def set_props(self, uid: str) -> None:
-        async with self.scheduler.run("set properties", requires={uid}):
-            self.log.append(f"set {uid}")
+    async def set_props(self, device_id: str) -> None:
+        async with self.scheduler.run("set properties", requires={device_id}):
+            self.log.append(f"set {device_id}")
 
     async def apply_profile(self, *, fail: bool = False) -> None:
         async with self.scheduler.run("apply a profile", requires={Word.PROFILE}):
@@ -57,11 +57,11 @@ def bench() -> _Bench:
 
 
 async def test_operations_run_1_at_a_time(bench: _Bench) -> None:
-    async def slow(uid: str) -> None:
-        async with bench.scheduler.run("slow", requires={uid}):
-            bench.log.append(f"{uid} start")
+    async def slow(device_id: str) -> None:
+        async with bench.scheduler.run("slow", requires={device_id}):
+            bench.log.append(f"{device_id} start")
             await asyncio.sleep(0.01)
-            bench.log.append(f"{uid} end")
+            bench.log.append(f"{device_id} end")
 
     await asyncio.gather(slow("camera"), slow("laser"))
 

@@ -23,12 +23,12 @@ def create_multi_tile_s3_urls(
 
 
 def create_aind_exaspim_s3_urls(
-    uid: str,
+    device_id: str,
     tiles: list[int],
     channel: int,
     bucket: str = "aind-open-data",
 ) -> list[S3Path]:
-    directory = f"exaSPIM_{uid}/SPIM.ome.zarr"
+    directory = f"exaSPIM_{device_id}/SPIM.ome.zarr"
     return create_multi_tile_s3_urls(tiles, channel, bucket, directory)
 
 
@@ -71,7 +71,7 @@ def example_aind_exaspim_s3():
             NGLayerConfig(
                 "s3",
                 create_aind_exaspim_s3_urls(
-                    uid="794491_2025-10-21_12-31-25",
+                    device_id="794491_2025-10-21_12-31-25",
                     tiles=[10, 11],
                     channel=488,
                 ),

@@ -34,7 +34,7 @@ async def test_imaging_requires_digital_support_before_any_source_is_enabled(
     enabled = []
 
     def enable(source, *, wait=False):
-        enabled.append((source.uid, wait))
+        enabled.append((source.id, wait))
 
     monkeypatch.setattr(SimulatedLaser, "source_enable", enable)
     with pytest.raises(StartupError) as caught:
@@ -148,7 +148,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
     )
     camera_interface = DeviceInterface.model_validate(
         {
-            "uid": "camera_1",
+            "id": "camera_1",
             "kind": "camera",
             "operations": {},
             "props": {
@@ -161,7 +161,7 @@ async def test_instrument_startup_collects_profile_port_and_stage_violations(
             },
         }
     )
-    daq_interface = DeviceInterface(uid="daq", kind="signal_generator", operations={}, props={})
+    daq_interface = DeviceInterface(id="daq", kind="signal_generator", operations={}, props={})
 
     def axis():
         return SimpleNamespace(lower_limit=Cell(0), upper_limit=Cell(100))

@@ -20,7 +20,7 @@ def _discard(_frame: LiveFrame) -> None:
 
 
 def _gen(sink: Callable[[LiveFrame], None] = _discard, **kwargs) -> LiveGenerator:
-    kwargs.setdefault("uid", "camera")
+    kwargs.setdefault("device_id", "camera")
     return LiveGenerator(sink=sink, **kwargs)
 
 
@@ -88,7 +88,7 @@ async def test_overview_and_viewport_share_capture_identity_and_resize_exactly()
     frame = _frame(w=230, h=180)
     gen = _gen(
         sink=captured.append,
-        uid="camera-1",
+        device_id="camera-1",
         target_width=204,
         viewport=LiveViewport(x=0.25, y=0.25, w=0.5, h=0.5),
     )
@@ -114,7 +114,7 @@ async def test_overview_and_viewport_share_capture_identity_and_resize_exactly()
 
 async def test_reset_stream_changes_capture_identity() -> None:
     captured: list[LiveFrame] = []
-    gen = _gen(sink=captured.append, uid="camera-1")
+    gen = _gen(sink=captured.append, device_id="camera-1")
     try:
         gen.submit_frame(_frame(w=32, h=24), 0)
         assert gen._overview_future is not None

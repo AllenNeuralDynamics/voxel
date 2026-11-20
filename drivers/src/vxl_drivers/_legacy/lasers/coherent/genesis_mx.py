@@ -13,11 +13,11 @@ class GenesisMX(Laser):
     Uses the coherent_lasers package for communication.
     """
 
-    def __init__(self, uid: str, serial: str, wavelength: int, max_power_mw: float = 1000) -> None:
+    def __init__(self, device_id: str, serial: str, wavelength: int, max_power_mw: float = 1000) -> None:
         """Initialize the Genesis MX laser.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             serial: Serial number of the laser.
             wavelength: Wavelength of the laser in nm.
             max_power_mw: Maximum power of the laser in mW. default is 1000 mW
@@ -38,7 +38,7 @@ class GenesisMX(Laser):
         except Exception as e:
             raise RuntimeError(f"Failed to set Genesis MX laser mode: {e}") from e
 
-        super().__init__(uid=uid, wavelength=wavelength)
+        super().__init__(device_id=device_id, wavelength=wavelength)
 
         self.log.info(f"Initialized Genesis MX laser: serial={serial}, wavelength={wavelength}nm")
 

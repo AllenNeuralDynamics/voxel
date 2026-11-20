@@ -64,18 +64,18 @@ class XimeaCamera(AreaCamera):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         serial: str,
         pixel_size_um: Vec2D | Mapping[str, float] = DEFAULT_PIXEL_SIZE_UM,
     ) -> None:
         """Initialize the Ximea camera.
 
         Args:
-            uid: Unique identifier for this device.
+            device_id: Unique identifier for this device.
             serial: Camera serial number.
             pixel_size_um: Physical pixel size in microns, as {x, y}.
         """
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
 
         self._serial = str(serial)
         self._pixel_size_um = Vec2D.parse(pixel_size_um)

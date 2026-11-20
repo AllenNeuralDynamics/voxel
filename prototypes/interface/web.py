@@ -337,39 +337,39 @@ class _Routes:
         """Device routes, each through the instrument: it decides whether a device may be used now."""
         instrument = self.instrument
 
-        def known(uid: str) -> None:
-            if uid not in instrument.view.value.devices:
-                raise _RefusedError(404, f"no device '{uid}'")
+        def known(device_id: str) -> None:
+            if device_id not in instrument.view.value.devices:
+                raise _RefusedError(404, f"no device '{device_id}'")
 
         async def read(request: Request) -> Response:
-            known(uid := request.path_params["uid"])
-            return _read(request, instrument.view.value.devices[uid])
+            known(device_id := request.path_params["id"])
+            return _read(request, instrument.view.value.devices[device_id])
 
         async def write(request: Request) -> Response:
-            known(uid := request.path_params["uid"])
-            results = await instrument.set_device_properties(uid, await _body(request))
+            known(device_id := request.path_params["id"])
+            results = await instrument.set_device_properties(device_id, await _body(request))
             if not results.is_ok:
                 refused = [{"loc": [name], "result": _dump(r)} for name, r in results.results.items() if not r.is_ok]
-                return problem(422, f"'{uid}' refused {len(refused)} propert(ies)", request.url.path, refused)
+                return problem(422, f"'{device_id}' refused {len(refused)} propert(ies)", request.url.path, refused)
             return JSONResponse(_dump(results))
 
         async def operation(request: Request) -> Response:
-            known(uid := request.path_params["uid"])
+            known(device_id := request.path_params["id"])
             name = request.path_params["operation"]
-            if name not in instrument.view.value.devices[uid].interface.operations:
-                raise _RefusedError(404, f"'{uid}' has no operation '{name}'")
-            result = await instrument.execute_device_command(uid, name, kwargs=await _body(request))
+            if name not in instrument.view.value.devices[device_id].interface.operations:
+                raise _RefusedError(404, f"'{device_id}' has no operation '{name}'")
+            result = await instrument.execute_device_command(device_id, name, kwargs=await _body(request))
             if not result.is_ok:
-                return problem(422, f"'{uid}' refused '{name}'", request.url.path, [_dump(result)])
+                return problem(422, f"'{device_id}' refused '{name}'", request.url.path, [_dump(result)])
             value = result.unwrap()
             return Response(status_code=204) if value is None else JSONResponse(_dump(value))
 
-        uid = {"name": "uid", "in": "path", "required": True, "schema": {"type": "string"}}
+        device_id = {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
         name = {"name": "operation", "in": "path", "required": True, "schema": {"type": "string"}}
         routes: list[tuple[str, Endpoint, str, list[dict[str, Any]]]] = [
-            ("/devices/{uid:key}", read, "GET", [uid]),
-            ("/devices/{uid:key}", write, "PATCH", [uid]),
-            ("/devices/{uid:key}:{operation:key}", operation, "POST", [uid, name]),
+            ("/devices/{id:key}", read, "GET", [device_id]),
+            ("/devices/{id:key}", write, "PATCH", [device_id]),
+            ("/devices/{id:key}:{operation:key}", operation, "POST", [device_id, name]),
         ]
         for path, handler, method, params in routes:
             app.add_api_route(

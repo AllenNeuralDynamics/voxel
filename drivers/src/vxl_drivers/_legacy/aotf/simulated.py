@@ -16,12 +16,12 @@ class SimulatedAotf(AOTF):
     used for testing rig configurations without physical hardware.
 
     Args:
-        uid: Unique identifier for this device.
+        device_id: Unique identifier for this device.
         blanking_mode: Initial blanking mode ("internal" or "external").
         default_input_mode: Default channel input mode ("internal" or "external").
     """
 
-    def __init__(self, uid: str, blanking_mode: str = "external", default_input_mode: str = "external") -> None:
+    def __init__(self, device_id: str, blanking_mode: str = "external", default_input_mode: str = "external") -> None:
         self._blanking_mode: BlankingMode = BlankingMode(blanking_mode)
 
         # Initialize channel state
@@ -30,7 +30,7 @@ class SimulatedAotf(AOTF):
         self._channel_powers: dict[int, float] = dict.fromkeys(range(1, _NUM_CHANNELS + 1), 10.0)
         self._channel_input_modes: dict[int, str] = dict.fromkeys(range(1, _NUM_CHANNELS + 1), default_input_mode)
 
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
 
         self.log.info(
             f"Initialized SimulatedAotf with {_NUM_CHANNELS} channels, "

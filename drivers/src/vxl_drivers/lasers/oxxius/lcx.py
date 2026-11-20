@@ -23,7 +23,7 @@ class OxxiusLCXLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         hub: OxxiusHub,
         prefix: str,
         wavelength: float,
@@ -33,7 +33,7 @@ class OxxiusLCXLaser(Laser):
         fixed_power_mw: float | None = None,
         startup_delay_s: float = 0.0,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if not all(isfinite(v) for v in (wavelength, min_power_mw, max_power_mw, startup_delay_s)):
             raise ValueError("Wavelength, power limits, and startup delay must be finite")
         if wavelength <= 0 or not 0 <= min_power_mw <= max_power_mw or max_power_mw <= 0:
@@ -52,7 +52,7 @@ class OxxiusLCXLaser(Laser):
         self._startup_delay_s = startup_delay_s
         self._enabled_at: float | None = None
         self._closed = False
-        self._prefix = hub.reserve(prefix, uid, family="LCX")
+        self._prefix = hub.reserve(prefix, device_id, family="LCX")
         # A failure here keeps the reservation: when the laser cannot be stopped, nothing else must reuse the slot.
         hub.disable(self._prefix)
         self.log.info(f"Initialized LCX {self._prefix}: {wavelength} nm")
@@ -128,7 +128,7 @@ class OxxiusLCXLaser(Laser):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode != "software":
-            raise ValueError(f"{self.uid} does only software control")
+            raise ValueError(f"{self.id} does only software control")
 
     @property
     @stream("fast", label="Measured Power", units="mW")
@@ -146,7 +146,7 @@ class OxxiusLCXLaser(Laser):
         """Stop the laser and release its slot; the rig closes the hub."""
         if not self._closed:
             self.off()
-            self._hub.release(self._prefix, self.uid)
+            self._hub.release(self._prefix, self.id)
             self._closed = True
 
     def _ensure_open(self) -> None:
@@ -162,8 +162,8 @@ class OxxiusLCXModulator(Modulator):
     is off, its power is 0 and no wire can open it. In analog control a wire sets the level, and a power that is set
     is kept for the other modes. It does not do mixed control."""
 
-    def __init__(self, uid: str, hub: OxxiusHub, prefix: str, *, max_output_power_mw: float) -> None:
-        super().__init__(uid=uid)
+    def __init__(self, device_id: str, hub: OxxiusHub, prefix: str, *, max_output_power_mw: float) -> None:
+        super().__init__(device_id=device_id)
         if not isfinite(max_output_power_mw) or max_output_power_mw <= 0:
             raise ValueError("Output maximum must be finite and positive")
         self._hub = hub
@@ -172,11 +172,11 @@ class OxxiusLCXModulator(Modulator):
         self._mode: ControlMode = "software"
         self._on = False
         self._closed = False
-        self._prefix = hub.reserve_modulator(prefix, uid)
+        self._prefix = hub.reserve_modulator(prefix, device_id)
         try:
             self.off()
         except Exception:
-            hub.release_modulator(self._prefix, uid)
+            hub.release_modulator(self._prefix, device_id)
             raise
 
     @property
@@ -233,7 +233,7 @@ class OxxiusLCXModulator(Modulator):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode == "mixed":
-            raise ValueError(f"{self.uid} does not do mixed control")
+            raise ValueError(f"{self.id} does not do mixed control")
         if mode == self._mode:
             return
         with self._hub.transaction():
@@ -253,7 +253,7 @@ class OxxiusLCXModulator(Modulator):
         """Close the modulator and release it; the rig closes the hub."""
         if not self._closed:
             self.off()
-            self._hub.release_modulator(self._prefix, self.uid)
+            self._hub.release_modulator(self._prefix, self.id)
             self._closed = True
 
     def _ensure_open(self) -> None:

@@ -18,7 +18,7 @@ def slot_label(content: object) -> object:
     """The label of a slot: the name of the component that it holds, or ``content`` itself when it is a name."""
     if content is None or isinstance(content, str):
         return content
-    return getattr(content, "uid", content)
+    return getattr(content, "id", content)
 
 
 SlotName = Annotated[str, BeforeValidator(slot_label)]
@@ -44,7 +44,7 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         slots: Mapping[int | str, SlotContent],
         slot_count: int | None = None,
     ) -> None:
@@ -53,7 +53,7 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
         String keys are normalized to integers; missing labels remain ``None``. A label has the form of a name:
         letters, digits, ``_`` and ``-``. A slot that holds a component takes the name of that component.
         """
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
 
         # Normalize slots: convert string keys to int (YAML might parse numeric keys as strings)
         normalized_slots: dict[int, str | None] = {}

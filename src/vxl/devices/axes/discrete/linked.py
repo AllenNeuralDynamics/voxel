@@ -27,7 +27,7 @@ class LinkedDiscreteAxis(DiscreteAxis):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         *,
         axes: Sequence[DiscreteAxis],
         slots: Mapping[int | str, LinkedSlot | Mapping[str, object]],
@@ -35,19 +35,21 @@ class LinkedDiscreteAxis(DiscreteAxis):
         specs = {int(index): LinkedSlot.model_validate(spec) for index, spec in slots.items()}
         members = list(axes)
         targets = self._targets(specs, members)
-        super().__init__(uid=uid, slots={index: spec.label for index, spec in specs.items()}, slot_count=len(specs))
+        super().__init__(
+            device_id=device_id, slots={index: spec.label for index, spec in specs.items()}, slot_count=len(specs)
+        )
         self._members = members
         self._slot_targets = targets
         self._target: int | None = None
 
     @property
     def state(self) -> DiscreteAxisState:
-        states = {member.uid: member.state for member in self._members}
+        states = {member.id: member.state for member in self._members}
         position = next(
             (
                 index
                 for index, targets in self._slot_targets.items()
-                if all(states[uid].position == slot for uid, slot in targets.items())
+                if all(states[device_id].position == slot for device_id, slot in targets.items())
             ),
             None,
         )
@@ -59,7 +61,7 @@ class LinkedDiscreteAxis(DiscreteAxis):
         if targets is None:
             raise ValueError(f"Invalid slot {slot}; valid slots are {sorted(self._slot_targets)}")
         for member in self._members:
-            member.move_to_slot(targets[member.uid], wait=False)
+            member.move_to_slot(targets[member.id], wait=False)
         self._target = slot
         if wait:
             self.await_movement(timeout_s)
@@ -91,20 +93,20 @@ class LinkedDiscreteAxis(DiscreteAxis):
         labels = [spec.label for spec in specs.values() if spec.label is not None]
         if len(labels) != len(set(labels)):
             raise ValueError("linked slot labels must be unique")
-        uids = [member.uid for member in members]
-        if not uids or len(uids) != len(set(uids)):
+        device_ids = [member.id for member in members]
+        if not device_ids or len(device_ids) != len(set(device_ids)):
             raise ValueError("axes must list at least 1 member, each once")
         targets: dict[int, dict[str, int]] = {}
         for index, spec in specs.items():
-            if set(spec.positions) != set(uids):
-                raise ValueError(f"slot {index} must give a position for exactly the members {uids}")
+            if set(spec.positions) != set(device_ids):
+                raise ValueError(f"slot {index} must give a position for exactly the members {device_ids}")
             found: dict[str, int] = {}
             for member in members:
-                label = spec.positions[member.uid]
+                label = spec.positions[member.id]
                 try:
-                    found[member.uid] = member.index_of(label)
+                    found[member.id] = member.index_of(label)
                 except KeyError:
-                    raise ValueError(f"slot {index}: '{label}' is not a slot of member '{member.uid}'") from None
+                    raise ValueError(f"slot {index}: '{label}' is not a slot of member '{member.id}'") from None
             targets[index] = found
         repeats = [index for index, found in targets.items() if list(targets.values()).index(found) != index]
         if repeats:

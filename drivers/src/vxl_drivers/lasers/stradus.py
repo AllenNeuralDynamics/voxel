@@ -62,7 +62,7 @@ class StradusLaser(Laser):
 
     def __init__(
         self,
-        uid: str,
+        device_id: str,
         port: str,
         wavelength: float,
         *,
@@ -71,7 +71,7 @@ class StradusLaser(Laser):
         baud: int = 19200,
         timeout_s: float = 1.0,
     ) -> None:
-        super().__init__(uid=uid)
+        super().__init__(device_id=device_id)
         if isinstance(wavelength, bool) or not isfinite(wavelength) or wavelength <= 0:
             raise ValueError("wavelength must be finite and positive in nm")
         if not isfinite(startup_delay_s) or startup_delay_s < 0:
@@ -344,7 +344,7 @@ class StradusLaser(Laser):
     def _set_control_mode(self, mode: ControlMode) -> None:
         self._ensure_open()
         if mode == "mixed":
-            raise ValueError(f"{self.uid} does not do mixed control")
+            raise ValueError(f"{self.id} does not do mixed control")
         with self._t.transaction():
             if self.control_mode == mode:
                 return

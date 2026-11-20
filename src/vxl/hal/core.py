@@ -39,7 +39,7 @@ class Stage:
 class RouteDimension:
     """Observe and select hardware routes; rule evaluation and acquisition belong to Instrument."""
 
-    uid: str
+    id: str
     selectors: Mapping[str, DiscreteAxisHandle]
     _definitions: Mapping[str, OpticalRouteDefinition]
 
@@ -47,9 +47,11 @@ class RouteDimension:
         """Select and verify a route, awaiting every selector and reporting all ordinary failures."""
         definition = self._definitions.get(route)
         if definition is None:
-            raise HALError(f"No optical route '{self.uid}.{route}'")
+            raise HALError(f"No optical route '{self.id}.{route}'")
         # Resolve every handle before issuing any movement.
-        selections = [(uid, self.selectors[uid], position) for uid, position in definition.selectors.items()]
+        selections = [
+            (device_id, self.selectors[device_id], position) for device_id, position in definition.selectors.items()
+        ]
 
         async def select_and_verify(handle: DiscreteAxisHandle, position: str) -> None:
             await handle.move_to(position, wait=True)
@@ -62,14 +64,14 @@ class RouteDimension:
             return_exceptions=True,
         )
         errors: list[Exception] = []
-        for (uid, _, _), result in zip(selections, results, strict=True):
+        for (device_id, _, _), result in zip(selections, results, strict=True):
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
                     raise result
-                result.add_note(f"Routing dimension '{self.uid}', selector '{uid}'")
+                result.add_note(f"Routing dimension '{self.id}', selector '{device_id}'")
                 errors.append(result)
         if errors:
-            raise ExceptionGroup(f"Routing selection failed for '{self.uid}'", errors)
+            raise ExceptionGroup(f"Routing selection failed for '{self.id}'", errors)
 
     async def current_route(self) -> str | None:
         """Read selectors now; return a route only when stationary and uniquely matched.
@@ -84,7 +86,7 @@ class RouteDimension:
         matches = [
             name
             for name, route in self._definitions.items()
-            if all(positions[uid] == position for uid, position in route.selectors.items())
+            if all(positions[device_id] == position for device_id, position in route.selectors.items())
         ]
         return matches[0] if len(matches) == 1 else None
 
@@ -180,10 +182,10 @@ class HAL:
         return [
             Violation(
                 code=error.code,
-                msg=f"Device '{uid}' failed to build: {error.msg}",
-                loc=("hal", "devices", uid),
+                msg=f"Device '{device_id}' failed to build: {error.msg}",
+                loc=("hal", "devices", device_id),
             )
-            for uid, error in self.rig.build_errors.items()
+            for device_id, error in self.rig.build_errors.items()
         ]
 
     async def _inspect_and_classify_devices(self) -> tuple[list[Violation], set[str]]:
@@ -195,38 +197,40 @@ class HAL:
         )
         violations = []
         unavailable = set()
-        for (uid, handle), interface in zip(devices, interfaces, strict=True):
+        for (device_id, handle), interface in zip(devices, interfaces, strict=True):
             if isinstance(interface, BaseException):
                 if not isinstance(interface, Exception):
                     raise interface
-                unavailable.add(uid)
+                unavailable.add(device_id)
                 violations.append(
                     Violation(
                         code="hal.device.interface",
-                        msg=f"Unable to inspect device '{uid}': {interface}",
-                        loc=("hal", "devices", uid),
+                        msg=f"Unable to inspect device '{device_id}': {interface}",
+                        loc=("hal", "devices", device_id),
                     )
                 )
                 continue
 
-            self._device_interfaces[uid] = interface
+            self._device_interfaces[device_id] = interface
 
             match interface.kind:
                 case "area_camera":
-                    self.cameras[uid] = AreaCameraHandle.wrap(handle)
+                    self.cameras[device_id] = AreaCameraHandle.wrap(handle)
                 case "signal_generator":
-                    self.signal_generators[uid] = SignalGeneratorHandle.wrap(handle)
+                    self.signal_generators[device_id] = SignalGeneratorHandle.wrap(handle)
                 case "laser_legacy":
-                    self.lasers[uid] = handle
+                    self.lasers[device_id] = handle
                 case "continuous_axis":
-                    self.continuous_axes[uid] = ContinuousAxisHandle.wrap(handle)
+                    self.continuous_axes[device_id] = ContinuousAxisHandle.wrap(handle)
                 case "discrete_axis":
-                    self.discrete_axes[uid] = DiscreteAxisHandle.wrap(handle)
+                    self.discrete_axes[device_id] = DiscreteAxisHandle.wrap(handle)
                 case _:
-                    logger.debug("Uncategorized device '%s' of type '%s'", uid, interface.kind)
+                    logger.debug("Uncategorized device '%s' of type '%s'", device_id, interface.kind)
 
         self.fws.update(
-            (uid, self.discrete_axes[uid]) for uid in self._topology.filter_wheels if uid in self.discrete_axes
+            (dev_id, self.discrete_axes[dev_id])
+            for dev_id in self._topology.filter_wheels
+            if dev_id in self.discrete_axes
         )
         return violations, unavailable
 
@@ -238,15 +242,15 @@ class HAL:
             return_exceptions=True,
         )
         violations = []
-        for (uid, _), result in zip(cameras, results, strict=True):
+        for (device_id, _), result in zip(cameras, results, strict=True):
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
                     raise result
                 violations.append(
                     Violation(
                         code="hal.camera.geometry",
-                        msg=f"Unable to read camera geometry for '{uid}': {result}",
-                        loc=("hal", "devices", uid),
+                        msg=f"Unable to read camera geometry for '{device_id}': {result}",
+                        loc=("hal", "devices", device_id),
                     )
                 )
                 continue
@@ -256,8 +260,8 @@ class HAL:
                     violations.append(
                         Violation(
                             code="hal.camera.geometry",
-                            msg=f"Camera '{uid}' did not return required property '{property_name}'.",
-                            loc=("hal", "devices", uid, property_name),
+                            msg=f"Camera '{device_id}' did not return required property '{property_name}'.",
+                            loc=("hal", "devices", device_id, property_name),
                         )
                     )
                     continue
@@ -270,8 +274,8 @@ class HAL:
                     violations.append(
                         Violation(
                             code="hal.camera.geometry",
-                            msg=f"Unable to read required camera property '{property_name}' for '{uid}': {exc}",
-                            loc=("hal", "devices", uid, property_name),
+                            msg=f"Unable to read required camera property '{property_name}' for '{device_id}': {exc}",
+                            loc=("hal", "devices", device_id, property_name),
                         )
                     )
         return violations
@@ -280,9 +284,9 @@ class HAL:
         """Read and validate assigned stage bounds without depending on instrument state."""
         stage = self._topology.stage
         requests = []
-        for axis, uid in (("x", stage.x), ("y", stage.y), ("z", stage.z)):
+        for axis, device_id in (("x", stage.x), ("y", stage.y), ("z", stage.z)):
             # Build, interface, and role validation already report unavailable/incorrect axes.
-            if (handle := self.continuous_axes.get(uid)) is not None:
+            if (handle := self.continuous_axes.get(device_id)) is not None:
                 requests.extend(((axis, "lower", handle.get_lower_limit()), (axis, "upper", handle.get_upper_limit())))
         results = await asyncio.gather(*(request for _, _, request in requests), return_exceptions=True)
         limits: dict[str, dict[str, float]] = {}
@@ -317,21 +321,21 @@ class HAL:
 
     async def _signal_port_violations(self) -> list[Violation]:
         """Discover every signal generator's ports into its shared property cache."""
-        uids = sorted(self.signal_generators)
+        device_ids = sorted(self.signal_generators)
         results = await asyncio.gather(
-            *(self.signal_generators[uid].get_ports() for uid in uids),
+            *(self.signal_generators[dev_id].get_ports() for dev_id in device_ids),
             return_exceptions=True,
         )
         violations = []
-        for uid, result in zip(uids, results, strict=True):
+        for device_id, result in zip(device_ids, results, strict=True):
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
                     raise result
                 violations.append(
                     Violation(
                         code="hal.signal_generator.ports",
-                        msg=f"Unable to read ports for signal generator '{uid}': {result}",
-                        loc=("hal", "devices", uid, "ports"),
+                        msg=f"Unable to read ports for signal generator '{device_id}': {result}",
+                        loc=("hal", "devices", device_id, "ports"),
                     )
                 )
         return violations
@@ -357,8 +361,8 @@ class HAL:
 
     def _resolve_routing(self) -> None:
         self.routing = {
-            uid: RouteDimension(
-                uid=uid,
+            device_id: RouteDimension(
+                id=device_id,
                 selectors={
                     selector: self.discrete_axes[selector]
                     for route in definition.routes.values()
@@ -366,7 +370,7 @@ class HAL:
                 },
                 _definitions=definition.routes,
             )
-            for uid, definition in self._topology.optical_routing.root.items()
+            for device_id, definition in self._topology.optical_routing.root.items()
         }
 
     def _camera_path_violations(self, unavailable: set[str]) -> list[Violation]:
@@ -436,10 +440,10 @@ class HAL:
 
     def _routing_selector_violations(self, unavailable: set[str]) -> list[Violation]:
         selectors = {
-            selector_uid
+            selector_id
             for definition in self._topology.optical_routing.root.values()
             for route in definition.routes.values()
-            for selector_uid in route.selectors
+            for selector_id in route.selectors
         }
         return self._discrete_axis_role_violations(
             selectors,

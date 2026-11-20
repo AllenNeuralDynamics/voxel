@@ -56,7 +56,7 @@ class MMCLinearAxis(ContinuousAxis):
         *,
         hub: MMCHub,
         axis_id: int,
-        uid: str,
+        device_id: str,
         units: str = "um",
         deadband_counts: int = 2,
         deadband_timeout_s: float = 1.0,
@@ -64,7 +64,7 @@ class MMCLinearAxis(ContinuousAxis):
         acceleration_mm_s2: float | None = None,
         deceleration_mm_s2: float | None = None,
     ) -> None:
-        super().__init__(uid=uid, units=units)
+        super().__init__(device_id=device_id, units=units)
         self.hub = hub
         self.axis_id = axis_id
         self._mm_per_user_unit = _MM_PER_USER_UNIT[units]
