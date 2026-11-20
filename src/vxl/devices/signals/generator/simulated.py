@@ -177,7 +177,8 @@ class _Player:
         for at, pin, on in self._edges:
             if self._stopped.wait(max(0.0, began + at - time.monotonic())):
                 return
-            self._wiring.send(self._id, pin, on)
+            # This thread is not a device's: hand each turn to the wiring's own thread.
+            self._wiring.call_soon(lambda pin=pin, on=on: self._wiring.send(self._id, pin, on))
         self._stopped.wait(max(0.0, began + self._length - time.monotonic()))
 
 

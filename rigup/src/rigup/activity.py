@@ -87,19 +87,19 @@ class ActivityScheduler:
         return self._activities
 
     @asynccontextmanager
-    async def run(self, name: str, requires: Collection[Resource]) -> AsyncGenerator[None]:
+    async def run(self, name: str, requires: Collection[Resource], *, restart: bool = True) -> AsyncGenerator[None]:
         """Run one operation in this block, after the operation before it has finished. Every activity that requires
-        one of ``requires`` is restarted around the block. Raises :class:`ActivityBusyError` if one of them cannot
-        restart. A nested operation does not wait."""
+        one of ``requires`` is restarted around the block, or left running when ``restart`` is false. Raises
+        :class:`ActivityBusyError` if one of them cannot restart. A nested operation does not wait."""
         if self._operation in _operations.get():
-            async with self._cleared(name, requires):
+            async with self._cleared(name, requires, restart=restart):
                 yield
             return
         async with self._lock:
             self._operation = object()
             token = _operations.set(_operations.get() | {self._operation})
             try:
-                async with self._cleared(name, requires):
+                async with self._cleared(name, requires, restart=restart):
                     yield
             finally:
                 _operations.reset(token)
@@ -145,18 +145,19 @@ class ActivityScheduler:
         return frozenset(resources).union(*(self._covers.get(resource, ()) for resource in resources))
 
     @asynccontextmanager
-    async def _cleared(self, name: str, requires: Collection[Resource]) -> AsyncGenerator[None]:
-        """Refuse the operation, or restart every activity that requires one of its resources."""
+    async def _cleared(self, name: str, requires: Collection[Resource], *, restart: bool) -> AsyncGenerator[None]:
+        """Refuse the operation, or restart every activity that requires one of its resources when ``restart``."""
         required = self._spread(requires)
         restarts: list[Restart] = []
-        for activity, (_, restart) in self._running.items():
+        for activity, (_, restarter) in self._running.items():
             if activity.requires & required:
-                if restart is None:
+                if restarter is None:
                     raise ActivityBusyError(f"Unable to {name} while {activity.info.kind} is running")
-                restarts.append(restart)
+                if restart:
+                    restarts.append(restarter)
         async with AsyncExitStack() as stack:
-            for restart in restarts:
-                await stack.enter_async_context(restart())
+            for restarter in restarts:
+                await stack.enter_async_context(restarter())
             yield
 
     async def _publish(self) -> None:

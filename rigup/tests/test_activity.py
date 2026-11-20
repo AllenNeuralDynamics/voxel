@@ -197,3 +197,17 @@ async def test_stop_all_stops_and_ends_every_activity_even_when_one_fails(bench:
         await bench.scheduler.stop_all()
     assert "preview stopped" in bench.log
     assert bench.scheduler.activities.value == ()
+
+
+async def test_an_operation_that_does_not_restart_leaves_a_restartable_activity_and_is_refused_by_others(
+    bench: _Bench,
+) -> None:
+    await bench.start_preview()
+    async with bench.scheduler.run("tune the profile", requires={Word.PROFILE}, restart=False):
+        pass
+    assert "preview off" not in bench.log
+
+    await bench.start("capture", {"camera"})
+    with pytest.raises(ActivityBusyError, match="Unable to set a region while capture is running"):
+        async with bench.scheduler.run("set a region", requires={"camera"}, restart=False):
+            pass

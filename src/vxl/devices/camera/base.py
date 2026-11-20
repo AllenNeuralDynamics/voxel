@@ -85,6 +85,15 @@ class CaptureState(StrEnum):
     CLOSED = "CLOSED"
 
 
+class CaptureStatus(FrozenModel):
+    """Where the camera's latest batch or image close is. ``batch`` counts up by 1 at each one started, so a wait can
+    tell its own from an earlier one; ``error`` says why it failed."""
+
+    batch: int = 0
+    state: CaptureState = CaptureState.IDLE
+    error: str | None = None
+
+
 class CameraMode(StrEnum):
     IDLE = "IDLE"
     PREVIEW = "PREVIEW"
@@ -144,6 +153,7 @@ __all__ = [
     "CameraMode",
     "CameraSensor",
     "CaptureState",
+    "CaptureStatus",
     "IntRange",
     "PixelFormat",
     "StorageStatus",

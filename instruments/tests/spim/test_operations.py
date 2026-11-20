@@ -34,6 +34,8 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
     "set_camera_region": {"camera": "camera", "region": None},
     "start_preview": {},
     "stop_preview": {},
+    "start_acquisition": {"storage": {"path": "runs/1"}, "operator": "ana"},
+    "stop_acquisition": {},
 }
 """1 valid call of each operation that the SPIM microscope declares itself, in the order they run; a function
 builds arguments that need the instrument."""

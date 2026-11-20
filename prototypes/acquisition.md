@@ -1,6 +1,8 @@
 # Acquisition
 
-Discussed on 2026-11-18, written down on 2026-11-19, revised on 2026-11-20 after 2 code reviews. Not built. The
+Discussed on 2026-11-18, written down on 2026-11-19, revised on 2026-11-20 after 2 code reviews. **Built** on
+2026-11-20 in `Microscope` (`spim/instrument.py`): the 3 scans as `_step_scan`, `_software_scan` and `_sweep_scan`,
+tested on simulated devices that pass their edges along the wires (`instruments/tests/spim/test_acquisition.py`). The
 records it writes are built in `src/vxl/records/` (see `records.md`); the writer side is in `writer.md`.
 
 ## Where it lives
@@ -37,11 +39,11 @@ class AcquisitionInfo(ActivityInfo):
     acquisition_id: UUID
     visit: int          # the index of the visit that runs now
     visits: int         # how many visits in total
-    phase: Phase        # planning | visiting | ending
+    stopping: bool      # a stop was asked for, or the run is ending
 ```
 
 - The loop calls `activity.update(...)`; `view.activities` carries it. `InstrumentView` gets no acquisition fields.
-- A stop request sets `ending` at once, as the legacy loop set `STOPPING` (`_legacy/instrument/core.py:771-774`).
+- A stop request sets `stopping` at once, as the legacy loop set `STOPPING` (`_legacy/instrument/core.py:771-774`).
 - Frame counts are in the record (`frames_written` and `dropped` per image), not on the activity.
 - Time left is measured, not planned: frames still to write ÷ the frame rate so far. There is no estimate before
   Start.
@@ -104,14 +106,16 @@ Left as they are, on purpose:
    2. Move the stage to the visit's start, wait until it is still, then set `Volume.positions`. `_apply_profile` set
       the stage-following devices for where the stage was before the move (`base.py:507`); the planner already
       worked out the right ones for this stop.
-   3. Open 1 image per camera with `async with camera.image(..., when_full=...)` (an `AsyncExitStack` for several
+   3. Open 1 image per camera, at `<visit>/<profile>/<channel>/<camera>` under the storage, with
+      `async with camera.image(..., when_full=...)` (an `AsyncExitStack` for several
       cameras), then `visit.images_opened(locations)`.
    4. Reset the live streams after `_apply_profile`, as `_begin_preview` does.
    5. Run the batch loop (below). Turn the lights on with `hal.lights_on(sources)` after the cameras are armed for
       the first batch and before the generators start, as the legacy loop did (`core.py:1653-1655`). A laser whose
       light has no path to the sample fails the visit (the preview only warns).
-   6. Report `visit.frames(camera, written)` from each camera's progress, and `visit.frames_dropped(camera, ranges)`
-      before the visit ends.
+   6. Each camera's `progress` stream is subscribed while its image is open; each change goes to
+      `visit.frames(camera, collected)`, which the records save at most once a second. Report
+      `visit.frames_dropped(camera, ranges)` before the visit ends.
    7. Clean up in a `finally` inside the image blocks, so the images close after: lights off, generators stopped,
       the axis halted. Every step runs even when one fails, and the errors are raised together; reuse the step
       runner of `_stop_preview_devices`. A cleanup error never hides the error that ended the visit.
@@ -164,7 +168,10 @@ Picked on 2026-11-20: no new camera action.
 ## Device calls
 
 - Camera handle: `check_writable`, `image(..., when_full)` (wraps `open_image` and `close_image`), `begin_batch`,
-  `capture_state`, `release_writer`, `reset_live_stream`, `ready_for_batch`; new: `progress`, `dropped`.
+  `capture_state`, `release_writer`, `reset_live_stream`, `ready_for_batch`; new: `progress`, `dropped`,
+  `wait_for_batch(batch)`, `wait_until_collected`. The waits follow the camera's `capture` stream
+  (`CaptureStatus`: `batch`, `state`, `error`); `begin_batch` and `close_image` give back the number to wait for, so a
+  stale value from an earlier batch never ends a wait. The `capture_state` query stays for the legacy loop.
 - Axis handle: `move_to`, `wait_until_still`, `arm_steps`, `sweep`, `halt`, `run_up`, `scan_state`.
 - Generator handle: `load`, `start(count)`, `stop`, `wait_until_done`.
 - Hal: `lights_on`, `lights_off`.
@@ -186,14 +193,19 @@ the writer cannot take are dropped by whole batches and reported.
 
 ## To do
 
-- `start_acquisition`, `stop_acquisition` and `AcquisitionInfo` on `Microscope`.
-- The flow and the batch loop for the 3 rows of the table.
-- The resources above: `set_power_mode` holding `_power_mode`, and `execute_device_command` refusing actions on held
-  devices.
-- The writer's `when_full` and `dropped`, and the camera passing them on (`writer.md`).
-- The records' dropped frames and `gaps` status (`records.md`).
-- A `progress` getter on the camera handle.
+- `acquisition.log.jsonl`: `Records.record` writes it at the end (`AcquisitionStore.write_log` exists, nothing
+  calls it).
 - Reading the drivers' dropped frames (`StreamInfo.dropped_frames`); nothing reads them today.
-- `Records.record` writes `acquisition.log.jsonl` at the end (`AcquisitionStore.write_log` exists, nothing calls it).
 - A sweep `margin` above 0 by default, checked by the config.
+- The planner ignores the task's scan direction (`path.scan`, such as `alternate`): every run goes low to high.
+- The writer refuses a pyramid deeper than the frame allows (a 64 px frame with the default 7 levels fails with a
+  shared-memory size of 0); the config could check it.
+- The software pacer has no simulated test.
 - A new ASI Tiger axis driver with `sweep` and `arm_steps`, outside `instruments/`; ask before starting it.
+
+## Simulation notes
+
+- Simulated devices that send edges from their own helper threads hand each one to the wiring's thread with
+  `Device.call_soon`; rigup refuses a call into a device from a thread that is not a device's.
+- A simulated sweep needs a wide margin (the test uses 30 %): Python threads can be several ms late, and a generator
+  misses a pulse while it plays a cycle.

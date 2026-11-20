@@ -1,7 +1,7 @@
 """Camera device handle with typed methods."""
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from pathlib import PurePosixPath
 
@@ -14,14 +14,13 @@ from vxlib.imaging.writer import FrameRange, WhenFull, WriterProgress
 from vxlib.vector import Transform, Vec2D
 
 from vxl.devices.camera.area import AreaCamera, AreaROI
-from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, TriggerMode, TriggerPolarity
+from vxl.devices.camera.base import Camera, CameraSensor, CaptureState, CaptureStatus, TriggerMode, TriggerPolarity
 from vxl.live import LiveViewport
 from vxl.storage import ImageLocation, StorageSpec, StorageStatus
 
 _IMAGE_LOCATION_ADAPTER = TypeAdapter(ImageLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
 _FRAME_RANGES_ADAPTER = TypeAdapter(list[FrameRange])
-_CLOSE_POLL_S = 0.05
 
 
 class CameraHandle[D: Camera](DeviceHandle[D]):
@@ -56,6 +55,7 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         self.sensor: PropView[CameraSensor] = self.props.view("sensor", CameraSensor.model_validate)
         self.ready_for_batch: PropView[bool] = self.props.view("ready_for_batch", bool)
         self.progress: PropView[WriterProgress] = self.props.view("progress", WriterProgress.model_validate)
+        self.capture: PropView[CaptureStatus] = self.props.view("capture", CaptureStatus.model_validate)
 
     async def start_preview(
         self,
@@ -114,9 +114,10 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         )
         return _IMAGE_LOCATION_ADAPTER.validate_python(result)
 
-    async def close_image(self) -> None:
-        """Start writing what is left of the image and closing it. Poll :meth:`capture_state` until ``CLOSED``."""
-        await self.call("close_image")
+    async def close_image(self) -> int:
+        """Start writing what is left of the image and closing it, and give back the close's number in
+        :attr:`capture`."""
+        return await self.call("close_image")
 
     @asynccontextmanager
     async def image(
@@ -135,11 +136,36 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         try:
             yield location
         finally:
-            await self.close_image()
-            while True:  # the camera runs on a node: its state is polled, there is no event to wait on
-                if await self.capture_state() is CaptureState.CLOSED:
-                    break
-                await asyncio.sleep(_CLOSE_POLL_S)
+            closing = await self.close_image()
+            await self._wait_for(
+                lambda s: s.batch == closing and (s.state is CaptureState.CLOSED or s.error is not None)
+            )
+
+    async def wait_for_batch(self, batch: int) -> None:
+        """Wait until batch ``batch`` of :meth:`begin_batch` is done. Raise when it failed."""
+        await self._wait_for(lambda s: s.batch == batch and (s.state is CaptureState.DONE or s.error is not None))
+
+    async def wait_until_collected(self) -> None:
+        """Wait until the camera collects no more frames: its batch is done, or has failed."""
+        await self._wait_for(lambda status: status.state is not CaptureState.COLLECTING, raise_on_error=False)
+
+    async def _wait_for(self, reached: Callable[[CaptureStatus], bool], *, raise_on_error: bool = True) -> None:
+        """Wait until :attr:`capture` is ``reached``, read now and then followed as the camera streams it. Raise when
+        the status reached carries an error, unless not ``raise_on_error``."""
+        found = asyncio.get_running_loop().create_future()
+
+        def check(status: CaptureStatus) -> None:
+            if not found.done() and reached(status):
+                found.set_result(status)
+
+        teardown = self.capture.subscribe(check)
+        try:
+            check(await self.capture.get())
+            status: CaptureStatus = await found
+        finally:
+            teardown()
+        if raise_on_error and status.error is not None:
+            raise RuntimeError(f"{self.id} capture failed: {status.error}")
 
     async def dropped(self) -> list[FrameRange]:
         """The frames of the open image that the writer dropped because every buffer was busy."""
@@ -149,9 +175,10 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         """Free the writer's buffers (its workers and shared memory); the next image allocates them again."""
         await self.call("release_writer")
 
-    async def begin_batch(self, num_frames: int) -> None:
-        """Arm and start grabbing num_frames frames in the background. Poll capture_state for completion."""
-        await self.call("begin_batch", num_frames)
+    async def begin_batch(self, num_frames: int) -> int:
+        """Arm and start grabbing ``num_frames`` frames in the background, and give back the batch's number in
+        :attr:`capture`, to pass to :meth:`wait_for_batch`."""
+        return await self.call("begin_batch", num_frames)
 
     async def capture_state(self) -> CaptureState:
         """Where the most recent :meth:`begin_batch` or :meth:`close_image` is. Raises if it failed."""

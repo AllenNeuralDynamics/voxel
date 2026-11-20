@@ -256,13 +256,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         args: Sequence[Any] = (),
         kwargs: Mapping[str, Any] | None = None,
     ) -> Result[Any]:
-        """Run a command of a device. A query or a failsafe runs at once; an action waits for the command before it.
-        None of them restarts or refuses an activity."""
+        """Run a command of a device. A query or a failsafe runs at once. An action waits for the command before it,
+        and is refused while an activity that cannot restart holds the device; it never restarts one."""
         handle = self._hal.device(device_id)
         info = (await handle.interface()).operations.get(command)
         if info is not None and info.intent in ("query", "failsafe"):
             return await handle.execute(command, *args, **dict(kwargs or {}))
-        async with self._scheduler.run("execute a device command", requires=()):
+        async with self._scheduler.run("execute a device command", requires={device_id}, restart=False):
             return await handle.execute(command, *args, **dict(kwargs or {}))
 
     @action(on="stage", verb="move")
@@ -412,7 +412,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     @action(on="lights", verb="set_power_mode")
     async def set_power_mode(self, mode: PowerMode) -> None:
         """Use the full or the dim powers. A running preview changes at once."""
-        async with self._scheduler.run("set the power mode", requires=()):
+        async with self._scheduler.run("set the power mode", requires={self._power_mode}):
             await self._apply_powers(self._store.value.profiles[self._active_profile.value], mode)
             await self._power_mode.set(mode)
 

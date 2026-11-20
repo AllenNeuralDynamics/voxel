@@ -28,6 +28,7 @@ from vxl.devices.camera.base import (
     CameraMode,
     CameraSensor,
     CaptureState,
+    CaptureStatus,
     IntRange,
     PixelFormat,
     StreamInfo,
@@ -101,6 +102,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         self._writer: ImageWriter[WriterSettings, Storage] | None = None
         self._task: asyncio.Task[None] | None = None
         self._task_kind: Literal["batch", "close"] | None = None
+        self._batch = 0
         self._publish_tasks: dict[LiveLayer, asyncio.Task[None]] = {}
         # Preview-publish counters (best-effort publish is skip-if-busy); reported per image.
         self._ram = self._system.ram
@@ -273,14 +275,16 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         return self._writer
 
     @action()
-    async def close_image(self) -> None:
+    async def close_image(self) -> int:
         """Write what is left of the image and close it in the background, then disarm the camera. Returns at
-        once; poll :meth:`capture_state` until ``CLOSED``. Writing what is left can take a while, so it runs off
-        the call."""
+        once, with the close's number in :attr:`capture`; follow it until ``CLOSED``. Writing what is left can take a
+        while, so it runs off the call."""
         if self._task is not None and not self._task.done():
             raise RuntimeError("Capture task already in progress.")
         self._task = asyncio.create_task(self._close_image())
         self._task_kind = "close"
+        self._batch += 1
+        return self._batch
 
     async def _close_image(self) -> None:
         """Write what is left of the image and close it, then reset the camera to a reusable IDLE state.
@@ -346,8 +350,9 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         num_frames: int,
         trigger_mode: TriggerMode = TriggerMode.ON,
         trigger_polarity: TriggerPolarity = TriggerPolarity.RISING_EDGE,
-    ) -> None:
-        """Arm the trigger for ``num_frames`` frames and start grabbing them in the background.
+    ) -> int:
+        """Arm the trigger for ``num_frames`` frames and start grabbing them in the background, and give back the
+        batch's number in :attr:`capture`.
 
         Waits for a free writer slot, then arms the camera before returning — so the caller can start
         the AO/triggers as soon as this resolves. Poll :meth:`capture_state` for completion; frame and
@@ -371,6 +376,8 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         )
         self._task = asyncio.create_task(self._collect_batch(num_frames, writer))
         self._task_kind = "batch"
+        self._batch += 1
+        return self._batch
 
     async def _collect_batch(self, num_frames: int, writer: ImageWriter[WriterSettings, Storage]) -> None:
         """Grab ``num_frames`` frames into the writer, then stop the camera."""
@@ -413,10 +420,28 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
                     frame.close()
             raise
 
+    @property
+    @stream("fast")
+    def capture(self) -> CaptureStatus:
+        """Where the latest :meth:`begin_batch` or :meth:`close_image` is, with its number and why it failed."""
+        task, batch = self._task, self._batch
+        if task is None:
+            return CaptureStatus(batch=batch)
+        if not task.done():
+            state = CaptureState.COLLECTING if self._task_kind == "batch" else CaptureState.CLOSING
+            return CaptureStatus(batch=batch, state=state)
+        if task.cancelled():
+            return CaptureStatus(batch=batch, state=CaptureState.IDLE, error="cancelled")
+        if (exc := task.exception()) is not None:
+            return CaptureStatus(batch=batch, state=CaptureState.IDLE, error=str(exc))
+        state = CaptureState.DONE if self._task_kind == "batch" else CaptureState.CLOSED
+        return CaptureStatus(batch=batch, state=state)
+
     @query()
     async def capture_state(self) -> CaptureState:
         """Lifecycle of the most recent :meth:`begin_batch`/:meth:`close_image` task. Non-mutating: the
-        terminal state persists until the next task starts. Raises if the task failed."""
+        terminal state persists until the next task starts. Raises if the task failed. Kept for the legacy loop; new
+        code follows :attr:`capture`."""
         task = self._task
         if task is None:
             return CaptureState.IDLE

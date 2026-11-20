@@ -159,8 +159,9 @@ class SimulatedContinuousAxis(ContinuousAxisNew):
         for at in times:
             if ended.wait(max(0.0, began + at - time.monotonic())):
                 return
-            wiring.send(self.id, pin, True)
-            wiring.send(self.id, pin, False)
+            # This thread is not a device's: hand each turn to the wiring's own thread.
+            wiring.call_soon(lambda: wiring.send(self.id, pin, True))
+            wiring.call_soon(lambda: wiring.send(self.id, pin, False))
 
     def _end_pulses(self) -> None:
         if self._pulsing is not None:

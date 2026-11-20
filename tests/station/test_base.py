@@ -154,6 +154,17 @@ async def test_a_device_command_runs_while_an_activity_holds_the_device(instrume
     assert [activity.kind for activity in instrument.view.value.activities] == ["calibration"]
 
 
+async def test_a_device_action_is_refused_while_an_activity_that_cannot_restart_holds_the_device(
+    instrument: _Bench,
+) -> None:
+    scheduler = instrument._scheduler
+    async with scheduler.run("start a calibration", requires=()):
+        await scheduler.start(ActivityInfo(kind="calibration"), {"laser_488"}, stop=_nothing)
+
+    with pytest.raises(ActivityBusyError, match="Unable to execute a device command while calibration is running"):
+        await instrument.execute_device_command("laser_488", "on")
+
+
 async def test_a_device_of_the_wrong_kind_stops_the_start(tmp_path: Path) -> None:
     rig = {**_RIG, "stage": {"x": {"device": "daq"}, "y": {"device": "y_axis"}, "z": {"device": "z_axis"}}}
     instrument = _instrument(tmp_path, rig)

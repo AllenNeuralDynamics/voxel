@@ -121,6 +121,39 @@ Not built.
 - Capped: lower OS priority, a limit on requests at once.
 - Big data comes from storage (Zarr, `acquisition.json`), never through the station.
 
+## Listing and filters
+
+Discussed on 2026-11-21 for the History page. Nothing here is built.
+
+**For now: only filters the database answers with its indexes.** History filters by status and by a range of the
+created time ("Any time", "Today", "Last 7 days", "Last 30 days"), newest first.
+
+- The table already has what they need (`migrations/0001_initial.sql`): `created_at_us`, an index on it for
+  acquisitions that are not archived, and an index on `status, created_at_us`. "Failed, in the last 7 days" is an
+  indexed query.
+- Missing: a store method with conditions. `AcquisitionStore` has only `list_all()`, which returns every record in full.
+  Add 1 list method taking an instrument, a status and a from/to time, using those indexes.
+- Add an index on `instrument, created_at_us`: each station page lists 1 instrument, and the `instrument` column has
+  no index today.
+
+**Later, by what each needs:**
+
+| Filter | Where the value is | What it needs |
+|---|---|---|
+| Operator | `operator`, top level of every record: a fixed place | Its own column written on save (as `status`), or an index on `json_extract(acquisition_json, '$.operator')`, or a generated column |
+| Key value (the subject), task names | Each task's metadata in `instrument_state.plan[].metadata`, shaped by the instrument's metadata form | A side table filled on save, `acquisition_keys(acquisition_id, field, value)`, indexed on `value` or `field, value` |
+| Profile | `visits[].profile` | The same side table, or its own `acquisition_profiles(acquisition_id, profile)` |
+| Free text (notes, names, key values) | Anywhere in the record | An FTS5 table filled on save |
+
+Why a path index does not fit metadata: an index on an expression holds 1 value per row and 1 fixed path. The
+metadata form differs per instrument (exaSPIM's key field is `subject_id`; another form may use `slide_id` or have no
+key), and 1 acquisition has several tasks, so several values. A side table holds field names as data and 1 row per
+task, so it works for any form.
+
+References: [indexes on expressions](https://www.sqlite.org/expridx.html),
+[JSON functions](https://www.sqlite.org/json1.html), [generated columns](https://www.sqlite.org/gencol.html),
+[FTS5](https://www.sqlite.org/fts5.html).
+
 ## Open
 
 - The full public schema of `acquisition.json`: versioned by `schema`, a new major version for a breaking change.

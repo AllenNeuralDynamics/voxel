@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable, Coroutine, Iterable
 from typing import Any, cast
 
 _log = logging.getLogger(__name__)
@@ -67,3 +67,17 @@ async def gather_all[T](*calls: Awaitable[T], message: str) -> list[T]:
     if errors := [result for result in results if isinstance(result, BaseException)]:
         raise BaseExceptionGroup(message, errors)
     return cast("list[T]", results)
+
+
+async def gather_in_order(steps: Iterable[tuple[Iterable[Awaitable[object]], str]], message: str) -> None:
+    """Gather each step's calls with :func:`gather_all`, 1 step after the other; each pair is the calls and the step's
+    title. Every step runs even when one fails. Raise 1 ``BaseExceptionGroup`` titled ``message`` with each failed
+    step's group."""
+    failures: list[BaseException] = []
+    for calls, title in steps:
+        try:
+            await gather_all(*calls, message=title)
+        except BaseExceptionGroup as group:
+            failures.append(group)
+    if failures:
+        raise BaseExceptionGroup(message, failures)
