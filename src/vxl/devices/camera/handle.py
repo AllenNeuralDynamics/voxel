@@ -10,6 +10,7 @@ from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, PropView
 from vxlib.coalescer import Coalescer
+from vxlib.imaging.writer import FrameRange, WhenFull, WriterProgress
 from vxlib.vector import Transform, Vec2D
 
 from vxl.devices.camera.area import AreaCamera, AreaROI
@@ -19,6 +20,7 @@ from vxl.storage import ImageLocation, StorageSpec, StorageStatus
 
 _IMAGE_LOCATION_ADAPTER = TypeAdapter(ImageLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
+_FRAME_RANGES_ADAPTER = TypeAdapter(list[FrameRange])
 _CLOSE_POLL_S = 0.05
 
 
@@ -53,6 +55,7 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         self.frame_area_um: PropView[Vec2D] = self.props.view("frame_area_um", Vec2D.parse)
         self.sensor: PropView[CameraSensor] = self.props.view("sensor", CameraSensor.model_validate)
         self.ready_for_batch: PropView[bool] = self.props.view("ready_for_batch", bool)
+        self.progress: PropView[WriterProgress] = self.props.view("progress", WriterProgress.model_validate)
 
     async def start_preview(
         self,
@@ -95,11 +98,20 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         await self.call("update_live_viewport", viewport)
 
     async def open_image(
-        self, *, storage: StorageSpec, subpath: PurePosixPath, transform: Transform, settings: WriterSettings
+        self,
+        *,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
+        transform: Transform,
+        settings: WriterSettings,
+        when_full: WhenFull = "wait",
     ) -> ImageLocation:
         """Prepare the camera and its writer for 1 image, and give the image's location while it is written.
-        ``transform`` gives the frame count and where each pixel sits; ``settings`` are the writer's own."""
-        result = await self.call("open_image", storage=storage, subpath=subpath, transform=transform, settings=settings)
+        ``transform`` gives the frame count and where each pixel sits; ``settings`` are the writer's own;
+        ``when_full`` is what a batch does when every buffer is busy."""
+        result = await self.call(
+            "open_image", storage=storage, subpath=subpath, transform=transform, settings=settings, when_full=when_full
+        )
         return _IMAGE_LOCATION_ADAPTER.validate_python(result)
 
     async def close_image(self) -> None:
@@ -108,11 +120,18 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
 
     @asynccontextmanager
     async def image(
-        self, storage: StorageSpec, subpath: PurePosixPath, transform: Transform, settings: WriterSettings
+        self,
+        storage: StorageSpec,
+        subpath: PurePosixPath,
+        transform: Transform,
+        settings: WriterSettings,
+        when_full: WhenFull = "wait",
     ) -> AsyncGenerator[ImageLocation]:
         """Open 1 image for the block, and give its location. Leaving the block closes the image and waits until
         every frame is written, also after an error."""
-        location = await self.open_image(storage=storage, subpath=subpath, transform=transform, settings=settings)
+        location = await self.open_image(
+            storage=storage, subpath=subpath, transform=transform, settings=settings, when_full=when_full
+        )
         try:
             yield location
         finally:
@@ -121,6 +140,10 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
                 if await self.capture_state() is CaptureState.CLOSED:
                     break
                 await asyncio.sleep(_CLOSE_POLL_S)
+
+    async def dropped(self) -> list[FrameRange]:
+        """The frames of the open image that the writer dropped because every buffer was busy."""
+        return _FRAME_RANGES_ADAPTER.validate_python(await self.call("dropped"))
 
     async def release_writer(self) -> None:
         """Free the writer's buffers (its workers and shared memory); the next image allocates them again."""

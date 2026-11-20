@@ -18,6 +18,31 @@ do there. How the acquisition drives the cameras is in `acquisition.md`.
   feeds the record's `frames_written`.
 - **Dropped frames:** the drivers report them (`StreamInfo.dropped_frames`); nothing reads them yet.
 
+## When the writer is full
+
+Agreed on 2026-11-20, not built. The writer owns the rule, so the caller never checks for free slots:
+
+```python
+open_image(target, size, dtype, transform, settings, ram_bytes, when_full: Literal["wait", "drop"])
+
+with writer.new_frame() as frame:   # unchanged: called for every frame
+    device.grab_frame(out=frame)
+
+writer.dropped -> list[FrameRange]  # what it dropped so far
+```
+
+- `"wait"`: `new_frame` blocks until a slot is free, as today. Step scans use it.
+- `"drop"`: at a batch border with no free slot, the writer drops that whole batch by itself. For each frame of it,
+  `new_frame` gives a scratch buffer and throws it away, so the camera's own buffer does not overflow. At the next
+  border it tries again. Sweeps use it.
+- Whole batches only: a batch is whole shards and a multiple of the pyramid factor, so a missing batch is just
+  missing shards, read as the fill value at every level.
+- `progress` (`WriterProgress`) gets a `dropped` count, and `metrics.json` notes dropped batches. `close()` works when
+  the last batch was dropped.
+- Where: `DatasetWriter` (`omezarr/`), the `ImageWriter` interface (`vxlib/src/vxlib/imaging/writer.py`), and the
+  camera, which passes `when_full` through `open_image` and `image(...)` and reports `dropped`. `begin_batch` does not
+  change.
+
 ## Geometry: OME-Zarr 0.6
 
 Built. Sources: the specs index https://ngff.openmicroscopy.org/specifications/ and RFC-5

@@ -12,6 +12,7 @@ from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, JsonValue, model_validator
+from vxlib.imaging.writer import FrameRange
 from vxlib.issues import Failure
 from vxlib.schema import FrozenModel
 from vxlib.vector import Transform
@@ -53,11 +54,13 @@ class VisitStatus(StrEnum):
 
 
 class ImageStatus(StrEnum):
-    """How complete an image is. ``partial``: some of its frames were written before its visit ended."""
+    """How complete an image is. ``partial``: some of its frames were written before its visit ended. ``gaps``: every
+    frame was written or dropped, and some were dropped."""
 
     PENDING = "pending"
     WRITING = "writing"
     COMPLETED = "completed"
+    GAPS = "gaps"
     PARTIAL = "partial"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -71,17 +74,22 @@ class ImageFormat(StrEnum):
 
 class Image(FrozenModel):
     """1 camera's image of 1 visit. ``transform`` gives its shape and where each pixel sits, in specimen µm; its first
-    axis counts the frames."""
+    axis counts the frames. ``dropped`` holds the frames the writer dropped because every buffer was busy."""
 
     format: ImageFormat = ImageFormat.OME_ZARR
     transform: Transform
     locations: list[ImageLocation] = Field(default_factory=list)
     frames_written: int = Field(default=0, ge=0)
+    dropped: list[FrameRange] = Field(default_factory=list)
 
     @property
     def frames_total(self) -> int:
         """The frames planned."""
         return self.transform.shape[0]
+
+    @property
+    def frames_dropped(self) -> int:
+        return sum(frames.count for frames in self.dropped)
 
 
 class Visit(FrozenModel):
@@ -126,6 +134,8 @@ class Visit(FrozenModel):
         image = self.images()[camera]
         if image.frames_written == image.frames_total:
             return ImageStatus.COMPLETED
+        if image.frames_written + image.frames_dropped == image.frames_total:
+            return ImageStatus.GAPS
         if self.result is None:
             return ImageStatus.WRITING if image.locations else ImageStatus.PENDING
         if self.result == "skipped":
@@ -133,11 +143,11 @@ class Visit(FrozenModel):
         return ImageStatus.PARTIAL if image.frames_written else ImageStatus.FAILED
 
     def missing(self) -> dict[str, int]:
-        """Each camera that wrote fewer frames than planned, with how many it misses."""
+        """Each camera that neither wrote nor dropped all the frames planned, with how many it misses."""
         return {
-            camera: image.frames_total - image.frames_written
+            camera: missing
             for camera, image in self.images().items()
-            if image.frames_written < image.frames_total
+            if (missing := image.frames_total - image.frames_written - image.frames_dropped) > 0
         }
 
 

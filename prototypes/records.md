@@ -59,6 +59,20 @@ Acquisition
 - A visit stores its own result. We may derive it from its images later, if storing it gives no value.
 - No separate instrument block. `instrument_config` and `instrument_state` carry the instrument.
 
+## Dropped frames
+
+Agreed on 2026-11-20, not built. A sweep may drop whole batches when the writer is full (`writer.md`).
+
+- `Image.dropped: list[FrameRange]`, empty by default.
+- `Visit.missing()` counts only frames neither written nor dropped. So a sweep with drops completes, and a step scan
+  that lost frames still fails.
+- New image status `gaps`: every frame is accounted for, but some were dropped. `completed` stays for "every frame
+  written".
+- `VisitRecording.frames_dropped(camera, ranges)`: the loop reports the drops before the visit ends.
+- No new result or state for "completed with drops": a result says how a visit ended, and the drops are facts on
+  the images. When a reader needs it (a screen, `acquisition.json` readers), add `frames_dropped` sums on `Visit`
+  and `Acquisition`, worked out from the images, and show them in `for_readers()`.
+
 ## Metadata
 
 - Metadata is per task. Each task in the plan has `metadata`, in the form that the state's `metadata_cls` gives. 1

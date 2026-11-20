@@ -14,6 +14,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequen
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from vxlib.imaging.writer import FrameRange
 from vxlib.issues import Failure
 
 from vxl.storage import ImageLocation
@@ -82,6 +83,16 @@ class VisitRecording:
             return {"channels": visit.with_images({camera: image}).channels}
 
         await self._run.change_visit(self._index, change, save=self._run.progress_due(), write_file=False)
+
+    async def frames_dropped(self, camera: str, dropped: Sequence[FrameRange]) -> None:
+        """Save the frames ``camera``'s writer dropped. Report them before the visit ends: a dropped frame is not
+        missing."""
+
+        def change(visit: Visit) -> Mapping[str, object]:
+            image = visit.images()[camera].model_copy(update={"dropped": list(dropped)})
+            return {"channels": visit.with_images({camera: image}).channels}
+
+        await self._run.change_visit(self._index, change)
 
 
 class Recording:

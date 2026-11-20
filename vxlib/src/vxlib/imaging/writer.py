@@ -9,7 +9,7 @@ import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from typing import Self
+from typing import Literal, Self
 
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
@@ -18,18 +18,43 @@ from vxlib.dtype import Dtype
 from vxlib.schema import FrozenModel
 from vxlib.vector import IVec2D, Transform
 
+type WhenFull = Literal["wait", "drop"]
+"""What a writer does with a new batch when every buffer is busy: ``wait`` for one, or ``drop`` the whole batch."""
+
+
+class FrameRange(FrozenModel):
+    """The frames from ``first`` to ``last`` of an image, both included."""
+
+    first: int = Field(ge=0)
+    last: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _in_order(self) -> Self:
+        if self.last < self.first:
+            raise ValueError(f"last ({self.last}) must not come before first ({self.first})")
+        return self
+
+    @property
+    def count(self) -> int:
+        return self.last - self.first + 1
+
 
 class WriterProgress(FrozenModel):
-    """How far the open image is: frames ``collected`` into memory and ``flushed`` to storage, of ``total``."""
+    """How far the open image is: frames ``collected`` into memory and ``flushed`` to storage, and frames
+    ``dropped``, of ``total``."""
 
     collected: int = Field(default=0, ge=0)
     flushed: int = Field(default=0, ge=0)
+    dropped: int = Field(default=0, ge=0)
     total: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _in_order(self) -> Self:
-        if not self.flushed <= self.collected <= self.total:
-            raise ValueError(f"flushed ({self.flushed}) <= collected ({self.collected}) <= total ({self.total})")
+        if not self.flushed <= self.collected <= self.total - self.dropped:
+            raise ValueError(
+                f"flushed ({self.flushed}) <= collected ({self.collected}) <= total ({self.total}) - dropped "
+                f"({self.dropped})"
+            )
         return self
 
 
@@ -71,10 +96,20 @@ class ImageWriter[S: BaseModel, T](ABC):
     the next image opens fast; :meth:`release` frees them."""
 
     @abstractmethod
-    def open_image(self, target: T, size: IVec2D, dtype: Dtype, transform: Transform, settings: S, ram_bytes: int) -> T:
+    def open_image(
+        self,
+        target: T,
+        size: IVec2D,
+        dtype: Dtype,
+        transform: Transform,
+        settings: S,
+        ram_bytes: int,
+        when_full: WhenFull = "wait",
+    ) -> T:
         """Open 1 image at ``target``, of ``transform.shape[0]`` frames of ``size`` pixels, and give back where the
-        image itself is written. Use at most ``ram_bytes`` of memory for buffers. Raise ``ValueError`` when ``size``
-        does not match ``transform.shape[1:]``."""
+        image itself is written. Use at most ``ram_bytes`` of memory for buffers. ``when_full`` says what a batch
+        that finds every buffer busy does: wait, or drop all its frames. Raise ``ValueError`` when ``size`` does not
+        match ``transform.shape[1:]``."""
 
     @property
     @abstractmethod
@@ -88,11 +123,17 @@ class ImageWriter[S: BaseModel, T](ABC):
 
     @abstractmethod
     def new_frame(self) -> AbstractContextManager[np.ndarray]:
-        """The memory for the next frame: fill it inside the block, and the frame counts once the block ends."""
+        """The memory for the next frame: fill it inside the block, and the frame counts once the block ends. A frame
+        of a dropped batch gets scratch memory, and is thrown away."""
 
     @abstractmethod
-    def latest_frame(self) -> FrameLease:
-        """The last frame written, lent read-only."""
+    def latest_frame(self) -> FrameLease | None:
+        """The last frame, lent read-only; ``None`` when it was dropped or none has come yet."""
+
+    @property
+    @abstractmethod
+    def dropped(self) -> list[FrameRange]:
+        """The frames of the open image dropped so far, or none when no image is open."""
 
     @property
     @abstractmethod

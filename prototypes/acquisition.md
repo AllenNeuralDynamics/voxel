@@ -1,7 +1,7 @@
 # Acquisition
 
-Discussed on 2026-11-18, written down on 2026-11-19, revised on 2026-11-20. Not built. The records it writes are
-built in `src/vxl/records/` (see `records.md`).
+Discussed on 2026-11-18, written down on 2026-11-19, revised on 2026-11-20 after 2 code reviews. Not built. The
+records it writes are built in `src/vxl/records/` (see `records.md`); the writer side is in `writer.md`.
 
 ## Where it lives
 
@@ -27,7 +27,7 @@ async def stop_acquisition(self) -> None:
 - `host` comes from `System.hostname()`.
 - The whole plan runs. A list of `task_ids` (as in the legacy loop) is left out; it can come later as 1 optional
   argument.
-- The run is a background task. `start_acquisition` returns once the record exists.
+- `stop_acquisition` is a failsafe: it never goes through the scheduler (see "The scheduler").
 
 ## Live state
 
@@ -41,7 +41,8 @@ class AcquisitionInfo(ActivityInfo):
 ```
 
 - The loop calls `activity.update(...)`; `view.activities` carries it. `InstrumentView` gets no acquisition fields.
-- Frame counts are in the record (`frames_written` per image), not on the activity.
+- A stop request sets `ending` at once, as the legacy loop set `STOPPING` (`_legacy/instrument/core.py:771-774`).
+- Frame counts are in the record (`frames_written` and `dropped` per image), not on the activity.
 - Time left is measured, not planned: frames still to write ÷ the frame rate so far. There is no estimate before
   Start.
 - The record reaches screens through `AcquisitionStore.subscribe`, the log through `LogJournal.subscribe` (see
@@ -54,76 +55,117 @@ class AcquisitionInfo(ActivityInfo):
 - The loop reads the `Volume`s, never the record. The record only describes what happened.
 - The config and state, with each task's metadata, are frozen into the record (`instrument_config`,
   `instrument_state`).
+- `_apply_profile` reads the profile from the store, not from a frozen copy (`base.py:494`). That is sound only
+  because the run holds the store. If plan edits are ever allowed during a run, apply from a snapshot.
+
+## The scheduler
+
+- **The run never calls `scheduler.run`.** The run's activity holds every device with no restart, so any operation
+  that names one is refused by the run itself (`activity.py:154`). And `close()` holds the scheduler lock while
+  `stop_all()` waits for the run's cleanup (`base.py:204`), so a cleanup that took the lock would deadlock. The loop
+  calls `_apply_profile`, `_move_axis` and the device handles directly.
+- **The task starts with a fresh context** (`asyncio.create_task(..., context=contextvars.Context())`). A task made
+  inside `start_acquisition`'s operation would copy its "inside an operation" mark and skip the lock
+  (`activity.py:94`). The "record exists" signal comes back through a future that also carries a startup error.
+- **Task housekeeping:** the instrument keeps a reference to the task; the task logs its own error (the records raise
+  it again, `records.py:191-193`) instead of leaving "Task exception was never retrieved"; on a normal end it calls
+  `activity.end()` itself.
+
+## Resources
+
+The `acquisition` activity holds, with no restart:
+
+- every device of the instrument, to be safe;
+- the store: every edit is refused during a run (plan, profiles, powers, properties, tuning knobs), as the legacy
+  "busy" state did;
+- `_active_profile`;
+- `_power_mode`: `set_power_mode` holds nothing today (`requires=()`), so it would switch every light between full and
+  dim during a run. It must hold `_power_mode`. The preview does not hold it, so the preview still changes at once.
+
+Changes outside the run:
+
+- `execute_device_command` refuses an action on a device that the run holds. Today it holds nothing and its docstring
+  says "None of them restarts or refuses an activity" (`base.py:259-266`). Queries and failsafes still run at once.
+
+Left as they are, on purpose:
+
+- A power edit holds only the store, not the light. Holding the light would restart the preview on every slider move.
+  The store already refuses it during a run.
+- `lights_off` and `lasers_off` are failsafes: they always work, also during a run.
 
 ## The flow
 
 1. Stop the preview. Check that each camera of the plan can write `storage` (`check_writable`), before anything is
    recorded.
 2. Freeze the plan into `Volume`s. Build the `Acquisition`, with 1 `Visit` per `Volume` and 1 `Image` per camera
-   (from `Volume.transforms`).
+   (from `Volume.transforms`). Set the power mode to `full` for the whole run; it is not set back after.
 3. `async with records.record(acquisition) as run:` for each visit, `async with run.visit(i) as visit:`
-   - lights off, apply the profile, move the stage to the visit's start,
-   - open 1 image per camera with `async with camera.image(...)` (an `AsyncExitStack` for several cameras), then
-     `visit.images_opened(locations)`,
-   - reset the live streams, as `_begin_preview` does,
-   - run the chunk loop (below), reporting `visit.frames(camera, written)`,
-   - in a `finally` inside the image blocks: lights off, generators stopped, the axis halted. The images close after.
-4. After the last visit, or on a stop or an error: release each camera's writer.
+   1. Apply the profile with `_apply_profile` (it turns every light off first).
+   2. Move the stage to the visit's start, wait until it is still, then set `Volume.positions`. `_apply_profile` set
+      the stage-following devices for where the stage was before the move (`base.py:507`); the planner already
+      worked out the right ones for this stop.
+   3. Open 1 image per camera with `async with camera.image(..., when_full=...)` (an `AsyncExitStack` for several
+      cameras), then `visit.images_opened(locations)`.
+   4. Reset the live streams after `_apply_profile`, as `_begin_preview` does.
+   5. Run the batch loop (below). Turn the lights on with `hal.lights_on(sources)` after the cameras are armed for
+      the first batch and before the generators start, as the legacy loop did (`core.py:1653-1655`). A laser whose
+      light has no path to the sample fails the visit (the preview only warns).
+   6. Report `visit.frames(camera, written)` from each camera's progress, and `visit.frames_dropped(camera, ranges)`
+      before the visit ends.
+   7. Clean up in a `finally` inside the image blocks, so the images close after: lights off, generators stopped,
+      the axis halted. Every step runs even when one fails, and the errors are raised together; reuse the step
+      runner of `_stop_preview_devices`. A cleanup error never hides the error that ended the visit.
+4. After the last visit, or on a stop or an error: release every camera's writer. 1 failure does not stop the others,
+   and failures are only logged: the record has already ended.
+5. The active profile stays as the last visit's profile.
 
 `Records.record` and `Recording.visit` already set every status: a normal end completes, a cancel cancels, an error
 fails, missing frames fail the visit, and visits that never started are skipped. The loop never names a status.
 
-## The chunk loop
+## The batch loop
 
-A visit runs in chunks. Between chunks, the loop waits until every camera has a free writer slot. That is the brake:
-a slow disk makes the scan wait instead of losing frames. A chunk is at most what fits in the free slots.
+A visit runs in batches of the writer's `batch_frames`. The writer's ring holds several batches in memory while
+workers write them to disk.
 
-| Motion | Pacer | 1 chunk |
-| --- | --- | --- |
-| step | a device | `begin_batch(n)` on each camera, `arm_steps` for `n` steps, start the generators for `n` cycles |
-| step | `software` | for each frame: move the axis, then play 1 cycle |
-| sweep | a device | a **segmented sweep**: 1 short sweep of `n` frames |
+| Motion | Pacer | How a visit runs | When the writer is full |
+| --- | --- | --- | --- |
+| step | a device | per batch: `begin_batch(n)` on each camera, `arm_steps` for `n` steps, `start(n)` on each generator, wait until every camera is `DONE`, `wait_until_done` on the generators | `when_full="wait"`: `begin_batch` waits for a slot, and the stage waits with it. No frame is lost. |
+| step | `software` | per frame: `move_to(p, wait=True)`, then `start(1)` and `wait_until_done` on each generator; the cameras are armed per batch and the axis is never armed | `"wait"`, as above |
+| sweep | a device | 1 `begin_batch(all frames)` on each camera, each generator loaded with `InputEdges(pin)` and started for all frames, then 1 `sweep(Sweep(first, last, speed, Pulses(count, pin)))` | `when_full="drop"`: the writer drops each whole batch that finds no free slot, and the sweep goes on. The record reports the dropped frames. |
 
-**Segmented sweep:** 1 visit and 1 image, but the stage runs the strip as several shorter sweeps.
-
-- The image opens 1 time, for all frames.
-- For each segment: arm the cameras (`begin_batch(n)`), load each generator with `InputEdges(pin)`, start it for `n`
-  cycles, then `sweep(Sweep(first, last, speed, Pulses(n, pin)))`. Each stage pulse plays 1 cycle, and each cycle
-  triggers 1 frame.
-- Segment `k` starts its first pulse at frame `k`'s position. Each segment adds 1 run-up.
-- If the whole strip fits in the free slots, there is 1 segment: the same as 1 long sweep.
-- The generator's pin is the wire from `SPIMProfile.trigger_chain(config).waits`.
-- The loop uses the spacing that `sweep()` gives back (the sweep the axis really runs), not the planned one.
-
-Why chunks: the writer (`omezarr/src/ome_zarr_writer/writer.py`) already moves to the next slot by itself and blocks
-when all are busy. But the camera's `begin_batch(n)` stops after `n` frames, and a sweeping stage cannot wait for it.
-
-## Resources
-
-The `acquisition` activity holds, with no restart:
-
-- the store: every edit is refused during a run (plan, profiles, powers, properties, tuning knobs), as the legacy
-  "busy" state did. The run reads its frozen copy, so plan edits could later be allowed with a finer resource.
-- the devices of every profile in the plan: cameras, generators, lights and the devices on their paths, and the stage.
-- `_power_mode`: `set_power_mode` holds nothing today (`requires=()`), so it would switch every light between full and
-  dim during a run. It must hold `_power_mode`. The preview does not hold it, so the preview still changes at once.
-
-Left as they are, on purpose:
-
-- A power edit holds only the store, not the light. Holding the light would restart the preview on every slider move.
-  The store already refuses it during a run.
-- `lights_off` and `lasers_off` are failsafes and hold nothing: they always work, also during a run.
+- The user must not run a sweep faster than the writer can keep up; dropped batches are reported, not prevented.
+- A generator's 2nd `start(n)` does nothing while its state is still `running` (`generator/base.py:108`). Each batch
+  ends with `wait_until_done` (it also stops) before the next `start`.
+- `begin_batch` raises while the last batch still runs (`area.py:353`), so the loop waits for `DONE` on every camera
+  first. `capture_state` raises once a batch has failed, which ends the visit.
+- Step: `arm_steps` checks travel from the current position, so steps go on from where the last batch stopped. It
+  follows `move_to(start, wait=True)`.
+- Sweep: the generator's pin is the wire from `SPIMProfile.trigger_chain(config).waits`. The loop uses the sweep that
+  `sweep()` gives back (what the axis really runs), not the planned one. A sweep needs at least 2 frames
+  (`Pulses.count >= 2`); a 1-frame visit runs as a step.
+- Sweep: `margin` must be above 0. With 0, a pulse comes exactly 1 cycle after the last (`plan.py:121`), and a
+  generator ignores a pulse while a cycle plays (the simulated one does too, `generator/simulated.py:156-158`), so 1
+  late pulse loses a frame.
+- Load is free when the cycle is the same (`generator/base.py:79-80`), so the loop can load once per visit.
 
 ## Stopping
 
-- `stop_acquisition` and `stop_all()` cancel the run's task and wait for its cleanup.
-- A camera grab that waits for a trigger blocks a stop on the same device thread. The stop must end that grab.
+Picked on 2026-11-20: no new camera action.
+
+- A stop cancels the run's task. The cleanup stops the generators, so no more triggers come. Each camera grab that
+  waits gives up after its timeout, the batch fails, and the image can close. Today `close_image` and
+  `release_writer` raise while a batch still runs (`area.py:273`, `317`).
+- So a stop takes up to 1 grab timeout. Every real camera driver needs a grab timeout longer than its slowest frame;
+  the simulated camera has one (`trigger_timeout_s`).
+- `Instrument.stop()` promises to never wait for the running command (`base.py:221`). The run's `stop` therefore waits
+  for its cleanup with a time limit, and `hal.stop()` runs even when that limit passes.
+- Later, if stops feel slow: an `abort_batch()` camera action that stops the driver from a 2nd thread.
 
 ## Device calls
 
-- Camera handle: `check_writable`, `image(...)` (wraps `open_image` and `close_image`), `begin_batch`,
-  `capture_state`, `release_writer`, `reset_live_stream`.
-- Axis handle: `move_to`, `arm_steps`, `sweep`, `halt`, `run_up`, `scan_state`.
+- Camera handle: `check_writable`, `image(..., when_full)` (wraps `open_image` and `close_image`), `begin_batch`,
+  `capture_state`, `release_writer`, `reset_live_stream`, `ready_for_batch`; new: `progress`, `dropped`.
+- Axis handle: `move_to`, `wait_until_still`, `arm_steps`, `sweep`, `halt`, `run_up`, `scan_state`.
 - Generator handle: `load`, `start(count)`, `stop`, `wait_until_done`.
 - Hal: `lights_on`, `lights_off`.
 
@@ -131,17 +173,27 @@ Left as they are, on purpose:
 
 - Only `SimulatedLinearAxis` has `sweep` and `arm_steps` today. ASI Tiger (`drivers/src/vxl_drivers/axes/asi.py`),
   MMC and Thorlabs still use the legacy axis with a TTL stepper only.
-- ASI hardware can run a segmented sweep: `SCANR` takes a start and a stop, the pulse output goes high as the stage
+- ASI hardware can sweep with pulses: `SCANR` takes a start and a stop, the pulse output goes high as the stage
   crosses the start, then 1 pulse every N encoder counts; the stage overshoots both ends so the speed is steady
   between them. Sources: https://asiimaging.com/docs/commands/scanr and https://asiimaging.com/docs/scan_module.
 - So a first pulse lands on the start to 1 encoder count, and the spacing is a whole number of counts.
 
+## Dropped: segmented sweeps
+
+Proposed and dropped on 2026-11-20, on advice. A sweep split into short sweeps, waiting for free slots between them,
+would lose no frames but adds a run-up and a turn-around per segment. Instead, a sweep is 1 sweep, and frames that
+the writer cannot take are dropped by whole batches and reported.
+
 ## To do
 
 - `start_acquisition`, `stop_acquisition` and `AcquisitionInfo` on `Microscope`.
-- The flow and the chunk loop for the 3 rows of the table.
-- The resources above, and `set_power_mode` holding `_power_mode`.
-- Ending a waiting camera grab on a stop.
+- The flow and the batch loop for the 3 rows of the table.
+- The resources above: `set_power_mode` holding `_power_mode`, and `execute_device_command` refusing actions on held
+  devices.
+- The writer's `when_full` and `dropped`, and the camera passing them on (`writer.md`).
+- The records' dropped frames and `gaps` status (`records.md`).
+- A `progress` getter on the camera handle.
 - Reading the drivers' dropped frames (`StreamInfo.dropped_frames`); nothing reads them today.
 - `Records.record` writes `acquisition.log.jsonl` at the end (`AcquisitionStore.write_log` exists, nothing calls it).
+- A sweep `margin` above 0 by default, checked by the config.
 - A new ASI Tiger axis driver with `sweep` and `arm_steps`, outside `instruments/`; ask before starting it.

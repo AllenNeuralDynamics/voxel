@@ -14,7 +14,7 @@ from ome_zarr_writer import OMEZarrWriter, Storage, WriterSettings
 from pydantic import BaseModel, Field
 from rigup.interface import StreamTier, action, choice, fact, failsafe, integer, number, query, stream
 from vxlib.dtype import Dtype
-from vxlib.imaging.writer import FrameLease, ImageWriter, WriterProgress
+from vxlib.imaging.writer import FrameLease, FrameRange, ImageWriter, WhenFull, WriterProgress
 from vxlib.schema import FrozenModel
 from vxlib.vector import IVec2D, Transform, Vec2D
 
@@ -131,8 +131,13 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
     @property
     @stream("fast")
     def progress(self) -> WriterProgress:
-        """How far the open image is: frames collected into memory and flushed to storage."""
+        """How far the open image is: frames collected into memory, flushed to storage, and dropped."""
         return self._writer.progress if self._writer else WriterProgress()
+
+    @query()
+    def dropped(self) -> list[FrameRange]:
+        """The frames of the open image that the writer dropped because every buffer was busy."""
+        return self._writer.dropped if self._writer else []
 
     def _on_live_frame(self, frame: LiveFrame) -> None:
         task = self._publish_tasks.get(frame.header.layer)
@@ -220,12 +225,14 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         subpath: PurePosixPath,
         transform: Transform,
         settings: WriterSettings,
+        when_full: WhenFull = "wait",
     ) -> ImageLocation:
         """Prepare the camera and its writer for 1 image, and give the image's location while it is written.
 
         ``storage`` is where the acquisition writes and ``subpath`` the image's place under it; this computer
         resolves them. ``transform`` gives the image's frame count and where each pixel sits; its frames must have
-        the size the camera reads now. ``settings`` are the writer's own. Batches start with :meth:`begin_batch`.
+        the size the camera reads now. ``settings`` are the writer's own. ``when_full`` is what a batch of the
+        writer does when every buffer is busy: wait, or drop its frames. Batches start with :meth:`begin_batch`.
         """
         if self._mode != CameraMode.IDLE:  # an image already open, or a preview → the mode is not IDLE
             raise RuntimeError(f"Cannot open an image: camera in {self._mode} mode")
@@ -248,7 +255,7 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
             started = time.perf_counter()
             written = await self._run(
                 lambda: self._writer_or_fail().open_image(
-                    target, size, dtype, transform, settings, self.ram_budget_bytes()
+                    target, size, dtype, transform, settings, self.ram_budget_bytes(), when_full
                 )
             )
             log.info(
@@ -370,6 +377,9 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         valid_bits = await self._run(self._valid_bits)
         for _ in range(num_frames):
             frame = await self._capture_into_writer(writer)
+            if frame is None:  # dropped by the writer: nothing for the live view
+                self._frame_idx += 1
+                continue
             try:
                 self._live.submit_frame(
                     frame,
@@ -382,10 +392,11 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
             self._frame_idx += 1
         await self._run(self.device.stop)
 
-    async def _capture_into_writer(self, writer: ImageWriter[WriterSettings, Storage]) -> FrameLease:
-        """Fill and commit one writer frame as one serialized, cancellation-safe device transaction."""
+    async def _capture_into_writer(self, writer: ImageWriter[WriterSettings, Storage]) -> FrameLease | None:
+        """Fill and commit one writer frame as one serialized, cancellation-safe device transaction. ``None`` when
+        the writer dropped the frame."""
 
-        def _grab() -> FrameLease:
+        def _grab() -> FrameLease | None:
             with writer.new_frame() as frame:
                 self.device.grab_frame(out=frame)
             return writer.latest_frame()
@@ -398,7 +409,8 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
             # its destination is not reused mid-write, then release a committed frame nobody will consume.
             with suppress(Exception):
                 frame = await task
-                frame.close()
+                if frame is not None:
+                    frame.close()
             raise
 
     @query()

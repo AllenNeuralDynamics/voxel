@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path, PurePosixPath
 
 import pytest
+from vxlib.imaging.writer import FrameRange
 from vxlib.issues import Failure
 from vxlib.vector import Transform, Vec3D
 
@@ -213,3 +214,24 @@ async def test_the_log_window_follows_the_acquisition_and_its_log_is_written(rec
     assert "during" in messages
     assert "before" not in messages
     assert "after" not in messages
+
+
+async def test_dropped_frames_leave_gaps_and_only_unaccounted_frames_fail_a_visit(records: Records) -> None:
+    acquisition = _acquisition(2)
+
+    async def run_all() -> None:
+        async with records.record(acquisition) as run:
+            async with run.visit(0) as visit:
+                await _capture(visit, 6)
+                await visit.frames_dropped("camera", [FrameRange(first=6, last=9)])
+            async with run.visit(1) as visit:
+                await _capture(visit, 6)
+                await visit.frames_dropped("camera", [FrameRange(first=6, last=7)])
+
+    with pytest.raises(CaptureError):
+        await run_all()
+
+    stored = await records.acquisitions.get(acquisition.id)
+    assert [visit.status for visit in stored.visits] == ["completed", "failed"]
+    assert [visit.image_status("camera") for visit in stored.visits] == ["gaps", "partial"]
+    assert stored.visits[1].missing() == {"camera": 2}

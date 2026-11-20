@@ -39,7 +39,7 @@ import psutil
 from cloudpathlib import S3Path
 from pydantic import BaseModel, ConfigDict, Field
 from vxlib.dtype import Dtype as PixelType
-from vxlib.imaging.writer import FrameLease, ImageWriter, WriterProgress
+from vxlib.imaging.writer import FrameLease, FrameRange, ImageWriter, WhenFull, WriterProgress
 from vxlib.vector import IVec2D, Transform, UIVec3D
 
 from ome_zarr_writer.array import ArrayWriter
@@ -228,6 +228,7 @@ class BatchMetrics(BaseModel):
     batch_idx: int
     expected_frames: int
     collected_frames: int = 0
+    dropped: bool = False
     flushed_bytes: int = 0
     transfered_bytes: int = 0
     collecting: Timing = Field(default_factory=Timing)
@@ -311,6 +312,10 @@ class DatasetWriter:
     and waits on the per-batch flush futures (for slot reuse and at close). The ring is borrowed: the
     writer drives the slots but never closes them, leaving every slot IDLE on :meth:`close` for reuse.
 
+    ``when_full`` says what a batch does when every slot is busy at its first frame: ``wait`` for a slot, or
+    ``drop`` the whole batch. A dropped batch's frames go into scratch memory and are thrown away; nothing is
+    written for it, so readers see the fill value there.
+
     Metadata is authored (main process) before binding; then each slot's worker opens the arrays. For a
     `StagedS3` storage the worker writes shards to local scratch and the main process uploads them per
     batch (s5cmd) as each flush completes; `Local`/`DirectS3` write straight to the target.
@@ -323,6 +328,7 @@ class DatasetWriter:
         ring: Ring,
         *,
         backend: ArrayWriter.Backend,
+        when_full: WhenFull = "wait",
     ) -> None:
         if not ring.matches(config.batch_shape, config.max_level, config.dtype):
             raise ValueError(
@@ -333,6 +339,7 @@ class DatasetWriter:
             raise ValueError(f"ring needs at least 2 slots, got {len(ring)}")
 
         self._config = config
+        self._when_full: WhenFull = when_full
         self._storage = storage
         self._ring = ring  # borrowed for this writer's lifetime; never closed here
         self._slot_count = len(ring)
@@ -387,6 +394,10 @@ class DatasetWriter:
         self._frame_open = False
         self._latest_slot: BatchSlot | None = None
         self._failure: BaseException | None = None
+        self._dropping = False
+        self._scratch: np.ndarray | None = None
+        self._dropped: list[FrameRange] = []
+        self._latest_dropped = False
         self._batches = BatchMetrics.create_many(
             self._frame_count, self._batch_frames
         )  # one record per batch, by index
@@ -417,6 +428,11 @@ class DatasetWriter:
         """The per-batch metrics records for this dataset, indexed by batch."""
         return self._batches
 
+    @property
+    def dropped(self) -> list[FrameRange]:
+        """The frames dropped so far, neighbouring batches joined into 1 range."""
+        return list(self._dropped)
+
     @contextmanager
     def new_frame(self) -> Generator[np.ndarray]:
         """Yield the next writable destination, committing on clean exit and aborting if the block raises."""
@@ -425,8 +441,14 @@ class DatasetWriter:
             raise RuntimeError("a frame is already open")
         if self._frames_added >= self._frame_count:
             raise RuntimeError(f"volume complete: {self._frames_added}/{self._frame_count} frames")
-        if self._current_slot is None:
-            self._assign_collecting_slot()
+        if self._current_slot is None and not self._dropping:
+            if self._when_full == "wait":
+                self._assign_collecting_slot()
+            elif not self._try_assign_collecting_slot():
+                self._begin_dropping()
+        if self._dropping:
+            yield from self._dropped_frame()
+            return
         if self._current_slot is None:  # pragma: no cover - narrowed by _assign_collecting_slot
             raise RuntimeError("writer did not assign a collecting slot")
         slot = self._ring[self._current_slot]
@@ -442,31 +464,48 @@ class DatasetWriter:
         finally:
             frame.flags.writeable = False
 
-    def latest_frame(self) -> FrameLease:
-        """Retain read-only access to the latest committed frame until the returned lease closes."""
+    def latest_frame(self) -> FrameLease | None:
+        """Retain read-only access to the latest frame until the returned lease closes; ``None`` when it was
+        dropped or none has been committed."""
         self._raise_if_failed()
         if self._frame_open:
             raise RuntimeError("cannot lease the latest frame while a frame is open")
-        if self._latest_slot is None:
-            raise RuntimeError("no frame has been committed")
+        if self._latest_dropped or self._latest_slot is None:
+            return None
         return FrameLease(self._latest_slot.retain_last_frame(), self._latest_slot.release_reader)
+
+    def _dropped_frame(self) -> Generator[np.ndarray]:
+        """Lend scratch memory for 1 frame of the batch being dropped, and count the frame once the block ends."""
+        if self._scratch is None:
+            shape = self._config.batch_shape
+            self._scratch = np.empty((shape.y, shape.x), dtype=self._config.dtype.dtype)
+        self._frame_open = True
+        try:
+            yield self._scratch
+        finally:
+            self._frame_open = False
+        self._frames_added += 1
+        self._latest_dropped = True
+        if self._frames_added % self._batch_frames == 0 or self._frames_added == self._frame_count:
+            self._dropping = False
+
+    def _begin_dropping(self) -> None:
+        """Drop the batch that starts at the next frame, and note its frames."""
+        batch_idx = self._frames_added // self._batch_frames
+        batch = self._batches[batch_idx]
+        batch.dropped = True
+        first, last = self._frames_added, self._frames_added + batch.expected_frames - 1
+        if self._dropped and self._dropped[-1].last + 1 == first:
+            self._dropped[-1] = FrameRange(first=self._dropped[-1].first, last=last)
+        else:
+            self._dropped.append(FrameRange(first=first, last=last))
+        self._dropping = True
+        log.warning("Every slot of %s is busy: dropped frames %d to %d", self._target, first, last)
 
     def _assign_collecting_slot(self) -> None:
         """Choose any reusable ring slot, waiting only when processing or retained reads occupy all slots."""
         while True:
-            self._reap()
-            for offset in range(self._slot_count):
-                slot_idx = (self._next_slot_hint + offset) % self._slot_count
-                slot = self._ring[slot_idx]
-                if not slot.reusable:
-                    continue
-                if slot_idx in self._inflight:
-                    self._harvest(slot_idx)  # completed future: record metrics before reassigning its memory
-                batch_idx = self._frames_added // self._batch_frames
-                slot.assign_batch(batch_idx)
-                self._batches[batch_idx].collecting.begin()
-                self._current_slot = slot_idx
-                self._next_slot_hint = (slot_idx + 1) % self._slot_count
+            if self._try_assign_collecting_slot():
                 return
 
             if self._inflight:
@@ -476,6 +515,24 @@ class DatasetWriter:
             # Every worker is finished, so retained readers are the only remaining owners. Wait briefly
             # on one slot and rescan; another slot may be the one whose reader actually released.
             self._ring[self._next_slot_hint].wait_for_reader_change(timeout=0.01)
+
+    def _try_assign_collecting_slot(self) -> bool:
+        """Make a reusable ring slot collect the next batch, without waiting. Give back whether one was free."""
+        self._reap()
+        for offset in range(self._slot_count):
+            slot_idx = (self._next_slot_hint + offset) % self._slot_count
+            slot = self._ring[slot_idx]
+            if not slot.reusable:
+                continue
+            if slot_idx in self._inflight:
+                self._harvest(slot_idx)  # completed future: record metrics before reassigning its memory
+            batch_idx = self._frames_added // self._batch_frames
+            slot.assign_batch(batch_idx)
+            self._batches[batch_idx].collecting.begin()
+            self._current_slot = slot_idx
+            self._next_slot_hint = (slot_idx + 1) % self._slot_count
+            return True
+        return False
 
     def _commit_frame(self) -> None:
         """Commit the open frame."""
@@ -492,6 +549,7 @@ class DatasetWriter:
         self._batches[slot.batch_idx].collected_frames += 1
         self._frames_added += 1
         self._frame_open = False
+        self._latest_dropped = False
 
         try:
             if slot.filled_l0 == self._batch_frames and self._frames_added < self._frame_count:
@@ -754,8 +812,16 @@ class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
         flushed = sum(b.expected_frames for b in done)
         collected = sum(b.collected_frames for b in batches)
         return WriterProgress(
-            collected=collected, flushed=min(flushed, collected), total=sum(b.expected_frames for b in batches)
+            collected=collected,
+            flushed=min(flushed, collected),
+            dropped=sum(b.expected_frames for b in batches if b.dropped),
+            total=sum(b.expected_frames for b in batches),
         )
+
+    @property
+    def dropped(self) -> list[FrameRange]:
+        """The frames of the open image dropped so far, or none when no image is open."""
+        return self._active.dropped if self._active is not None else []
 
     def open_image(
         self,
@@ -765,17 +831,20 @@ class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
         transform: Transform,
         settings: WriterSettings,
         ram_bytes: int,
+        when_full: WhenFull = "wait",
     ) -> Storage:
         """Open 1 image as a dataset under ``target`` and give back the dataset's own location. Its metadata says
-        where each pixel sits, from ``transform``."""
+        where each pixel sits, from ``transform``. ``when_full`` is what a batch does when every slot is busy."""
         _, height, width = transform.shape
         if (height, width) != (size.y, size.x):
             raise ValueError(f"frames of {size.x} x {size.y} px do not match the image's {width} x {height}")
         config = WriterConfig(**settings.model_dump(), transform=transform, dtype=dtype)
-        dataset = self.open_dataset(config, target, ram_bytes=ram_bytes)
+        dataset = self.open_dataset(config, target, ram_bytes=ram_bytes, when_full=when_full)
         return target.model_copy(update={"target": dataset.target})
 
-    def open_dataset(self, config: WriterConfig, storage: Storage, *, ram_bytes: int | None = None) -> DatasetWriter:
+    def open_dataset(
+        self, config: WriterConfig, storage: Storage, *, ram_bytes: int | None = None, when_full: WhenFull = "wait"
+    ) -> DatasetWriter:
         """Open 1 dataset from a full ``config``, as :meth:`open_image` does from a transform, and give its writer.
         Reuse the kept ring when its geometry fits; otherwise release it and allocate one: of the fixed ``slots``
         when the writer has them, else within ``ram_bytes`` and the memory free now."""
@@ -794,7 +863,7 @@ class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
                 max_level=config.max_level,
                 dtype=config.dtype,
             )
-        self._active = DatasetWriter(config, storage, self._ring, backend=self._backend)
+        self._active = DatasetWriter(config, storage, self._ring, backend=self._backend, when_full=when_full)
         return self._active
 
     @staticmethod
@@ -820,8 +889,8 @@ class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
         with self._active.new_frame() as frame:
             yield frame
 
-    def latest_frame(self) -> FrameLease:
-        """The last frame written to the open image, lent read-only."""
+    def latest_frame(self) -> FrameLease | None:
+        """The last frame of the open image, lent read-only; ``None`` when it was dropped or none has come yet."""
         if self._active is None:
             raise RuntimeError("no image open; call open_image() first")
         return self._active.latest_frame()

@@ -7,7 +7,7 @@ whether it is built.
 
 | Note | What | State |
 | --- | --- | --- |
-| `acquisition.md` | The acquisition loop in SPIM: commands, live state, the chunk loop, segmented sweeps | not built |
+| `acquisition.md` | The acquisition loop in SPIM: commands, live state, resources, the batch loop for steps and sweeps | not built |
 | `records.md` | The station's records of acquisitions and logs, and the public contract | built, except the share service |
 | `writer.md` | How images reach storage, OME-Zarr 0.6 geometry, line scan | mostly built |
 | `interface.md` | Instrument operations declared with decorators, and their HTTP routes | built; HTTP is a try-out |

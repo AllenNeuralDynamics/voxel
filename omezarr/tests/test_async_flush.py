@@ -7,14 +7,16 @@ per-frame values mean any reuse-before-flush would corrupt the read-back, so a g
 the invariant holds while flush overlaps capture.
 """
 
+import time
 from concurrent.futures import Future
 from pathlib import Path
 
 import numpy as np
 import pytest
-from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, WriterConfig
+from ome_zarr_writer import Local, OMEZarrWriter, ScaleLevel, WriterConfig, WriterSettings
 from ome_zarr_writer.array.ts import TSArrayReader
-from vxlib.vector import Transform, Vec3D
+from vxlib.imaging.writer import FrameRange
+from vxlib.vector import IVec2D, Transform, Vec3D
 
 
 def _read_l0(base: Path, z: int) -> np.ndarray:
@@ -95,6 +97,7 @@ def test_retained_frame_prevents_slot_reuse_after_processing(tmp_path: Path) -> 
     with writer.new_frame() as frame:
         frame.fill(11)
     lease = writer.latest_frame()
+    assert lease is not None
     writer.close_image()
 
     assert writer._ring is not None
@@ -122,6 +125,7 @@ def test_flush_failure_poisoning_is_sticky(tmp_path: Path, monkeypatch: pytest.M
     with writer.new_frame() as frame:
         frame.fill(1)
     lease = writer.latest_frame()
+    assert lease is not None
     with pytest.raises(RuntimeError, match="flush failed"):
         dataset.close()
 
@@ -135,3 +139,45 @@ def test_flush_failure_poisoning_is_sticky(tmp_path: Path, monkeypatch: pytest.M
 
     lease.close()
     writer.release()
+
+
+@pytest.mark.slow
+def test_a_batch_that_finds_every_slot_busy_is_dropped_whole_and_the_next_one_is_written(tmp_path: Path) -> None:
+    cfg = WriterConfig(transform=Transform.grid((4 * 64, 64, 64), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
+    batch = cfg.batch_frames
+    writer = OMEZarrWriter(slots=2)
+    writer.open_image(
+        Local(target=tmp_path / "drop"),
+        IVec2D(x=64, y=64),
+        cfg.dtype,
+        cfg.transform,
+        WriterSettings(max_level=ScaleLevel.L6),
+        ram_bytes=0,
+        when_full="drop",
+    )
+    leases = []
+    for i in range(4 * batch):
+        with writer.new_frame() as frame:
+            frame.fill(i + 1)
+        if i in (batch - 1, 2 * batch - 1):  # a reader holds the last frame of batches 0 and 1: both slots stay busy
+            lease = writer.latest_frame()
+            assert lease is not None
+            leases.append(lease)
+        if i == 3 * batch - 1:
+            assert writer.latest_frame() is None  # the last frame of the dropped batch
+            for lease in leases:
+                lease.close()
+            deadline = time.monotonic() + 30
+            while not writer.ready_for_batch:  # the slots finish writing to disk
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+
+    assert writer.dropped == [FrameRange(first=2 * batch, last=3 * batch - 1)]
+    assert writer.progress.dropped == batch
+    writer.close_image()
+    writer.release()
+
+    arr = _read_l0(tmp_path / "drop", 4 * batch)
+    assert int(arr[2 * batch - 1].max()) == 2 * batch
+    assert int(arr[2 * batch : 3 * batch].max()) == 0
+    assert int(arr[3 * batch].min()) == 3 * batch + 1
