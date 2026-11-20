@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from .support import codes, load, profile, signals
+from .support import codes, load, problems, profile, rig, signals
 
 type Change = Callable[[dict[str, Any]], Any]
 
@@ -14,8 +14,7 @@ def _channel(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _messages(data: dict[str, Any], code: str) -> list[str]:
-    example = load(data)
-    return [v.msg for v in example.problems() if v.code == code]
+    return [problem.msg for problem in problems(data) if problem.code == code]
 
 
 def _second_camera(data: dict[str, Any]) -> None:
@@ -45,17 +44,11 @@ def _unlit_laser(data: dict[str, Any]) -> None:
         (_unlit_laser, "profile.channel.no_path"),
         (_second_camera, "profile.channel.dark"),
         (lambda d: profile(d)["positions"].update(camera="x"), "profile.position.unexpected"),
-        (lambda d: profile(d).update(fov={"fw": {"x": 0, "y": 0, "w": 64, "h": 64}}), "profile.fov.not_channel"),
         (lambda d: profile(d).update(setup={"x_axis": []}), "profile.setup_inactive"),
         (
             lambda d: profile(d)["timelines"].update(camera=profile(d)["timelines"]["ao_main"]),
             "profile.timeline.no_wires",
         ),
-        (lambda d: d["wiring"]["ao_main"].pop("z_step"), "profile.unstarted"),
-        (lambda d: d["wiring"]["ao_main"].pop("camera_trigger"), "profile.unstarted"),
-        (lambda d: profile(d).update(timelines={}), "profile.trigger_not_played"),
-        (lambda d: signals(d).pop("z_step"), "profile.trigger_not_played"),
-        (lambda d: signals(d).pop("camera_trigger"), "profile.trigger_not_played"),
         (lambda d: signals(d).update(shutter={"kind": "off"}), "timeline.signal.unexpected"),
         (lambda d: signals(d).update(laser={"kind": "constant", "value": "1 V"}), "timeline.signal.kind_mismatch"),
         (lambda d: signals(d)["galvo"].update(amplitude="0.5 mm"), "timeline.signal.unit_mismatch"),
@@ -73,35 +66,36 @@ def _unlit_laser(data: dict[str, Any]) -> None:
         ),
     ],
 )
-def test_profile_problems(config_data: dict[str, Any], change: Change, code: str) -> None:
-    change(config_data)
-    assert code in codes(load(config_data))
+def test_profile_problems(change: Change, code: str) -> None:
+    data = rig()
+    change(data)
+    assert code in codes(data)
 
 
-def test_a_wire_with_no_signal_stays_at_rest(config_data: dict[str, Any]) -> None:
-    del signals(config_data)["galvo"]
-    del signals(config_data)["laser"]
-    assert codes(load(config_data)) == []
+def test_a_wire_with_no_signal_stays_at_rest() -> None:
+    data = rig()
+    del signals(data)["galvo"]
+    del signals(data)["laser"]
+    assert codes(data) == []
 
 
-def test_a_pin_is_live_when_its_wire_has_a_signal_or_comes_from_a_camera(config_data: dict[str, Any]) -> None:
+def test_a_pin_is_live_when_its_wire_has_a_signal_or_comes_from_a_camera() -> None:
     def live(data: dict[str, Any]) -> dict[str, str]:
-        example = load(data)
-        inputs = example.default.profiles["gfp"].live_inputs(example.config)
+        config, default = load(data)
+        inputs = default.profiles["gfp"].live_inputs(config)
         return {str(pin): f"{wire.sender}.{wire.name}" for pin, wire in inputs.items()}
 
-    assert live(config_data) == {
+    data = rig()
+    assert live(data) == {
         "camera/trigger_in": "ao_main.camera_trigger",
         "laser/ttl_in": "ao_main.laser",
         "galvo/in": "ao_main.galvo",
-        "z_axis/ttl_in": "ao_main.z_step",
     }
-    del signals(config_data)["laser"]
-    config_data["wiring"]["camera"] = {"frame": {"pin": "out", "to": ["x_axis/ttl_in"], "kind": "digital"}}
-    assert live(config_data) == {
+    del signals(data)["laser"]
+    data["wiring"]["camera"] = {"frame": {"pin": "out", "to": ["x_axis/ttl_in"], "kind": "digital"}}
+    assert live(data) == {
         "camera/trigger_in": "ao_main.camera_trigger",
         "galvo/in": "ao_main.galvo",
-        "z_axis/ttl_in": "ao_main.z_step",
         "x_axis/ttl_in": "camera.frame",
     }
 
@@ -113,13 +107,14 @@ def test_a_pin_is_live_when_its_wire_has_a_signal_or_comes_from_a_camera(config_
         ("galvo", "'galvo' is a part, so it has no settings."),
     ],
 )
-def test_props_go_to_free_devices_on_the_light_paths(config_data: dict[str, Any], device: str, message: str) -> None:
-    profile(config_data)["props"] = {device: {"speed": 1}, "laser": {"power_mw": 10}, "camera": {"binning": 1}}
-    assert _messages(config_data, "profile.props_inactive") == [message]
+def test_props_go_to_free_devices_on_the_light_paths(device: str, message: str) -> None:
+    data = rig()
+    profile(data)["props"] = {device: {"speed": 1}, "laser": {"power_mw": 10}, "camera": {"binning": 1}}
+    assert _messages(data, "profile.props_inactive") == [message]
 
 
-def test_a_device_can_hold_parts_that_magnify(config_data: dict[str, Any]) -> None:
-    hal = config_data
+def test_a_device_can_hold_parts_that_magnify() -> None:
+    hal = data = rig()
     hal["devices"]["turret"] = {
         "target": "builtins.object",
         "init": {"slots": {"0": "10x", "1": "20x"}},
@@ -129,11 +124,11 @@ def test_a_device_can_hold_parts_that_magnify(config_data: dict[str, Any]) -> No
     hal["parts"]["20x"] = {"target": "vxl.parts.Objective", "magnification": 20}
     hal["optics"]["specimen"]["to"] = "turret"
     hal["optics"]["turret"] = {"to": "fw"}
-    assert "profile.channel.magnification" in codes(load(config_data))
+    assert "profile.channel.magnification" in codes(data)
 
-    profile(config_data)["positions"]["turret"] = "20x"
-    example = load(config_data)
-    assert codes(example) == []
-    config, positions = example.config, example.default.profiles["gfp"].positions
+    profile(data)["positions"]["turret"] = "20x"
+    assert codes(data) == []
+    config, default = load(data)
+    positions = default.profiles["gfp"].positions
     (seen,) = config.optics.paths_to("camera", positions)
     assert (config.magnification(seen, positions), config.band(seen, positions)) == (20, (500, 550))

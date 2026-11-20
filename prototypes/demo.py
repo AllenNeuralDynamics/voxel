@@ -11,8 +11,9 @@ from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 
-from tests.instruments.spim.support import config_data, simulated, template
-from vxl.instruments.spim.instrument import Microscope
+from vxl_instruments.spim.instrument import Microscope
+
+from instruments.tests.spim.support import config_data, simulated, template
 from vxl.records import Records
 from vxl.station.errors import RejectedError
 from vxl.station.instrument.folder import InstrumentFolder

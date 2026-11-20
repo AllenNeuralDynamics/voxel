@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
+from vxl_instruments.spim.instrument import Microscope
+from vxl_instruments.spim.task import SPIMTask
 
-from tests.instruments.spim.support import config_data, simulated, template
-from vxl.instruments.spim.instrument import Microscope
-from vxl.instruments.spim.task import SPIMTask
+from instruments.tests.spim.support import config_data, simulated, template
 from vxl.records import Records
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System

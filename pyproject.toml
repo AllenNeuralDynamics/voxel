@@ -68,6 +68,7 @@ build-backend = "uv_build"
 members = [
     "rigup",
     "drivers",
+    "instruments",
     "vxlib",
     "omezarr",
     "bench",
@@ -80,6 +81,7 @@ ome-zarr-writer = { workspace = true }
 rigup = { workspace = true }
 vxlib = { workspace = true }
 vxl-records = { workspace = true }
+vxl-instruments = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -99,6 +101,7 @@ norecursedirs = ["notes"]
 testpaths = [
     "tests",
     "drivers/tests",
+    "instruments/tests",
     "omezarr/tests",
     "records/tests",
     "rigup/tests",

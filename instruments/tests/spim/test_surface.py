@@ -2,9 +2,8 @@ import math
 import random
 
 import pytest
+from vxl_instruments.spim.surface import Surface
 from vxlib.vector import Vec3D
-
-from vxl.instruments.spim.surface import Surface
 
 
 def _surface(points: list[tuple[float, float, float]]) -> Surface:

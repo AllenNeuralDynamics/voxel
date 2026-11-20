@@ -10,15 +10,15 @@ from itertools import product
 from pathlib import Path
 
 import numpy as np
+from vxl_instruments.spim.plan import _light
 from vxlib.vector import IVec2D, Transform, Vec2D, Vec3D
 
-from tests.instruments.spim.support import load_file
+from instruments.tests.spim.support import load_file
 from vxl.devices.camera import AreaROI, CameraSensor
-from vxl.instruments.spim.plan import _light
 from vxl.station.instrument.config import Detector
 from vxl.station.instrument.geometry import camera_frame
 
-_FILES = Path("tests/instruments/spim/files")
+_FILES = Path("instruments/src/vxl_instruments/spim/templates")
 _SAME_PLANE_DEG = 1.0
 
 type Point = tuple[float, float]
@@ -143,16 +143,17 @@ def _rounded(vector: Vec3D) -> tuple[float, float, float]:
 
 
 def main() -> None:
-    exaspim = load_file(_FILES / "exaspim-v1.yaml")
+    exaspim = load_file(_FILES / "z-step.yaml")
     sensors = {"camera": CameraSensor(pixel_um=Vec2D(x=3.76, y=3.76), size_px=IVec2D(x=14192, y=10640))}
     picks = {"excitation_side_selector": "left"}
     _, frames = _light(exaspim.config, exaspim.default.profiles["gfp"], picks, sensors)
     _show("exaSPIM, from exaspim-v1.yaml", frames, rect=(0.0, -1500.0, 2000.0, 1500.0), point=(1000.0, -500.0))
 
-    open_top = load_file(_FILES / "open-top.yaml")
+    open_top = load_file(_FILES / "x-sweep-oblique.yaml")
     sensors = {"camera": CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=2048, y=2048))}
     _, frames = _light(open_top.config, open_top.default.profiles["gfp"], {}, sensors)
-    _show("open-top, tilted 45°, from open-top.yaml", frames, rect=(0.0, -200.0, 200.0, 200.0), point=(200.0, 0.0))
+    title = "open-top, tilted 45°, from x-sweep-oblique.yaml"
+    _show(title, frames, rect=(0.0, -200.0, 200.0, 200.0), point=(200.0, 0.0))
 
     big = CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=2048, y=2048))
     small = CameraSensor(pixel_um=Vec2D(x=6.5, y=6.5), size_px=IVec2D(x=1024, y=1024))

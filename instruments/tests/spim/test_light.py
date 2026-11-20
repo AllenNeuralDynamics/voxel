@@ -1,13 +1,14 @@
-import copy
+"""The light of the SPIM preview: dim and full power, lights and lasers off during a preview, and a preview that
+runs dark. How every instrument sets its light is tested in ``tests/station/test_light.py``."""
+
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
+from vxl_instruments.spim.instrument import Microscope
 
-from vxl.instruments.spim.instrument import Microscope
 from vxl.records import Records
-from vxl.station.errors import RejectedError
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
 
@@ -36,10 +37,9 @@ _FLIP = {
 async def microscope(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterator[Microscope]:
     """An open microscope with a 488 nm laser, 1 AOTF line, a shutter, and a flip mirror that sends the light to the
     left or the right arm, or nowhere when it is ``closed``. A 561 nm laser has nothing after it to stop its light.
-    The generator can gate the AOTF line and set the 488 nm laser's power.
+    The generator gates the AOTF line.
 
-    Profile ``gfp`` gates the AOTF line with the generator, and gives it 1 power for each side. ``align`` is the same
-    with no gate signal. ``analog`` also sets the laser's power with a wire."""
+    Profile ``gfp`` gates the AOTF line with the generator, and gives it 1 power for each side."""
     data = simulated(config_data)
     data["devices"] |= {
         "laser": {"target": f"{_LIGHT}.SimulatedLaser", "init": {"wavelength": 488}},
@@ -61,13 +61,6 @@ async def microscope(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterat
     wires = data["wiring"]["ao_main"]
     del wires["laser"]
     wires["gate"] = {"pin": "ao1", "to": ["aotf/ttl_in"], **_DIGITAL}
-    wires["laser_power"] = {
-        "pin": "ao4",
-        "to": ["laser/analog_in"],
-        "kind": "analog",
-        "limits": {"V": [0, 5]},
-        "park": "0 V",
-    }
     default = data["default"]
     default["positions"] = {"flip": "left"}
     gfp = default["profiles"]["gfp"]
@@ -77,12 +70,6 @@ async def microscope(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterat
         "laser": {"full": "50 mW"},
         "aotf": {"router": "flip", "full": {"left": "30 %", "right": "42 %"}, "dim": {"left": "3 %", "right": "4 %"}},
     }
-    align = copy.deepcopy(gfp)
-    del align["timelines"]["ao_main"]["signals"]["gate"]
-    analog = copy.deepcopy(gfp)
-    analog["timelines"]["ao_main"]["signals"]["laser_power"] = {"kind": "constant", "value": "2 V"}
-    del analog["power"]["laser"]
-    default["profiles"] |= {"align": align, "analog": analog}
 
     folder = InstrumentFolder.create(template(data), "left", tmp_path)
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
@@ -111,10 +98,6 @@ async def _light(microscope: Microscope) -> dict[str, Any]:
     }
 
 
-def _saved(microscope: Microscope) -> dict[str, Any]:
-    return microscope.view.value.state.profiles["gfp"].model_dump(mode="json", exclude_none=True)["power"]
-
-
 async def test_a_preview_lights_the_dim_power_and_switches_to_full_without_a_restart(microscope: Microscope) -> None:
     assert (await _light(microscope))["on"] == (False, False, False)
     await microscope.start_preview()
@@ -125,38 +108,6 @@ async def test_a_preview_lights_the_dim_power_and_switches_to_full_without_a_res
     assert microscope._preview is running
     await microscope.stop_preview()
     assert (await _light(microscope))["on"] == (True, False, False)
-
-
-async def test_a_power_is_saved_for_the_side_the_light_goes_now(microscope: Microscope) -> None:
-    await microscope.set_power_mode("full")
-    await microscope.set_power("aotf", 35)
-    await microscope.set_position_rule("flip", "right")
-    await microscope.apply_profile()
-    assert (await _light(microscope))["power"] == 42
-    await microscope.set_dim_power("aotf", 5)
-    assert _saved(microscope) == {
-        "laser": {"full": "50 mW"},
-        "aotf": {"router": "flip", "full": {"left": "35 %", "right": "42 %"}, "dim": {"left": "3 %", "right": "5 %"}},
-    }
-
-
-async def test_a_power_out_of_range_is_refused_and_nothing_changes(microscope: Microscope) -> None:
-    await microscope.set_power_mode("full")
-    before = _saved(microscope)
-    with pytest.raises(RejectedError, match=r"cannot do 500 % \(it can do 0.5..100 %\)"):
-        await microscope.set_power("aotf", 500)
-    assert _saved(microscope) == before
-    assert (await _light(microscope))["power"] == 30
-
-
-async def test_the_timelines_of_a_profile_say_what_controls_each_device(microscope: Microscope) -> None:
-    assert (await _light(microscope))["controls"] == ("software", "digital")
-    await microscope.select_profile("align")
-    assert (await _light(microscope))["controls"] == ("software", "software")
-    await microscope.select_profile("analog")
-    assert (await _light(microscope))["controls"] == ("analog", "digital")
-    with pytest.raises(RejectedError, match="A wire sets the power of 'laser'"):
-        await microscope.set_power("laser", 20)
 
 
 async def test_lights_off_keeps_a_stopped_laser_on_and_lasers_off_turns_it_off(microscope: Microscope) -> None:

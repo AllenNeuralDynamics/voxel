@@ -1,0 +1,347 @@
+# A Z-step light sheet with 8 lasers and 4 cameras, on simulated drivers: it opens on any computer.
+# Each laser has an AOM that the generator gates. Both illumination sides have a focus. Behind the objective, 1 shared
+# filter wheel feeds a splitter to 4 cameras, each with its own focus and filter wheel; 1 focus moves all 4.
+# Each round of profiles images DAPI on camera 1 through the same filters, so the rounds line up.
+# The 4 cameras run on 1 computer, so each reads 7096 × 5320 px: 1/4 of an exaSPIM frame.
+# To run real hardware, swap each device's target for its driver.
+#
+# What each part of the file says, top to bottom:
+#   parts          things with no driver: kind says what each is. A filter has its band, an objective its magnification.
+#   devices        things with a driver: target names the driver's class, init its settings.
+#   rig.optics     where the light goes, from the light sources through the specimen to the cameras.
+#   rig.scan       the axis that 1 capture moves, step or sweep, and what sets the rhythm. The rest follows from the wires.
+#   default        what a new instrument starts with: task defaults, positions and profiles.
+#   a profile      channels by name, each with its cameras and their lights, positions, powers, timelines, spacing.
+#   a timeline     only the wires it plays. A wire with no signal stays at rest: off for a digital wire, park for an analog wire.
+
+rig:
+  model: z-step light sheet, 4 cameras
+  target: vxl_instruments.spim.Microscope
+
+  parts:
+    combiner:           {kind: combiner}
+    left_tunable_lens:  {kind: tunable_lens}
+    right_tunable_lens: {kind: tunable_lens}
+    positive_galvo:     {kind: galvo}
+    negative_galvo:     {kind: galvo}
+    objective:          {target: vxl.parts.Objective, magnification: 5.0}
+    splitter:           {kind: beam_splitter}        # sends the light to all 4 cameras
+    BP450:              {target: vxl.parts.Filter, band: [425 nm, 475 nm]}
+    BP480:              {target: vxl.parts.Filter, band: [465 nm, 495 nm]}
+    BP525:              {target: vxl.parts.Filter, band: [500 nm, 550 nm]}
+    BP545:              {target: vxl.parts.Filter, band: [530 nm, 560 nm]}
+    BP600:              {target: vxl.parts.Filter, band: [575 nm, 625 nm]}
+    BP630:              {target: vxl.parts.Filter, band: [615 nm, 645 nm]}
+    BP700:              {target: vxl.parts.Filter, band: [663 nm, 737 nm]}
+    BP720:              {target: vxl.parts.Filter, band: [705 nm, 735 nm]}
+    QB_A:               {target: vxl.parts.Filter, band: [420 nm, 740 nm]}   # wide, for the shared wheel
+    QB_B:               {target: vxl.parts.Filter, band: [460 nm, 740 nm]}   # wide, for the shared wheel
+
+  devices:                                        # simulated drivers: swap each target for the driver of your hardware
+    nidaq_1:
+      target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
+      init: {device_name: Dev3}
+    ao_main:
+      target: vxl.devices.signals.generator.simulated.SimulatedGenerator
+      init: {hub: nidaq_1}
+
+    laser_405: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 405}}
+    laser_445: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 445}}
+    laser_488: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 488}}
+    laser_514: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 514}}
+    laser_561: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 561}}
+    laser_594: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 594}}
+    laser_640: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 640}}
+    laser_685: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 685}}
+
+    aom_405:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_445:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_488:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_514:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_561:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_594:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_640:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_685:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+
+    excitation_side_axis:                         # moves the mirror that picks the illumination arm
+      target: vxl.devices.axes.simulated.SimulatedContinuousAxis
+      init: {lower_limit: 0, upper_limit: 100, has_ttl_stepper: false}
+    excitation_side_selector:                     # the same mirror, as 2 named positions
+      target: vxl.devices.axes.discrete.MappedDiscreteAxis
+      init:
+        axis: excitation_side_axis
+        tolerance: 1
+        slots:
+          "0": {label: left, position: 0}
+          "1": {label: right, position: 100}
+
+    fw_shared:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": QB_A, "1": QB_B}
+    fw_1:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": BP450, "1": BP480, "2": BP525, "3": BP545, "4": BP600, "5": BP630, "6": BP700, "7": BP720}
+    fw_2:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": BP450, "1": BP480, "2": BP525, "3": BP545, "4": BP600, "5": BP630, "6": BP700, "7": BP720}
+    fw_3:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": BP450, "1": BP480, "2": BP525, "3": BP545, "4": BP600, "5": BP630, "6": BP700, "7": BP720}
+    fw_4:
+      target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
+      init:
+        slots: {"0": BP450, "1": BP480, "2": BP525, "3": BP545, "4": BP600, "5": BP630, "6": BP700, "7": BP720}
+
+    cam_1:
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
+    cam_2:
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
+    cam_3:
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
+    cam_4:
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source: {sensor_size_px: {x: 7096, y: 5320}, pixel_size_um: {x: 3.76, y: 3.76}}
+
+    x_axis:          &stage {target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis, init: {lower: 0, upper: 50000, speed: 10000}}
+    y_axis:          *stage
+    z_axis:          *stage
+    left_focus:      *stage
+    right_focus:     *stage
+    detection_focus: *stage                       # moves all 4 cameras' focus together
+    cam_1_focus:     *stage
+    cam_2_focus:     *stage
+    cam_3_focus:     *stage
+    cam_4_focus:     *stage
+
+  autosave:
+    cam_1: [exposure_time_ms]
+    cam_2: [exposure_time_ms]
+    cam_3: [exposure_time_ms]
+    cam_4: [exposure_time_ms]
+
+  stage:
+    x: {device: x_axis}
+    y: {device: y_axis}
+    z: {device: z_axis}
+
+  wiring:
+    ao_main:
+      cam_1_trigger: {pin: ao20, to: [cam_1/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      cam_2_trigger: {pin: ao21, to: [cam_2/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      cam_3_trigger: {pin: ao22, to: [cam_3/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      cam_4_trigger: {pin: ao23, to: [cam_4/trigger_in], kind: digital, off: 0 V, on: 5 V}
+      aom_405:       {pin: ao10, to: [aom_405/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_445:       {pin: ao11, to: [aom_445/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_488:       {pin: ao12, to: [aom_488/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_514:       {pin: ao13, to: [aom_514/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_561:       {pin: ao14, to: [aom_561/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_594:       {pin: ao15, to: [aom_594/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_640:       {pin: ao16, to: [aom_640/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      aom_685:       {pin: ao17, to: [aom_685/ttl_in],    kind: digital, off: 0 V, on: 5 V}
+      lens_left:      {pin: ao1,  to: [left_tunable_lens/in],  kind: analog, limits: {V: [0, 5]}, park: 3.13 V}
+      lens_right:     {pin: ao3,  to: [right_tunable_lens/in], kind: analog, limits: {V: [0, 5]}, park: 4.85 V}
+      galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
+      z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
+
+  optics:
+    laser_405: {to: aom_405}
+    laser_445: {to: aom_445}
+    laser_488: {to: aom_488}
+    laser_514: {to: aom_514}
+    laser_561: {to: aom_561}
+    laser_594: {to: aom_594}
+    laser_640: {to: aom_640}
+    laser_685: {to: aom_685}
+    aom_405:   {to: combiner}
+    aom_445:   {to: combiner}
+    aom_488:   {to: combiner}
+    aom_514:   {to: combiner}
+    aom_561:   {to: combiner}
+    aom_594:   {to: combiner}
+    aom_640:   {to: combiner}
+    aom_685:   {to: combiner}
+    combiner:           {to: excitation_side_selector}
+    excitation_side_selector:
+      to: {left: left_tunable_lens, right: right_tunable_lens}
+    left_tunable_lens:  {to: positive_galvo}
+    positive_galvo:     {to: left_focus}
+    left_focus:         {to: specimen}
+    right_tunable_lens: {to: negative_galvo}
+    negative_galvo:     {to: right_focus}
+    right_focus:        {to: specimen}
+    specimen:           {to: objective}
+    objective:          {to: detection_focus}
+    detection_focus:    {to: fw_shared}
+    fw_shared:          {to: splitter}
+    splitter:           {to: [cam_1_focus, cam_2_focus, cam_3_focus, cam_4_focus]}
+    cam_1_focus:        {to: fw_1}
+    cam_2_focus:        {to: fw_2}
+    cam_3_focus:        {to: fw_3}
+    cam_4_focus:        {to: fw_4}
+    fw_1:               {to: cam_1}
+    fw_2:               {to: cam_2}
+    fw_3:               {to: cam_3}
+    fw_4:               {to: cam_4}
+    cam_1:              {width: {y: 1}, height: {x: -1}}
+    cam_2:              {width: {y: 1}, height: {x: -1}}
+    cam_3:              {width: {y: 1}, height: {x: -1}}
+    cam_4:              {width: {y: 1}, height: {x: -1}}
+
+  scan:
+    axis: z
+    motion: step
+    pacer: ao_main
+
+default:
+  task:
+    overlap: {x: 10 %, y: 10 %}
+    path:
+      scan:  {z: forward}
+      tiles: {kind: grid, axes: [{x: alternate}, {y: forward}]}
+    iteration: position_major
+
+  positions:
+    excitation_side_selector: {axis: x, order: [left, right], at: [20000], margin: 100}
+
+  profiles:
+    round_1:
+      label: Round 1
+      channels:
+        DAPI: {cam_1: laser_405}
+        GFP: {cam_2: laser_488}
+        RFP: {cam_3: laser_561}
+        Cy5: {cam_4: laser_640}
+      positions: {fw_shared: QB_A, fw_1: BP450, fw_2: BP525, fw_3: BP600, fw_4: BP700}
+      power:
+        laser_405: {full: 50 mW}
+        aom_405:   {full: 80 %, dim: 8 %}
+        laser_488: {full: 50 mW}
+        aom_488:   {full: 80 %, dim: 8 %}
+        laser_561: {full: 50 mW}
+        aom_561:   {full: 80 %, dim: 8 %}
+        laser_640: {full: 50 mW}
+        aom_640:   {full: 80 %, dim: 8 %}
+      timelines:
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms
+          signals:
+            cam_1_trigger: &camera_round_1 {kind: on, start: {timeline: start, offset: 25 ms}, end: {timeline: start, offset: 136 ms}}
+            cam_2_trigger: *camera_round_1
+            cam_3_trigger: *camera_round_1
+            cam_4_trigger: *camera_round_1
+            aom_405:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_488:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_561:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_640:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            lens_left:      {kind: wave, shape: triangle, split: 1, center: 3.13 V, amplitude: 1.15 V}
+            lens_right:     {kind: constant, value: 4.85 V}
+            galvo_positive: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
+      spacing: 1.0
+
+    round_2:
+      label: Round 2
+      channels:
+        DAPI: {cam_1: laser_405}
+        YFP: {cam_2: laser_514}
+        mCherry: {cam_3: laser_594}
+        Cy5_5: {cam_4: laser_685}
+      positions: {fw_shared: QB_A, fw_1: BP450, fw_2: BP545, fw_3: BP630, fw_4: BP720}
+      power:
+        laser_405: {full: 50 mW}
+        aom_405:   {full: 80 %, dim: 8 %}
+        laser_514: {full: 50 mW}
+        aom_514:   {full: 80 %, dim: 8 %}
+        laser_594: {full: 50 mW}
+        aom_594:   {full: 80 %, dim: 8 %}
+        laser_685: {full: 50 mW}
+        aom_685:   {full: 80 %, dim: 8 %}
+      timelines:
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms
+          signals:
+            cam_1_trigger: &camera_round_2 {kind: on, start: {timeline: start, offset: 25 ms}, end: {timeline: start, offset: 136 ms}}
+            cam_2_trigger: *camera_round_2
+            cam_3_trigger: *camera_round_2
+            cam_4_trigger: *camera_round_2
+            aom_405:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_514:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_594:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_685:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            lens_left:      {kind: wave, shape: triangle, split: 1, center: 3.13 V, amplitude: 1.15 V}
+            lens_right:     {kind: constant, value: 4.85 V}
+            galvo_positive: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
+      spacing: 1.0
+
+    round_3:
+      label: Round 3
+      channels:
+        DAPI: {cam_1: laser_405}
+        CFP: {cam_2: laser_445}
+      positions: {fw_shared: QB_A, fw_1: BP450, fw_2: BP480}
+      power:
+        laser_405: {full: 50 mW}
+        aom_405:   {full: 80 %, dim: 8 %}
+        laser_445: {full: 50 mW}
+        aom_445:   {full: 80 %, dim: 8 %}
+      timelines:
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms
+          signals:
+            cam_1_trigger: &camera_round_3 {kind: on, start: {timeline: start, offset: 25 ms}, end: {timeline: start, offset: 136 ms}}
+            cam_2_trigger: *camera_round_3
+            aom_405:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            aom_445:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            lens_left:      {kind: wave, shape: triangle, split: 1, center: 3.13 V, amplitude: 1.15 V}
+            lens_right:     {kind: constant, value: 4.85 V}
+            galvo_positive: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
+      spacing: 1.0
+
+    split_488:
+      label: GFP split
+      # 1 laser, 2 channels: GFP's peak on camera 2 and its long tail on camera 3
+      channels:
+        GFP: {cam_2: laser_488}
+        GFP_long: {cam_3: laser_488}
+      positions: {fw_shared: QB_A, fw_2: BP525, fw_3: BP600}
+      power:
+        laser_488: {full: 50 mW}
+        aom_488:   {full: 80 %, dim: 8 %}
+      timelines:
+        ao_main:
+          sample_rate: 10 kHz
+          duration: 544 ms
+          signals:
+            cam_2_trigger: &camera_split_488 {kind: on, start: {timeline: start, offset: 25 ms}, end: {timeline: start, offset: 136 ms}}
+            cam_3_trigger: *camera_split_488
+            aom_488:       {kind: on, start: {timeline: start, offset: 15 ms}}
+            lens_left:      {kind: wave, shape: triangle, split: 1, center: 3.13 V, amplitude: 1.15 V}
+            lens_right:     {kind: constant, value: 4.85 V}
+            galvo_positive: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
+            z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
+      spacing: 1.0
+
+  writer:
+    max_level: 3
+    compression: blosc.lz4

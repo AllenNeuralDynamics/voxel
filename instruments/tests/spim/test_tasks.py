@@ -2,9 +2,8 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-
-from vxl.instruments.spim.state import SPIMState
-from vxl.instruments.spim.task import (
+from vxl_instruments.spim.state import SPIMState
+from vxl_instruments.spim.task import (
     Region,
     SPIMTask,
 )

@@ -3,14 +3,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from vxl_instruments import spim
+from vxl_instruments.spim.config import SPIMConfig
+from vxl_instruments.spim.state import SPIMState
 from vxlib.issues import Problems
 
 from vxl._utils.files import load_yaml
-from vxl.instruments.spim.config import SPIMConfig
-from vxl.instruments.spim.state import SPIMState
 
-FILES = Path(__file__).parent / "files"
-"""Complete example instrument files."""
+TEMPLATES = Path(spim.__file__).parent / "templates"
+"""The templates that the SPIM package ships: complete instruments to start from."""
 
 _DIGITAL = {"kind": "digital", "off": "0 V", "on": "5 V"}
 
@@ -18,7 +19,7 @@ _CONFIG: dict[str, Any] = {
     "id": "5x8k2m9q4r7t1v3w6y0z2b4c8d",
     "name": "exaSPIM left",
     "model": "exaspim.v2",
-    "target": "vxl.instruments.spim.Microscope",
+    "target": "vxl_instruments.spim.Microscope",
     "parts": {
         "galvo": {"kind": "galvo"},
         "objective": {"target": "vxl.parts.Objective", "magnification": 5},

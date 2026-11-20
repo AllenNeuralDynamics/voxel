@@ -1,0 +1,22 @@
+[project]
+name = "vxl-instruments"
+version = "0.1.0"
+description = "Instrument kinds for Voxel: the classes that run a kind of instrument, such as SPIM"
+authors = [
+    { name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "vxl",
+    "vxlib",
+    "ome-zarr-writer",
+]
+
+[tool.uv.sources]
+vxl = { workspace = true }
+vxlib = { workspace = true }
+ome-zarr-writer = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"

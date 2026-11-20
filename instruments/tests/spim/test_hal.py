@@ -3,9 +3,8 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-
-from vxl.instruments.spim.config import Scan, SPIMConfig, TriggerChain
-from vxl.instruments.spim.state import SPIMState
+from vxl_instruments.spim.config import Scan, SPIMConfig, TriggerChain
+from vxl_instruments.spim.state import SPIMState
 
 from .support import Example, codes, load, sweep_x, two_arms
 
@@ -34,13 +33,12 @@ def _wires(data: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.parametrize(
     ("change", "code"),
     [
-        (lambda d: d["optics"]["specimen"].update(to="fw_emision"), "rig.optics.target_missing"),
         (lambda d: d["devices"].update(software={"target": "builtins.object"}), "rig.reserved_name"),
         (lambda d: d["scan"].update(pacer="ao_mian"), "rig.scan.pacer_missing"),
         (lambda d: _follow(d, "z"), "positions.follows_scan_axis"),
     ],
 )
-def test_hal_problems_of_the_bench_and_of_the_scan(config_data: dict[str, Any], change: Change, code: str) -> None:
+def test_spim_rig_problems(config_data: dict[str, Any], change: Change, code: str) -> None:
     change(config_data)
     assert code in codes(load(config_data))
 

@@ -1,22 +1,20 @@
-# exaSPIM v1 in the new file shape: Z steps, and ao_main's own clock sets the rhythm.
-# A sketch from the design talk of 2026-11-10. This shape is for instruments with area cameras.
-# Numbers are examples. Filter bands are guesses to check.
-# Hardware facts come from notes/platform/examples/_archive/exaspim-step.yaml. The illumination side selector comes from the simulated exaSPIM template.
-# The selector and the galvo arms are assumptions to check on the bench.
+# A Z-sweep light sheet like exaSPIM, on simulated drivers: it opens on any computer.
+# The same bench as z-step.yaml, with 1 more wire: z_axis.z_pulse. Z moves without stopping, and sends 1 pulse every
+# spacing; each pulse starts 1 cycle of ao_main, which triggers the camera. A sweep plays no z_step signal.
+# To run real hardware, swap each device's target for its driver.
 #
-# What is new, top to bottom:
-#   no engine      rig.scan says how 1 capture runs.
-#   parts          kind says what each part is. A filter has its band, an objective its magnification.
-#   rig.optics     3 rules. No kind in the graph. A device that moves lists its positions.
-#   rig.scan       the axis, its motion, and the pacer. The rest of the chain follows from the wires.
-#   default        positions and profiles: no imaging wrapper, no channel map, no instrument-level props.
-#   positions      a plain position, or the rule by which a device follows the stage.
-#   a profile      channels by name, each with its cameras and their lights, fov for a camera that reads less than its sensor, positions, props, timelines, spacing.
+# What each part of the file says, top to bottom:
+#   parts          things with no driver: kind says what each is. A filter has its band, an objective its magnification.
+#   devices        things with a driver: target names the driver's class, init its settings.
+#   rig.optics     where the light goes, from the light sources through the specimen to the cameras.
+#   rig.scan       the axis that 1 capture moves, step or sweep, and what sets the rhythm. The rest follows from the wires.
+#   default        what a new instrument starts with: task defaults, positions and profiles.
+#   a profile      channels by name, each with its cameras and their lights, positions, powers, timelines, spacing.
 #   a timeline     only the wires it plays. A wire with no signal stays at rest: off for a digital wire, park for an analog wire.
 
 rig:
-  model: exaSPIM
-  target: vxl.instruments.spim.Microscope
+  model: z-sweep light sheet
+  target: vxl_instruments.spim.Microscope
 
   parts:                                          # things with no driver: their facts, and their class when it is not rigup.Part
     combiner:           {kind: combiner}
@@ -29,18 +27,19 @@ rig:
     BP600:              {target: vxl.parts.Filter, band: [575 nm, 625 nm]}
     BP700:              {target: vxl.parts.Filter, band: [663 nm, 737 nm]}
 
-  devices:
+  devices:                                        # simulated drivers: swap each target for the driver of your hardware
     nidaq_1:
-      target: vxl.devices.signals.cards.ni.NiDaqmx
-      init: {device_name: Dev3, product: PCIe-6738}
+      target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
+      init: {device_name: Dev3}
 
     ao_main:
-      target: vxl.devices.signals.generator.ni.NiGenerator
+      target: vxl.devices.signals.generator.simulated.SimulatedGenerator
       init: {hub: nidaq_1}
 
-    camera:
-      target: vxl_drivers.cameras.egrabber.VieworksCamera
-      init: {pixel_size_um: {x: 3.76, y: 3.76}, serial: MP151BDZ014}
+    camera:                                       # a 151-megapixel sensor, as on exaSPIM
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source: {sensor_size_px: {x: 14192, y: 10640}, pixel_size_um: {x: 3.76, y: 3.76}}
 
     laser_488:
       target: vxl.devices.light.simulated.SimulatedLaser
@@ -69,27 +68,12 @@ rig:
           "0": {label: left, position: 0}
           "1": {label: right, position: 100}
 
-    tiger_controller:
-      target: vxl_drivers.tigerhub.TigerHub
-      init: {box: COM3}
-    x_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: x, units: um}
-    y_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: v, units: um}
-    z_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: z, units: um}
-    left_focus:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: a, units: um}
-    right_focus:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: b, units: um}
-    camera_focus:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: m, units: um}
+    x_axis:      &stage {target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis, init: {lower: 0, upper: 50000, speed: 10000}}
+    y_axis:      *stage
+    z_axis:      *stage
+    left_focus:  *stage
+    right_focus: *stage
+    camera_focus: *stage
 
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms, binning, pixel_format]
@@ -110,6 +94,8 @@ rig:
       galvo_positive: {pin: ao26, to: [positive_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
       galvo_negative: {pin: ao27, to: [negative_galvo/in],     kind: analog, limits: {V: [-1, 1]}, park: 0 V}
       z_step:         {pin: ao5,  to: [z_axis/ttl_in],         kind: digital, off: 0 V, on: 5 V}
+    z_axis:
+      z_pulse:        {pin: ttl_out, to: [ao_main/pfi0], kind: digital}   # 1 pulse every spacing while Z sweeps
 
   optics:                                         # where the light goes: light sources → specimen → detectors
     # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
@@ -144,12 +130,14 @@ rig:
 
   scan:                                           # how 1 capture runs. Only the choices: the rest follows from the wires
     axis: z                                       # the stage axis that 1 capture moves. X and Y are tiled
-    motion: step                                  # step: move, stop, take the frame
-    pacer: ao_main                                # what sets the rhythm: this device's own clock
+    motion: sweep                                 # sweep: take frames while moving
+    pacer: z_axis                                 # what sets the rhythm: this stage's pulses, 1 every spacing
+    margin: 5 %                                   # Z runs 5 % slower than spacing ÷ duration, so no pulse comes before a frame ends
     # Worked out from the wires, and shown by the check:
-    #   ao_main   repeats on its own clock, 1 cycle for each frame
+    #   z_axis    sweeps, and sends 1 pulse every spacing on z_axis.z_pulse
+    #   ao_main   plays 1 cycle on each pulse of z_axis.z_pulse
     #   camera    takes 1 frame on each pulse of ao_main.camera_trigger
-    #   z_axis    takes 1 step of spacing on each pulse of ao_main.z_step
+    # Not used by this scan: ao_main.z_step
 
 default:
   task:                                           # what a new task takes when it leaves these out
@@ -174,7 +162,7 @@ default:
       timelines:                                  # 1 for each signal generator that plays. Only the wires it plays
         ao_main:
           sample_rate: 10 kHz
-          duration: 544 ms                        # 1 camera frame
+          duration: 544 ms                        # 1 camera frame. No z_step signal: that wire stays at rest
           signals:
             camera_trigger: &camera {kind: on, start: {timeline: start, offset: 25 ms}, end: {timeline: start, offset: 136 ms}}
             laser_488:      &laser {kind: on, start: {timeline: start, offset: 15 ms}}
@@ -182,7 +170,6 @@ default:
             lens_right:     &lens_right {kind: constant, value: 4.85 V}
             galvo_positive: &galvo {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
             galvo_negative: *galvo
-            z_step:         &z_step {kind: on, end: {timeline: start, offset: 5.44 ms}}
       spacing: 1.0                                # µm between frames along the scan axis
 
     rfp:                                          # real profiles differ in focus, timing and signal size. Here they share values only because this is an example
@@ -203,7 +190,6 @@ default:
             lens_right:     *lens_right
             galvo_positive: *galvo
             galvo_negative: *galvo
-            z_step:         *z_step
       spacing: 1.0
 
     cy5:
@@ -224,7 +210,6 @@ default:
             lens_right:     *lens_right
             galvo_positive: *galvo
             galvo_negative: *galvo
-            z_step:         *z_step
       spacing: 1.0
 
   writer:

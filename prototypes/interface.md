@@ -204,7 +204,7 @@ Built in the prototype:
   return values, or record once in a base helper.
 - **Guard, to build**: the operation runner checks that a `create`, `update` or `delete` made at most 1 history entry,
   and 1 test runs it over every shipped kind.
-- **`BasicInstrument`** (decided 2026-11-18): a ready-made kind in `vxl.instruments.basic`, `Instrument[InstrumentConfig,
+- **`BasicInstrument`** (decided 2026-11-18): a ready-made kind in `vxl.station.instrument.basic` (moved from `vxl.instruments.basic` on 2026-11-19), `Instrument[InstrumentConfig,
   InstrumentState, InstrumentView]`, that declarations `update_profile` with the base `ProfileFields`. A `rig.yaml` can name it
   and run with no code. Kinds still subclass `Instrument` and declaration their own `update_profile`. The base keeps the name
   `Instrument`, because type hints use it for "any instrument". The base helper `_update_profile` does the edit;

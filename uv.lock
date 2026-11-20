@@ -18,6 +18,7 @@ members = [
     "rigup",
     "vxl",
     "vxl-drivers",
+    "vxl-instruments",
     "vxl-records",
     "vxlib",
 ]
@@ -3088,6 +3089,23 @@ requires-dist = [
     { name = "ximea-python", marker = "extra == 'ximea-camera'", url = "https://github.com/adamkglaser/ximea-python/releases/download/v4.29.10/ximea_python-4.29.10-py3-none-any.whl" },
 ]
 provides-extras = ["thorlabs", "opto-icc", "opto-kummenberg", "thorlabs-power-meter", "mpds-calibration", "coherent-laser", "obis-laser", "vortran-laser", "pycobolt-laser", "egrabber-camera", "ximea-camera"]
+
+[[package]]
+name = "vxl-instruments"
+version = "0.1.0"
+source = { editable = "instruments" }
+dependencies = [
+    { name = "ome-zarr-writer" },
+    { name = "vxl" },
+    { name = "vxlib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ome-zarr-writer", editable = "omezarr" },
+    { name = "vxl", editable = "." },
+    { name = "vxlib", editable = "vxlib" },
+]
 
 [[package]]
 name = "vxl-records"

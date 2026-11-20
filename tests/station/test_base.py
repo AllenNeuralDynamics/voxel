@@ -6,11 +6,11 @@ import pytest
 from rigup.activity import ActivityBusyError, ActivityInfo
 from vxlib.issues import Problems
 
-from vxl.instruments.basic import BasicInstrument
 from vxl.metadata import ExperimentMetadata
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.station.instrument.base import Instrument
+from vxl.station.instrument.basic import BasicInstrument
 from vxl.station.instrument.config import InstrumentConfig
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.station.instrument.state import InstrumentState, ProfileFields, Task

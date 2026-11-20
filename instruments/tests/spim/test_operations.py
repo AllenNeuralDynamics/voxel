@@ -1,14 +1,13 @@
-"""Every operation of the SPIM microscope, run once through ``execute`` on simulated devices."""
+"""Every operation that the SPIM microscope declares itself, run once through ``execute`` on simulated devices."""
 
 from collections.abc import AsyncIterator, Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
+from vxl_instruments.spim.instrument import Microscope
+from vxl_instruments.spim.task import SPIMTask
 
-from vxl.instruments.basic import BasicInstrument
-from vxl.instruments.spim.instrument import Microscope
-from vxl.instruments.spim.task import SPIMTask
 from vxl.records import Records
 from vxl.station.instrument.folder import InstrumentFolder
 from vxl.system import System
@@ -31,43 +30,18 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
     "remove_tasks": {"task_ids": ["b"]},
     "update_profile": {"profile_id": "gfp", "spacing": 2.5, "label": "GFP"},
     "update_writer_settings": {"shard_z_chunks": 4},
-    "select_profile": {"profile_id": "gfp"},
-    "apply_profile": {},
-    "set_generator_timeline": lambda m: {
-        "generator": "ao_main",
-        "timeline": m.view.value.state.profiles["gfp"].timelines["ao_main"].model_dump(mode="json"),
-    },
-    "set_power_mode": {"mode": "full"},
-    "set_power": {"device": "laser", "value": 50.0},
-    "set_dim_power": {"device": "laser", "value": 5.0},
-    "stage_position": {},
-    "set_position_rule": {"device_id": "fw", "rule": "GFP"},
-    "set_metadata_class": {"cls": "vxl.metadata.ExperimentMetadata"},
-    "save_as_default_state": {"fields": ["writer"]},
-    "restore_default_state": {"fields": ["writer"]},
-    "move_stage": {"x": 10.0, "wait": True},
     "set_preview_channels": {"channels": ["camera"]},
     "set_camera_region": {"camera": "camera", "region": None},
     "start_preview": {},
     "stop_preview": {},
-    "lights_off": {},
-    "lasers_off": {},
-    "undo": {},
-    "redo": {},
-    "stop": {},
 }
-"""1 valid call of each operation, in the order they run; a function builds arguments that need the instrument."""
-
-
-_EDITS = {"update_task_metadata", "reorder_tasks", "remove_tasks", "set_position_rule"}
-"""Actions that edit the saved state, and so must be 1 undo step too."""
+"""1 valid call of each operation that the SPIM microscope declares itself, in the order they run; a function
+builds arguments that need the instrument."""
 
 
 @pytest.fixture
 async def opened(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterator[Microscope]:
-    """An open microscope on simulated devices. Its profile leaves the filter wheel to the instrument, so a position
-    rule can set it."""
-    del config_data["default"]["profiles"]["gfp"]["positions"]
+    """An open microscope on simulated devices."""
     folder = InstrumentFolder.create(template(simulated(config_data)), "left", tmp_path)
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
@@ -77,9 +51,8 @@ async def opened(config_data: dict[str, Any], tmp_path: Path) -> AsyncIterator[M
     await microscope.close()
 
 
-def test_every_operation_of_every_shipped_kind_has_an_example() -> None:
-    assert set(Microscope.operations) == set(_EXAMPLES)
-    assert set(BasicInstrument.operations) <= set(_EXAMPLES)
+def test_every_operation_the_microscope_declares_has_an_example() -> None:
+    assert {name for name in Microscope.operations if name in vars(Microscope)} == set(_EXAMPLES)
 
 
 async def test_every_operation_runs_and_each_state_change_is_1_undo_step(opened: Microscope) -> None:

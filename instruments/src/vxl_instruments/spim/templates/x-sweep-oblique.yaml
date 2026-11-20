@@ -1,12 +1,20 @@
-# Open-top light sheet in the new file shape: X sweeps, and the X stage's pulses set the rhythm.
-# The objectives are below a glass plate at 45°, so each frame is a slanted slice. Each strip is 1 capture: a Y and Z position and an X sweep.
-# A sketch from the design talk of 2026-11-10. This shape is for instruments with area cameras.
-# Pins and numbers are examples. Filter bands are guesses to check.
-# Hardware facts come from notes/platform/examples/_archive/open-top.yaml.
+# An open-top light sheet, on simulated drivers: it opens on any computer.
+# The objectives sit below a glass plate at 45°, so each frame is a slanted slice. Each strip is 1 capture: a Y and Z
+# position, and an X sweep. X sends 1 pulse every spacing; each pulse starts 1 cycle of ao_main, which triggers the camera.
+# To run real hardware, swap each device's target for its driver.
+#
+# What each part of the file says, top to bottom:
+#   parts          things with no driver: kind says what each is. A filter has its band, an objective its magnification.
+#   devices        things with a driver: target names the driver's class, init its settings.
+#   rig.optics     where the light goes, from the light sources through the specimen to the cameras.
+#   rig.scan       the axis that 1 capture moves, step or sweep, and what sets the rhythm. The rest follows from the wires.
+#   default        what a new instrument starts with: task defaults, positions and profiles.
+#   a profile      channels by name, each with its cameras and their lights, positions, powers, timelines, spacing.
+#   a timeline     only the wires it plays. A wire with no signal stays at rest: off for a digital wire, park for an analog wire.
 
 rig:
-  model: open-top light sheet
-  target: vxl.instruments.spim.Microscope
+  model: oblique x-sweep light sheet
+  target: vxl_instruments.spim.Microscope
 
   parts:                                          # things with no driver: their facts, and their class when it is not rigup.Part
     combiner:    {kind: combiner}
@@ -15,18 +23,19 @@ rig:
     BP525:       {target: vxl.parts.Filter, band: [500 nm, 550 nm]}
     LP650:       {target: vxl.parts.Filter, band: [650 nm, null]}    # a long-pass filter: open at the top
 
-  devices:
+  devices:                                        # simulated drivers: swap each target for the driver of your hardware
     nidaq_1:
-      target: vxl.devices.signals.cards.ni.NiDaqmx
-      init: {device_name: Dev1, product: PCIe-6738}
+      target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
+      init: {device_name: Dev1}
 
     ao_main:
-      target: vxl.devices.signals.generator.ni.NiGenerator
+      target: vxl.devices.signals.generator.simulated.SimulatedGenerator
       init: {hub: nidaq_1}
 
-    camera:
-      target: vxl_drivers.cameras.dcam.hamamatsu.HamamatsuCamera   # ORCA-Flash4.0: 2048 × 2048 px
-      init: {pixel_size_um: {x: 6.5, y: 6.5}, serial: "000123"}
+    camera:                                       # 2048 × 2048 px of 6.5 µm, as an ORCA-Flash4.0
+      target: vxl.devices.camera.simulated.SimulatedCamera
+      init:
+        frame_source: {sensor_size_px: {x: 2048, y: 2048}, pixel_size_um: {x: 6.5, y: 6.5}}
 
     laser_488:
       target: vxl.devices.light.simulated.SimulatedLaser
@@ -40,18 +49,9 @@ rig:
       init:
         slots: {"0": BP525, "1": LP650}
 
-    tiger_controller:
-      target: vxl_drivers.tigerhub.TigerHub
-      init: {box: COM4}
-    x_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: x, units: um}
-    y_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: y, units: um}
-    z_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: z, units: um}
+    x_axis: &stage {target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis, init: {lower: -25000, upper: 25000, speed: 10000}}
+    y_axis: *stage
+    z_axis: *stage
 
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms]
