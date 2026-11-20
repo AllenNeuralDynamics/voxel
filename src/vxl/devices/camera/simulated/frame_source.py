@@ -12,7 +12,8 @@ import cv2
 import numpy as np
 from pydantic import Field, TypeAdapter, model_validator
 from vxlib.schema import FrozenModel, SparseModel
-from vxlib.vector import IVec2D, Vec2D
+from vxlib.units import Wavelength
+from vxlib.vector import IVec2D, Span, Vec2D, Vec3D
 
 from vxl.devices.camera.area import AreaROI
 from vxl.live import ValidBits
@@ -107,7 +108,32 @@ class PatternFrameSourceConfig(FrozenModel):
         return self
 
 
-type FrameSourceConfig = FileFrameSourceConfig | PatternFrameSourceConfig
+class BeadGroup(FrozenModel):
+    """``count`` beads that glow under light near ``excitation`` and send out ``emission``."""
+
+    count: int = Field(ge=1)
+    excitation: Wavelength
+    emission: Wavelength
+
+
+class Specimen(FrozenModel):
+    """Beads of ``size_um`` at random places in ``region_um``, the same for every ``seed``."""
+
+    seed: int = 0
+    size_um: float = Field(default=4.0, gt=0)
+    region_um: tuple[Span, Span, Span] = (Span(-5000, 5000), Span(-5000, 5000), Span(0, 2000))
+    beads: list[BeadGroup] = Field(min_length=1)
+
+
+class SpecimenFrameSourceConfig(FrozenModel):
+    """A specimen drawn where the camera looks: see :class:`SpecimenView`."""
+
+    specimen: Specimen
+    sensor_size_px: IVec2D
+    pixel_size_um: Vec2D = DEFAULT_PIXEL_SIZE_UM
+
+
+type FrameSourceConfig = FileFrameSourceConfig | PatternFrameSourceConfig | SpecimenFrameSourceConfig
 
 _FRAME_SOURCE_CONFIG_ADAPTER = TypeAdapter(FrameSourceConfig)
 
@@ -215,6 +241,106 @@ class PatternFrameSource(FrameSource):
         return _bin_frame(frame.astype(dtype), binning)
 
 
+@dataclass(frozen=True)
+class SpecimenView:
+    """Where a camera looks in the specimen at 1 frame. The sensor's center sees ``center`` (µm); 1 sensor pixel
+    spans ``width`` and ``height`` (µm vectors). ``focus`` moves the sharp plane along the viewing direction (µm).
+    ``brightness`` scales each bead group, 0 for dark; ``exposure`` scales everything."""
+
+    center: Vec3D
+    width: Vec3D
+    height: Vec3D
+    focus: float
+    brightness: tuple[float, ...]
+    exposure: float
+
+
+_PEAK = 0.6
+"""A bead's brightest pixel at full light and exposure 1, as a share of the largest pixel value."""
+_BACKGROUND = 0.02
+_NOISE = 0.005
+
+
+class SpecimenFrameSource(FrameSource):
+    """Draws a specimen's beads where the camera looks, over a dark, noisy background."""
+
+    def __init__(self, config: SpecimenFrameSourceConfig) -> None:
+        self.sensor_size_px = config.sensor_size_px
+        self.pixel_size_um = config.pixel_size_um
+        self.source_valid_bits = 16
+        self._specimen = config.specimen
+        rng = np.random.default_rng(config.specimen.seed)
+        groups = config.specimen.beads
+        low = np.array([span.low for span in config.specimen.region_um])
+        high = np.array([span.high for span in config.specimen.region_um])
+        self._beads = rng.uniform(low, high, size=(sum(group.count for group in groups), 3))
+        self._groups = np.repeat(np.arange(len(groups)), [group.count for group in groups])
+        self._base: tuple[tuple[object, ...], np.ndarray] | None = None
+
+    @property
+    def groups(self) -> list[BeadGroup]:
+        return list(self._specimen.beads)
+
+    def prepare(self, roi: AreaROI, binning: int) -> np.ndarray:
+        _validate_geometry(roi, binning, self.sensor_size_px)
+        return np.zeros((roi.h // binning, roi.w // binning), dtype=np.uint16)
+
+    def render(self, out: np.ndarray, view: SpecimenView, roi: AreaROI, binning: int, valid_bits: int) -> None:
+        """Fill ``out``, the frame of ``roi`` at ``binning``, with what ``view`` sees."""
+        maximum = (1 << valid_bits) - 1
+        np.copyto(out, self._background(out.shape, out.dtype, maximum, view.exposure), casting="unsafe")
+        width, height = _xyz(view.width), _xyz(view.height)
+        um_per_px = float(np.linalg.norm(width))
+        normal = np.cross(width, height)
+        normal /= np.linalg.norm(normal)
+        offset = self._beads - _xyz(view.center)
+        depth = offset @ normal - view.focus
+        sharp = self._specimen.size_um * 2
+        col = (offset @ width / um_per_px**2 + self.sensor_size_px.x / 2 - roi.x) / binning - 0.5
+        row = (offset @ height / um_per_px**2 + self.sensor_size_px.y / 2 - roi.y) / binning - 0.5
+        sigma = max(0.5, self._specimen.size_um / 2.355 / um_per_px / binning)
+        radius = int(np.ceil(3 * sigma))
+        light = np.array(view.brightness)[self._groups]
+        amplitude = _PEAK * maximum * view.exposure * light * np.exp(-(depth**2) / (2 * sharp**2))
+        rows, cols = out.shape
+        shown = (
+            (np.abs(depth) < 3 * sharp)
+            & (amplitude >= 1)
+            & (col > -radius)
+            & (col < cols + radius)
+            & (row > -radius)
+            & (row < rows + radius)
+        )
+        grid = np.arange(-radius, radius + 1)
+        for r, c, a in zip(row[shown], col[shown], amplitude[shown], strict=True):
+            near_r, near_c = round(r), round(c)
+            top, left = near_r - radius, near_c - radius
+            ys, xs = grid + near_r - r, grid + near_c - c
+            spot = a * np.exp(-(ys[:, None] ** 2 + xs[None, :] ** 2) / (2 * sigma**2))
+            y0, x0 = max(top, 0), max(left, 0)
+            y1, x1 = min(top + 2 * radius + 1, rows), min(left + 2 * radius + 1, cols)
+            if y0 >= y1 or x0 >= x1:
+                continue
+            patch = spot[y0 - top : y1 - top, x0 - left : x1 - left]
+            region = out[y0:y1, x0:x1]
+            np.copyto(region, np.minimum(region + patch, maximum), casting="unsafe")
+
+    def _background(self, shape: tuple[int, ...], dtype: np.dtype, maximum: int, exposure: float) -> np.ndarray:
+        key = (shape, dtype, maximum, round(exposure, 3))
+        if self._base is None or self._base[0] != key:
+            rng = np.random.default_rng(self._specimen.seed)
+            tile = rng.normal(0.0, _NOISE * maximum, size=(256, 256))
+            reps = (-(-shape[0] // 256), -(-shape[1] // 256))
+            noise = np.tile(tile, reps)[: shape[0], : shape[1]]
+            base = np.clip(_BACKGROUND * maximum * exposure + noise, 0, maximum).astype(dtype)
+            self._base = (key, base)
+        return self._base[1]
+
+
+def _xyz(vector: Vec3D) -> np.ndarray:
+    return np.array([vector.x, vector.y, vector.z])
+
+
 def create_frame_source(
     config: FrameSource | FrameSourceConfig | Mapping[str, object] | None,
 ) -> FrameSource:
@@ -228,6 +354,8 @@ def create_frame_source(
         parsed = _FRAME_SOURCE_CONFIG_ADAPTER.validate_python(config)
     if isinstance(parsed, FileFrameSourceConfig):
         return FileFrameSource(parsed)
+    if isinstance(parsed, SpecimenFrameSourceConfig):
+        return SpecimenFrameSource(parsed)
     return PatternFrameSource(parsed)
 
 

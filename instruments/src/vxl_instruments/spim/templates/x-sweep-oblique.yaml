@@ -16,12 +16,31 @@ rig:
   model: oblique x-sweep light sheet
   target: vxl_instruments.spim.Microscope
 
-  parts:                                          # things with no driver: their facts, and their class when it is not rigup.Part
+  parts: &parts                                   # things with no driver: their facts, and their class when it is not rigup.Part
     combiner:    {kind: combiner}
     sheet_galvo: {kind: galvo}
     objective:   {target: vxl.parts.Objective, magnification: 16.7}   # 6.5 µm ÷ 16.7 = 0.39 µm per pixel in the sample
     BP525:       {target: vxl.parts.Filter, band: [500 nm, 550 nm]}
     LP650:       {target: vxl.parts.Filter, band: [650 nm, null]}    # a long-pass filter: open at the top
+
+  optics: &optics                                 # where the light goes: light sources → specimen → detectors
+    # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
+    # Rule 2: what a part does to the light is in parts, not here.
+    # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
+    # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
+
+    laser_488:   {to: combiner}                   # the 2 lasers point at 1 node: the beams join there
+    laser_638:   {to: combiner}
+    combiner:    {to: sheet_galvo}
+    sheet_galvo: {to: specimen}                   # the wire galvo_sheet drives it: it scans the beam into a sheet
+
+    specimen:    {to: objective}
+    objective:   {to: fw_emission}
+
+    fw_emission:                                  # it holds the filters that its slot labels name
+      to: camera
+
+    camera:      {width: {y: 1}, height: {x: 1, z: 1}}   # no to: a detector. Width along +y; height at 45° between +x and +z
 
   wiring: &wiring                                 # every wire on the bench, grouped by the device that sends it
     ao_main:
@@ -49,14 +68,26 @@ rig:
       target: vxl.devices.camera.simulated.SimulatedCamera
       init:
         wiring: sim_wiring
-        frame_source: {sensor_size_px: {x: 2048, y: 2048}, pixel_size_um: {x: 6.5, y: 6.5}}
+        optics: *optics
+        parts: *parts
+        follows: {x: x_axis, y: y_axis, z: z_axis}
+        frame_source:
+          specimen: &specimen
+            seed: 1
+            size_um: 2
+            region_um: [[-400, 400], [-400, 400], [0, 400]]
+            beads:
+              - {count: 1500, excitation: 488 nm, emission: 520 nm}   # shows with laser_488 through BP525
+              - {count: 1500, excitation: 638 nm, emission: 680 nm}   # shows with laser_638 through LP650
+          sensor_size_px: {x: 2048, y: 2048}
+          pixel_size_um: {x: 6.5, y: 6.5}
 
     laser_488:
       target: vxl.devices.light.simulated.SimulatedLaser
-      init: {wavelength: 488}
+      init: {wavelength: 488, wiring: sim_wiring}
     laser_638:
       target: vxl.devices.light.simulated.SimulatedLaser
-      init: {wavelength: 638}
+      init: {wavelength: 638, wiring: sim_wiring}
 
     fw_emission:
       target: vxl.devices.axes.simulated.SimulatedDiscreteAxis
@@ -81,25 +112,6 @@ rig:
     y: {device: y_axis}
     z: {device: z_axis}
   # z_axis: this motor counts up as the specimen goes up, but +z is deeper: its direction will be set on the device
-
-  optics:                                         # where the light goes: light sources → specimen → detectors
-    # Rule 1: to says where the light goes next. A list means "to all of these at once". Several nodes can point at 1 node.
-    # Rule 2: what a part does to the light is in parts, not here.
-    # Rule 3: a device that sends the light a different way at each position gives `to` for each position.
-    # Rule 4: a device holds a part when 1 of its slot labels, in devices.<name>.init.slots, is the name of a part.
-
-    laser_488:   {to: combiner}                   # the 2 lasers point at 1 node: the beams join there
-    laser_638:   {to: combiner}
-    combiner:    {to: sheet_galvo}
-    sheet_galvo: {to: specimen}                   # the wire galvo_sheet drives it: it scans the beam into a sheet
-
-    specimen:    {to: objective}
-    objective:   {to: fw_emission}
-
-    fw_emission:                                  # it holds the filters that its slot labels name
-      to: camera
-
-    camera:      {width: {y: 1}, height: {x: 1, z: 1}}   # no to: a detector. Width along +y; height at 45° between +x and +z
 
   scan:                                           # how 1 capture runs. Only the choices: the rest follows from the wires
     axis: x                                       # the stage axis that 1 capture moves. Y and Z are tiled

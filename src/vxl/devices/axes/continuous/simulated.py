@@ -60,7 +60,8 @@ class SimulatedContinuousAxis(ContinuousAxisNew):
         self._wiring = wiring
         self._pulsing: threading.Event | None = None
         if wiring is not None:
-            wiring.listen(self.id, "ttl_in", lambda: self.pulse_in("ttl_in"))
+            wiring.register(self)
+            wiring.listen(self.id, "ttl_in", lambda on: self.pulse_in("ttl_in") if on else None)
 
     @property
     def position(self) -> float:
@@ -158,7 +159,8 @@ class SimulatedContinuousAxis(ContinuousAxisNew):
         for at in times:
             if ended.wait(max(0.0, began + at - time.monotonic())):
                 return
-            wiring.send(self.id, pin)
+            wiring.send(self.id, pin, True)
+            wiring.send(self.id, pin, False)
 
     def _end_pulses(self) -> None:
         if self._pulsing is not None:

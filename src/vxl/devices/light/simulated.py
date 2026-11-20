@@ -7,6 +7,7 @@ from rigup.interface import number, stream
 from vxlib.vector import Span
 
 from vxl.devices.base import Pin
+from vxl.devices.simulated import SimulatedWiring
 
 from .base import ControlMode, Dimmable
 from .laser import Laser
@@ -17,15 +18,33 @@ from .shutter import Shutter
 
 class SimulatedDimmable(Dimmable):
     """A dimmable device that keeps what it is told. It starts off, at its highest power, with ``pins`` to follow:
-    ``ttl_in`` is digital, any other is analog."""
+    ``ttl_in`` is digital, any other is analog. With ``wiring``, ``ttl_in`` follows its wire."""
 
-    def __init__(self, device_id: str, *, low: float, high: float, pins: list[str]) -> None:
+    def __init__(
+        self, device_id: str, *, low: float, high: float, pins: list[str], wiring: SimulatedWiring | None = None
+    ) -> None:
         super().__init__(device_id=device_id)
         self._range = Span(low, high)
         self._pins = [Pin(name=pin, direction="in", kind="digital" if pin == "ttl_in" else "analog") for pin in pins]
         self._power = high
         self._on = False
         self._control_mode: ControlMode = "software"
+        self._gate: bool | None = None
+        if wiring is not None:
+            wiring.register(self)
+        if wiring is not None and "ttl_in" in pins:
+            self._gate = False
+            wiring.listen(self.id, "ttl_in", self._on_gate)
+
+    def _on_gate(self, on: bool) -> None:
+        self._gate = on
+
+    @property
+    def emitting(self) -> bool:
+        """Whether light passes now: on, and with its gate open when its digital pin controls it. An unwired gate
+        counts as open."""
+        gated = self._control_mode in ("digital", "mixed")
+        return self._on and (not gated or self._gate is not False)
 
     @property
     def power(self) -> float:
@@ -66,9 +85,17 @@ class SimulatedLaser(SimulatedDimmable, Laser):
     unit: ClassVar[str] = "mW"
 
     def __init__(
-        self, device_id: str, *, wavelength: float, low: float = 1, high: float = 100, pins: list[str] | None = None
+        self,
+        device_id: str,
+        *,
+        wavelength: float,
+        low: float = 1,
+        high: float = 100,
+        pins: list[str] | None = None,
+        wiring: SimulatedWiring | None = None,
     ) -> None:
-        super().__init__(device_id, low=low, high=high, pins=["ttl_in", "analog_in"] if pins is None else pins)
+        pins = ["ttl_in", "analog_in"] if pins is None else pins
+        super().__init__(device_id, low=low, high=high, pins=pins, wiring=wiring)
         self._wavelength = wavelength
 
     @property
@@ -79,8 +106,11 @@ class SimulatedLaser(SimulatedDimmable, Laser):
 class SimulatedModulator(SimulatedDimmable, Modulator):
     """A modulator that lets ``low`` to 100 % of the light through."""
 
-    def __init__(self, device_id: str, *, low: float = 0.5, pins: list[str] | None = None) -> None:
-        super().__init__(device_id, low=low, high=100, pins=["ttl_in", "analog_in"] if pins is None else pins)
+    def __init__(
+        self, device_id: str, *, low: float = 0.5, pins: list[str] | None = None, wiring: SimulatedWiring | None = None
+    ) -> None:
+        pins = ["ttl_in", "analog_in"] if pins is None else pins
+        super().__init__(device_id, low=low, high=100, pins=pins, wiring=wiring)
 
 
 class SimulatedShutter(Shutter):

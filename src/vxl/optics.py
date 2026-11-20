@@ -12,6 +12,9 @@ from vxlib.issues import Problems
 from vxlib.schema import FrozenModel, UniqueList, identifier
 from vxlib.vector import Vec3D
 
+from rigup import Part
+from vxl.parts import Filter, Objective
+
 type SpecimenAxis = Literal["x", "y", "z"]
 
 
@@ -137,6 +140,49 @@ class OpticalGraph(RootModel[dict[OpticalNodeName, OpticalNode]]):
     def paths_to(self, detector: str, positions: Mapping[str, AxisPosition | None]) -> list[LightPath]:
         """The ways from the specimen to ``detector`` at ``positions``."""
         return [path for path in self._paths if path.nodes[-1] == detector and path.fits(positions)]
+
+    def magnification(
+        self, path: LightPath, positions: Mapping[str, AxisPosition | None], parts: Mapping[str, Part]
+    ) -> float | None:
+        """The product of the objectives' magnifications on ``path``; ``None`` without an objective."""
+        found = [part.magnification for part in self.parts_on(path, positions, parts) if isinstance(part, Objective)]
+        return math.prod(found) if found else None
+
+    def band(
+        self, path: LightPath, positions: Mapping[str, AxisPosition | None], parts: Mapping[str, Part]
+    ) -> tuple[float | None, float | None] | None:
+        """The wavelengths in nm that the filters on ``path`` let through; ``None`` without a filter."""
+        low: float | None = None
+        high: float | None = None
+        banded = False
+        for part in self.parts_on(path, positions, parts):
+            if isinstance(part, Filter):
+                banded = True
+                low = part.band[0] if low is None else low if part.band[0] is None else max(low, part.band[0])
+                high = part.band[1] if high is None else high if part.band[1] is None else min(high, part.band[1])
+        return (low, high) if banded else None
+
+    def camera_axes(
+        self, camera: str, positions: Mapping[str, AxisPosition | None], parts: Mapping[str, Part]
+    ) -> tuple[Vec3D, Vec3D]:
+        """Where 1 µm along ``camera``'s width and height lands in the specimen. Raise ``ValueError`` when no path
+        reaches it or its paths disagree on magnification."""
+        paths = self.paths_to(camera, positions)
+        if not paths:
+            raise ValueError(f"No light goes from the specimen to '{camera}' with {dict(positions)}.")
+        found = {self.magnification(path, positions, parts) for path in paths}
+        if len(found) != 1 or (magnification := found.pop()) is None:
+            raise ValueError(f"The light paths from the specimen to '{camera}' do not give 1 magnification.")
+        width, height = self.detectors()[camera].sides()
+        return width / magnification, height / magnification
+
+    def parts_on(
+        self, path: LightPath, positions: Mapping[str, AxisPosition | None], parts: Mapping[str, Part]
+    ) -> list[Part]:
+        """The parts on ``path``: its part nodes, and the part each device on it holds, named by its position."""
+        at = (path.positions.get(node, positions.get(node)) for node in path.nodes[:-1])
+        held = (position for position in at if isinstance(position, str) and position not in self.root)
+        return [parts[name] for name in (*path.nodes, *held) if name in parts]
 
     @cached_property
     def _paths(self) -> tuple[LightPath, ...]:

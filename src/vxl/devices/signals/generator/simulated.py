@@ -16,8 +16,8 @@ class SimulatedGenerator(Generator):
     """A generator on a simulated card. It reserves pins on the card as a real one would, keeps the armed cycle, and
     plays in time: a run of ``count`` cycles takes ``count`` cycle lengths.
 
-    With ``wiring``, it plays on the simulated wires: each cycle sends a rising edge wherever a digital wire leaving
-    1 of its pins turns on, and a cycle that starts on input edges plays once for each edge that reaches its pin.
+    With ``wiring``, it plays on the simulated wires: each cycle turns its digital wires on and off as its volts do,
+    and a cycle that starts on input edges plays once for each rising edge at its pin.
     An edge that comes while a cycle plays is missed. Without ``wiring``, nothing sends it edges, so a cycle that
     starts on input edges runs, but cannot be counted."""
 
@@ -25,10 +25,12 @@ class SimulatedGenerator(Generator):
         super().__init__(device_id=device_id)
         self._hub = hub
         self._wiring = wiring
+        if wiring is not None:
+            wiring.register(self)
         self._armed: Cycle | None = None
         self._ends_at: float | None = None
         self._running = False
-        self._edges: list[tuple[float, str]] = []
+        self._edges: list[tuple[float, str, bool]] = []
         self._player: _Player | None = None
 
     @property
@@ -65,9 +67,9 @@ class SimulatedGenerator(Generator):
         if self._wiring is not None:
             rate = float(cycle.sample_rate)
             edges = [
-                (index / rate, pin)
+                (index / rate, pin, on)
                 for pin, volts in cycle.volts.items()
-                for index in self._wiring.edges(self.id, pin, volts)
+                for index, on in self._wiring.turns(self.id, pin, volts)
             ]
             self._edges = sorted(edges)
 
@@ -123,7 +125,7 @@ class _Player:
         generator: SimulatedGenerator,
         wiring: SimulatedWiring,
         cycle: Cycle,
-        edges: list[tuple[float, str]],
+        edges: list[tuple[float, str, bool]],
         length: float,
         count: int | None,
     ) -> None:
@@ -151,8 +153,8 @@ class _Player:
         if self._thread is not threading.current_thread():
             self._thread.join()
 
-    def _on_edge(self) -> None:
-        if not self._playing:
+    def _on_edge(self, on: bool) -> None:
+        if on and not self._playing:
             self._playing = True
             self._triggers.release()
 
@@ -172,10 +174,10 @@ class _Player:
 
     def _play(self) -> None:
         began = time.monotonic()
-        for at, pin in self._edges:
+        for at, pin, on in self._edges:
             if self._stopped.wait(max(0.0, began + at - time.monotonic())):
                 return
-            self._wiring.send(self._id, pin)
+            self._wiring.send(self._id, pin, on)
         self._stopped.wait(max(0.0, began + self._length - time.monotonic()))
 
 

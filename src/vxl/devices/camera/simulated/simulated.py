@@ -3,7 +3,7 @@ import threading
 import time
 from collections.abc import Mapping
 from random import randint
-from typing import ClassVar, cast, final
+from typing import Any, ClassVar, cast, final
 
 import numpy as np
 from rigup.interface import choice, fact, integer, number
@@ -21,7 +21,13 @@ from vxl.devices.camera.base import (
     TriggerMode,
     TriggerPolarity,
 )
-from vxl.devices.camera.simulated.frame_source import FrameSource, FrameSourceConfig, create_frame_source
+from vxl.devices.camera.simulated.frame_source import (
+    FrameSource,
+    FrameSourceConfig,
+    SpecimenFrameSource,
+    create_frame_source,
+)
+from vxl.devices.camera.simulated.scene import Scene
 from vxl.devices.simulated import SimulatedWiring
 
 
@@ -36,6 +42,9 @@ class SimulatedCamera(AreaCamera):
     With ``wiring`` and the trigger on, each frame waits for a rising edge at ``trigger_in``, as a real camera does.
     Edges that come before the camera starts are lost; a frame that gets no edge within ``trigger_timeout_s``
     raises ``TimeoutError``. Without ``wiring``, frames come at ``frame_rate_hz`` whatever the trigger.
+
+    A specimen frame source needs ``optics`` and ``parts`` (the rig's, through YAML anchors) and ``follows`` (the
+    stage axes ``x``, ``y``, ``z`` and an optional ``focus`` axis, sharp at ``focus_at``); see :class:`Scene`.
     """
 
     _min_width: ClassVar[int] = 64
@@ -68,6 +77,10 @@ class SimulatedCamera(AreaCamera):
         buffer_update_interval_s: float = 5.0,
         wiring: SimulatedWiring | None = None,
         trigger_timeout_s: float = 10.0,
+        optics: Mapping[str, Any] | None = None,
+        parts: Mapping[str, Any] | None = None,
+        follows: Mapping[str, Any] | None = None,
+        focus_at: float = 0.0,
     ) -> None:
         if any(not math.isfinite(delay) or delay < 0 for delay in (start_delay_s, stop_delay_s)):
             raise ValueError("Camera operation delays must be finite and non-negative")
@@ -103,9 +116,25 @@ class SimulatedCamera(AreaCamera):
         self._last_grab_frame_time: float = 0
         self._actual_frame_rate_fps: float = 0
         self._wiring = wiring
+        if wiring is not None:
+            wiring.register(self)
         self._trigger_timeout_s = trigger_timeout_s
         self._triggers = threading.Semaphore(0)
         self._waits_for_triggers = False
+        self._scene: Scene | None = None
+        if isinstance(self._frame_source, SpecimenFrameSource):
+            if optics is None or parts is None or follows is None:
+                raise ValueError(f"{device_id} draws a specimen, so it needs optics, parts and follows")
+            self._scene = Scene(
+                device_id,
+                optics=optics,
+                parts=parts,
+                follows=follows,
+                focus_at=focus_at,
+                groups=self._frame_source.groups,
+                wiring=wiring,
+                log=self.log,
+            )
 
     @property
     def readout_time_ms(self) -> float:
@@ -208,8 +237,9 @@ class SimulatedCamera(AreaCamera):
     def pins(self) -> list[Pin]:
         return [Pin(name="trigger_in", direction="in", kind="digital")]
 
-    def _on_trigger(self) -> None:
-        self._triggers.release()
+    def _on_trigger(self, on: bool) -> None:
+        if on:
+            self._triggers.release()
 
     def _configure_trigger_mode(self, mode: TriggerMode) -> None:
         self.log.debug("trigger mode set to %s", mode)
@@ -291,7 +321,12 @@ class SimulatedCamera(AreaCamera):
         reference_frame = self._reference_frame
         if reference_frame is None:
             raise RuntimeError("Reference frame not generated. Call start() first.")
-        np.copyto(out, reference_frame, casting="no")
+        if self._scene is not None and isinstance(self._frame_source, SpecimenFrameSource):
+            view = self._scene.view(self.sensor.pixel_um, self._exposure_time_ms / 10.0)
+            valid_bits = PIXEL_FMT_TO_VALID_BITS[cast("PixelFormat", str(self.pixel_format))]
+            self._frame_source.render(out, view, self.roi, int(self.binning), valid_bits)
+        else:
+            np.copyto(out, reference_frame, casting="no")
         self._frame_count += 1
 
     def stop(self) -> None:

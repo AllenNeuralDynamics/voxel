@@ -18,7 +18,7 @@ rig:
   model: z-step light sheet, 4 cameras
   target: vxl_instruments.spim.Microscope
 
-  parts:
+  parts: &parts
     combiner:           {kind: combiner}
     left_tunable_lens:  {kind: tunable_lens}
     right_tunable_lens: {kind: tunable_lens}
@@ -36,6 +36,50 @@ rig:
     BP720:              {target: vxl.parts.Filter, band: [705 nm, 735 nm]}
     QB_A:               {target: vxl.parts.Filter, band: [420 nm, 740 nm]}   # wide, for the shared wheel
     QB_B:               {target: vxl.parts.Filter, band: [460 nm, 740 nm]}   # wide, for the shared wheel
+
+  optics: &optics
+    laser_405: {to: aom_405}
+    laser_445: {to: aom_445}
+    laser_488: {to: aom_488}
+    laser_514: {to: aom_514}
+    laser_561: {to: aom_561}
+    laser_594: {to: aom_594}
+    laser_640: {to: aom_640}
+    laser_685: {to: aom_685}
+    aom_405:   {to: combiner}
+    aom_445:   {to: combiner}
+    aom_488:   {to: combiner}
+    aom_514:   {to: combiner}
+    aom_561:   {to: combiner}
+    aom_594:   {to: combiner}
+    aom_640:   {to: combiner}
+    aom_685:   {to: combiner}
+    combiner:           {to: excitation_side_selector}
+    excitation_side_selector:
+      to: {left: left_tunable_lens, right: right_tunable_lens}
+    left_tunable_lens:  {to: positive_galvo}
+    positive_galvo:     {to: left_focus}
+    left_focus:         {to: specimen}
+    right_tunable_lens: {to: negative_galvo}
+    negative_galvo:     {to: right_focus}
+    right_focus:        {to: specimen}
+    specimen:           {to: objective}
+    objective:          {to: detection_focus}
+    detection_focus:    {to: fw_shared}
+    fw_shared:          {to: splitter}
+    splitter:           {to: [cam_1_focus, cam_2_focus, cam_3_focus, cam_4_focus]}
+    cam_1_focus:        {to: fw_1}
+    cam_2_focus:        {to: fw_2}
+    cam_3_focus:        {to: fw_3}
+    cam_4_focus:        {to: fw_4}
+    fw_1:               {to: cam_1}
+    fw_2:               {to: cam_2}
+    fw_3:               {to: cam_3}
+    fw_4:               {to: cam_4}
+    cam_1:              {width: {y: 1}, height: {x: -1}}
+    cam_2:              {width: {y: 1}, height: {x: -1}}
+    cam_3:              {width: {y: 1}, height: {x: -1}}
+    cam_4:              {width: {y: 1}, height: {x: -1}}
 
   wiring: &wiring
     ao_main:
@@ -69,23 +113,55 @@ rig:
       target: vxl.devices.signals.generator.simulated.SimulatedGenerator
       init: {hub: nidaq_1, wiring: sim_wiring}
 
-    laser_405: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 405}}
-    laser_445: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 445}}
-    laser_488: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 488}}
-    laser_514: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 514}}
-    laser_561: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 561}}
-    laser_594: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 594}}
-    laser_640: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 640}}
-    laser_685: {target: vxl.devices.light.simulated.SimulatedLaser, init: {wavelength: 685}}
+    laser_405:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 405, wiring: sim_wiring}
+    laser_445:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 445, wiring: sim_wiring}
+    laser_488:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 488, wiring: sim_wiring}
+    laser_514:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 514, wiring: sim_wiring}
+    laser_561:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 561, wiring: sim_wiring}
+    laser_594:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 594, wiring: sim_wiring}
+    laser_640:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 640, wiring: sim_wiring}
+    laser_685:
+      target: vxl.devices.light.simulated.SimulatedLaser
+      init: {wavelength: 685, wiring: sim_wiring}
 
-    aom_405:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_445:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_488:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_514:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_561:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_594:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_640:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
-    aom_685:   {target: vxl.devices.light.simulated.SimulatedModulator, init: {pins: [ttl_in]}}
+    aom_405:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_445:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_488:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_514:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_561:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_594:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_640:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
+    aom_685:
+      target: vxl.devices.light.simulated.SimulatedModulator
+      init: {pins: [ttl_in], wiring: sim_wiring}
 
     excitation_side_axis:                         # moves the mirror that picks the illumination arm
       target: vxl.devices.axes.simulated.SimulatedContinuousAxis
@@ -168,50 +244,6 @@ rig:
     x: {device: x_axis}
     y: {device: y_axis}
     z: {device: z_axis}
-
-  optics:
-    laser_405: {to: aom_405}
-    laser_445: {to: aom_445}
-    laser_488: {to: aom_488}
-    laser_514: {to: aom_514}
-    laser_561: {to: aom_561}
-    laser_594: {to: aom_594}
-    laser_640: {to: aom_640}
-    laser_685: {to: aom_685}
-    aom_405:   {to: combiner}
-    aom_445:   {to: combiner}
-    aom_488:   {to: combiner}
-    aom_514:   {to: combiner}
-    aom_561:   {to: combiner}
-    aom_594:   {to: combiner}
-    aom_640:   {to: combiner}
-    aom_685:   {to: combiner}
-    combiner:           {to: excitation_side_selector}
-    excitation_side_selector:
-      to: {left: left_tunable_lens, right: right_tunable_lens}
-    left_tunable_lens:  {to: positive_galvo}
-    positive_galvo:     {to: left_focus}
-    left_focus:         {to: specimen}
-    right_tunable_lens: {to: negative_galvo}
-    negative_galvo:     {to: right_focus}
-    right_focus:        {to: specimen}
-    specimen:           {to: objective}
-    objective:          {to: detection_focus}
-    detection_focus:    {to: fw_shared}
-    fw_shared:          {to: splitter}
-    splitter:           {to: [cam_1_focus, cam_2_focus, cam_3_focus, cam_4_focus]}
-    cam_1_focus:        {to: fw_1}
-    cam_2_focus:        {to: fw_2}
-    cam_3_focus:        {to: fw_3}
-    cam_4_focus:        {to: fw_4}
-    fw_1:               {to: cam_1}
-    fw_2:               {to: cam_2}
-    fw_3:               {to: cam_3}
-    fw_4:               {to: cam_4}
-    cam_1:              {width: {y: 1}, height: {x: -1}}
-    cam_2:              {width: {y: 1}, height: {x: -1}}
-    cam_3:              {width: {y: 1}, height: {x: -1}}
-    cam_4:              {width: {y: 1}, height: {x: -1}}
 
   scan:
     axis: z

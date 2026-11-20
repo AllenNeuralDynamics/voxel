@@ -1,6 +1,5 @@
 """The files of an instrument: ``rig.yaml``, ``default.yaml`` and ``state.json``."""
 
-import math
 import secrets
 from collections.abc import Mapping
 from typing import Annotated, Literal
@@ -15,10 +14,8 @@ from vxlib.issues import Problem, Problems
 from vxlib.schema import FrozenModel
 from vxlib.vector import Span, Vec3D
 
-from rigup import Part
 from vxl.devices.base import DeviceId
 from vxl.optics import SPECIMEN, AxisPosition, LightPath, OpticalGraph, SpecimenAxis
-from vxl.parts import Filter, Objective
 from vxl.wiring import Wiring
 
 _ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
@@ -127,46 +124,16 @@ class InstrumentConfig(RigConfig, frozen=True):
         return problems
 
     def magnification(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> float | None:
-        """The magnification of the parts that the light passes on ``path``, with each device in ``positions`` at its
-        position there: ``None`` when no part gives one."""
-        found = [part.magnification for part in self._parts_on(path, positions) if isinstance(part, Objective)]
-        return math.prod(found) if found else None
+        """See :meth:`OpticalGraph.magnification`."""
+        return self.optics.magnification(path, positions, self.parts)
 
     def camera_axes(self, camera: DeviceId, positions: Mapping[str, AxisPosition]) -> tuple[Vec3D, Vec3D]:
-        """Where 1 µm along ``camera``'s sensor width and height lands in the specimen, with each device in
-        ``positions`` at its position there: the detector's sides divided by the magnification. Raise ``ValueError``
-        when no light path reaches the camera, or its paths do not agree on 1 magnification."""
-        paths = self.optics.paths_to(camera, positions)
-        if not paths:
-            raise ValueError(f"No light goes from the specimen to '{camera}' with {dict(positions)}.")
-        found = {self.magnification(path, positions) for path in paths}
-        if len(found) != 1 or (magnification := found.pop()) is None:
-            raise ValueError(f"The light paths from the specimen to '{camera}' do not give 1 magnification.")
-        width, height = self.optics.detectors()[camera].sides()
-        return width / magnification, height / magnification
+        """See :meth:`OpticalGraph.camera_axes`."""
+        return self.optics.camera_axes(camera, positions, self.parts)
 
     def band(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> tuple[float | None, float | None] | None:
-        """The wavelengths, in nm, that the parts on ``path`` let through, with each device in ``positions`` at its
-        position there: ``None`` when no part gives a band."""
-        low: float | None = None
-        high: float | None = None
-        banded = False
-        for part in self._parts_on(path, positions):
-            if isinstance(part, Filter):
-                banded = True
-                low = part.band[0] if low is None else low if part.band[0] is None else max(low, part.band[0])
-                high = part.band[1] if high is None else high if part.band[1] is None else min(high, part.band[1])
-        return (low, high) if banded else None
-
-    def _parts_on(self, path: LightPath, positions: Mapping[str, AxisPosition]) -> list[Part]:
-        """The parts that the light passes on ``path``: its nodes that are parts, and the part that each device on it
-        holds in the light's way. A device holds the part with the name of its position, when that part is not a node
-        of the optical graph. A device is at the position that ``path`` needs, or else at its position in
-        ``positions``."""
-        parts = self.parts
-        at = (path.positions.get(node, positions.get(node)) for node in path.nodes[:-1])
-        held = (position for position in at if isinstance(position, str) and position not in self.optics.root)
-        return [parts[name] for name in (*path.nodes, *held) if name in parts]
+        """See :meth:`OpticalGraph.band`."""
+        return self.optics.band(path, positions, self.parts)
 
     def _name_problems(self) -> Problems:
         problems = Problems(
