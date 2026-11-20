@@ -43,39 +43,17 @@ These are the current picks, open until decided.
 - **A change is sent on release** (or Enter in the box). The wheel has no release, so a short pause counts as 1.
   Loading a cycle into a running generator stops it, re-arms it and starts it again
   (`GeneratorController.load`), so sending every small move would restart it many times a second.
-- **Live panel section: "Timing".** UI words: "Add knob", "Edit knob", "Remove knob"; the star on a Timing panel row
+- **Live panel section: "Tuning"**, the same word as the config field. "Timing" was dropped: some knobs are levels
+  (volts), not times. UI words: "Add knob", "Edit knob", "Remove knob"; the star on a Timing panel row
   says "Add to the Live panel" or "Edit the knob".
+- **A turn names the number it turns**, not the knob's place in the list (see "Backend additions"). Adding, removing
+  or undoing a knob then cannot make a turn hit the wrong number, and 2 knobs on the same number turn it alike.
 
 ## The ruler
 
-Prototyped in the Lab on the Live panel's focus rows (device positions), which have the same need as timeline knobs.
-Not yet used for the knobs themselves.
-
-- **Settled: a needle.** A 2 px line with round ends, fixed at the center, marks the target. The ruler of ticks moves
-  under it. A round thumb was tried and dropped: on a slider it means "drag me and I move", but here it stays put, and
-  it hid the ticks at the value.
-- **Input.** A drag anywhere on the ruler moves it with the pointer; the value snaps to steps. Shift moves 10 steps at a
-  time. The wheel and the arrow keys move 1 step (Page Up and Down 10). The number box takes an exact value.
-- **When a change is sent.** A drag sends on release. The wheel and the keys send after a 0.4 s pause.
-- **Motion.** Each ruler keeps its drawn state by its key, so a rebuild of the panel does not reset it. The center value
-  and the reading ease toward their targets at the screen's frame rate. While dragging, the ticks follow the pointer
-  exactly, and on release the ruler glides onto the snapped value. The live loop redraws a ruler whenever its drawn
-  reading differs from the real one. A first version redrew only while its row was marked "moving", so a short move
-  that ended before the next tick left the reading mark stuck. When a page is in the background and gets few frames,
-  the live loop steps the animation itself, so it still settles.
-- **Looks under test** (Lab, Ruler):
-
-  | Look | What it draws |
-  |---|---|
-  | Fine (default) | the slider's 3 px track over the range; a tick every step: every 10th full strength, every 5th at 0.7, the rest at 0.45, all fading near the ends; the reading as a fill on the track |
-  | Track | the same track and fill; a tick every 2 steps, every 10th taller |
-  | Light | no track; a tick every 2 steps, fading toward the ends; a cap at each end of the range; the reading as a fill |
-  | Boxed | a framed ruler; a tick every step with a label every 10; hatching past the range; a straight center line; the reading as a mark at the bottom, pinned to the edge on its side when outside the window |
-
-- **Spacing.** 8 px between steps for Track, Light and Boxed. For Fine, a Lab choice (Fine spacing): Dense (about
-  5.3 px, a window 1.5 times as wide, the default), Medium (6.4 px) or Sparse (8 px). Closer ticks mean less hand
-  movement for each step, so fine moves get harder to control; ticks between steps were rejected, because they would
-  show positions the value can never stop at.
+The control's look, input and motion are in `notes/web-ui/ruler.md`. Decided here: a needle fixed at the center over
+moving ticks, the value snaps to steps, a drag sends on release, Alt + wheel and the arrow keys send after a 0.4 s
+pause, and a plain wheel scrolls the panel.
 
 ## Bounds and step, worked out
 
@@ -126,8 +104,8 @@ Adding, editing and removing knobs goes through `update_profile`, so it is undoa
 
 A turn uses the same scheduler resources as `set_generator_timeline` (the generator, the store, the active profile).
 `ActivityScheduler.run` raises `ActivityBusyError` when a running activity holds 1 of them and cannot restart, so a turn
-is refused during a run, and a preview that can restart restarts around it. Not checked yet: that the acquisition lists
-the generator among its resources.
+is refused during a run, and a preview that can restart restarts around it. The acquisition holds the store and its
+devices, generators included, with no restart (`acquisition.md`, "Resources"), so a turn is refused during a run.
 
 ## Backend additions
 
@@ -140,7 +118,7 @@ the generator among its resources.
 | 5 | `Profile.cautions(config)`: the fit checks above, apart from `Profile.problems` | `state.py` |
 | 6 | Bounds and step helpers (scale tables read backward for levels; edge placement for times) | `signals.py`, `samples.py` |
 | 7 | A knob view in the instrument view: each knob's current value, unit, bounds, step, and whether it is available. 1 field in `InstrumentView` and 1 line in `_view_sources`. | `base.py` |
-| 8 | A turn method on the base instrument, such as `set_tuning_knob(index, value)`: change 1 number, run the profile checks, load the generator, save | `base.py` |
+| 8 | A turn method on the base instrument, `set_tuning_knob(generator, wire, field, value)`: change 1 number of the active profile, run the profile checks, load the generator, save | `base.py` |
 
 Why a turn method rather than clients calling `set_generator_timeline`: the bounds are worked out in the backend, so 1
 method keeps them in 1 place for every caller (web, Qt, a script), and a client sends 1 number.
@@ -155,12 +133,27 @@ method keeps them in 1 place for every caller (web, Qt, a script), and a client 
   `window` (a signal's start to end), `amplitude` (a wave's swing), `bounds`, `tolerance`. Dropped because both modes
   only declared limits, which the system already has.
 
+## Tabled: a mark when the generator plays something else
+
+Tabled on 2026-11-19. A knob row has nothing at its right: a turn is loaded at once, so a reading would repeat the
+box. The useful fact is when the generator does not play the profile's value (a turn refused during a run, a failed
+load). The row would then turn amber, as other rows that differ from their target.
+
+The generator reports what it plays: `GeneratorController.loaded` streams the `Cycle`, which holds only volts for each
+pin at each sample, not the timeline's numbers. 2 ways to know:
+
+- **The instrument remembers the timeline it last loaded** for each generator, after each load that worked, and clears
+  it when `loaded` becomes empty. A knob compares its number in the profile with the same number in that copy, so only
+  that row turns amber. Cheap, and sound because only the instrument touches devices. The pick so far.
+- **Compare cycles:** build the cycle from the profile and compare it with `loaded` (`load` already compares cycles).
+  The generator's own word, but it says only that something on that generator differs, so every knob on it would turn
+  amber; and building a cycle is heavy (about 925,000 numbers at 100 kHz), so it can run only when either side changes.
+
 ## Open questions
 
 - If the ruler over the derived bounds proves too coarse, add 1 optional override (`extent`) for a narrower window.
 - Undo of live changes as a whole (power, properties, camera region, timelines, knob turns).
 - Whether the view says when devices differ from the profile, so the panel can offer Apply after an undo.
-- That the acquisition holds the generator, so turns are refused during a run.
 - A voltage-resolution fact on the generator, for level steps.
 - A default step for levels with no natural unit step.
 
@@ -170,6 +163,4 @@ method keeps them in 1 place for every caller (web, Qt, a script), and a client 
   and problem messages match the Python exactly.
 - `Cycle.volts` sends a plain list of volts for each pin. At 100 kHz over 544 ms with 17 wires that is about 925,000
   numbers each time a profile loads.
-- The templates moved to `instruments/src/vxl_instruments/spim/templates/`. exaSPIM now gates an AOM after each laser
-  on `aom_N/ttl_in`; `z-step-4-cameras.yaml` matches the Lab's exaSPIM Max.
 - The new API has no digital `train` kind; skipped for now.
