@@ -181,9 +181,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run("open the instrument", requires=()):
             await self._hal.open()
             await self._discover_remote_stores()
-            if problems := await self._open_problems():
+            if errors := (await self._open_problems()).errors():
                 await self._hal.close()
-                raise StartupError(problems)
+                raise StartupError(errors)
             # Read each stage axis once, so the first live frames already have a position: until a streamed
             # position arrives, an axis that is not read has none. An axis that fails stays unknown.
             await asyncio.gather(*(axis.position.get() for axis in self._hal.stage.values()), return_exceptions=True)
@@ -319,9 +319,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             active = self._active_profile.value
             profile = self._store.value.profiles[active]
             candidate = profile.model_copy(update={"timelines": {**profile.timelines, generator: timeline}})
-            if problems := candidate.problems(self._config):
-                problems = problems.under("profiles", active)
-                raise RejectedError(str(problems), problems)
+            if errors := candidate.problems(self._config).errors():
+                errors = errors.under("profiles", active)
+                raise RejectedError(str(errors), errors)
             await handle.load(self._generator_cycle(generator, timeline, OwnClock()))
             await self._store.update({("profiles", active, "timelines", generator): timeline})
             await self._apply_light(candidate)
@@ -501,8 +501,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 problems += power.problems(*ranges[device]).under(device)
             else:
                 problems.add("profile.power.not_dimmable", f"'{device}' is not a laser or a modulator.", device)
-        if problems := problems.under("profiles", profile_id, "power"):
-            raise RejectedError(str(problems), problems)
+        if errors := problems.errors().under("profiles", profile_id, "power"):
+            raise RejectedError(str(errors), errors)
         await hal.lights_off()
         positions = {**state.positions_at(await self.stage_position(), {}), **profile.positions}
         await gather_all(*(self._move_axis(device, position) for device, position in positions.items()), message="move")
@@ -647,8 +647,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         :class:`RejectedError` when the timeline has problems with the generator's wires."""
         wires = self._config.wiring.outputs(generator)
         rendered = render(timeline, wires)
-        if rendered.problems:
-            raise RejectedError(str(rendered.problems), rendered.problems)
+        if errors := rendered.problems.errors():
+            raise RejectedError(str(errors), errors)
         volts = {wires[name].pin: samples.volts.tolist() for name, samples in rendered.wires.items()}
         return Cycle(sample_rate=timeline.sample_rate, volts=volts, start=start)
 
@@ -713,8 +713,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                 after = Power(full=power)
             else:
                 raise RejectedError(f"'{device}' has no full power in this profile, so it has no dim power to set")
-            if problems := after.problems(lowest, highest).under("profiles", active, "power", device):
-                raise RejectedError(str(problems), problems)
+            if errors := after.problems(lowest, highest).errors().under("profiles", active, "power", device):
+                raise RejectedError(str(errors), errors)
             await self._store.update({("profiles", active, "power", device): after.model_dump(mode="json")})
             in_use = self._power_mode.value
             now = after.at(in_use, position)

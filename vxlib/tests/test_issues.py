@@ -80,12 +80,32 @@ def test_assignments_names_each_missing_and_each_unexpected_key():
     ]
 
 
-def test_a_problem_is_an_issue_that_is_always_an_error() -> None:
+def test_a_problem_is_an_issue_that_is_an_error_unless_it_says_warning() -> None:
     problem = Problem(code="rig.x", msg="wrong", loc=("devices", "camera"))
     assert isinstance(problem, Issue)
     assert problem.level == "error"
-    with pytest.raises(ValidationError):
-        Problem.model_validate({"code": "rig.x", "msg": "wrong", "level": "warning"})
+    assert Problem.model_validate({"code": "rig.x", "msg": "odd", "level": "warning"}).level == "warning"
+
+
+def test_errors_keeps_only_the_problems_that_refuse() -> None:
+    found = Problems()
+    found.add("knob.no_signal", "The knob's wire has no signal.", "tuning_knobs", 0, level="warning")
+    found.add("timeline.no_wires", "The generator sends no wires.", "timelines", "ao")
+
+    assert [problem.level for problem in found] == ["warning", "error"]
+    assert found.errors().codes() == ["timeline.no_wires"]
+    assert isinstance(found.errors(), Problems)
+
+
+def test_warnings_alone_raise_nothing_and_never_join_the_raised_errors() -> None:
+    warnings = Problems([Problem(code="knob.no_signal", msg="no signal", level="warning")])
+    warnings.raise_if_any("Only warnings")
+
+    mixed = Problems([*warnings, Problem(code="timeline.no_wires", msg="no wires", loc=("timelines", "ao"))])
+    with pytest.raises(ValidationError) as caught:
+        mixed.raise_if_any("Mixed")
+
+    assert Problems.from_validation(caught.value).codes() == ["timeline.no_wires"]
 
 
 def test_an_alert_is_an_issue_that_started_at_a_time() -> None:

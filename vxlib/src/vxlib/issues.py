@@ -1,11 +1,12 @@
 """Issues: what is wrong, each with a stable code, a level, a message, and the place in the data that it is about.
 
-A :class:`Problem` is wrong in a setup's data and refuses what it belongs to, such as opening an instrument or an
-edit. An :class:`Alert` is wrong in a running instrument now, and ends by itself when the state changes back. A
-:class:`Failure` is what stopped a piece of work, such as an acquisition, and stays in its record.
+A :class:`Problem` is wrong in a setup's data. An error refuses what it belongs to, such as opening an instrument or
+an edit; a warning is reported and refuses nothing. An :class:`Alert` is wrong in a running instrument now, and ends
+by itself when the state changes back. A :class:`Failure` is what stopped a piece of work, such as an acquisition,
+and stays in its record.
 
-A check collects problems and returns them, or raises them as 1 pydantic ``ValidationError`` from a validator. The 2
-forms convert into each other: :meth:`Problems.raise_if_any` and :meth:`Problems.from_validation`.
+A check collects problems and returns them, or raises its errors as 1 pydantic ``ValidationError`` from a validator.
+The 2 forms convert into each other: :meth:`Problems.raise_if_any` and :meth:`Problems.from_validation`.
 """
 
 import traceback
@@ -40,11 +41,11 @@ class Issue(BaseModel, frozen=True):
 
 
 class Problem(Issue, frozen=True):
-    """Something wrong in a setup's data. It is always an error, and it refuses what it belongs to, such as opening an
-    instrument or an edit. A check gives ``loc`` from the object it checks; each parent check puts its own key in
-    front, with :meth:`Problems.under`."""
+    """Something wrong in a setup's data. An error, the default, refuses what it belongs to, such as opening an
+    instrument or an edit; a warning is reported and refuses nothing. A check gives ``loc`` from the object it
+    checks; each parent check puts its own key in front, with :meth:`Problems.under`."""
 
-    level: Literal["error"] = "error"
+    level: Level = "error"
 
     @classmethod
     def not_configured(cls, label: str, name: str, *, code: str, loc: KeyPath) -> Self:
@@ -101,9 +102,13 @@ class Problems(list[Problem]):
             found.add(f"{code}.unexpected", f"Unexpected {label} assignment '{key}'.", key)
         return found
 
-    def add(self, code: str, msg: str, *loc: str | int, detail: str | None = None) -> None:
+    def add(self, code: str, msg: str, *loc: str | int, detail: str | None = None, level: Level = "error") -> None:
         """Add 1 problem at ``loc``."""
-        self.append(Problem(code=code, msg=msg, loc=loc, detail=detail))
+        self.append(Problem(code=code, msg=msg, loc=loc, detail=detail, level=level))
+
+    def errors(self) -> Self:
+        """The problems that refuse: the errors, without the warnings."""
+        return type(self)(found for found in self if found.level == "error")
 
     def under(self, *keys: str | int) -> Self:
         """These problems, with ``keys`` in front of each place."""
@@ -114,9 +119,11 @@ class Problems(list[Problem]):
         return [found.code for found in self]
 
     def raise_if_any(self, title: str) -> None:
-        """Raise these problems as 1 ``ValidationError`` titled ``title``, each with its code, place and detail. A
-        pydantic validator calls this, so that data that does not validate reports every problem at once."""
-        if not self:
+        """Raise the errors among these problems as 1 ``ValidationError`` titled ``title``, each with its code, place
+        and detail; warnings refuse nothing, so they are not raised. A pydantic validator calls this, so that data that
+        does not validate reports every error at once."""
+        errors = self.errors()
+        if not errors:
             return
         details = [
             InitErrorDetails(
@@ -126,7 +133,7 @@ class Problems(list[Problem]):
                 loc=found.loc,
                 input=None,
             )
-            for found in self
+            for found in errors
         ]
         raise ValidationError.from_exception_data(title, details)
 

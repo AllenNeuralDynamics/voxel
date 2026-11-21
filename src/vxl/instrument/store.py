@@ -119,7 +119,7 @@ class InstrumentStore[S: InstrumentState](Subscribable[S]):
         fields = self._default_fields(include, "save as default")
         async with self._lock:
             default = self._default.value.model_copy(update={field: getattr(self._value, field) for field in fields})
-            if found := default.problems(self._config):
+            if found := default.problems(self._config).errors():
                 raise RejectedError(f"Cannot save as default: {found}", found)
             data = default.model_dump(mode="json", exclude_none=True, include=set(default.default_fields()))
             await asyncio.to_thread(update_yaml, self._home / "default.yaml", data)
@@ -161,7 +161,7 @@ class InstrumentStore[S: InstrumentState](Subscribable[S]):
             raise RejectedError(str(problems), problems) from exc
         if validated == self._value:
             return
-        if found := validated.problems(self._config):
+        if found := validated.problems(self._config).errors():
             raise RejectedError(str(found), found)
         await asyncio.to_thread(
             atomic_write, self._home / "state.json", validated.model_dump_json(indent=2, exclude_none=True)

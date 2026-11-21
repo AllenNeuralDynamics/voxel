@@ -36,7 +36,7 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
     @property
     def ok(self) -> bool:
         """Whether the instrument can be built."""
-        return self.config is not None and self.default is not None and not self.problems
+        return self.config is not None and self.default is not None and not self.problems.errors()
 
     @staticmethod
     def read(home: Path | str) -> "InstrumentFolder[Any, Any]":

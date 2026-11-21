@@ -137,7 +137,7 @@ class Profile(FrozenModel):
     def problems(self, config: InstrumentConfig) -> Problems:
         """Return the problems of this profile against ``config``."""
         problems = self._channel_problems(config)
-        if problems:  # the checks below read the light paths, so a wrong channel would repeat as their problems
+        if problems.errors():  # the checks below read the light paths, so a wrong channel would repeat as their problems
             problems += self._timeline_problems(config)
             return problems
         nodes = self.path_nodes(config)
@@ -250,7 +250,7 @@ class Profile(FrozenModel):
                 problems.add("profile.timeline.no_wires", msg, "timelines", generator)
                 continue
             found = timeline.problems(wires)
-            if not found:  # the specimens of a wrong timeline would repeat its problems
+            if not found.errors():  # the specimens of a wrong timeline would repeat its problems
                 found = render(timeline, wires).problems
             problems += found.under("timelines", generator)
         return problems

@@ -114,7 +114,7 @@ devices, generators included, with no restart (`acquisition.md`, "Resources"), s
 
 | # | Addition | Where |
 |---|---|---|
-| 1 | `Problem.level` (error or warning) and `Problems.errors()`; `raise_if_any` raises only errors; refusing checks use `errors()` | `vxlib/src/vxlib/issues.py`, its callers |
+| 1 | `Problem.level` (error or warning) and `Problems.errors()` (names picked 2026-11-20); `raise_if_any` raises only errors; refusing checks use `errors()` | `vxlib/src/vxlib/issues.py`, its callers |
 | 2 | `TuningKnob` (`label`, `generator`, `wire`, `field`) | `src/vxl/instrument/state.py` |
 | 3 | `Profile.tuning_knobs`, default empty | `state.py` |
 | 4 | `tuning_knobs` in the base `ProfileFields`, so every kind's `update_profile` edits the list | `state.py` |
