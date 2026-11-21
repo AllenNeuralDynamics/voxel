@@ -99,17 +99,16 @@ class SeqSweep:
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
         """Apply the optics to a pass: pixel size, stage speed, strip width and distances (travel = capture + 2 x margin)."""
         optics = self.config.default.optics
-        capture_um = abs(pass_config.scan_end_um - pass_config.scan_start_um)
-        capture_mm = capture_um / 1000
+        capture_mm = abs(pass_config.scan_end_mm - pass_config.scan_start_mm)
         return DerivedScan(
             scan_axis=self.config.default.scan_axis,
             pixel_size_um=optics.pixel_size_um,
             scan_speed_mm_s=pass_config.line_rate_hz * optics.pixel_size_um / 1000,
-            scan_margin_um=pass_config.scan_margin_um,
+            scan_margin_mm=pass_config.scan_margin_mm,
             tdi_image_width_um=optics.tdi_image_width_um,
             capture_mm=capture_mm,
-            travel_mm=capture_mm + 2 * pass_config.scan_margin_um / 1000,
-            line_count=capture_um / optics.pixel_size_um,
+            travel_mm=capture_mm + 2 * pass_config.scan_margin_mm,
+            line_count=capture_mm * 1000 / optics.pixel_size_um,
         )
 
     def _log_derived(self, job_name: str, derived: DerivedScan) -> None:
@@ -126,7 +125,7 @@ class SeqSweep:
             job_name,
             derived.pixel_size_um / 1000,
             derived.scan_speed_mm_s,
-            derived.scan_margin_um / 1000,
+            derived.scan_margin_mm,
             derived.tdi_image_width_um / 1000,
             derived.travel_mm,
             derived.capture_mm,
@@ -145,13 +144,12 @@ class SeqSweep:
             raise ValueError(f"chambers {unknown} are not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}")
         if defaults.scan_safe_range_mm is not None:
             low_mm, high_mm = defaults.scan_safe_range_mm
-            start_mm, end_mm = sorted((job.pass_config.scan_start_um / 1000, job.pass_config.scan_end_um / 1000))
+            start_mm, end_mm = sorted((job.pass_config.scan_start_mm, job.pass_config.scan_end_mm))
             if start_mm < low_mm or end_mm > high_mm:
                 raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside scan_safe_range_mm [{low_mm:g}, {high_mm:g}]")
-        scan_margin_mm = job.pass_config.scan_margin_um / 1000
-        if scan_margin_mm > defaults.chamber_edge_margin_mm:
+        if job.pass_config.scan_margin_mm > defaults.chamber_edge_margin_mm:
             raise ValueError(
-                f"scan_margin_um {job.pass_config.scan_margin_um:g} exceeds chamber_edge_margin_mm "
+                f"scan_margin_mm {job.pass_config.scan_margin_mm:g} exceeds chamber_edge_margin_mm "
                 f"{defaults.chamber_edge_margin_mm:g}"
             )
         line_rate_hz = job.pass_config.line_rate_hz
@@ -173,11 +171,11 @@ class SeqSweep:
                     if chamber is not None:
                         step_mm = (
                             defaults.chambers_step_mm[chamber]
-                            + pass_config.step_margin_um / 1000
+                            + pass_config.step_margin_mm
                             + strip * derived.tdi_image_width_um / 1000
                         )
-                        start_um = pass_config.scan_end_um if job.direction is ScanDirection.REVERSE else pass_config.scan_start_um
-                        x_mm, y_mm = (start_um / 1000, step_mm) if scan_axis_is_x else (step_mm, start_um / 1000)
+                        start_mm = pass_config.scan_end_mm if job.direction is ScanDirection.REVERSE else pass_config.scan_start_mm
+                        x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
                         await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
                         await scan_controller.wait_motion_end()
                         self.log.info("Moved to X=%.3f mm, Y=%.3f mm (%sstrip %d/%d)", x_mm, y_mm, label, strip + 1, job.num_strips)

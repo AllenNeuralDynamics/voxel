@@ -62,7 +62,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
         default_factory=dict, description="Lower edge of each sample chamber along the step axis (across the scan); strips step upward from it"
     )
     chamber_edge_margin_mm: float = Field(
-        ..., gt=0, description="Clearance between the safe X range and the chamber edge; a job's scan_margin_um must fit in it"
+        ..., gt=0, description="Clearance between the safe X range and the chamber edge; a job's scan_margin_mm must fit in it"
     )
     scan_safe_range_mm: tuple[float, float] | None = Field(
         default=None,

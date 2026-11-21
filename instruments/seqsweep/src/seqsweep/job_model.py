@@ -6,8 +6,8 @@ from vxlib.schema import FrozenModel
 
 
 class ScanDirection(StrEnum):
-    FORWARD = "forward"  # scan_start_um → scan_end_um
-    REVERSE = "reverse"  # scan_end_um → scan_start_um
+    FORWARD = "forward"  # scan_start_mm → scan_end_mm
+    REVERSE = "reverse"  # scan_end_mm → scan_start_mm
 
 
 class ScanPattern(StrEnum):
@@ -16,14 +16,14 @@ class ScanPattern(StrEnum):
 
 
 class ScanPassConfig(FrozenModel):
-    """One strip pass along the scan axis (µm, Hz). Stage speed and line pitch follow from the optics."""
+    """One strip pass along the scan axis (mm, Hz). Stage speed and line pitch follow from the optics."""
 
-    scan_start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
-    scan_end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
-    scan_margin_um: float = Field(
+    scan_start_mm: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
+    scan_end_mm: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
+    scan_margin_mm: float = Field(
         ge=0, description="Run-up and run-out outside the imaged range, at each end (the buffer's MARGIN)"
     )
-    step_margin_um: float = Field(
+    step_margin_mm: float = Field(
         default=0.0,
         ge=0,
         description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
@@ -39,7 +39,7 @@ class DerivedScan(FrozenModel):
     scan_axis: Literal["x", "y"] = Field(description="Stage axis the scan runs along (from the defaults)")
     pixel_size_um: float = Field(description="Pixel size on the sample; also the stage travel per line trigger")
     scan_speed_mm_s: float = Field(description="Constant stage speed during imaging")
-    scan_margin_um: float = Field(description="Run-up and run-out outside the imaged range, at each end (from the job)")
+    scan_margin_mm: float = Field(description="Run-up and run-out outside the imaged range, at each end (from the job)")
     tdi_image_width_um: float = Field(description="Strip width on the sample, across the scan")
     capture_mm: float = Field(description="Imaged distance along the scan axis")
     travel_mm: float = Field(description="Capture distance plus the margin at both ends")

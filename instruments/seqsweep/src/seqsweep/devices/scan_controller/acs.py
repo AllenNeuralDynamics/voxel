@@ -323,7 +323,7 @@ class AcsController(ScanController):
             raise ValueError(f"No gate output for lasers {unknown}")
         low, high = self._config.limits_mm[derived.scan_axis]
         parameters: dict[str, float | int] = {
-            "overscan_mm": derived.scan_margin_um / 1000,
+            "overscan_mm": derived.scan_margin_mm,
             "pixel_size_mm": derived.pixel_size_um / 1000,
             "scan_speed_mm_s": derived.scan_speed_mm_s,
             "line_pulse_ms": self._config.line_pulse_width_ms,
@@ -344,7 +344,7 @@ class AcsController(ScanController):
         if self._pass is None:
             raise RuntimeError("configure() must be called before run()")
         config, _ = self._pass
-        start_mm, end_mm = config.scan_start_um / 1000, config.scan_end_um / 1000
+        start_mm, end_mm = config.scan_start_mm, config.scan_end_mm
         if direction is ScanDirection.REVERSE:
             start_mm, end_mm = end_mm, start_mm
         self._write("scan_start_mm", start_mm)

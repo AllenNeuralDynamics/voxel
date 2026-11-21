@@ -74,7 +74,7 @@ default:
     tdi_pixel_um: 5.0
     magnification: 20
     tdi_image_width_px: 4352  # sensor width, steps of 32, max 16384; must match the camera and frame grabber
-  chamber_edge_margin_mm: 10  # clearance between the safe X range and the chamber edge; a job's scan_margin_um must fit in it
+  chamber_edge_margin_mm: 10  # clearance between the safe X range and the chamber edge; a job's scan_margin_mm must fit in it
   chambers_step_mm:  # lower edge of each chamber across the scan (Y while scan_axis is x); strips step upward from it
     1: 200.25
     2: 155.0
