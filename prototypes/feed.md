@@ -1,6 +1,7 @@
 # Station feed with topics
 
-Agreed on 2026-11-17, not built. For the web layer, after the acquisition capture in `spim.Microscope`.
+Agreed on 2026-11-17, not built. For the web layer, after the acquisition capture in `spim.Microscope`. Since
+2026-11-20 the feed is spoken at every hop: publisher → gateway → gateway → window (`gateway.md`).
 
 ## Why
 
@@ -45,9 +46,22 @@ keeps `device_views`, since its other names give handles.
 "Feed topics" are not rigup's device topics (`live`, `props.update`); the dotted form keeps them apart. Say so in the
 feed's docstring and in `src/vxl/live/live.md`.
 
+## Every hop
+
+- **Publishers** (the station, the lab) send 1 feed to their gateway. A gateway sends the same feed on to windows and
+  to the gateway above it. A window cannot tell how many gateways are in between.
+- **The feed is a written spec**, so a gateway in another language can speak it: envelope, frame message, topic
+  names, version, and the HTTP routes it passes on. The Python types in `vxl.feed` follow the spec.
+- **Topic names are global, and the publisher adds its own prefix** (decided 2026-11-20): the station always
+  publishes `stations.<id>.<topic>`, the lab `lab.<topic>`, also with only 1 upstream. A gateway never renames a
+  topic; it only caches, merges and filters, so 1 upstream and many behave the same. A station window strips the
+  prefix it knows. The topics below are written without the prefix.
+- **`vxl.feed.client`** connects any Python caller (Qt, notebooks, scripts, tests) to a gateway.
+
 ## Messages
 
-2 websockets, as now: state and live frames. Different rules (state never drops, frames keep only the newest), and
+2 WebSockets per window, as now: state and live frames. A Preview window opens its own 2, subscribed only to
+what it shows. Different rules (state never drops, frames keep only the newest), and
 neither blocks the other. Both share 1 envelope and 1 merge rule.
 
 ```yaml
@@ -97,7 +111,7 @@ instrument.frames.camera.overview:
 - **Per-screen subscription:** a screen subscribes to the topics it shows, such as the preview window to
   `instrument.live`, `instrument.preview_channels` and its cameras' `instrument.frames.<camera>`. The biggest gain is
   on the frame socket: today every client gets every camera's frames.
-- **Stage position when the relay starts:** read each axis once (`position.get()`) when the instrument opens, so a
+- **Stage position when `LiveRelay` starts:** read each axis once (`position.get()`) when the instrument opens, so a
   frame's position is only unknown when an axis really fails.
 
 ## Issues in the view
@@ -105,7 +119,7 @@ instrument.frames.camera.overview:
 - `vxlib.issues`: `Issue`, `Problem(Issue)` (setup data, always an error, refuses an open or an edit) and
   `Alert(Issue)` (wrong now, started at `since`, ends by itself). Built.
 - Alerts are worked out in the core as a `Computed` over cached state, and go out as `instrument.alerts`. Not built.
-- "A camera sends no frames" needs a watchdog in the relay that keeps a set of stalled cameras (a `Cell`) as 1 more
+- "A camera sends no frames" needs a watchdog in `LiveRelay` (`vxl.instrument.live`) that keeps a set of stalled cameras (a `Cell`) as 1 more
   trigger. Prototype it first, to see how much code it adds.
 - The app keeps its own request failures (`request.failed`, `action.failed`, `command.failed`) as a separate feature,
   and adds actions, such as Restore, to alert rows.

@@ -224,9 +224,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         applied after snapping it to its grid. When the camera is a channel of the active profile, save that region
         as its ``fov`` there, or drop its ``fov`` for the full frame. A save cannot be undone."""
         async with self._scheduler.run("set a camera region", requires={camera, self._store}):
-            handle = self._hal.area_cameras.get(camera)
-            if handle is None:
-                raise RejectedError(f"'{camera}' is not a camera")
+            handle = self._hal.area_camera(camera)
             applied = await (handle.reset_roi() if region is None else handle.update_roi(region))
             active = self._active_profile.value
             if camera in self._store.value.profiles[active].lights():
@@ -285,11 +283,11 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     async def _apply_profile(self, profile_id: ProfileId) -> None:
         """Apply the profile as the base does, then each channel camera's region: its ``fov``, or its whole sensor."""
         await super()._apply_profile(profile_id)
-        profile, cameras = self._store.value.profiles[profile_id], self._hal.area_cameras
+        profile, hal = self._store.value.profiles[profile_id], self._hal
         regions = (
-            cameras[camera].reset_roi()
+            hal.area_camera(camera).reset_roi()
             if (region := profile.fov.get(camera)) is None
-            else cameras[camera].update_roi(region)
+            else hal.area_camera(camera).update_roi(region)
             for camera in profile.lights()
         )
         await gather_all(*regions, message="camera regions")
@@ -318,10 +316,10 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         if await axis.scan_state.get() != "idle":
             await axis.halt()
         try:
-            await gather_all(*(hal.area_cameras[c].start_preview() for c in cameras), message="cameras")
+            await gather_all(*(hal.area_camera(c).start_preview() for c in cameras), message="cameras")
             await self._reset_live(cameras)  # a camera starts a new stream when it starts; frames before the light drop
             lit = await hal.lights_on(sources)
-            await gather_all(*(hal.signal_generators[g].start() for g in generators), message="generators")
+            await gather_all(*(hal.signal_generator(g).start() for g in generators), message="generators")
         except BaseException:
             await self._stop_preview_devices(cameras, generators)
             raise
@@ -362,8 +360,8 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         hal = self._hal
         steps = (
             ((hal.lights_off(),), "lights off"),
-            ((hal.signal_generators[g].stop() for g in generators), "generators"),
-            ((hal.area_cameras[c].stop_preview() for c in cameras), "cameras"),
+            ((hal.signal_generator(g).stop() for g in generators), "generators"),
+            ((hal.area_camera(c).stop_preview() for c in cameras), "cameras"),
         )
         await gather_in_order(steps, "The preview did not stop cleanly")
 
@@ -415,7 +413,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         scan's devices before the images close. A cleanup failure never hides the error that ended the scan."""
         hal, scan = self._hal, self._config.scan
         profile = self._store.value.profiles[volume.profile]
-        cameras = {camera: hal.area_cameras[camera] for camera in volume.transforms}
+        cameras = {camera: hal.area_camera(camera) for camera in volume.transforms}
         await self._apply_profile(volume.profile)
         moves = (hal.stage[axis].move_to(getattr(volume.start, axis), wait=True) for axis in Stage.axes())
         await gather_all(*moves, message="move the stage")
@@ -542,23 +540,24 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         for generator, timeline in profile.timelines.items():
             wire = chain.waits.get(generator)
             start = OwnClock() if wire is None else InputEdges(pin=wire.inputs_on(generator)[0])
-            await self._hal.signal_generators[generator].load(self._generator_cycle(generator, timeline, start))
+            await self._hal.signal_generator(generator).load(self._generator_cycle(generator, timeline, start))
         return tuple(profile.timelines)
 
     async def _start_generators(self, generators: DeviceIds, chain: TriggerChain, count: int) -> None:
         """Start ``count`` cycles on each generator: those that wait for pulses first, then the starters of
         ``chain``."""
         first = set(chain.starters)
-        signal = self._hal.signal_generators
-        await gather_all(*(signal[g].start(count) for g in generators if g not in first), message="arm the generators")
-        await gather_all(*(signal[g].start(count) for g in generators if g in first), message="start the generators")
+        handles = {g: self._hal.signal_generator(g) for g in generators}
+        await gather_all(*(h.start(count) for g, h in handles.items() if g not in first), message="arm the generators")
+        await gather_all(*(h.start(count) for g, h in handles.items() if g in first), message="start the generators")
 
     async def _wait_for_generators(self, generators: DeviceIds, profile: SPIMProfile, count: int) -> None:
         """Wait until each generator has played its ``count`` cycles; that also stops it, ready for the next start."""
-        signal = self._hal.signal_generators
+        hal = self._hal
         cycle_s = max((float(timeline.duration) for timeline in profile.timelines.values()), default=0.0)
         timeout_s = count * cycle_s + _GENERATOR_SLACK_S
-        await gather_all(*(signal[g].wait_until_done(timeout_s) for g in generators), message="generators")
+        waits = (hal.signal_generator(g).wait_until_done(timeout_s) for g in generators)
+        await gather_all(*waits, message="generators")
 
     async def _wait_for_batches(self, cameras: Cameras, batches: Sequence[int]) -> None:
         """Wait until each camera's batch, numbered in ``batches``, is done. A batch that failed raises."""
@@ -577,7 +576,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         hal = self._hal
         steps = (
             ((hal.lights_off(),), "lights off"),
-            ((hal.signal_generators[g].stop() for g in profile.timelines), "generators"),
+            ((hal.signal_generator(g).stop() for g in profile.timelines), "generators"),
             ((hal.stage[self._config.scan.axis].halt(),), "scan axis"),
             ((c.wait_until_collected() for c in cameras.values()), "cameras"),
         )

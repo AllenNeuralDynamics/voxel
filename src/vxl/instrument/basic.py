@@ -15,7 +15,7 @@ class BasicInstrument(Instrument[InstrumentConfig, InstrumentState]):
 
     @update("profiles", key="profile_id")
     async def update_profile(self, profile_id: ProfileId, **fields: Unpack[ProfileFields]) -> None:
-        """Change the label or notes of a profile, as 1 edit."""
+        """Change the label, notes or tuning knobs of a profile, as 1 edit."""
         await self._update_profile(profile_id, fields, ProfileFields)
 
     @create("plan")

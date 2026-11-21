@@ -16,10 +16,10 @@ from vxlib.units import Quantity
 from vxl.devices.base import DeviceId
 from vxl.instrument.config import InstrumentConfig, NotDefault
 from vxl.instrument.samples import render
-from vxl.instrument.signals import Timeline
+from vxl.instrument.signals import Timeline, TuningField
 from vxl.metadata import ExperimentMetadata, MetadataCls, get_path_from_class
 from vxl.optics import AxisPosition, SpecimenAxis
-from vxl.wiring import PinRef, Wire
+from vxl.wiring import PinRef, Wire, WireName
 
 ProfileId = Annotated[str, identifier("Profile id")]
 
@@ -93,11 +93,22 @@ class Power(FrozenModel):
         return problems
 
 
+class TuningKnob(FrozenModel):
+    """1 number of a timeline that the Live profile panel shows under ``label``, so a person can tune it during
+    preview: ``field`` of the signal on ``wire`` in the timeline of ``generator``."""
+
+    label: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    generator: DeviceId
+    wire: WireName
+    field: TuningField
+
+
 class Profile(FrozenModel):
     """What is on at the same moment, and all that it needs to run. ``channels`` names each channel, with its cameras
     and the light each uses; a camera is in at most 1 channel. ``positions`` gives the position of each device that
     this profile sets, ``power`` the power of each laser and modulator that software sets, and ``timelines`` what each
-    signal generator plays. A kind of instrument adds its own fields in a subclass."""
+    signal generator plays. ``tuning_knobs`` names the numbers of the timelines that a person tunes during preview. A
+    kind of instrument adds its own fields in a subclass."""
 
     channels: dict[ChannelName, ChannelCameras] = Field(min_length=1)
     positions: dict[DeviceId, AxisPosition] = Field(default_factory=dict)
@@ -105,6 +116,7 @@ class Profile(FrozenModel):
     props: dict[DeviceId, dict[PropertyName, Any]] = Field(default_factory=dict)
     setup: dict[DeviceId, list[OperationRequest]] = Field(default_factory=dict)
     timelines: dict[DeviceId, Timeline] = Field(default_factory=dict)
+    tuning_knobs: list[TuningKnob] = Field(default_factory=list)
     desc: str = ""
     label: str | None = None
 
@@ -137,8 +149,9 @@ class Profile(FrozenModel):
     def problems(self, config: InstrumentConfig) -> Problems:
         """Return the problems of this profile against ``config``."""
         problems = self._channel_problems(config)
-        if problems.errors():  # the checks below read the light paths, so a wrong channel would repeat as their problems
+        if problems.errors():  # checks below read the light paths, so a wrong channel would repeat as their problems
             problems += self._timeline_problems(config)
+            problems += self._tuning_knob_problems()
             return problems
         nodes = self.path_nodes(config)
 
@@ -161,6 +174,7 @@ class Profile(FrozenModel):
                 problems.add("profile.setup_inactive", msg, "setup", device)
         problems += self._power_problems(config, nodes)
         problems += self._timeline_problems(config)
+        problems += self._tuning_knob_problems()
         return problems
 
     def _position_problems(self, config: InstrumentConfig, nodes: set[str]) -> Problems:
@@ -255,6 +269,28 @@ class Profile(FrozenModel):
             problems += found.under("timelines", generator)
         return problems
 
+    def _tuning_knob_problems(self) -> Problems:
+        """The knobs that turn no number: the generator has no timeline, the wire no signal, or the signal no such
+        field; and each knob on the same number as a knob before it. Each is a warning, so a knob never refuses an
+        edit."""
+        problems = Problems()
+        seen: set[tuple[DeviceId, WireName, TuningField]] = set()
+        for index, knob in enumerate(self.tuning_knobs):
+            number = (knob.generator, knob.wire, knob.field)
+            if (timeline := self.timelines.get(knob.generator)) is None:
+                code, msg = "no_timeline", f"'{knob.generator}' has no timeline in this profile."
+            elif (signal := timeline.signals.get(knob.wire)) is None:
+                code, msg = "no_signal", f"'{knob.wire}' has no signal in the timeline of '{knob.generator}'."
+            elif knob.field not in type(signal).model_fields:
+                code, msg = "no_field", f"A '{signal.kind}' signal has no '{knob.field}'."
+            elif number in seen:
+                code, msg = "duplicate", f"A knob before it turns '{knob.field}' of '{knob.wire}' already."
+            else:
+                seen.add(number)
+                continue
+            problems.add(f"profile.tuning_knob.{code}", msg, "tuning_knobs", index, level="warning")
+        return problems
+
     def _given(self) -> str:
         """The positions that this profile sets, as words."""
         return ", ".join(f"{device} at {value}" for device, value in self.positions.items()) or "no positions"
@@ -265,6 +301,7 @@ class ProfileFields(TypedDict, total=False):
 
     label: str | None
     desc: str
+    tuning_knobs: list[TuningKnob]
 
 
 TaskId = Annotated[str, identifier("Task id")]

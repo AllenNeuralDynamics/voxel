@@ -20,6 +20,7 @@ records it writes are built in `src/vxl/records/` (see `records.md`); the writer
 async def start_acquisition(self, storage: StorageSpec, operator: str) -> UUID:
     """Start acquiring the plan in the background, and give back the new acquisition's id."""
 
+
 async def stop_acquisition(self) -> None:
     """Cancel the running acquisition and wait for its cleanup."""
 ```
@@ -37,9 +38,9 @@ async def stop_acquisition(self) -> None:
 class AcquisitionInfo(ActivityInfo):
     kind: str = "acquisition"
     acquisition_id: UUID
-    visit: int          # the index of the visit that runs now
-    visits: int         # how many visits in total
-    stopping: bool      # a stop was asked for, or the run is ending
+    visit: int  # the index of the visit that runs now
+    visits: int  # how many visits in total
+    stopping: bool  # a stop was asked for, or the run is ending
 ```
 
 - The loop calls `activity.update(...)`; `view.activities` carries it. `InstrumentView` gets no acquisition fields.
@@ -201,9 +202,10 @@ the writer cannot take are dropped by whole batches and reported.
 
 ## To do
 
-- Reading the drivers' dropped frames: see `src/vxl/devices/camera/dropped-frames.md`.
+- Reading the drivers' dropped frames: see `dropped-frames.md`.
 - Memory per camera, checked at Start: see `writer.md`.
-- A new ASI Tiger axis driver with `sweep` and `arm_steps`, outside `instruments/`; ask before starting it.
+- The ASI Tiger axis driver with `sweep` and `arm_steps` is built (2026-11-20, `vxl_drivers.axes.asi`); it needs the
+  checks on the real stage listed in `drivers/README.md`.
 
 ## Simulation notes
 

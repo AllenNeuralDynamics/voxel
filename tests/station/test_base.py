@@ -388,7 +388,7 @@ def test_a_basic_instrument_offers_the_base_operations_and_its_profile_update() 
     }
     update = BasicInstrument.operations["update_profile"]
     assert (update.intent, update.resource, update.key) == ("update", "profiles", "profile_id")
-    assert set(update.params["properties"]) == {"profile_id", "label", "desc"}
+    assert set(update.params["properties"]) == {"profile_id", "label", "desc", "tuning_knobs"}
 
 
 async def test_a_basic_instrument_updates_a_profile_as_1_undo_step(tmp_path: Path) -> None:

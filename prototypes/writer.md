@@ -20,7 +20,7 @@ do there. How the acquisition drives the cameras is in `acquisition.md`.
 
 ## When the writer is full
 
-Agreed on 2026-11-20, not built. The writer owns the rule, so the caller never checks for free slots:
+Agreed and built on 2026-11-20. The writer owns the rule, so the caller never checks for free slots:
 
 ```python
 open_image(target, size, dtype, transform, settings, ram_bytes, when_full: Literal["wait", "drop"])

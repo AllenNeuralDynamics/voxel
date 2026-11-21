@@ -8,6 +8,7 @@ from itertools import pairwise
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 from vxlib.issues import Problems
+from vxlib.units import Quantity
 from vxlib.vector import Span
 
 from vxl.instrument.signals import (
@@ -21,6 +22,8 @@ from vxl.instrument.signals import (
     DigitalOn,
     Signal,
     Timeline,
+    TimelineEdge,
+    TuningField,
 )
 from vxl.wiring import AnalogWire, DigitalWire, WireConfig, WireName
 
@@ -299,4 +302,148 @@ def _table(
     return PchipInterpolator(x, y, extrapolate=False)(np.clip(values, x[0], x[-1]) if clip else values)
 
 
-__all__ = ["Rendered", "WireSamples", "render"]
+_LEVELS = frozenset({"value", "idle", "active", "first", "last", "center", "amplitude"})
+
+
+def tune(
+    timeline: Timeline,
+    wires: Mapping[WireName, WireConfig],
+    *,
+    wire: WireName,
+    field: TuningField,
+    value: float,
+    volts: Span,
+) -> tuple[Timeline, float]:
+    """``timeline`` with 1 number of the signal on ``wire`` set to ``value``, and the value applied. ``value`` is in
+    the field's fixed unit: times in ms, levels in the wire's unit, ``phase`` in degrees, a follow's ``offset`` in V,
+    and ``cycles``, ``split`` and ``scale`` in none. It is kept on the number's step and inside its bounds, and written
+    in the unit the file used.
+
+    An edge stays inside the timeline, a follow's ``delay`` within 1 duration either way, and a follow's ``offset`` and
+    ``scale`` keep its volts inside the wire's limits. A level stays inside the wire's limits, or inside ``volts``,
+    what the generator can put out, carried up through the wire's scales; an ``amplitude`` goes from 0 to half that
+    range. The step is 1 sample for times, and a round number near 1/1000 of the bounds for the rest. Raise
+    ``ValueError`` when the signal has no such field, or when the bounds depend on an edge or a signal that cannot be
+    placed or rendered."""
+    bounds, step = _tuning_bounds(timeline, wires, wire, field, volts)
+    low, high = bounds.low, bounds.high
+    if step is not None:
+        value = round(value / step) * step
+        low, high = math.ceil(low / step - 1e-9) * step, math.floor(high / step + 1e-9) * step
+    applied = _tidy(min(max(value, low), high))
+    signal, config = timeline.signals[wire], wires[wire]
+    old = getattr(signal, field)
+    match field:
+        case "start" | "end":
+            new = old.model_copy(update={"offset": _written(old.offset, applied * 1e-3)})
+        case "delay":
+            new = _written(old, applied * 1e-3)
+        case "phase":
+            new = _written(old, math.radians(applied))
+        case "offset":
+            new = _written(old, applied)
+        case "cycles" | "split" | "scale":
+            new = applied
+        case _:
+            new = Quantity.of(applied, config.unit if isinstance(config, AnalogWire) else old.unit)
+    signals = {**timeline.signals, wire: signal.model_copy(update={field: new})}
+    return timeline.model_copy(update={"signals": signals}), applied
+
+
+def _tuning_bounds(
+    timeline: Timeline, wires: Mapping[WireName, WireConfig], wire: WireName, field: TuningField, volts: Span
+) -> tuple[Span, float | None]:
+    """The bounds and the step of 1 number, in the field's fixed unit, as :func:`tune` says. The step is ``None`` for
+    bounds with no end."""
+    signal, config = timeline.signals.get(wire), wires.get(wire)
+    if signal is None or config is None:
+        raise ValueError(f"'{wire}' has no signal on a wire of this generator")
+    if field not in type(signal).model_fields:
+        raise ValueError(f"A '{signal.kind}' signal has no '{field}'")
+    sample_ms, duration_ms = 1e3 / timeline.sample_rate, timeline.duration * 1e3
+    if field in ("start", "end"):
+        edge = getattr(signal, field)
+        if isinstance(edge, TimelineEdge):
+            base = 0.0 if edge.timeline == "start" else float(timeline.duration)
+        elif (window := timeline.windows().get(edge.signal)) is not None:
+            base = window.a if edge.edge == "start" else window.b
+        else:
+            raise ValueError(f"The edge '{edge.signal}.{edge.edge}' cannot be placed")
+        return Span(0 - base * 1e3, duration_ms - base * 1e3), sample_ms
+    if field == "delay":
+        return Span(-duration_ms, duration_ms), sample_ms
+    if field == "phase":
+        return Span(0.0, 360.0), _round_step(360.0)
+    if field == "split":
+        return Span(0.0, 1.0), _round_step(1.0)
+    if field == "cycles":
+        window = timeline.windows().get(wire)
+        most = 0.0 if window is None else round(window.length * timeline.sample_rate) / 2
+        if (step := _round_step(most)) is None:
+            raise ValueError(f"The window of '{wire}' cannot be placed or has no samples")
+        return Span(step, most), step  # above 0: the smallest number on the step
+    if not isinstance(config, AnalogWire):
+        raise ValueError(f"'{wire}' is not an analog wire")
+    if field in _LEVELS:
+        span = _level_span(config, volts)
+        if field == "amplitude":  # half the swing, not a level; a negative one only flips the wave, as phase does
+            span = Span(0.0, span.length / 2)
+        return span, _round_step(span.length)
+    return _follow_bounds(timeline, wires, wire, field, config.limits.get("V", volts))
+
+
+def _level_span(wire: AnalogWire, volts: Span) -> Span:
+    """The values ``wire`` can take in its unit: its limits in the highest unit that has them, or ``volts``, carried up
+    through the scale tables read backward."""
+    units = wire.units
+    top = next((index for index, unit in enumerate(units) if unit in wire.limits), len(units) - 1)
+    span = wire.limits.get(units[top], volts)
+    for upper, lower in reversed(list(pairwise(units[: top + 1]))):
+        table = wire.scales[upper]
+        carried = _table(table[lower], table[upper], np.array([span.a, span.b]), clip=True)
+        span = Span(float(carried.min()), float(carried.max()))
+    return Span(span.low, span.high)
+
+
+def _follow_bounds(
+    timeline: Timeline, wires: Mapping[WireName, WireConfig], wire: WireName, field: TuningField, limits: Span
+) -> tuple[Span, float | None]:
+    """The ``offset`` or ``scale`` of a follow that keeps its copied volts inside ``limits``, and its step."""
+    follow = timeline.signals[wire]
+    if not isinstance(follow, AnalogFollow) or (source := render(timeline, wires).wires.get(follow.source)) is None:
+        raise ValueError(f"The source of '{wire}' cannot be rendered")
+    ends = (float(source.volts.min()), float(source.volts.max()))
+    if field == "offset":
+        copied = [follow.scale * end for end in ends]
+        low, high = limits.low - min(copied), limits.high - max(copied)
+    else:
+        low, high = -math.inf, math.inf
+        for end in ends:
+            if end != 0:
+                a, b = (limits.low - follow.offset) / end, (limits.high - follow.offset) / end
+                low, high = max(low, min(a, b)), min(high, max(a, b))
+    if low > high:
+        raise ValueError(f"No {field} keeps the volts of '{wire}' inside {limits.low:g} to {limits.high:g} V")
+    span = Span(low, high)
+    return span, _round_step(span.length)
+
+
+def _written(old: Quantity, base: float) -> Quantity:
+    """A value of the kind of ``old``, in its unit, from a number in the kind's base unit."""
+    factor = 1.0 if old.UNITS is None else old.UNITS[old.unit]
+    return type(old).of(_tidy(base / factor), old.unit)
+
+
+def _tidy(number: float) -> float:
+    """``number`` at 12 significant digits, so a sum of steps such as ``0.1 * 3`` is saved as ``0.3``."""
+    return float(f"{number:.12g}")
+
+
+def _round_step(length: float) -> float | None:
+    """A power of 10 near 1/1000 of ``length``, or ``None`` for a length that is 0 or has no end."""
+    if not math.isfinite(length) or length <= 0:
+        return None
+    return 10.0 ** math.floor(math.log10(length / 1000))
+
+
+__all__ = ["Rendered", "WireSamples", "render", "tune"]

@@ -25,6 +25,7 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[BasicInstrument], Mapping[str
         "generator": "ao_main",
         "timeline": i.view.value.state.profiles["gfp"].timelines["ao_main"].model_dump(mode="json"),
     },
+    "set_tuning_knob": {"generator": "ao_main", "wire": "galvo", "field": "amplitude", "value": 0.4},
     "set_power_mode": {"mode": "full"},
     "set_power": {"device": "laser", "value": 50.0},
     "set_dim_power": {"device": "laser", "value": 5.0},

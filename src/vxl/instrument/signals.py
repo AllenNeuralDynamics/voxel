@@ -152,6 +152,25 @@ type Signal = Annotated[
 
 _DIGITAL_KINDS = (DigitalOn, DigitalOff)
 
+type TuningField = Literal[
+    "start",
+    "end",
+    "delay",
+    "phase",
+    "cycles",
+    "split",
+    "scale",
+    "value",
+    "idle",
+    "active",
+    "first",
+    "last",
+    "center",
+    "amplitude",
+    "offset",
+]
+"""A number of a signal that a tuning knob can turn. ``start`` and ``end`` are the offset of that edge."""
+
 
 @dataclass(frozen=True)
 class _EdgeProblem:
@@ -334,4 +353,5 @@ __all__ = [
     "SignalEdge",
     "Timeline",
     "TimelineEdge",
+    "TuningField",
 ]

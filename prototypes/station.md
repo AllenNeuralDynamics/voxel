@@ -1,19 +1,19 @@
 # Station setup
 
-Written on 2026-11-19 from what was agreed so far, not built. It collects the pieces of `records.md`, `proxy.md`,
-`feed.md`, `interface.md`, `acquisition.md` and `lab.md` into 1 picture. The detail stays in those notes.
-`notes/platform/station.md` (2026-11-08) is older than all of this.
+Written on 2026-11-19, reworked on 2026-11-20 for the gateway model. Not built. It collects the pieces of
+`records.md`, `gateway.md`, `feed.md`, `interface.md`, `acquisition.md` and `lab.md` into 1 picture. The detail stays
+in those notes. `notes/platform/station.md` (2026-11-08) is older than all of this.
 
 ## Processes on a station computer
 
 ```text
                          station computer
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  station  (Station, its instrument, the records)                         │
-│    ├─ operations: HTTP, from each UI ◀───────────────── station UIs      │
-│    └─ 1 feed ──▶ feed proxy ──▶ station UIs and lab screens (live)       │
+│  station  (Station, its instrument, the records)          127.0.0.1 only │
+│    ├─ 1 feed ─────────────▶ gateway ──▶ windows, and the lab machine     │
+│    └─ vxl.station.api ◀──── gateway ◀── operations from windows (HTTP)   │
 │                                                                          │
-│  records.sqlite3 (WAL) ──▶ share service ──▶ the lab (stored data)       │
+│  records.sqlite3 (WAL) ──▶ gateway (history, full logs, acquisition.json)│
 │                                                                          │
 │  device nodes (vxl node start), here or on camera computers              │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -22,33 +22,34 @@ images and acquisition.json / acquisition.log.jsonl ──▶ storage (disk or S
 
 | Process | Does | Started by | Status |
 | --- | --- | --- | --- |
-| **station** | `Station`: 1 instrument session at a time, the records, the log journal; serves the instrument's operations over HTTP and sends 1 feed | `vxl station start` | `Station` built; `open()` / `close()` built; HTTP not built |
-| **feed proxy** | Takes the station's 1 feed and fans it out to every screen; read-only | `vxl station start` | not built (`proxy.md`: Python first, then Rust) |
-| **share service** | Serves stored data from the records database: history, `acquisition.json`, full logs | `vxl station start`, when `station.yaml` has `share:` | not built |
+| **station** | `Station`: 1 instrument session at a time, the records, the log journal; sends 1 feed and answers operations, both to its gateway only | `vxl station start` | `Station` built; `open()` / `close()` built; feed and API not built |
+| **gateway** | Topic cache, fan-out, routing of operations, records history, local `/data`, web app files (`gateway.md`) | `vxl station start`, unless `--no-gateway` | not built |
 | **device nodes** | Run devices on another computer, over ZMQ | `vxl node start <node_id>` on each computer | built |
-| **lab** | Index of every station's acquisitions, and the Lab app | `vxl lab start`, on a station or a lab server | not built (`lab.md`) |
+
+The lab runs on its own computer, or on a station computer, with `vxl lab start` (`lab.md`).
 
 ## What each part owns
 
-- **The station process owns the hardware and the records.** Nothing outside it changes either. It runs no outside
-  request except the instrument's operations, which a person sends from a station UI.
-- **The feed proxy owns the screens.** The station always has 1 subscriber, however many people watch
-  (`proxy.md`). A slow screen costs only the proxy.
-- **The share service owns outside reads.** It reads the database in WAL mode, in its own capped process, so a lab's
-  query never waits on, or slows, the station (`records.md`).
-- **Storage owns the pixels.** Images never pass through the station, the proxy or the share service.
+- **The station process owns the hardware and the records.** Nothing outside it changes either. Its only client is
+  its gateway; it runs no outside request except the operations the gateway passes on.
+- **The gateway owns everything outside.** Windows, the lab machine and readers of stored data all go through it. A
+  slow window costs only the gateway. It reads the records database in WAL mode, in its own capped process, so a query
+  never waits on, or slows, the station (`records.md`).
+- **Storage owns the pixels.** Images never pass through the station. Remote storage serves itself; local files are
+  served by the gateway on the machine that has the disk.
 
 ## What goes through where
 
 | Data | Path |
 | --- | --- |
-| A person's edit or command | UI → station (HTTP; `ETag` / `If-Match`, `202` for long actions; `interface.md`) |
-| Instrument state, activities, progress (`AcquisitionInfo`) | station view → feed → proxy → screens |
-| Live frames | station → feed (frame socket) → proxy → screens |
-| Acquisition revisions | `AcquisitionStore.subscribe` → feed (records topic) → proxy → screens |
-| Log lines | `LogJournal.subscribe` → feed (append topic, `seq` cursor) → proxy → screens |
-| History, full logs, `acquisition.json` | records database → share service → the lab |
-| Images | cameras → storage; readers go to storage |
+| A person's edit or command | window → gateway → `vxl.station.api` (HTTP; `ETag` / `If-Match`, `202` for long actions; `interface.md`) |
+| Instrument state, activities, progress (`AcquisitionInfo`) | station view → feed → gateway → windows |
+| Live frames | station → feed (frame socket) → gateway → windows |
+| Acquisition revisions | `AcquisitionStore.subscribe` → feed (records topic) → gateway → windows |
+| Log lines | `LogJournal.subscribe` → feed (append topic, `seq` cursor) → gateway → windows |
+| History, full logs, `acquisition.json` | records database → gateway → windows and the lab |
+| Small topics for the lab | gateway → gateway on the lab machine (connects out) |
+| Images | cameras → storage; readers go to storage, or to the gateway for local files |
 
 ## Start and stop
 
@@ -56,24 +57,27 @@ images and acquisition.json / acquisition.log.jsonl ──▶ storage (disk or S
 
 1. Load `station.yaml` (`StationConfig.load()`); refuse to start when it has problems.
 2. `Station.open()`: start the log journal, then end each acquisition an earlier run left open as interrupted.
-3. Start serving: the station's HTTP and its feed.
-4. Start the feed proxy, pointed at the feed.
-5. Start the share service, when `station.yaml` has `share:` and `--no-share` is not given.
-6. With `--with-lab`, start the lab server too, on this computer.
-6. Wait. A person opens an instrument session from a UI (`open_session`).
+3. Start the feed end and `vxl.station.api`, on `127.0.0.1` only.
+4. Start the gateway as a child process (unless `--no-gateway`), pointed at the feed, the records database, the
+   storage and the web app. Print the address windows open.
+5. Watch the gateway and start it again when it stops. The run does not stop.
+6. Wait. A person opens an instrument session from a window (`open_session`).
 
-On Ctrl-C or a stop signal, in reverse: stop the share service and the proxy, stop serving, `Station.close()` (closes
-the session, which stops any acquisition; stops the journal).
+On Ctrl-C or a stop signal, in reverse: stop the gateway, stop serving, `Station.close()` (closes the session, which
+stops any acquisition; stops the journal).
 
 ## Settings
 
 `station.yaml` (`StationConfig`) holds the station's id, name, storage, remotes and metadata forms today. To add:
 
-- **The station's address and port** for HTTP and the feed.
-- **`proxy:`** its address and port for screens.
-- **`share:`** its address and port; off when the section is missing.
+```yaml
+gateway:
+  port: 8000                      # optional, default 8000
+  upstream: wss://<lab-host>:8000 # optional: the lab machine to join
+  command: vxl-gateway            # optional: another gateway program
+```
 
-Not decided: the section names and their fields.
+The station's own feed and API ports are local only; their defaults need no setting.
 
 ## The CLI around it
 
@@ -84,35 +88,33 @@ Agreed so far (product, then action):
 | `vxl station init` | Writes `station.yaml` | built |
 | `vxl station check` | Checks `station.yaml` and every instrument folder it finds, and shows the paths it found | built (2026-11-20) |
 | `vxl station info` | Shows the station: id, name, folder, instruments, storage | not built |
-| `vxl station start` | Starts the processes above. `--with-lab` also starts the lab server; `--no-share` skips the share service even when `station.yaml` has `share:` (decided 2026-11-19) | not built |
+| `vxl station start` | Starts the station and its gateway. `--no-gateway` runs it headless | not built |
+| `vxl lab start` | Starts the lab and its gateway, from `lab.yaml` | not built |
 | `vxl node start <node_id>` | Starts a device node | built |
 | `vxl devices shell` | Tries devices from a rig file | built |
-| `vxl lab start` | Starts the lab server | not built |
 | `vxl legacy web\|qt\|check\|init\|import-catalog` | The legacy apps, frozen | built |
 
 ## Where it will live
 
-Picked on 2026-11-19, for now. Each folder is made with its first code, not before.
+Picked on 2026-11-20. Each folder is made with its first code, not before.
 
-| Part | Where |
-| --- | --- |
-| Station HTTP server | `vxl.station.http` |
-| Feed (exists) | `vxl.station.feed` |
-| Feed proxy, Python | `vxl.station.proxy` |
-| Feed proxy, Rust | `proxy/`, workspace member `vxl-proxy` (maturin, `bindings = "bin"`) |
-| Share service | `vxl.station.share` |
-| Lab server | `vxl.lab`; its own package only when a lab server must install without the station |
-| Lab browser app | `web/lab/`, on `@voxel/kit` |
-| CLI | `vxl/cli/station.py` (exists), `vxl/cli/lab.py` |
-| Station browser app (new) | `web/app/`; the legacy `web/station/` stays until it is removed |
+```text
+src/vxl/
+├── feed/               the protocol: messages, the publisher end, vxl.feed.client
+├── station/            publisher: station.py, topics.py (today's feed.py), api.py (FastAPI)
+├── lab/                publisher, a peer of station: lab.py, topics.py, api.py (with its first operation)
+└── cli/                station.py, lab.py: the only place that starts a publisher and a gateway together
+gateway/                vxl_gateway, its own workspace package; imports only vxl.feed
+web/kit, web/station, web/lab   the browser apps; web/lab later holds the Zarr viewer
+```
 
-The station parts sit under `vxl.station` because they run only under `vxl station start`.
+- `vxl.station` and `vxl.lab` have the same shape and never import each other.
+- `vxl.feed.client` is for any Python caller: Qt, notebooks, scripts, tests.
+- `vxl_gateway` may import `vxl.feed` and the public records schema, nothing else, so a gateway in another language can
+  replace it. If imports slip, `vxl.feed` becomes its own small package.
+- The feed spec is written down next to the code, for any gateway program (`gateway.md`).
 
 ## Open
 
-- **1 process or several.** Whether the station's HTTP runs in the station process or as its own process that talks
-  to it (for example over ZMQ). This note assumes the station process serves HTTP itself.
-- **How processes are started and watched:** child processes of `vxl station start`, or a process manager. What
-  happens when the proxy or the share service dies while the station runs.
-- **Settings:** the names of the `proxy:` and `share:` sections, and where the station's own address goes.
+- **Settings of the station's local ports**, if the defaults clash with something on a computer.
 - **Login and who may see what:** later, with the lab.

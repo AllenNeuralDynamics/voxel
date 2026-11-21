@@ -501,6 +501,20 @@ async def test_a_timeline_edit_restarts_what_holds_the_profile_and_waits_for_a_c
             await opened.set_generator_timeline("ao_main", timeline)
 
 
+async def test_the_hal_finds_a_signal_generator_by_id(opened: BasicInstrument) -> None:
+    hal = opened._hal
+    assert hal.signal_generator("ao_main") is hal.signal_generators["ao_main"]
+    with pytest.raises(NotFoundError, match="'camera' is not a signal generator"):
+        hal.signal_generator("camera")
+
+
+async def test_the_hal_finds_an_area_camera_by_id(opened: BasicInstrument) -> None:
+    hal = opened._hal
+    assert hal.area_camera("camera") is hal.area_cameras["camera"]
+    with pytest.raises(NotFoundError, match="'ao_main' is not an area camera"):
+        hal.area_camera("ao_main")
+
+
 # --- what stops the opening ---
 
 

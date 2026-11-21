@@ -1,7 +1,7 @@
 # Records
 
 Discussed on 2026-11-18 and 2026-11-19. **Built** in `src/vxl/records/` (2026-11-19), tested in
-`tests/records/`. The share service and the public schema are not built. Replaces `vxl_records` for the new core;
+`tests/records/`. The records history in the gateway and the public schema are not built. Replaces `vxl_records` for the new core;
 `vxl_records` stays frozen for legacy and goes with it. The loop that writes the records is in `acquisition.md`.
 
 ## Lines
@@ -61,7 +61,8 @@ Acquisition
 
 ## Dropped frames
 
-Agreed on 2026-11-20, not built. A sweep may drop whole batches when the writer is full (`writer.md`).
+Agreed and built on 2026-11-20 (`Image.dropped`, the `gaps` status, `frames_dropped`), except the sums on
+`Visit` and `Acquisition`, which wait for a reader. A sweep may drop whole batches when the writer is full (`writer.md`).
 
 - `Image.dropped: list[FrameRange]`, empty by default.
 - `Visit.missing()` counts only frames neither written nor dropped. So a sweep with drops completes, and a step scan
@@ -80,7 +81,7 @@ Agreed on 2026-11-20, not built. A sweep may drop whole batches when the writer 
 - The acquisition has no `metadata` field of its own. It is in `instrument_state.plan[].metadata`, and a visit names
   its task.
 - Frozen at Start. vxl gives the lab the facts as they were; a lab corrects them in its own systems.
-- Later option: corrections through the share service, stored next to the acquisition, never in it.
+- Later option: corrections through `vxl.station.api`, stored next to the acquisition, never in it.
 
 ## Writes
 
@@ -92,33 +93,32 @@ Agreed on 2026-11-20, not built. A sweep may drop whole batches when the writer 
 ## Logs
 
 - `LogJournal` keeps the log lines: each line goes to SQLite first, then to subscribers.
-- Live lines reach every screen through the station feed and the feed proxy.
-- The share service serves the full log of 1 acquisition.
+- Live lines reach every window through the station feed and the gateway.
+- The gateway serves the full log of 1 acquisition.
 - At the end, `acquisition.log.jsonl` is written next to `acquisition.json`, 1 time, so the log travels with the data.
   S3 cannot add lines to a file. `AcquisitionStore.write_log` exists; `Records.record` does not call it yet.
 
 ## Public contract
 
-Live data comes through the feed proxy. Stored data has 1 source, the records database, with 2 outputs that share 1
+Live data comes through the gateway. Stored data has 1 source, the records database, with 2 outputs that share 1
 schema:
 
-| | Feed proxy | Share service | `acquisition.json` |
+| | Gateway, live | Gateway, records history | `acquisition.json` |
 | --- | --- | --- | --- |
 | Job | live: status, progress, logs, frames | stored: history, search, full logs | the copy that travels with the data |
-| How | 1 feed from the station, fanned out (`proxy.md`) | a separate, capped process that reads the database (WAL) | written by the station at each life step |
+| How | 1 feed from the station, fanned out (`gateway.md`) | the gateway's capped process reads the database (WAL) | written by the station at each life step |
 | Freshness | live | as stored | life steps |
 
-The share service and `acquisition.json` carry the record's `revision`, so a reader can tell which is newer.
+The records history and `acquisition.json` carry the record's `revision`, so a reader can tell which is newer.
 
-## Share service
+## Records history in the gateway
 
-Not built.
+Not built. Replaces the share service (2026-11-20, `gateway.md`).
 
-- Stored data only. Live data goes through the feed proxy.
-- Named `share`. `vxl station start` starts it when `station.yaml` has `share:` and `--no-share` is not given (see
-  `station.md`).
+- The gateway serves stored data next to the live feed: history, `acquisition.json`, full logs.
 - Its own process: its own GIL, its own CPU share. Reads SQLite in WAL mode, so it never blocks station writes.
 - Capped: lower OS priority, a limit on requests at once.
+- It reads the database through the public read schema, so a gateway in another language can read it too.
 - Big data comes from storage (Zarr, `acquisition.json`), never through the station.
 
 ## Listing and filters

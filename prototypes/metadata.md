@@ -15,10 +15,12 @@ the Run page's Task card and the History page's Tasks tab this way.
       medium: str = "other"
       refractive_index: float = 1.33
 
+
   class AnatomicalDirections(BaseModel):
       x: AnatomicalDirectionX = "Anterior_to_posterior"
       y: AnatomicalDirectionY = "Inferior_to_superior"
       z: AnatomicalDirectionZ = "Left_to_right"
+
 
   class ExaspimMetadata(ExperimentMetadata):
       subject_id: str = key(default="")

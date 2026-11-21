@@ -176,6 +176,20 @@ class HAL:
         except KeyError:
             raise NotFoundError(f"Device '{device_id}' not found") from None
 
+    def signal_generator(self, device_id: DeviceId) -> GeneratorHandle:
+        """The handle of an open signal generator. Raise :class:`NotFoundError` when the device is not one."""
+        try:
+            return self._signal_generators[device_id]
+        except KeyError:
+            raise NotFoundError(f"'{device_id}' is not a signal generator") from None
+
+    def area_camera(self, device_id: DeviceId) -> AreaCameraHandle:
+        """The handle of an open area camera. Raise :class:`NotFoundError` when the device is not one."""
+        try:
+            return self._area_cameras[device_id]
+        except KeyError:
+            raise NotFoundError(f"'{device_id}' is not an area camera") from None
+
     # === Light ===
 
     async def router_positions(self) -> dict[DeviceId, str | None]:

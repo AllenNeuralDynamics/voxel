@@ -31,8 +31,8 @@ from vxl.instrument.geometry import camera_frame
 from vxl.instrument.hal import HAL, DeviceView
 from vxl.instrument.interface import InstrumentInterface, check_operations
 from vxl.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
-from vxl.instrument.samples import render
-from vxl.instrument.signals import Timeline
+from vxl.instrument.samples import render, tune
+from vxl.instrument.signals import Timeline, TuningField
 from vxl.instrument.state import (
     InstrumentState,
     PositionRule,
@@ -52,6 +52,7 @@ from vxl.optics import AxisPosition, SpecimenAxis
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.system import Remote, System, remote_store_fingerprint
+from vxl.wiring import WireName
 
 if TYPE_CHECKING:
     from vxlib.vector import Transform
@@ -313,18 +314,26 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._scheduler.run(
             "set a generator timeline", requires={generator, self._store, self._active_profile}
         ):
-            handle = self._hal.signal_generators.get(generator)
-            if handle is None:
-                raise RejectedError(f"'{generator}' is not a signal generator")
-            active = self._active_profile.value
-            profile = self._store.value.profiles[active]
-            candidate = profile.model_copy(update={"timelines": {**profile.timelines, generator: timeline}})
-            if errors := candidate.problems(self._config).errors():
-                errors = errors.under("profiles", active)
-                raise RejectedError(str(errors), errors)
-            await handle.load(self._generator_cycle(generator, timeline, OwnClock()))
-            await self._store.update({("profiles", active, "timelines", generator): timeline})
-            await self._apply_light(candidate)
+            await self._load_timeline(generator, timeline)
+
+    @action(on="generators", key="generator", verb="set_tuning_knob")
+    async def set_tuning_knob(self, generator: DeviceId, wire: WireName, field: TuningField, value: float) -> float:
+        """Set 1 number of the signal on ``wire`` in the active profile's timeline of a signal generator, as a tuning
+        knob does, and give back the value applied. ``value`` is in the field's fixed unit, and is fitted as
+        :func:`~vxl.instrument.samples.tune` says. The timeline is then loaded and saved as
+        :meth:`set_generator_timeline` does. A save cannot be undone."""
+        async with self._scheduler.run("set a tuning knob", requires={generator, self._store, self._active_profile}):
+            volts = await self._hal.signal_generator(generator).get_voltage_range()
+            timeline = self._store.value.profiles[self._active_profile.value].timelines.get(generator)
+            if timeline is None:
+                raise RejectedError(f"The active profile has no timeline for '{generator}'")
+            try:
+                wires = self._config.wiring.outputs(generator)
+                tuned, applied = tune(timeline, wires, wire=wire, field=field, value=value, volts=volts)
+            except ValueError as error:
+                raise RejectedError(str(error)) from error
+            await self._load_timeline(generator, tuned)
+            return applied
 
     async def _update_profile(self, profile_id: ProfileId, fields: Mapping[str, object], allowed: type) -> None:
         """Change fields of a profile as 1 edit. ``allowed`` is the kind's ``ProfileFields`` subclass, which names the
@@ -517,7 +526,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             generator: self._generator_cycle(generator, timeline, OwnClock())
             for generator, timeline in profile.timelines.items()
         }
-        loads = (hal.signal_generators[generator].load(cycle) for generator, cycle in cycles.items())
+        loads = (hal.signal_generator(generator).load(cycle) for generator, cycle in cycles.items())
         await gather_all(*loads, message="timelines")
         await self._apply_light(profile)
         await self._active_profile.set(profile_id)
@@ -527,7 +536,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """Start a new live stream on each of ``cameras`` and end every other: older frames are no longer valid."""
         if self._live is None:
             return
-        await self._live.reset({dev_id: self._hal.area_cameras[dev_id] for dev_id in cameras})
+        await self._live.reset({dev_id: self._hal.area_camera(dev_id) for dev_id in cameras})
         planes = () if self._planes is None else self._planes.value
         await self._live_view.set(LiveView(stream_revision=self._live_view.value.stream_revision + 1, planes=planes))
         self._apply_boxes(self._boxes)
@@ -555,8 +564,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         for camera in profile.lights():
             try:
                 axes = self._config.camera_axes(camera, positions)
-                sensor, roi = hal.area_cameras[camera].sensor.value, hal.area_cameras[camera].roi.value
-            except (KeyError, ValueError, NotObservedError):
+                handle = hal.area_camera(camera)
+                sensor, roi = handle.sensor.value, handle.roi.value
+            except (KeyError, ValueError, NotFoundError, NotObservedError):
                 continue
             frames[camera] = camera_frame(axes, sensor, roi)  # binning changes a pixel's size, not the place
         return planes_of(frames)
@@ -572,7 +582,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             box = self._boxes[camera]
             viewport = LiveViewport() if box is None else pictures[camera].viewport(box)
             if viewport is not None:
-                self._hal.area_cameras[camera].live_viewport.update(viewport)
+                self._hal.area_camera(camera).live_viewport.update(viewport)
 
     def _cached_stage(self) -> StagePosition | None:
         """Where the stage last said it is, without asking it, so a frame never waits for the stage. ``None`` while
@@ -641,6 +651,20 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             )
         finally:
             _OPEN_EDIT.reset(token)
+
+    async def _load_timeline(self, generator: DeviceId, timeline: Timeline) -> None:
+        """Load a timeline into a signal generator and save it into the active profile, then set what controls each
+        laser and modulator. The profile's checks run first, so a timeline that does not fit is refused before the
+        generator changes."""
+        active = self._active_profile.value
+        profile = self._store.value.profiles[active]
+        candidate = profile.model_copy(update={"timelines": {**profile.timelines, generator: timeline}})
+        if errors := candidate.problems(self._config).errors():
+            errors = errors.under("profiles", active)
+            raise RejectedError(str(errors), errors)
+        await self._hal.signal_generator(generator).load(self._generator_cycle(generator, timeline, OwnClock()))
+        await self._store.update({("profiles", active, "timelines", generator): timeline})
+        await self._apply_light(candidate)
 
     def _generator_cycle(self, generator: DeviceId, timeline: Timeline, start: OwnClock | InputEdges) -> Cycle:
         """``timeline`` as the cycle that ``generator`` plays: each wire's volts on that wire's pin. Raise
