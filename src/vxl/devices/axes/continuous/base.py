@@ -73,7 +73,7 @@ class Sweep(FrozenModel):
         return self.first - self.direction * run_up
 
 
-class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], ABC):
+class ContinuousAxisController[D: "ContinuousAxis"](DeviceController[D], ABC):
     """The rules around a continuous axis: it must have no fault, nothing moves it while it scans, and 1 scan runs at
     a time. A move or a scan stays inside the limits, as each kind of axis checks them. A sweep, with its run-up at
     both ends, must stay inside them too, at a speed the axis can hold steady."""
@@ -150,7 +150,7 @@ class ContinuousAxisNewController[D: "ContinuousAxisNew"](DeviceController[D], A
             raise ValueError(f"pin '{name}' of {self.device.id} cannot {'receive' if direction == 'in' else 'send'}")
 
 
-class ContinuousAxisNew(Device):
+class ContinuousAxis(Device):
     """The device side of a continuous axis. Positions are in its kind's :attr:`unit`, such as ``µm`` or ``deg``,
     and speeds in that unit per second. A driver reports where it is and what it is
     doing, starts and halts moves, and scans as far as its abilities allow. Rules every driver follows:
@@ -273,7 +273,7 @@ class ContinuousAxisNew(Device):
 _POLL_S = 0.01
 
 
-class ContinuousAxisNewHandle[D: ContinuousAxisNew](DeviceHandle[D]):
+class ContinuousAxisHandle[D: ContinuousAxis](DeviceHandle[D]):
     """A continuous axis, typed. A wait polls ``is_moving`` here, so no long call crosses the rig node. Each kind of
     axis has its own handle, which adds its limits."""
 
@@ -328,9 +328,9 @@ class ContinuousAxisNewHandle[D: ContinuousAxisNew](DeviceHandle[D]):
 
 
 __all__ = [
-    "ContinuousAxisNew",
-    "ContinuousAxisNewController",
-    "ContinuousAxisNewHandle",
+    "ContinuousAxis",
+    "ContinuousAxisController",
+    "ContinuousAxisHandle",
     "Pulses",
     "ScanAbility",
     "ScanState",

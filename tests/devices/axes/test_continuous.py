@@ -5,14 +5,14 @@ from rigup.config import DeviceConfig
 from rigup.node import LocalNode
 from vxlib.vector import Span
 
-from vxl.devices.axes.continuous.base import ContinuousAxisNewController, Pulses, Sweep
+from vxl.devices.axes.continuous.base import ContinuousAxisController, Pulses, Sweep
 from vxl.devices.axes.continuous.linear import LinearAxisController, LinearAxisHandle
 from vxl.devices.axes.continuous.rotation import RotationAxisController, RotationAxisHandle
 from vxl.devices.axes.continuous.simulated import SimulatedLinearAxis, SimulatedRotationAxis
 
 _SIMULATED = "vxl.devices.axes.continuous.simulated"
 
-type Call = Callable[[ContinuousAxisNewController], Awaitable[object]]
+type Call = Callable[[ContinuousAxisController], Awaitable[object]]
 
 
 async def test_each_kind_shows_its_unit_and_limits_across_a_rig_node() -> None:
@@ -35,7 +35,7 @@ async def test_each_kind_shows_its_unit_and_limits_across_a_rig_node() -> None:
         await node.close()
 
 
-async def _call(axis: ContinuousAxisNewController, command: str, *args: object) -> object:
+async def _call(axis: ContinuousAxisController, command: str, *args: object) -> object:
     """Run a command on the axis's own thread, as a rig does, and raise its error."""
     return (await axis.execute(command, *args)).unwrap()
 
@@ -72,7 +72,7 @@ def _limited_rotation() -> RotationAxisController:
     ],
 )
 async def test_each_kind_keeps_moves_and_scans_inside_its_limits(
-    make: Callable[[], ContinuousAxisNewController], call: Call, refused: bool
+    make: Callable[[], ContinuousAxisController], call: Call, refused: bool
 ) -> None:
     axis = make()
     if refused:

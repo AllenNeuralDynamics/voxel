@@ -1,6 +1,6 @@
 """Continuous axis module."""
 
-from vxl.devices.axes.continuous_legacy.base import (
+from vxl._legacy.devices.axes.continuous.base import (
     ContinuousAxis,
     ContinuousAxisController,
     ScanMode,
@@ -9,7 +9,7 @@ from vxl.devices.axes.continuous_legacy.base import (
     TTLStepper,
     TTLStepperConfig,
 )
-from vxl.devices.axes.continuous_legacy.handle import ContinuousAxisHandle
+from vxl._legacy.devices.axes.continuous.handle import ContinuousAxisHandle
 
 __all__ = [
     "ContinuousAxis",

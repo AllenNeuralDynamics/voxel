@@ -87,7 +87,6 @@ class WriteRun(BaseModel):
     max_level: str
     target_shard_gb: float
     shard_frame_chunks: int
-    batch_shards: int
     batch_frames: int
     frame_y: int
     frame_x: int
@@ -298,7 +297,7 @@ def _print_header(cfg: BenchConfig, wconfig: WriterConfig, blocks: list, run_id:
     gb = sum(b.nbytes for b in blocks) / 1e9
     console.rule(f"[bold]write bench[/]  run_id={run_id}")
     console.print(
-        f"frame={y}x{x} | batch_frames={wconfig.batch_frames} x {cfg.batches} batches = "
+        f"frame={y}x{x} | batch_frames={wconfig.rounded_batch_frames} x {cfg.batches} batches = "
         f"{BATCH_SIZE * cfg.batches} frames "
         f"@ {cfg.fps:.0f}fps | slots={cfg.slots} | {wconfig.compression} | downscale={wconfig.downscale_type} | "
         f"samples={len(blocks)} ({gb:.0f}GB)"
@@ -424,8 +423,7 @@ def run_combo(
         max_level=wconfig.max_level.name,
         target_shard_gb=wconfig.target_shard_gb,
         shard_frame_chunks=wconfig.shard_frame_chunks,
-        batch_shards=wconfig.batch_shards,
-        batch_frames=wconfig.batch_frames,
+        batch_frames=wconfig.rounded_batch_frames,
         frame_y=int(wconfig.volume_shape.y),
         frame_x=int(wconfig.volume_shape.x),
         dtype=str(blocks[0].dtype),
@@ -446,17 +444,17 @@ def run_combo(
 
 def build_wconfig(blocks: list, batches: int, downscale: DownscaleType, **geometry) -> WriterConfig:
     """A WriterConfig for `batches` batches of the loaded frame shape. `geometry` overrides the writer's
-    geometry defaults (max_level, shard_frame_chunks, batch_shards, target_shard_gb) -- the sweep uses this."""
+    geometry defaults (max_level, shard_frame_chunks, batch_frames, target_shard_gb) -- the sweep uses this."""
     y, x = blocks[0].shape[1], blocks[0].shape[2]
     wconfig = WriterConfig(
         transform=Transform.grid((BATCH_SIZE * batches, y, x), Vec3D(z=1.0, y=0.5, x=0.5)),
         downscale_type=downscale,
-        **geometry,
+        **{"batch_frames": BATCH_SIZE, **geometry},
     )
-    if wconfig.batch_frames != BATCH_SIZE:
+    if wconfig.rounded_batch_frames != BATCH_SIZE:
         raise SystemExit(
-            f"batch_frames={wconfig.batch_frames} != BATCH_SIZE={BATCH_SIZE}; "
-            "fix max_level/shard_frame_chunks/batch_shards"
+            f"the writer's batch of {wconfig.rounded_batch_frames} frames != BATCH_SIZE={BATCH_SIZE}; "
+            "fix max_level/shard_frame_chunks/batch_frames"
         )
     return wconfig
 

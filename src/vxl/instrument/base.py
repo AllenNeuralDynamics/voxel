@@ -22,7 +22,7 @@ from vxlib.reactivity import Cell, Computed, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
 
-from vxl.devices.axes.continuous.base import ContinuousAxisNewHandle
+from vxl.devices.axes.continuous.base import ContinuousAxisHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.base import DeviceId
 from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
@@ -658,7 +658,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         match self._hal.device(device), position:
             case DiscreteAxisHandle() as axis, str():
                 await axis.move_to(position, wait=True)
-            case ContinuousAxisNewHandle() as axis, float():
+            case ContinuousAxisHandle() as axis, float():
                 await axis.move_to(position, wait=True)
             case _:
                 raise RejectedError(f"'{device}' cannot go to {position!r}")
@@ -770,7 +770,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                     problems.add(
                         "position.no_such_slot", f"'{device}' has no slot '{position}' (it has {known}).", *loc
                     )
-            elif not (isinstance(handle, ContinuousAxisNewHandle) and isinstance(position, float)):
+            elif not (isinstance(handle, ContinuousAxisHandle) and isinstance(position, float)):
                 problems.add("position.wrong_kind", f"'{device}' cannot take the position {position!r}.", *loc)
         return problems
 

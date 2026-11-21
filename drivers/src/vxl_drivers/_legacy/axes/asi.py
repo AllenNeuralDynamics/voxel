@@ -2,6 +2,13 @@ import logging
 from types import TracebackType
 from typing import Self
 
+from vxl._legacy.devices.axes.continuous.base import (
+    ContinuousAxis,
+    StepMode,
+    TriggerMode,
+    TTLStepper,
+    TTLStepperConfig,
+)
 from vxl_drivers.tigerhub.hub import TigerHub
 from vxl_drivers.tigerhub.model.axis_state import AxisState
 from vxl_drivers.tigerhub.model.models import ASIAxisInfo
@@ -13,14 +20,6 @@ from vxl_drivers.tigerhub.ops.step_shoot import (
     TTLOut0Mode,
 )
 from vxl_drivers.tigerhub.protocol.errors import ASIProtocolError
-
-from vxl.devices.axes.continuous_legacy.base import (
-    ContinuousAxis,
-    StepMode,
-    TriggerMode,
-    TTLStepper,
-    TTLStepperConfig,
-)
 
 
 class TigerTTLStepper(TTLStepper):

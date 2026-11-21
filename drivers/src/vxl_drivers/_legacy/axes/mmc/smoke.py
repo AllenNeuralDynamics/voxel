@@ -1,10 +1,10 @@
 """Manual MMC-100 smoke test.
 
 Read-only by default:
-    uv run python -m vxl_drivers.axes.mmc.smoke --port /dev/tty.usbserial-... --axis 1
+    uv run python -m vxl_drivers._legacy.axes.mmc.smoke --port /dev/tty.usbserial-... --axis 1
 
 Motion must be explicitly enabled:
-    uv run python -m vxl_drivers.axes.mmc.smoke --port COM4 --axis 1 --exercise-motion --distance 1
+    uv run python -m vxl_drivers._legacy.axes.mmc.smoke --port COM4 --axis 1 --exercise-motion --distance 1
 """
 
 import argparse
@@ -12,7 +12,7 @@ import logging
 import math
 import time
 
-from vxl_drivers.axes.mmc import (
+from vxl_drivers._legacy.axes.mmc import (
     ControllerError,
     MMCAxisError,
     MMCCommunicationError,

@@ -8,10 +8,10 @@ and records every point to the same results/write/<host>.jsonl (shared run_id) a
 pool in analysis. Concurrency caps are fixed for the whole sweep (set `VOXEL_*` env before running); to
 sweep them, run the sweep once per setting.
 
-Geometry constraint: `batch_frames = batch_shards * shard_frame_chunks * max_level.factor` must equal BATCH_SIZE
-(128, the frames pushed per batch). The default geometry (L7 / 1 / 1) satisfies it. To sweep `max_level`
-you must also set `shard_frame_chunks`/`batch_shards` so the product stays 128 (e.g. L6 with shard_frame_chunks=2);
-a bad combination fails loudly in `build_wconfig`.
+Geometry constraint: the writer's batch (`batch_frames` rounded up to whole shards of `shard_frame_chunks *
+max_level.factor` frames) must equal BATCH_SIZE (128, the frames pushed per batch). The default geometry (L7 / 1)
+satisfies it, and so does any level up to L7 whose shard divides 128 (e.g. L6 with shard_frame_chunks=2); a bad
+combination fails loudly in `build_wconfig`.
 """
 
 import argparse
@@ -47,8 +47,8 @@ SWEEP = {
     "downscale": [DownscaleType.GAUSSIAN],
 }
 
-_GEOMETRY = ("max_level", "shard_frame_chunks", "batch_shards", "target_shard_gb", "compression")  # -> WriterConfig
-_EXPENSIVE = ("backend", "slots", "max_level", "shard_frame_chunks", "batch_shards")  # force a writer/ring rebuild
+_GEOMETRY = ("max_level", "shard_frame_chunks", "batch_frames", "target_shard_gb", "compression")  # -> WriterConfig
+_EXPENSIVE = ("backend", "slots", "max_level", "shard_frame_chunks", "batch_frames")  # force a writer/ring rebuild
 
 
 def _points(grid: dict) -> list[dict]:

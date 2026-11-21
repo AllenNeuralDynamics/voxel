@@ -3,11 +3,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from vxl_drivers.axes.asi import TigerLinearAxis
+from vxl._legacy.devices.axes.continuous.base import ContinuousAxis, TTLStepper
+from vxl_drivers._legacy.axes.asi import TigerLinearAxis
 from vxl_drivers.tigerhub.hub import TigerHub
 from vxl_drivers.tigerhub.ops.scan import ScanPattern, ScanRConfig, ScanVConfig
-
-from vxl.devices.axes.continuous_legacy.base import ContinuousAxis, TTLStepper
 
 
 class XYZStage[A: ContinuousAxis]:

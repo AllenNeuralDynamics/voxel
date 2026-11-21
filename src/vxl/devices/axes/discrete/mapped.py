@@ -1,13 +1,14 @@
 """Adapt a continuous axis into a set of named discrete positions."""
 
 import math
+import time
 from collections.abc import Mapping
 from contextlib import suppress
 
 from pydantic import BaseModel, ConfigDict
 
 from rigup import BuildConfig, build_objects
-from vxl.devices.axes.continuous_legacy import ContinuousAxis
+from vxl.devices.axes.continuous.base import ContinuousAxis
 from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotName
 
 
@@ -20,11 +21,16 @@ class MappedSlot(BaseModel):
     label: SlotName | None = None
 
 
+_POLL_S = 0.01
+"""How often a wait asks the continuous axis whether it still moves."""
+
+
 class MappedDiscreteAxis(DiscreteAxis):
     """Present fixed positions on any injected continuous axis as discrete slots.
 
     The adapter borrows the underlying axis; rigup remains responsible for closing
-    that device. Positions outside every slot's tolerance resolve to ``None``.
+    that device. Positions outside every slot's tolerance resolve to ``None``. ``home`` names the slot, by index or
+    label, that :meth:`home` moves to; without it the axis cannot home.
     """
 
     def __init__(
@@ -34,6 +40,7 @@ class MappedDiscreteAxis(DiscreteAxis):
         axis: ContinuousAxis,
         slots: Mapping[int | str, MappedSlot | Mapping[str, object]],
         tolerance: float,
+        home: int | str | None = None,
     ) -> None:
         specs = {int(index): MappedSlot.model_validate(spec) for index, spec in slots.items()}
         self._validate_specs(specs, tolerance)
@@ -47,6 +54,7 @@ class MappedDiscreteAxis(DiscreteAxis):
         self._specs = specs
         self._tolerance = float(tolerance)
         self._target: int | None = None
+        self._home = None if home is None else self._slot_named(home)
 
     @property
     def state(self) -> DiscreteAxisState:
@@ -71,24 +79,34 @@ class MappedDiscreteAxis(DiscreteAxis):
             target = self._specs[slot].position
         except KeyError as exc:
             raise ValueError(f"Invalid slot {slot}; valid slots are {sorted(self._specs)}") from exc
-        self._axis.move_to(target, wait=False)
+        self._axis.move_to(target)
         self._target = slot
         if wait:
             self.await_movement(timeout_s)
 
     def home(self, *, wait: bool = False, timeout_s: float | None = None) -> None:
-        home_position = self._axis.home
-        target = self._slot_at(home_position) if home_position is not None else None
-        self._axis.go_home(wait=False)
-        self._target = target
-        if wait:
-            self.await_movement(timeout_s)
+        """Move to the ``home`` slot. Raise when none was given."""
+        if self._home is None:
+            raise RuntimeError(f"{self.id} has no home slot")
+        self.move_to_slot(self._home, wait=wait, timeout_s=timeout_s)
 
     def halt(self) -> None:
         self._axis.halt()
 
     def await_movement(self, timeout_s: float | None = None) -> None:
-        self._axis.await_movement(timeout_s=timeout_s)
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
+        while self._axis.is_moving:
+            if deadline is not None and time.monotonic() > deadline:
+                raise TimeoutError(f"{self.id} still moves after {timeout_s} s")
+            time.sleep(_POLL_S)
+
+    def _slot_named(self, slot: int | str) -> int:
+        """The index of ``slot``, given by index or by label."""
+        if isinstance(slot, int):
+            if slot not in self._specs:
+                raise ValueError(f"No slot {slot}; valid slots are {sorted(self._specs)}")
+            return slot
+        return self.index_of(slot)
 
     @staticmethod
     def _validate_specs(specs: dict[int, MappedSlot], tolerance: float) -> None:
@@ -132,6 +150,7 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
         axis: BuildConfig | Mapping[str, object],
         slots: Mapping[int | str, MappedSlot | Mapping[str, object]],
         tolerance: float,
+        home: int | str | None = None,
     ) -> None:
         axis_config = axis if isinstance(axis, BuildConfig) else BuildConfig.model_validate(axis)
         axis_id = f"{device_id}_axis"
@@ -145,7 +164,7 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
                 with suppress(Exception):
                     child.dispose()
             actual = type(child).__name__ if child is not None else "None"
-            raise TypeError(f"Owned axis for '{device_id}' must be a ContinuousAxis, got {actual}")
+            raise TypeError(f"Owned axis for '{device_id}' must be a continuous axis, got {actual}")
 
         try:
             super().__init__(
@@ -153,6 +172,7 @@ class OwnedMappedDiscreteAxis(MappedDiscreteAxis):
                 axis=child,
                 slots=slots,
                 tolerance=tolerance,
+                home=home,
             )
         except Exception:
             with suppress(Exception):

@@ -1,20 +1,22 @@
+import time
+
 import pytest
 from pydantic import ValidationError
 
 from rigup import BuildConfig, Part
+from vxl.devices.axes.continuous.simulated import SimulatedLinearAxis
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.mapped import MappedDiscreteAxis, OwnedMappedDiscreteAxis
-from vxl.devices.axes.simulated import SimulatedContinuousAxis
 
 
-def make_axis() -> SimulatedContinuousAxis:
-    return SimulatedContinuousAxis(
-        device_id="continuous",
-        lower_limit=0,
-        upper_limit=100,
-        speed=1_000_000,
-        has_ttl_stepper=False,
-    )
+def make_axis() -> SimulatedLinearAxis:
+    return SimulatedLinearAxis("continuous", lower=0, upper=100, speed=100_000)
+
+
+def move(axis: SimulatedLinearAxis, position: float) -> None:
+    axis.move_to(position)
+    while axis.is_moving:
+        time.sleep(0.001)
 
 
 def test_mapped_axis_delegates_motion_and_resolves_slot() -> None:
@@ -47,16 +49,29 @@ def test_mapped_axis_reports_unknown_position_and_preserves_commanded_target() -
             1: {"label": "right", "position": 100},
         },
         tolerance=0.5,
+        home="left",
     )
-    continuous.move_to(50, wait=True)
+    move(continuous, 50)
     assert mapped.state == DiscreteAxisState(position=None, target=None, is_moving=False)
 
     mapped.move_to_slot(1, wait=True)
-    continuous.move_to(0, wait=True)
+    move(continuous, 0)
     assert mapped.state == DiscreteAxisState(position=0, target=1, is_moving=False)
 
     mapped.home(wait=True)
     assert mapped.state == DiscreteAxisState(position=0, target=0, is_moving=False)
+
+
+def test_a_mapped_axis_without_a_home_slot_cannot_home() -> None:
+    slots: dict[int | str, dict[str, object]] = {
+        0: {"label": "left", "position": 0},
+        1: {"label": "right", "position": 100},
+    }
+    mapped = MappedDiscreteAxis(device_id="selector", axis=make_axis(), slots=slots, tolerance=0.5)
+    with pytest.raises(RuntimeError, match="has no home slot"):
+        mapped.home()
+    with pytest.raises(KeyError):
+        MappedDiscreteAxis(device_id="selector", axis=make_axis(), slots=slots, tolerance=0.5, home="middle")
 
 
 def test_mapped_axis_rejects_overlapping_slots_and_extra_fields() -> None:
@@ -86,12 +101,11 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
     mapped = OwnedMappedDiscreteAxis(
         device_id="selector",
         axis=BuildConfig(
-            target="vxl.devices.axes.simulated.SimulatedContinuousAxis",
+            target="vxl.devices.axes.continuous.simulated.SimulatedLinearAxis",
             init={
-                "lower_limit": 0,
-                "upper_limit": 100,
-                "speed": 1_000_000,
-                "has_ttl_stepper": False,
+                "lower": 0,
+                "upper": 100,
+                "speed": 100_000,
             },
         ),
         slots={
@@ -129,7 +143,7 @@ def test_owned_mapped_axis_preserves_nested_build_failure() -> None:
 
 
 def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
-    continuous = make_axis()
+    continuous = SimulatedLinearAxis("continuous", lower=0, upper=100, speed=10)  # 10 s to the far slot
     mapped = MappedDiscreteAxis(
         device_id="selector",
         axis=continuous,
@@ -137,10 +151,6 @@ def test_mapped_axis_records_target_before_wait_and_preserves_it_on_rejection(mo
         tolerance=0.5,
     )
 
-    def timeout(timeout_s: float | None = None) -> None:
-        raise TimeoutError(timeout_s)
-
-    monkeypatch.setattr(continuous, "await_movement", timeout)
     with pytest.raises(TimeoutError):
         mapped.move_to_slot(1, wait=True, timeout_s=0)
     continuous.halt()

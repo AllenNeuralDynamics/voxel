@@ -1,7 +1,7 @@
 """Micronix MMC-100 motion-controller drivers."""
 
-from vxl_drivers.axes.mmc._axis import MMCAxisError, MMCLinearAxis
-from vxl_drivers.axes.mmc._cmds import (
+from vxl_drivers._legacy.axes.mmc._axis import MMCAxisError, MMCLinearAxis
+from vxl_drivers._legacy.axes.mmc._cmds import (
     AxisStatus,
     ControllerError,
     DeadbandSettings,
@@ -11,7 +11,7 @@ from vxl_drivers.axes.mmc._cmds import (
     LimitStatus,
     PositionReading,
 )
-from vxl_drivers.axes.mmc._hub import (
+from vxl_drivers._legacy.axes.mmc._hub import (
     MMCAxisAlreadyReservedError,
     MMCCommunicationError,
     MMCHub,

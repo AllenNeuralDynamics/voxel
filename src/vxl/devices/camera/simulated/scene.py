@@ -8,7 +8,7 @@ from rigup.build import import_class
 from vxlib.vector import Vec2D, Vec3D
 
 from rigup import Part
-from vxl.devices.axes.continuous.base import ContinuousAxisNew
+from vxl.devices.axes.continuous.base import ContinuousAxis
 from vxl.devices.axes.discrete.base import DiscreteAxis
 from vxl.devices.camera.simulated.frame_source import BeadGroup, SpecimenView
 from vxl.devices.light.laser import Laser
@@ -140,7 +140,7 @@ class Scene:
 
     def _position(self, axis: str) -> float:
         device = self._follows.get(axis)
-        return float(device.position) if isinstance(device, ContinuousAxisNew) else 0.0
+        return float(device.position) if isinstance(device, ContinuousAxis) else 0.0
 
     def _names(self, value: Any) -> Any:
         """``value`` with each device or part that rigup put in place of its name turned back into the name."""

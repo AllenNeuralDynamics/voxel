@@ -9,7 +9,7 @@ from vxlib.vector import Span
 from vxl.devices.base import Pin
 from vxl.devices.simulated import SimulatedWiring
 
-from .base import ContinuousAxisNew, ScanAbility, ScanState, Sweep
+from .base import ContinuousAxis, ScanAbility, ScanState, Sweep
 from .linear import LinearAxis
 from .rotation import RotationAxis
 
@@ -26,7 +26,7 @@ class _Steps(NamedTuple):
     pin: str
 
 
-class SimulatedContinuousAxis(ContinuousAxisNew):
+class SimulatedContinuousAxis(ContinuousAxis):
     """An axis that moves in real time at its speed, legs 1 after the other, with no acceleration. A sweep runs up at
     the move speed, then crosses its span at the sweep's speed. It knows where it is from the start, and nothing
     goes wrong with it, so it has no fault. It has 2 digital pins: ``ttl_in`` to step on, and ``ttl_out`` for

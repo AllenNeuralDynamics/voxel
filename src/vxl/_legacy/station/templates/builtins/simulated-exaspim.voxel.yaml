@@ -31,10 +31,10 @@ hal:
       init:
         slots: {"0": "specimen", "1": "calibration"}
     excitation_side_axis:
-      target: vxl.devices.axes.simulated.SimulatedContinuousAxis
+      target: vxl._legacy.devices.axes.simulated.SimulatedContinuousAxis
       init: {lower_limit: 0, upper_limit: 100, has_ttl_stepper: false}
     excitation_side_selector:
-      target: vxl.devices.axes.discrete.MappedDiscreteAxis
+      target: vxl._legacy.devices.axes.mapped.MappedDiscreteAxis
       init:
         axis: excitation_side_axis
         tolerance: 1
@@ -54,7 +54,7 @@ hal:
       autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 640, source_enable_delay_s: 1}
     x_axis:
-      target: &linear_axis_target vxl.devices.axes.simulated.SimulatedContinuousAxis
+      target: &linear_axis_target vxl._legacy.devices.axes.simulated.SimulatedContinuousAxis
       init: {lower_limit: 0, upper_limit: 40000}
     y_axis:
       target: *linear_axis_target

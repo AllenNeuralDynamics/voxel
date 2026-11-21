@@ -7,7 +7,7 @@ from pydantic import TypeAdapter
 from rigup.device import DeviceHandle
 from rigup.device.handle import Adapter, PropView
 
-from vxl.devices.axes.continuous_legacy.base import ContinuousAxis, TTLStepperConfig
+from vxl._legacy.devices.axes.continuous.base import ContinuousAxis, TTLStepperConfig
 
 _POLL_INTERVAL = 0.05  # 50 ms - matches the 20 Hz stream rate
 _FLOAT_ADAPTER = TypeAdapter(float)

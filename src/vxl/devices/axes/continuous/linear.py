@@ -8,10 +8,10 @@ from vxlib.vector import Span
 
 from vxl.devices.base import DeviceType
 
-from .base import ContinuousAxisNew, ContinuousAxisNewController, ContinuousAxisNewHandle
+from .base import ContinuousAxis, ContinuousAxisController, ContinuousAxisHandle
 
 
-class LinearAxisController(ContinuousAxisNewController["LinearAxis"]):
+class LinearAxisController(ContinuousAxisController["LinearAxis"]):
     """The rules around a linear axis: those of every continuous axis, and every move or scan stays inside its
     limits."""
 
@@ -21,7 +21,7 @@ class LinearAxisController(ContinuousAxisNewController["LinearAxis"]):
             raise ValueError(f"{self.device.id} cannot reach {min(low, high)}..{max(low, high)} µm (limits {limits})")
 
 
-class LinearAxis(ContinuousAxisNew, kind=DeviceType.LINEAR_AXIS, controller=LinearAxisController):
+class LinearAxis(ContinuousAxis, kind=DeviceType.LINEAR_AXIS, controller=LinearAxisController):
     """The device side of a linear axis, in µm. A driver whose hardware can change its limits adds its own way to set
     them."""
 
@@ -33,7 +33,7 @@ class LinearAxis(ContinuousAxisNew, kind=DeviceType.LINEAR_AXIS, controller=Line
     def limits(self) -> Span: ...
 
 
-class LinearAxisHandle(ContinuousAxisNewHandle[LinearAxis]):
+class LinearAxisHandle(ContinuousAxisHandle[LinearAxis]):
     """A linear axis, typed."""
 
     async def get_limits(self) -> Span:

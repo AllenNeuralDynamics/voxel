@@ -128,7 +128,7 @@ def template(data: dict[str, Any]) -> dict[str, Any]:
     return {"rig": files, "default": data["default"]}
 
 
-_SIMULATED_AXIS = "vxl.devices.axes.simulated.SimulatedContinuousAxis"
+_SIMULATED_AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 _STAGE_AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
 
@@ -157,7 +157,7 @@ def simulated(data: dict[str, Any]) -> dict[str, Any]:
     devices["fw"] = {
         "target": "vxl.devices.axes.discrete.mapped.OwnedMappedDiscreteAxis",
         "init": {
-            "axis": {"target": _SIMULATED_AXIS, "init": {"lower_limit": 0, "upper_limit": 100}},
+            "axis": {"target": _SIMULATED_AXIS, "init": {"lower": 0, "upper": 100}},
             "slots": {"0": {"label": "GFP", "position": 0}, "1": {"label": "RFP", "position": 10}},
             "tolerance": 1,
         },

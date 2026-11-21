@@ -9,10 +9,10 @@ from vxlib.vector import Span
 
 from vxl.devices.base import DeviceType
 
-from .base import ContinuousAxisNew, ContinuousAxisNewController, ContinuousAxisNewHandle
+from .base import ContinuousAxis, ContinuousAxisController, ContinuousAxisHandle
 
 
-class RotationAxisController(ContinuousAxisNewController["RotationAxis"]):
+class RotationAxisController(ContinuousAxisController["RotationAxis"]):
     """The rules around a rotation axis: those of every continuous axis, and every move or scan stays inside its
     limits when it has them."""
 
@@ -22,7 +22,7 @@ class RotationAxisController(ContinuousAxisNewController["RotationAxis"]):
             raise ValueError(f"{self.device.id} cannot reach {min(low, high)}..{max(low, high)}° (limits {limits})")
 
 
-class RotationAxis(ContinuousAxisNew, kind=DeviceType.ROTATION_AXIS, controller=RotationAxisController):
+class RotationAxis(ContinuousAxis, kind=DeviceType.ROTATION_AXIS, controller=RotationAxisController):
     """The device side of a rotation axis, in degrees."""
 
     unit: ClassVar[str] = "deg"
@@ -33,7 +33,7 @@ class RotationAxis(ContinuousAxisNew, kind=DeviceType.ROTATION_AXIS, controller=
     def limits(self) -> Span | None: ...
 
 
-class RotationAxisHandle(ContinuousAxisNewHandle[RotationAxis]):
+class RotationAxisHandle(ContinuousAxisHandle[RotationAxis]):
     """A rotation axis, typed."""
 
     async def get_limits(self) -> Span | None:

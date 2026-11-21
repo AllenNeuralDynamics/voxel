@@ -45,7 +45,7 @@ hal:
       init: {box: COM3}
 
     x_axis:
-      target: vxl_drivers.axes.asi.TigerLinearAxis
+      target: vxl_drivers._legacy.axes.asi.TigerLinearAxis
       init: {hub: tiger_controller, axis_label: x, units: um}
 ```
 
@@ -120,10 +120,17 @@ See the [driver module](src/vxl_drivers/power_meters/thorlabs.py) for setup note
 | Hardware | Target | Python support |
 | --- | --- | --- |
 | ASI Tiger controller | `vxl_drivers.tigerhub.TigerHub` | Serial support included |
-| ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
-| Micronix MMC-100 controller | `vxl_drivers.axes.mmc.MMCHub` | Serial support included |
-| Micronix MMC-100 linear axis | `vxl_drivers.axes.mmc.MMCLinearAxis` | Configured with an `MMCHub` |
 | Thorlabs MFF101 flip mount | `vxl_drivers.axes.thorlabs.MFF101` | `thorlabs` extra |
+
+The axis drivers below are on the legacy continuous axis (`vxl._legacy.devices.axes.continuous`), which only the
+legacy app uses. A Tiger linear axis on the new axis API is being written in their place.
+
+| Hardware | Target | Python support |
+| --- | --- | --- |
+| ASI Tiger linear axis | `vxl_drivers._legacy.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
+| ASI Tiger XYZ stage | `vxl_drivers._legacy.axes.stage.TigerXYZStage` | Configured with a `TigerHub` |
+| Micronix MMC-100 controller | `vxl_drivers._legacy.axes.mmc.MMCHub` | Serial support included |
+| Micronix MMC-100 linear axis | `vxl_drivers._legacy.axes.mmc.MMCLinearAxis` | Configured with an `MMCHub` |
 
 ## Install vendor support
 

@@ -32,8 +32,8 @@ from vxlib.reactivity import Cell, Computed, Derived, Emitter, ReactiveQuery, Re
 from vxlib.schema import FrozenModel
 from vxlib.vector import Transform, Vec3D
 
+from vxl._legacy.devices.axes.continuous import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl._legacy.hal import HAL, HardwareTopology
-from vxl.devices.axes import ContinuousAxisHandle, StepMode, TTLStepperConfig
 from vxl.devices.camera import AreaCameraHandle, AreaROI, CaptureState
 from vxl.devices.daq.clocked import Signals
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header

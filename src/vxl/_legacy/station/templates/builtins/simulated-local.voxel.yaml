@@ -43,7 +43,7 @@ hal:
       init:
         slots: { 0: "left", 1: "right" }
     x_axis:
-      target: &axis_target vxl.devices.axes.simulated.SimulatedContinuousAxis
+      target: &axis_target vxl._legacy.devices.axes.simulated.SimulatedContinuousAxis
       init: { lower_limit: 0, upper_limit: 36700 }
     y_axis:
       target: *axis_target

@@ -20,8 +20,8 @@ _FLIP = {
     "target": "vxl.devices.axes.discrete.mapped.OwnedMappedDiscreteAxis",
     "init": {
         "axis": {
-            "target": "vxl.devices.axes.simulated.SimulatedContinuousAxis",
-            "init": {"lower_limit": 0, "upper_limit": 100},
+            "target": "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis",
+            "init": {"lower": 0, "upper": 100},
         },
         "slots": {
             "0": {"label": "left", "position": 0},

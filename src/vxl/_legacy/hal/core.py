@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 from rigup.device import DeviceHandle, DeviceInterface
 from rigup.rig import Rig
 
-from vxl.devices.axes import ContinuousAxisHandle
+from vxl._legacy.devices.axes.continuous import ContinuousAxisHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.camera import AreaCameraHandle

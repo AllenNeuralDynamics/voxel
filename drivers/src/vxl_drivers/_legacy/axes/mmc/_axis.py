@@ -4,7 +4,9 @@ import math
 import time
 
 from rigup.interface import action, choice, fact, failsafe, number, stream
-from vxl_drivers.axes.mmc._cmds import (
+
+from vxl._legacy.devices.axes.continuous import ContinuousAxis, TTLStepper
+from vxl_drivers._legacy.axes.mmc._cmds import (
     ENCODER_TYPE_FROM_WIRE,
     ENCODER_TYPE_TO_WIRE,
     FEEDBACK_MODE_FROM_WIRE,
@@ -26,9 +28,7 @@ from vxl_drivers.axes.mmc._cmds import (
     parse_position,
     parse_status,
 )
-from vxl_drivers.axes.mmc._hub import MMCCommunicationError, MMCHub
-
-from vxl.devices.axes.continuous_legacy import ContinuousAxis, TTLStepper
+from vxl_drivers._legacy.axes.mmc._hub import MMCCommunicationError, MMCHub
 
 _MM_PER_USER_UNIT = {
     "nm": 0.000_001,

@@ -4,7 +4,8 @@ import threading
 from collections.abc import Iterator
 
 from rigup.device import Device
-from vxl_drivers.axes.mmc._cmds import Cmd, format_number
+
+from vxl_drivers._legacy.axes.mmc._cmds import Cmd, format_number
 from vxl_drivers.serial import SerialTransport
 
 DEFAULT_BAUD = 38400

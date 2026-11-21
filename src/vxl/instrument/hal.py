@@ -15,7 +15,6 @@ from vxlib.reactivity import Cell, Readable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
 
-from vxl.devices.axes import ContinuousAxisHandle
 from vxl.devices.axes.continuous.linear import LinearAxisHandle
 from vxl.devices.axes.continuous.rotation import RotationAxisHandle
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
@@ -41,7 +40,6 @@ _PINS = TypeAdapter(list[Pin])
 _HANDLES: dict[str, type[DeviceHandle[Any]]] = {
     "area_camera": AreaCameraHandle,
     "line_camera": LineCameraHandle,
-    "continuous_axis": ContinuousAxisHandle,
     "discrete_axis": DiscreteAxisHandle,
     "generator": GeneratorHandle,
     "linear_axis": LinearAxisHandle,

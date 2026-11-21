@@ -164,8 +164,8 @@ rig:
       init: {pins: [ttl_in], wiring: sim_wiring}
 
     excitation_side_axis:                         # moves the mirror that picks the illumination arm
-      target: vxl.devices.axes.simulated.SimulatedContinuousAxis
-      init: {lower_limit: 0, upper_limit: 100, has_ttl_stepper: false}
+      target: vxl.devices.axes.continuous.simulated.SimulatedLinearAxis
+      init: {lower: 0, upper: 100, speed: 10000}
     excitation_side_selector:                     # the same mirror, as 2 named positions
       target: vxl.devices.axes.discrete.MappedDiscreteAxis
       init:
