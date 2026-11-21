@@ -38,7 +38,6 @@ class OpticsConfig(FrozenModel):
     tdi_image_width_px: int = Field(
         ..., gt=0, le=16384, multiple_of=32, description="Sensor width in pixels (long side of TDI sensor)"
     )
-    overscan_px: int = Field(..., ge=0, description="Lead-in and lead-out distance outside the imaged range, in pixels")
 
     @property
     def pixel_size_um(self) -> float:
@@ -49,11 +48,6 @@ class OpticsConfig(FrozenModel):
     def tdi_image_width_um(self) -> float:
         """Strip width on the sample, across the scan."""
         return self.tdi_image_width_px * self.pixel_size_um
-
-    @property
-    def overscan_um(self) -> float:
-        """Run-up and run-out outside the imaged range."""
-        return self.overscan_px * self.pixel_size_um
 
 
 class SeqSweepInstrumentDefaults(FrozenModel):
@@ -68,7 +62,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
         default_factory=dict, description="Lower edge of each sample chamber along the step axis (across the scan); strips step upward from it"
     )
     chamber_edge_margin_mm: float = Field(
-        ..., gt=0, description="Clearance between the safe X range and the chamber edge; the overscan must fit in it"
+        ..., gt=0, description="Clearance between the safe X range and the chamber edge; a job's scan_margin_um must fit in it"
     )
     scan_safe_range_mm: tuple[float, float] | None = Field(
         default=None,
@@ -87,12 +81,6 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     def _check_safe_range(self) -> Self:
         if self.scan_safe_range_mm is not None and self.scan_safe_range_mm[0] >= self.scan_safe_range_mm[1]:
             raise ValueError("scan_safe_range_mm must be [min, max]")
-        overscan_mm = self.optics.overscan_um / 1000
-        if overscan_mm > self.chamber_edge_margin_mm:
-            raise ValueError(
-                f"overscan {overscan_mm:g} mm ({self.optics.overscan_px} px) exceeds "
-                f"chamber_edge_margin_mm {self.chamber_edge_margin_mm:g}"
-            )
         return self
 
 

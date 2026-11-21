@@ -37,10 +37,9 @@ class SeqSweep:
         defaults = self.config.default
         optics = defaults.optics
         self.log.info(
-            "Optics: pixel size %.4f um, Image width %.1f um, overscan %.1f um (chamber edge margin %g mm)",
+            "Optics: pixel size %.4f um, Image width %.1f um (chamber edge margin %g mm)",
             optics.pixel_size_um,
             optics.tdi_image_width_um,
-            optics.overscan_um,
             defaults.chamber_edge_margin_mm,
         )
 
@@ -98,17 +97,18 @@ class SeqSweep:
         return await self._hal.scan_controller.read_status()
 
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
-        """Apply the optics to a pass: pixel size, stage speed, overscan, strip width and distances."""
+        """Apply the optics to a pass: pixel size, stage speed, strip width and distances (travel = capture + 2 x margin)."""
         optics = self.config.default.optics
         capture_um = abs(pass_config.scan_end_um - pass_config.scan_start_um)
+        capture_mm = capture_um / 1000
         return DerivedScan(
             scan_axis=self.config.default.scan_axis,
             pixel_size_um=optics.pixel_size_um,
             scan_speed_mm_s=pass_config.line_rate_hz * optics.pixel_size_um / 1000,
-            overscan_um=optics.overscan_um,
+            scan_margin_um=pass_config.scan_margin_um,
             tdi_image_width_um=optics.tdi_image_width_um,
-            capture_mm=capture_um / 1000,
-            travel_mm=(capture_um + 2 * optics.overscan_um) / 1000,
+            capture_mm=capture_mm,
+            travel_mm=capture_mm + 2 * pass_config.scan_margin_um / 1000,
             line_count=capture_um / optics.pixel_size_um,
         )
 
@@ -126,7 +126,7 @@ class SeqSweep:
             job_name,
             derived.pixel_size_um / 1000,
             derived.scan_speed_mm_s,
-            derived.overscan_um / 1000,
+            derived.scan_margin_um / 1000,
             derived.tdi_image_width_um / 1000,
             derived.travel_mm,
             derived.capture_mm,
@@ -148,6 +148,12 @@ class SeqSweep:
             start_mm, end_mm = sorted((job.pass_config.scan_start_um / 1000, job.pass_config.scan_end_um / 1000))
             if start_mm < low_mm or end_mm > high_mm:
                 raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside scan_safe_range_mm [{low_mm:g}, {high_mm:g}]")
+        scan_margin_mm = job.pass_config.scan_margin_um / 1000
+        if scan_margin_mm > defaults.chamber_edge_margin_mm:
+            raise ValueError(
+                f"scan_margin_um {job.pass_config.scan_margin_um:g} exceeds chamber_edge_margin_mm "
+                f"{defaults.chamber_edge_margin_mm:g}"
+            )
         line_rate_hz = job.pass_config.line_rate_hz
         if defaults.max_line_rate_hz is not None and line_rate_hz > defaults.max_line_rate_hz:
             raise ValueError(f"line rate {line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
@@ -164,7 +170,11 @@ class SeqSweep:
                 for strip in range(job.num_strips):
                     label = f"chamber {chamber}, " if chamber is not None else ""
                     if chamber is not None:
-                        step_mm = defaults.chambers_step_mm[chamber] + strip * derived.tdi_image_width_um / 1000
+                        step_mm = (
+                            defaults.chambers_step_mm[chamber]
+                            + job.step_margin_um / 1000
+                            + strip * derived.tdi_image_width_um / 1000
+                        )
                         start_um = pass_config.scan_end_um if job.direction is ScanDirection.REVERSE else pass_config.scan_start_um
                         x_mm, y_mm = (start_um / 1000, step_mm) if scan_axis_is_x else (step_mm, start_um / 1000)
                         await scan_controller.move_to(x_mm, y_mm)

@@ -20,6 +20,9 @@ class ScanPassConfig(FrozenModel):
 
     scan_start_um: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
     scan_end_um: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
+    scan_margin_um: float = Field(
+        ge=0, description="Run-up and run-out outside the imaged range, at each end (the buffer's MARGIN)"
+    )
     # Validate against camera config
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
@@ -31,10 +34,10 @@ class DerivedScan(FrozenModel):
     scan_axis: Literal["x", "y"] = Field(description="Stage axis the scan runs along (from the defaults)")
     pixel_size_um: float = Field(description="Pixel size on the sample; also the stage travel per line trigger")
     scan_speed_mm_s: float = Field(description="Constant stage speed during imaging")
-    overscan_um: float = Field(description="Run-up and run-out outside the imaged range")
+    scan_margin_um: float = Field(description="Run-up and run-out outside the imaged range, at each end (from the job)")
     tdi_image_width_um: float = Field(description="Strip width on the sample, across the scan")
     capture_mm: float = Field(description="Imaged distance along the scan axis")
-    travel_mm: float = Field(description="Capture distance plus overscan at both ends")
+    travel_mm: float = Field(description="Capture distance plus the margin at both ends")
     line_count: float = Field(description="Line triggers over the capture distance")
 
 
@@ -45,6 +48,11 @@ class ScanJob(FrozenModel):
     chambers: list[int] = Field(
         default_factory=list,
         description="Sample chambers, scanned in this order; each Y start comes from the defaults. Empty: no Y moves",
+    )
+    step_margin_um: float = Field(
+        default=0.0,
+        ge=0,
+        description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
     )
     direction: ScanDirection = ScanDirection.FORWARD
     # TODO Validate the number of strips does not exceed the next chamber's start position

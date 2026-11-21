@@ -10,18 +10,16 @@ Positions and speeds are in the controller's user units, which are assumed to be
 import re
 import threading
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Literal, Self
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import Field, model_validator
 from rigup import describe
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 from vxlib.schema import FrozenModel
 
 from .base import ScanController
 
-OUTPUT_PATTERN = re.compile(r"OUT\d+\.\d+")
-AcsOutput = Annotated[str, StringConstraints(pattern=OUTPUT_PATTERN.pattern)]
-"""A digital output bit as ``OUT<port>.<bit>``, e.g. ``OUT0.1``."""
+OUTPUT_PATTERN = re.compile(r"OUT\d+\.\d+")  # a digital output bit as OUT<port>.<bit>, e.g. OUT0.1
 
 MST_ENABLE = 0x00000001  # Motor state flags (SPiiPlus Python manual, 6.16)
 MST_INPOS = 0x00000010
@@ -50,7 +48,6 @@ class AcsControllerConfig(FrozenModel):
     port: int | None = Field(default=None, gt=0, le=65535, description="Controller TCP port (701 is the SPiiPlus stream port); ethernet_tcp only")
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
-    frame_trigger_output: AcsOutput = Field(description="Output driving the frame trigger to the grabber")
     scan_buffer: int = Field(ge=0, description="Controller program buffer that holds the scan pass; it is overwritten on connect")
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
@@ -293,7 +290,7 @@ class AcsController(ScanController):
             sp.StopBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
             for axis in self._axes:
                 sp.Halt(self._hc, axis, sp.SYNCHRONOUS, True)
-            for output in (*self._gate_outputs.values(), self._config.frame_trigger_output):
+            for output in self._gate_outputs.values():
                 self._clear_output(output)
 
     def _clear_output(self, output: str) -> None:
@@ -319,7 +316,7 @@ class AcsController(ScanController):
             raise ValueError(f"No gate output for lasers {unknown}")
         low, high = self._config.limits_mm[derived.scan_axis]
         parameters: dict[str, float | int] = {
-            "overscan_mm": derived.overscan_um / 1000,
+            "overscan_mm": derived.scan_margin_um / 1000,
             "pixel_size_mm": derived.pixel_size_um / 1000,
             "scan_speed_mm_s": derived.scan_speed_mm_s,
             "line_pulse_ms": self._config.line_pulse_width_ms,
