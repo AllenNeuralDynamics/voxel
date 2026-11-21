@@ -1,0 +1,5 @@
+@import 'tailwindcss';
+@import '@voxel/kit/style.css';
+
+/* The kit is its own package, so Tailwind scans its files too. */
+@source '../../../kit/src';
