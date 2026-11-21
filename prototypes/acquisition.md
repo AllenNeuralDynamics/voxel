@@ -193,14 +193,9 @@ the writer cannot take are dropped by whole batches and reported.
 
 ## To do
 
-- `acquisition.log.jsonl`: `Records.record` writes it at the end (`AcquisitionStore.write_log` exists, nothing
-  calls it).
-- Reading the drivers' dropped frames (`StreamInfo.dropped_frames`); nothing reads them today.
-- A sweep `margin` above 0 by default, checked by the config.
+- Reading the drivers' dropped frames: see `src/vxl/devices/camera/dropped-frames.md`.
 - The planner ignores the task's scan direction (`path.scan`, such as `alternate`): every run goes low to high.
-- The writer refuses a pyramid deeper than the frame allows (a 64 px frame with the default 7 levels fails with a
-  shared-memory size of 0); the config could check it.
-- The software pacer has no simulated test.
+- Memory per camera, checked at Start, and the batch set in frames: see `writer.md`.
 - A new ASI Tiger axis driver with `sweep` and `arm_steps`, outside `instruments/`; ask before starting it.
 
 ## Simulation notes

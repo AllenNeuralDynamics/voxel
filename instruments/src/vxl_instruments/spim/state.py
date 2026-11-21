@@ -22,7 +22,7 @@ class WriterFields(TypedDict, total=False):
 
     max_level: ScaleLevel
     shard_frame_chunks: int
-    batch_shards: int
+    batch_frames: int
     compression: Compression
     downscale_type: DownscaleType
     target_shard_gb: float

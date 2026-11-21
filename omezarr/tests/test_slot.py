@@ -59,8 +59,10 @@ def test_batchslot_roundtrip(tmp_path: Path) -> None:
     and verify every frame's value survived. Exercises spawn + bind_output + flush + slot reuse across
     successive batches (the worker opens the writers once, the slot is reassigned after each flush)."""
     z, y, x = 6, 64, 64
-    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L1)
-    batch_frames = cfg.batch_frames
+    cfg = WriterConfig(
+        transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L1, batch_frames=2
+    )
+    batch_frames = cfg.rounded_batch_frames
     assert batch_frames == 2
     assert z % batch_frames == 0  # three full batches
 
@@ -105,8 +107,10 @@ def test_batchslot_concurrent_writers(tmp_path: Path) -> None:
     up as a wrong value on read-back."""
     n_slots, batch_frames = 3, 64
     z, y, x = n_slots * batch_frames, 64, 64  # 192 frames = 3 shard-aligned batches
-    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
-    assert cfg.batch_frames == batch_frames
+    cfg = WriterConfig(
+        transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6, batch_frames=64
+    )
+    assert cfg.rounded_batch_frames == batch_frames
     assert cfg.shard_shape.z == batch_frames  # shard-aligned: one batch = whole shard(s)
 
     root = Path(f"{tmp_path / 'ds'}.ome.zarr")

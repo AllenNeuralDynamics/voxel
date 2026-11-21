@@ -242,4 +242,5 @@ default:
 
   writer:
     max_level: 3
+    batch_frames: 8                               # 8 frames of 302 MB: about 2.4 GB per slot
     compression: blosc.lz4

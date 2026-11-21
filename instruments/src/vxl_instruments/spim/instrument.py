@@ -467,7 +467,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         axis = hal.stage[config.scan.axis]
         step_pin = chain.waits[axis_id].inputs_on(axis_id)[0]
         generators = await self._load_generators(profile, chain)
-        run, batch = volume.scan, self._store.value.writer.batch_frames
+        run, batch = volume.scan, await self._batch_frames(cameras)
         done = 0
         while done < run.count:
             count = min(batch, run.count - done)
@@ -487,7 +487,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         axis = hal.stage[config.scan.axis]
         chain = profile.trigger_chain(config)
         generators = await self._load_generators(profile, chain)
-        run, batch = volume.scan, self._store.value.writer.batch_frames
+        run, batch = volume.scan, await self._batch_frames(cameras)
         done = 0
         while done < run.count:
             count = min(batch, run.count - done)
@@ -530,6 +530,11 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         if len(pins) != 1:
             raise RejectedError(f"The pulses of '{pacer}' must leave 1 pin, not {sorted(pins)}")
         return pins.pop()
+
+    async def _batch_frames(self, cameras: Cameras) -> int:
+        """The smallest batch of the cameras' writers: each batch of the scan then waits for a free buffer on every
+        camera."""
+        return min(await gather_all(*(c.batch_frames() for c in cameras.values()), message="batch sizes"))
 
     async def _load_generators(self, profile: SPIMProfile, chain: TriggerChain) -> tuple[DeviceId, ...]:
         """Load each generator of ``profile``: on the pulses of the wire that ``chain`` says starts it, or on its own

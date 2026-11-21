@@ -27,9 +27,11 @@ def _read_l0(base: Path, z: int) -> np.ndarray:
 def test_OMEZarrWriter_async_flush_wrapping_ring_roundtrip(tmp_path: Path) -> None:  # noqa: N802
     """OMEZarrWriter DatasetWriter (via the coordinator): same wrapping-ring invariant."""
     z, y, x = 256, 64, 64
-    cfg = WriterConfig(transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
-    assert cfg.batch_frames == 64
-    assert z // cfg.batch_frames == 4
+    cfg = WriterConfig(
+        transform=Transform.grid((z, y, x), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6, batch_frames=64
+    )
+    assert cfg.rounded_batch_frames == 64
+    assert z // cfg.rounded_batch_frames == 4
     writer = OMEZarrWriter(slots=2)  # BatchSlot (process) — worker does downsample + write off the main GIL
     writer.open_dataset(cfg, Local(target=tmp_path / "v2"))
     for i in range(z):
@@ -144,17 +146,17 @@ def test_flush_failure_poisoning_is_sticky(tmp_path: Path, monkeypatch: pytest.M
 @pytest.mark.slow
 def test_a_batch_that_finds_every_slot_busy_is_dropped_whole_and_the_next_one_is_written(tmp_path: Path) -> None:
     cfg = WriterConfig(transform=Transform.grid((4 * 64, 64, 64), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=ScaleLevel.L6)
-    batch = cfg.batch_frames
     writer = OMEZarrWriter(slots=2)
     writer.open_image(
         Local(target=tmp_path / "drop"),
         IVec2D(x=64, y=64),
         cfg.dtype,
         cfg.transform,
-        WriterSettings(max_level=ScaleLevel.L6),
+        WriterSettings(max_level=ScaleLevel.L6, batch_frames=4),
         ram_bytes=0,
         when_full="drop",
     )
+    batch = writer.batch_frames  # 64 px frames get fewer levels than the settings ask for, so smaller batches
     leases = []
     for i in range(4 * batch):
         with writer.new_frame() as frame:

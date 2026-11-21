@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from vxl_instruments.spim.config import Scan, SPIMConfig, TriggerChain
+from vxl_instruments.spim.config import SWEEP_MARGIN, Scan, SPIMConfig, TriggerChain
 from vxl_instruments.spim.state import SPIMState
 
 from .support import Example, codes, load, sweep_x, two_arms
@@ -54,6 +54,12 @@ def test_spim_rig_problems(config_data: dict[str, Any], change: Change, code: st
 def test_scan_rules(scan: dict[str, Any], match: str) -> None:
     with pytest.raises(ValidationError, match=match):
         Scan.model_validate(scan)
+
+
+def test_a_sweep_that_gives_no_margin_gets_the_default_and_a_step_gets_none() -> None:
+    sweep = Scan.model_validate({"axis": "z", "motion": "sweep", "pacer": "z_axis"})
+    step = Scan.model_validate({"axis": "z", "motion": "step", "pacer": "ao_main"})
+    assert (str(sweep.margin), step.margin) == (SWEEP_MARGIN, None)
 
 
 def _chain(example: Example) -> TriggerChain:

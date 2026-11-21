@@ -33,7 +33,8 @@ the Run page's Task card and the History page's Tasks tab this way.
   schema already has nesting), and a flat list (a long card; titles such as "Chamber medium" repeat the group).
 - **A class may mark 1 key field**, with `key()` next to `annotation()`. Tasks with the same key value are about the
   same thing. exaSPIM marks `subject_id`; a bead calibration class might mark `slide_id`, or nothing.
-  - With a key: a task's full name is its key value, then its own name (`M-2816 · cortex`); the Run page groups tasks
+  - With a key: a task's full name is its key value, then its own name, joined by a slash with no spaces
+    (`M-2816/cortex`, the task inside its key, as in storage paths); the Run page groups tasks
     by it; a name only has to be unique among tasks with the same key value.
   - Without a key: names show alone and must be unique across the plan.
 - **Provenance and annotations.** Fields are provenance by default and lock after the first acquisition that uses the
@@ -85,6 +86,9 @@ From the class's JSON schema only, for any class:
 
 ## Open questions
 
+- A key value that contains `/` (the subject field takes any text) would read as 2 steps in `M-2816/cortex`. Either
+  refuse `/` in key values, as task names already allow only letters, digits, `_` and `-`, or show such names another
+  way.
 - Display labels for choices: keep the values with spaces, or let a class give short labels.
 - A task heading when the class has no key field: its name alone (current pick).
 - Whether History may edit annotations of a past acquisition, and where that edit is stored: the acquisition record is

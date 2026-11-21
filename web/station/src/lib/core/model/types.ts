@@ -274,7 +274,7 @@ export type DownscaleType = 'gaussian' | 'mean' | 'min' | 'max';
 export interface WriterSettings {
   max_level: ScaleLevel;
   shard_frame_chunks: number;
-  batch_shards: number;
+  batch_frames: number;
   compression: Compression;
   downscale_type: DownscaleType;
   target_shard_gb: number;
@@ -335,7 +335,7 @@ export interface ChannelPatch {
 export interface WriterPatch {
   max_level?: ScaleLevel | null;
   shard_frame_chunks?: number | null;
-  batch_shards?: number | null;
+  batch_frames?: number | null;
   compression?: Compression | null;
   downscale_type?: DownscaleType | null;
   target_shard_gb?: number | null;

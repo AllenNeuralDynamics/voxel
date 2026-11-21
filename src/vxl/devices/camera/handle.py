@@ -167,6 +167,10 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         if raise_on_error and status.error is not None:
             raise RuntimeError(f"{self.id} capture failed: {status.error}")
 
+    async def batch_frames(self) -> int:
+        """The frames in 1 batch of the open image's writer: a step scan arms the camera for at most this many."""
+        return await self.call("batch_frames")
+
     async def dropped(self) -> list[FrameRange]:
         """The frames of the open image that the writer dropped because every buffer was busy."""
         return _FRAME_RANGES_ADAPTER.validate_python(await self.call("dropped"))

@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import Field, PositiveFloat, model_validator
 from vxlib.issues import Problem, Problems
@@ -23,15 +23,27 @@ type Motion = Literal["step", "sweep"]
 """``step``: move, stop, take the frame. ``sweep``: take frames while moving."""
 
 
+SWEEP_MARGIN = "5 %"
+"""The margin of a sweep that gives none: a generator ignores a pulse while it plays a cycle, so pulses need slack."""
+
+
 class Scan(FrozenModel):
     """How 1 capture runs. ``axis`` is the stage axis that it moves; the other 2 are tiled. ``pacer`` is the device
     whose own clock or pulses set the rhythm, or ``software``. ``margin`` is how much slower a sweep runs than
-    spacing ÷ frame time, so that no pulse of the stage comes before a frame ends."""
+    spacing ÷ frame time, so that no pulse of the stage comes before a frame ends; a sweep that leaves it out gets
+    ``SWEEP_MARGIN``."""
 
     axis: SpecimenAxis
     motion: Motion
     pacer: DeviceId | Literal["software"]
     margin: Portion | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_margin(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("motion") == "sweep" and data.get("margin") is None:
+            return {**data, "margin": SWEEP_MARGIN}
+        return data
 
     @model_validator(mode="after")
     def _check(self) -> Self:

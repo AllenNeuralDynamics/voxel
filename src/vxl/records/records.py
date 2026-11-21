@@ -13,6 +13,7 @@ import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import UUID
 
 from vxlib.imaging.writer import FrameRange
 from vxlib.issues import Failure
@@ -22,13 +23,16 @@ from vxl.storage import ImageLocation
 from ._database import Database
 from .acquisition import Acquisition, AcquisitionResult, Visit, VisitResult
 from .errors import CaptureError
-from .logs import LogJournal
+from .logs import LogEntry, LogJournal
 from .store import AcquisitionStore, RootResolver
 
 logger = logging.getLogger(__name__)
 
 PROGRESS_INTERVAL_S = 1.0
 """The shortest time between 2 saved progress reports. The live count goes through the instrument's activity."""
+
+_LOG_PAGE_LINES = 10_000
+"""How many log lines 1 read of an acquisition's log window takes."""
 
 type _VisitChange = Callable[[Visit], Mapping[str, object]]
 
@@ -178,11 +182,21 @@ class Records:
         """The database file."""
         return self._database.path
 
+    async def _write_log(self, acquisition_id: UUID) -> None:
+        """Write every line of the acquisition's log window as its log file. S3 cannot add lines to a file, so every
+        page is read first."""
+        entries: list[LogEntry] = []
+        while page := await self.logs.for_acquisition(
+            acquisition_id, after_seq=entries[-1].seq if entries else 0, limit=_LOG_PAGE_LINES
+        ):
+            entries += page
+        await self.acquisitions.write_log(acquisition_id, entries)
+
     @asynccontextmanager
     async def record(self, acquisition: Acquisition) -> AsyncGenerator[Recording]:
         """Save ``acquisition``, open its log window, and run it inside the block. Leaving the block ends it:
-        completed, cancelled, or failed with the error. Each visit that never started is skipped, and the log window
-        closes."""
+        completed, cancelled, or failed with the error. Each visit that never started is skipped, the log window
+        closes, and its lines are written next to the images, 1 time."""
         await self.acquisitions.save(acquisition)
         await self.logs.open_acquisition_window(acquisition.id)
         run = Recording(self, acquisition)
@@ -192,6 +206,7 @@ class Records:
             run.value = run.value.ended(result, _now(), failures)
             await self.acquisitions.save(run.value)
             await self.logs.close_acquisition_window(acquisition.id)
+            await self._write_log(acquisition.id)
 
         what = f"acquisition {acquisition.id}"
         try:

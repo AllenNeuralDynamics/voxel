@@ -137,6 +137,11 @@ class AreaCameraController(CameraController["AreaCamera"], streaming={"fast": 0.
         return self._writer.progress if self._writer else WriterProgress()
 
     @query()
+    def batch_frames(self) -> int:
+        """The frames in 1 batch of the open image's writer. Raise when no image is open."""
+        return self._writer_or_fail().batch_frames
+
+    @query()
     def dropped(self) -> list[FrameRange]:
         """The frames of the open image that the writer dropped because every buffer was busy."""
         return self._writer.dropped if self._writer else []

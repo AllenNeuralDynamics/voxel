@@ -11,7 +11,7 @@ from vxl_instruments.spim.instrument import AcquisitionInfo, Microscope
 from vxl_instruments.spim.task import SPIMTask
 
 from vxl.instrument.folder import InstrumentFolder
-from vxl.records import Records
+from vxl.records import Acquisition, Records
 from vxl.station.errors import RejectedError
 from vxl.storage import StorageSpec
 from vxl.system import System
@@ -46,16 +46,16 @@ def _sweep_z(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-async def _open(data: dict[str, Any], tmp_path: Path) -> Microscope:
+async def _open(data: dict[str, Any], tmp_path: Path, *, depth_um: float = 4) -> Microscope:
     folder = InstrumentFolder.create(template(data), "left", tmp_path)
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / "data" / spec.path)
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     microscope = Microscope(folder, records=records, system=system)
     await microscope.open()
-    region = {"outline": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]}, "bounds": [0, 4]}
+    region = {"outline": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]}, "bounds": [0, depth_um]}
     task = SPIMTask.complete({"id": "brain", "region": region, "profiles": ["gfp"]}, microscope.view.value.state.task)
     await microscope.add_task(task)
-    await microscope.update_writer_settings(max_level=ScaleLevel.L2)  # batches of 4 frames: a visit takes 2
+    await microscope.update_writer_settings(max_level=ScaleLevel.L2, batch_frames=4)  # a visit takes 2 batches
     return microscope
 
 
@@ -124,3 +124,35 @@ async def test_during_a_run_edits_and_device_actions_are_refused_and_a_stop_canc
     assert stepping.view.value.activities == ()
     stored = await stepping._records.acquisitions.get(acquisition_id)
     assert stored.status == "cancelled"
+
+
+async def test_a_step_scan_paced_by_the_program_takes_every_frame(config_data: dict[str, Any], tmp_path: Path) -> None:
+    config_data["scan"] = {"axis": "z", "motion": "step", "pacer": "software"}
+    microscope = await _open(_wired(config_data), tmp_path)
+    try:
+        acquisition_id = await microscope.start_acquisition(_STORAGE, "ana")
+        await _finish(microscope)
+        stored = await microscope._records.acquisitions.get(acquisition_id)
+    finally:
+        await microscope.close()
+    assert stored.status == "completed", stored.visits[0].failures
+    assert [visit.image_status("camera") for visit in stored.visits] == ["completed"]
+
+
+async def test_progress_reaches_the_record_while_a_visit_runs(config_data: dict[str, Any], tmp_path: Path) -> None:
+    microscope = await _open(_wired(config_data), tmp_path, depth_um=19)  # 20 frames of 100 ms: longer than 1 save
+    written: list[int] = []
+
+    def seen(acquisition: Acquisition) -> None:
+        visit = acquisition.visits[0]
+        if visit.result is None:
+            written.append(visit.images()["camera"].frames_written)
+
+    unsubscribe = microscope._records.acquisitions.subscribe(seen)
+    try:
+        await microscope.start_acquisition(_STORAGE, "ana")
+        await _finish(microscope)
+    finally:
+        unsubscribe()
+        await microscope.close()
+    assert any(0 < frames < 20 for frames in written), written

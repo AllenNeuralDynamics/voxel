@@ -540,10 +540,10 @@
                 size="sm"
               />
             </Field>
-            <Field label="Batch shards">
+            <Field label="Batch frames">
               <SpinBox
-                value={output.batch_shards}
-                onChange={(value) => instrument.updateOutput({ batch_shards: value })}
+                value={output.batch_frames}
+                onChange={(value) => instrument.updateOutput({ batch_frames: value })}
                 onEditStart={() => instrument.edits.hold()}
                 min={1}
                 step={1}

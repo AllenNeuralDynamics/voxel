@@ -24,7 +24,7 @@ def main(directory: Path | None = None, filename: str = "stack") -> None:
         target_shard_gb=1,  # tiny shards keep the example small
     )
 
-    # Batch depth (cfg.batch_frames) is policy-derived from the config knobs; RAM only sizes the ring slots.
+    # Batch depth (cfg.rounded_batch_frames) is policy-derived from the config knobs; RAM only sizes the ring slots.
     writer = OMEZarrWriter(slots=3)
     writer.open_dataset(cfg, storage)
     for i in range(z):

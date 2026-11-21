@@ -135,6 +135,10 @@ created time ("Any time", "Today", "Last 7 days", "Last 30 days"), newest first.
   Add 1 list method taking an instrument, a status and a from/to time, using those indexes.
 - Add an index on `instrument, created_at_us`: each station page lists 1 instrument, and the `instrument` column has
   no index today.
+- A custom range, in the app only (not the Lab): a last menu item, "Custom range…", opens bits-ui's date range
+  picker; the box then shows the range ("Created: 12–18 Nov"). The kit already depends on `bits-ui` and
+  `@internationalized/date` but has no date picker part yet. The created-time index serves any from/to range, so the
+  backend needs nothing more than the list method above.
 
 **Later, by what each needs:**
 

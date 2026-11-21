@@ -63,6 +63,10 @@ log = logging.getLogger(__name__)
 # Floor for the base (L0) chunk edge: chunks never fall below 64 voxels per axis, regardless of level.
 MIN_CHUNK_EDGE = 64
 
+MIN_LEVEL_EDGE_PX = 16
+"""The fewest pixels a pyramid's last level may keep on its shorter side; a smaller frame gets fewer levels. Whatever
+it is set to, every level keeps at least 1 pixel."""
+
 OME_ZARR_SUFFIX = ".ome.zarr"
 
 
@@ -79,10 +83,14 @@ class WriterSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # sync-critical (determine batch_frames)
+    # sync-critical (determine the batch)
     max_level: ScaleLevel = Field(default=ScaleLevel.L7, description="Maximum pyramid downscale level")
     shard_frame_chunks: int = 1
-    batch_shards: int = 1
+    batch_frames: int = Field(
+        default=128,
+        ge=1,
+        description="Frames in 1 batch, rounded up to whole shards: a step scan pauses after each, and a slot holds 1",
+    )
     # coherence (uniform for a consistent dataset; camera conforms)
     compression: Compression = Field(default=Compression.BLOSC_LZ4, description="Compression codec for zarr chunks")
     downscale_type: DownscaleType = Field(
@@ -93,13 +101,17 @@ class WriterSettings(BaseModel):
 
     @property
     def chunk_shape(self) -> UIVec3D:
-        # Base (L0) chunk is a cube of edge 2^max_level, floored at MIN_CHUNK_EDGE.
+        """The L0 chunk: 2^max_level frames deep, so a batch is always whole shards, and 2^max_level pixels wide and
+        high, floored at ``MIN_CHUNK_EDGE``. Each level halves it, so its deepest level's chunk is 1 frame deep."""
         edge = max(MIN_CHUNK_EDGE, self.max_level.factor)
-        return UIVec3D(z=edge, y=edge, x=edge)
+        return UIVec3D(z=self.max_level.factor, y=edge, x=edge)
 
     @property
-    def batch_frames(self) -> int:
-        return self.batch_shards * self.shard_frame_chunks * self.max_level.factor
+    def rounded_batch_frames(self) -> int:
+        """``batch_frames`` rounded up to whole shards of ``shard_frame_chunks`` chunks, each ``2^max_level``
+        frames deep, so a batch never shares a shard with another."""
+        shard = self.shard_frame_chunks * self.max_level.factor
+        return -(-self.batch_frames // shard) * shard
 
 
 class WriterConfig(WriterSettings):
@@ -141,14 +153,14 @@ class WriterConfig(WriterSettings):
 
     @cached_property
     def batch_shape(self) -> UIVec3D:
-        """L0 shape of a single batch: one batch deep (``batch_frames``) and the full frame in y/x.
+        """L0 shape of a single batch: one batch deep (``rounded_batch_frames``) and the full frame in y/x.
 
-        Depends only on ``batch_frames`` and the frame extent, not on ``volume_shape.z`` (which sets the
+        Depends only on ``rounded_batch_frames`` and the frame extent, not on ``volume_shape.z`` (which sets the
         number of batches, not their shape). A buffer ring sized to this shape therefore serves any
         volume with the same frame geometry, batch depth, dtype, and ``max_level``, regardless of frame
         count.
         """
-        return UIVec3D(z=self.batch_frames, y=self.volume_shape.y, x=self.volume_shape.x)
+        return UIVec3D(z=self.rounded_batch_frames, y=self.volume_shape.y, x=self.volume_shape.x)
 
     @cached_property
     def dataset(self) -> OmeZarrDataset:
@@ -347,7 +359,7 @@ class DatasetWriter:
         self._frame_count = config.volume_shape.z
         self._levels = list(config.dataset.arrays)
         self._shard_z = config.dataset.shard_shape.z
-        self._batch_frames = config.batch_frames
+        self._batch_frames = config.rounded_batch_frames
         self._staging = storage.tuning if isinstance(storage, StagedS3) else None  # upload tuning, iff staged
         self._store: S3Store | None = None if isinstance(storage, Local) else storage.store  # S3 connection, iff remote
         self._target = _as_ome_zarr(storage.target)  # concrete dataset location: base target + .ome.zarr
@@ -760,6 +772,14 @@ class DatasetWriter:
         )
 
 
+def _levels_that_fit(side: int, wanted: ScaleLevel) -> ScaleLevel:
+    """The deepest pyramid level, up to ``wanted``, whose last level keeps ``MIN_LEVEL_EDGE_PX`` pixels on a frame's
+    shorter ``side``, and always at least 1."""
+    by_floor = (side // max(MIN_LEVEL_EDGE_PX, 1)).bit_length() - 1
+    by_pixel = side.bit_length() - 1
+    return ScaleLevel(max(0, min(wanted, by_floor, by_pixel)))
+
+
 class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
     """Writes each image as 1 OME-Zarr dataset, through a reusable :class:`Ring` of batch buffers.
 
@@ -834,10 +854,23 @@ class OMEZarrWriter(ImageWriter[WriterSettings, Storage]):
         when_full: WhenFull = "wait",
     ) -> Storage:
         """Open 1 image as a dataset under ``target`` and give back the dataset's own location. Its metadata says
-        where each pixel sits, from ``transform``. ``when_full`` is what a batch does when every slot is busy."""
+        where each pixel sits, from ``transform``. ``when_full`` is what a batch does when every slot is busy. A frame
+        too small for the pyramid of ``settings`` gets fewer levels, with a warning."""
         _, height, width = transform.shape
         if (height, width) != (size.y, size.x):
             raise ValueError(f"frames of {size.x} x {size.y} px do not match the image's {width} x {height}")
+        levels = _levels_that_fit(min(height, width), settings.max_level)
+        if levels < settings.max_level:
+            log.warning(
+                "Frames of %d x %d px allow %d pyramid levels, not %d: %s gets %d",
+                width,
+                height,
+                levels,
+                settings.max_level,
+                target.target,
+                levels,
+            )
+            settings = settings.model_copy(update={"max_level": levels})
         config = WriterConfig(**settings.model_dump(), transform=transform, dtype=dtype)
         dataset = self.open_dataset(config, target, ram_bytes=ram_bytes, when_full=when_full)
         return target.model_copy(update={"target": dataset.target})

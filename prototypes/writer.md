@@ -43,6 +43,49 @@ writer.dropped -> list[FrameRange]  # what it dropped so far
   camera, which passes `when_full` through `open_image` and `image(...)` and reports `dropped`. `begin_batch` does not
   change.
 
+## Pyramid depth and shards
+
+Built on 2026-11-20 in `omezarr/src/ome_zarr_writer/writer.py`.
+
+- **A batch is always whole shards.** The L0 chunk is `2^max_level` frames deep (width and height stay floored at
+  `MIN_CHUNK_EDGE`, 64 px). Before, the depth was floored at 64 too, so a pyramid of 5 levels or fewer had batches
+  smaller than a shard, and 2 slot workers could rewrite the same shard file at once; TensorStore's file store says
+  such partial writes "may" lose updates (https://google.github.io/tensorstore/kvstore/file/index.html). exaSPIM
+  (`max_level: 3`, 14192 x 10640 px frames) was in that case: its chunks are now 8 frames deep, and its batches stay
+  8 frames (about 2.4 GB per slot).
+- **A small frame gets fewer levels**, with a warning: the last level keeps at least `MIN_LEVEL_EDGE_PX` (16) pixels
+  on the shorter side, and always at least 1 pixel whatever the constant says (`_levels_that_fit`). A full 2048 px
+  sensor with 7 levels and a full exaSPIM frame with 3 are unchanged.
+- Fewer levels mean shallower shards; the batch stays close to `batch_frames`, rounded up to whole shards.
+
+## Batch size in frames
+
+Built on 2026-11-20. `WriterSettings.batch_frames` (128 by default) gives the frames in 1 batch; the writer rounds it
+up to whole shards (`rounded_batch_frames`), so it sets the stops of a step scan and the memory of a slot directly,
+whatever the pyramid depth. It replaced `batch_shards` everywhere: the SPIM `WriterFields`, the legacy `WriterPatch`
+and the legacy web app (rebuilt), and the saved `~/.voxel/instruments/*/state.json` files, each given the batch it had
+before. The exaSPIM template sets `batch_frames: 8`.
+
+A camera reports its open image's real batch (`AreaCameraHandle.batch_frames()`): a small frame can get fewer levels,
+so smaller shards. A step scan arms the cameras for the smallest of their batches, so each of its batches waits for a
+free buffer on every camera.
+
+## Memory per camera (not built)
+
+Each camera's computer has a budget: free RAM x `max_ram_fraction` (0.75 by default, `System.ram_budget_bytes`),
+split between its cameras (`RamBudget`). The writer fits 2 to 4 slots in it (`MIN_SLOTS`, `MAX_SLOTS` in
+`sizing.py`); a slot costs a batch plus its pyramid and the worker's buffers (`per_slot_bytes`). If 2 do not fit, the
+image fails to open with `RingSizingError`, today at the first visit.
+
+- **Camera query:** for an image (its transform) and the writer settings, give the memory per slot, the camera's
+  budget and how many slots fit. It reuses `per_slot_bytes` and `slots_for_budget`, and runs on the camera's computer
+  where the budget is.
+- **Start check:** `start_acquisition` asks it for every image of the plan and refuses before the record exists
+  when fewer than 2 slots fit.
+- **UI:** the writer section shows the batch in frames and, for each camera of the active profile, its frame size,
+  memory per slot, budget and slots that fit, with a warning under 2. More slots give a sweep more slack before it
+  drops a batch.
+
 ## Geometry: OME-Zarr 0.6
 
 Built. Sources: the specs index https://ngff.openmicroscopy.org/specifications/ and RFC-5

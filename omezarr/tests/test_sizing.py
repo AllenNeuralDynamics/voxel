@@ -20,6 +20,7 @@ from ome_zarr_writer.sizing import (
     ring_shm_bytes,
     slots_for_budget,
 )
+from ome_zarr_writer.writer import _levels_that_fit
 from vxlib.dtype import Dtype
 from vxlib.vector import Transform, UIVec3D, Vec3D
 
@@ -185,3 +186,38 @@ def test_fixed_slots_set_the_ring_depth(tmp_path: Path) -> None:
         writer.close_image()
     finally:
         writer.release()
+
+
+@pytest.mark.parametrize("level", list(ScaleLevel))
+def test_a_batch_is_whole_shards_at_every_pyramid_depth(level: ScaleLevel) -> None:
+    cfg = WriterConfig(transform=Transform.grid((1024, 256, 256), Vec3D(z=1.0, y=0.5, x=0.5)), max_level=level)
+    assert cfg.rounded_batch_frames % cfg.shard_shape.z == 0
+
+
+@pytest.mark.parametrize(
+    ("side", "wanted", "levels"),
+    [
+        (2048, ScaleLevel.L7, ScaleLevel.L7),
+        (512, ScaleLevel.L7, ScaleLevel.L5),
+        (64, ScaleLevel.L7, ScaleLevel.L2),
+        (8, ScaleLevel.L3, ScaleLevel.L0),
+        (14192, ScaleLevel.L3, ScaleLevel.L3),
+    ],
+)
+def test_a_small_frame_gets_fewer_levels(side: int, wanted: ScaleLevel, levels: ScaleLevel) -> None:
+    assert _levels_that_fit(side, wanted) == levels
+
+
+def test_the_1_pixel_rule_holds_whatever_the_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(writer_module, "MIN_LEVEL_EDGE_PX", 0)
+    assert _levels_that_fit(100, ScaleLevel.L7) == ScaleLevel.L6
+
+
+@pytest.mark.parametrize(("wanted", "rounded"), [(1, 8), (8, 8), (9, 16), (100, 104)])
+def test_the_batch_rounds_up_to_whole_shards(wanted: int, rounded: int) -> None:
+    cfg = WriterConfig(
+        transform=Transform.grid((256, 256, 256), Vec3D(z=1.0, y=0.5, x=0.5)),
+        max_level=ScaleLevel.L3,
+        batch_frames=wanted,
+    )
+    assert cfg.rounded_batch_frames == rounded

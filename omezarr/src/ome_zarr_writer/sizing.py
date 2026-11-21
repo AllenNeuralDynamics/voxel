@@ -28,7 +28,7 @@ class RingBudgetExceededError(RingSizingError):
     """The geometry cannot fit :data:`MIN_SLOTS` within the caller's memory budget.
 
     Deterministic — the same config against the same budget always fails, so the config is what has to
-    change: ``batch_shards``, ``shard_frame_chunks``, ``max_level``, ``target_shard_gb``, frame size, or
+    change: ``batch_frames``, ``shard_frame_chunks``, ``max_level``, ``target_shard_gb``, frame size, or
     whatever sets the caller's budget.
     """
 
@@ -118,7 +118,7 @@ def slots_for_budget(
     if max_slots < MIN_SLOTS:
         raise RingBudgetExceededError(
             f"{prefix}cannot fit {MIN_SLOTS} batch slots ({slot_bytes:,} B/slot, {budget_bytes:,} B budget). "
-            f"Reduce batch_shards, shard_frame_chunks, max_level, target_shard_gb, or the frame size; "
+            f"Reduce batch_frames, shard_frame_chunks, max_level, target_shard_gb, or the frame size; "
             f"or raise the budget."
         )
     slots = min(max_slots, MAX_SLOTS)

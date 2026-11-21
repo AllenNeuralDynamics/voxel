@@ -198,7 +198,9 @@ async def test_a_file_that_cannot_be_written_does_not_stop_the_acquisition(
     assert "could not be written" in caplog.text
 
 
-async def test_the_log_window_follows_the_acquisition_and_its_log_is_written(records: Records, tmp_path: Path) -> None:
+async def test_the_log_window_follows_the_acquisition_and_its_end_writes_its_log(
+    records: Records, tmp_path: Path
+) -> None:
     log = logging.getLogger("vxl.test_records")
     log.setLevel(logging.INFO)
     acquisition = _acquisition()
@@ -208,8 +210,6 @@ async def test_the_log_window_follows_the_acquisition_and_its_log_is_written(rec
             log.info("during")
             await _capture(visit, 10)
         log.info("after")
-        entries = await records.logs.for_acquisition(acquisition.id)
-    await records.acquisitions.write_log(acquisition.id, entries)
     messages = [json.loads(line)["message"] for line in _file(tmp_path, LOG_FILE).splitlines()]
     assert "during" in messages
     assert "before" not in messages
