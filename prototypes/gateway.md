@@ -122,8 +122,9 @@ A gateway in another language (for example Rust) can replace the Python one when
 4. **The gateway tests are black-box tests:** they start any gateway program, connect over sockets, and check what
    comes out.
 
-The Rust plan from `proxy.md` still applies: `tokio`, `tokio-tungstenite` upstream, `axum` for windows,
-`tokio::sync::broadcast` with `bytes::Bytes` for the fan-out, shipped with `maturin` (`bindings = "bin"`).
+The Rust plan from `proxy.md` (deleted in `d74219bf`, kept in git) still applies: `tokio`, `tokio-tungstenite`
+upstream, `axum` for windows, `tokio::sync::broadcast` with `bytes::Bytes` for the fan-out, shipped with `maturin`
+(`bindings = "bin"`).
 
 ## Measured
 

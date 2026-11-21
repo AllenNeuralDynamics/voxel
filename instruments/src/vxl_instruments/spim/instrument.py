@@ -125,14 +125,16 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     @action(on="acquisition", verb="start")
     async def start_acquisition(self, storage: StorageSpec, operator: str) -> uuid.UUID:
         """Acquire the whole plan in the background into ``storage``, and give back the new acquisition's id once its
-        record exists. The preview stops first, and every camera of the plan must be able to write ``storage``. While
-        it runs, it holds every device and the state."""
+        record exists. Each task must have its required metadata. The preview stops first, and every camera of the plan
+        must be able to write ``storage``. While it runs, it holds every device and the state."""
         async with self._scheduler.run("start an acquisition", requires=()):
             if self._acquisition is not None:
                 raise RejectedError("An acquisition is already running")
             state = self._store.value
             if not state.plan:
                 raise RejectedError("The plan has no tasks")
+            if problems := self._metadata_problems():
+                raise RejectedError(str(problems), problems)
             await self._end_preview()
             cameras = self._hal.area_cameras
             sensors = dict(

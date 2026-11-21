@@ -74,10 +74,10 @@ def test_station_file_gives_the_metadata_forms(voxel_home: Path) -> None:
     station.write_text(head, encoding="utf-8")
     assert StationConfig.load().metadata_menu() == {"Base": "vxl.metadata.ExperimentMetadata"}
 
-    station.write_text(head + "metadata_schemas:\n  exaspim: vxl_drivers.metadata.ExaspimMetadata\n", encoding="utf-8")
+    station.write_text(head + "metadata_schemas:\n  exaspim: vxl._legacy.metadata.ExaspimMetadata\n", encoding="utf-8")
     assert StationConfig.load().metadata_menu() == {
         "Base": "vxl.metadata.ExperimentMetadata",
-        "exaspim": "vxl_drivers.metadata.ExaspimMetadata",
+        "exaspim": "vxl._legacy.metadata.ExaspimMetadata",
     }
 
     station.write_text(head + "metadata_schemas:\n  lab: vxl.system.System\n", encoding="utf-8")

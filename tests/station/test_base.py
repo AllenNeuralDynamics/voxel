@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from pydantic import BaseModel, Field
 from rigup.activity import ActivityBusyError, ActivityInfo
 from vxlib.issues import Problems
 
@@ -11,7 +12,7 @@ from vxl.instrument.basic import BasicInstrument
 from vxl.instrument.config import InstrumentConfig
 from vxl.instrument.folder import InstrumentFolder
 from vxl.instrument.state import InstrumentState, ProfileFields, Task
-from vxl.metadata import ExperimentMetadata
+from vxl.metadata import ExperimentMetadata, key, required
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
 from vxl.system import System
@@ -230,6 +231,17 @@ class _LabMetadata(ExperimentMetadata):
     operator: str = ""
 
 
+class _Chamber(BaseModel):
+    medium: str = required(default="other")
+    refractive_index: float = 1.33
+
+
+class _SubjectMetadata(ExperimentMetadata):
+    subject_id: str = key(default="")
+    experimenters: list[str] = required(default_factory=list)
+    chamber: _Chamber = Field(default_factory=_Chamber)
+
+
 async def _with_task(instrument: _Bench) -> None:
     await instrument._add_task(Task(id="brain", profiles=["main"]))
 
@@ -257,6 +269,60 @@ async def test_metadata_that_does_not_fit_its_form_is_rejected_at_its_field(inst
 
     assert [problem.loc for problem in caught.value.problems] == [("plan", 0, "metadata", "weight")]
     assert instrument.view.value.history.undo_label == "Add task"
+
+
+async def test_an_edit_of_1_field_of_a_metadata_group_keeps_the_others(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    await instrument.set_metadata_class(_SubjectMetadata)
+    await instrument._update_task_metadata("brain", {"chamber": {"medium": "oil", "refractive_index": 1.52}})
+
+    await instrument._update_task_metadata("brain", {"chamber": {"medium": "water"}})
+
+    assert _metadata(instrument)["chamber"] == {"medium": "water", "refractive_index": 1.52}
+
+
+async def test_the_view_gives_the_schema_of_the_metadata_form_with_the_plan_that_fits_it(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    assert "subject_id" not in instrument.view.value.metadata_schema["properties"]
+    seen: list[tuple[bool, bool]] = []
+    instrument.view.subscribe(
+        lambda view: seen.append(
+            ("chamber" in view.metadata_schema["properties"], "chamber" in view.state.plan[0].metadata)
+        )
+    )
+
+    await instrument.set_metadata_class(_SubjectMetadata)
+
+    schema = instrument.view.value.metadata_schema
+    assert schema["properties"]["subject_id"]["isKey"] is True
+    assert schema["properties"]["chamber"] == {"$ref": "#/$defs/_Chamber", "isAnnotation": False}
+    assert set(seen) == {(True, True)}  # the new schema never shows with the old plan, nor the old with the new
+
+
+async def test_each_required_metadata_field_left_empty_is_a_problem_at_its_field(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    await instrument.set_metadata_class(_SubjectMetadata)  # a task with empty required fields is still accepted
+    await instrument._update_task_metadata("brain", {"experimenters": ["ana"], "chamber": {"medium": ""}})
+
+    problems = instrument._metadata_problems()
+
+    assert [(problem.loc, problem.msg) for problem in problems] == [
+        (("plan", 0, "metadata", "subject_id"), "brain: Subject id is empty."),
+        (("plan", 0, "metadata", "chamber", "medium"), "brain: Medium is empty."),
+    ]
+    await instrument._update_task_metadata("brain", {"subject_id": "M-2816", "chamber": {"medium": "oil"}})
+    assert not instrument._metadata_problems()
+
+
+def test_a_metadata_class_names_its_key_field_and_has_at_most_1() -> None:
+    assert _SubjectMetadata.key_field() == "subject_id"
+    assert _LabMetadata.key_field() is None
+    with pytest.raises(TypeError, match="more than 1 key field"):
+        type(
+            "_TwoKeys",
+            (ExperimentMetadata,),
+            {"__annotations__": {"a": str, "b": str}, "a": key(default=""), "b": key(default="")},
+        )
 
 
 async def test_metadata_of_a_missing_task_is_not_found(instrument: _Bench) -> None:

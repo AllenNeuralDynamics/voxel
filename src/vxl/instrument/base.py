@@ -18,7 +18,7 @@ from rigup.interface import OperationInfo, OperationParamsError, action, bind_op
 from vxlib.asyncio import gather_all
 from vxlib.history import Change, HistoryState, UndoHistory
 from vxlib.issues import KeyPath, Problems
-from vxlib.reactivity import Cell, Computed, Emitter, Readable, Subscribable
+from vxlib.reactivity import Cell, Computed, Derived, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
 
@@ -69,8 +69,9 @@ _OPEN_EDIT: ContextVar["Instrument.StateEdit | None"] = ContextVar("open_edit", 
 class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     """The open instrument as a screen sees it: its ``rig.yaml``, its saved state and default state, the next edit to
     undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, the object
-    stores that every camera can write to, and the live image. ``config`` and the states keep every field of the kind
-    of instrument. A kind with more to show adds fields in its own class."""
+    stores that every camera can write to, the live image, and the JSON Schema of the form that each task's metadata
+    has. ``config`` and the states keep every field of the kind of instrument. A kind with more to show adds fields in
+    its own class."""
 
     config: SerializeAsAny[C]
     state: SerializeAsAny[S]
@@ -82,6 +83,7 @@ class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     devices: dict[DeviceId, DeviceView]
     remote_stores: dict[str, Remote]
     live: LiveView
+    metadata_schema: dict[str, Any]
 
 
 class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = InstrumentView[C, S]]:
@@ -135,6 +137,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._power_mode = Cell[PowerMode]("dim")
         self._live_frames = Emitter[LiveSourceEmission]()
         self._live_view = Cell(LiveView())
+        form = Derived(self._store, fn=lambda state: state.metadata_cls)
+        self._metadata_schema = Derived(form, fn=lambda form: form.model_json_schema())
         self._live: LiveRelay | None = None
         self._planes: Computed[tuple[Plane, ...]] | None = None
         self._boxes: dict[DeviceId, Box | None] = {}
@@ -364,11 +368,12 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             await edit.record({("plan", index, name): value for name, value in fields.items()})
 
     async def _update_task_metadata(self, task_id: TaskId, fields: Mapping[str, Any]) -> None:
-        """Change fields of the metadata of a task as 1 edit, checked against the metadata form."""
+        """Change fields of the metadata of a task as 1 edit, checked against the metadata form. A group is changed
+        field by field: the fields of it that are not named keep their values."""
         async with self._state_edit("Update task metadata") as edit:
             index = self._task_index(task_id)
             metadata = self._store.value.plan[index].metadata
-            await edit.record({("plan", index, "metadata"): {**metadata, **fields}})
+            await edit.record({("plan", index, "metadata"): self._merged(metadata, fields)})
 
     async def _remove_tasks(self, task_ids: Sequence[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""
@@ -492,6 +497,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             "devices": self._hal.device_views,
             "remote_stores": self._remote_stores,
             "live": self._live_view,
+            "metadata_schema": self._metadata_schema,
         }
 
     async def _apply_profile(self, profile_id: ProfileId) -> None:
@@ -796,6 +802,28 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
                     )
             elif not (isinstance(handle, ContinuousAxisHandle) and isinstance(position, float)):
                 problems.add("position.wrong_kind", f"'{device}' cannot take the position {position!r}.", *loc)
+        return problems
+
+    @staticmethod
+    def _merged(values: Mapping[str, Any], changes: Mapping[str, Any]) -> dict[str, Any]:
+        """``values`` with ``changes`` over them. Where both hold a map, the maps are merged the same way."""
+        merged = dict(values)
+        for name, change in changes.items():
+            value = merged.get(name)
+            if isinstance(value, Mapping) and isinstance(change, Mapping):
+                merged[name] = Instrument._merged(cast("Mapping[str, Any]", value), cast("Mapping[str, Any]", change))
+            else:
+                merged[name] = change
+        return merged
+
+    def _metadata_problems(self) -> Problems:
+        """A problem for each required metadata field that a task of the plan leaves empty, at that field."""
+        state, problems = self._store.value, Problems()
+        for index, task in enumerate(state.plan):
+            for path, title in state.metadata_cls.empty_required(task.metadata):
+                problems.add(
+                    "task.metadata.required", f"{task.id}: {title} is empty.", "plan", index, "metadata", *path
+                )
         return problems
 
     def _fit_plan(self, form: type[ExperimentMetadata]) -> list[Task]:

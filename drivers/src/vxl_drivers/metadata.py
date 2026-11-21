@@ -2,35 +2,37 @@
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from vxl.metadata import ExperimentMetadata
+from vxl.metadata import ExperimentMetadata, key
 
 AnatomicalDirectionX = Literal["Anterior_to_posterior", "Posterior_to_anterior"]
 AnatomicalDirectionY = Literal["Inferior_to_superior", "Superior_to_inferior"]
 AnatomicalDirectionZ = Literal["Left_to_right", "Right_to_left"]
 
 
+class Chamber(BaseModel):
+    """The chamber that holds the specimen: its immersion medium, and the refractive index of that medium."""
+
+    medium: str = "other"
+    refractive_index: float = 1.33
+
+
+class AnatomicalDirections(BaseModel):
+    """The anatomical direction of the specimen along each stage axis."""
+
+    x: AnatomicalDirectionX = "Anterior_to_posterior"
+    y: AnatomicalDirectionY = "Inferior_to_superior"
+    z: AnatomicalDirectionZ = "Left_to_right"
+
+
 class ExaspimMetadata(ExperimentMetadata):
-    """Metadata for exaSPIM light-sheet microscopy sessions."""
+    """Metadata for exaSPIM light-sheet microscopy sessions. Tasks with the same ``subject_id`` image 1 subject."""
 
-    subject_id: str = Field(default="", description="Unique subject/specimen identifier")
+    subject_id: str = key(default="", description="Unique subject/specimen identifier")
     experimenters: list[str] = Field(default_factory=list, description="Experimenter name(s)")
-
-    # Chamber settings
-    chamber_medium: str = Field(default="other", description="Immersion medium")
-    chamber_refractive_index: float = Field(default=1.33, description="Refractive index of medium")
-
-    # Anatomical directions
-    x_anatomical_direction: AnatomicalDirectionX = Field(
-        default="Anterior_to_posterior", description="X-axis anatomical direction"
-    )
-    y_anatomical_direction: AnatomicalDirectionY = Field(
-        default="Inferior_to_superior", description="Y-axis anatomical direction"
-    )
-    z_anatomical_direction: AnatomicalDirectionZ = Field(
-        default="Left_to_right", description="Z-axis anatomical direction"
-    )
+    chamber: Chamber = Field(default_factory=Chamber)
+    anatomical_directions: AnatomicalDirections = Field(default_factory=AnatomicalDirections)
 
 
-__all__ = ["ExaspimMetadata"]
+__all__ = ["AnatomicalDirections", "Chamber", "ExaspimMetadata"]

@@ -96,7 +96,7 @@ Agreed and built on 2026-11-20 (`Image.dropped`, the `gaps` status, `frames_drop
 - Live lines reach every window through the station feed and the gateway.
 - The gateway serves the full log of 1 acquisition.
 - At the end, `acquisition.log.jsonl` is written next to `acquisition.json`, 1 time, so the log travels with the data.
-  S3 cannot add lines to a file. `AcquisitionStore.write_log` exists; `Records.record` does not call it yet.
+  S3 cannot add lines to a file. `Records.record` calls `AcquisitionStore.write_log` when the acquisition ends.
 
 ## Public contract
 
@@ -123,7 +123,7 @@ Not built. Replaces the share service (2026-11-20, `gateway.md`).
 
 ## Listing and filters
 
-Discussed on 2026-11-21 for the History page. Nothing here is built.
+Discussed on 2026-11-20 for the History page. Nothing here is built.
 
 **For now: only filters the database answers with its indexes.** History filters by status and by a range of the
 created time ("Any time", "Today", "Last 7 days", "Last 30 days"), newest first.

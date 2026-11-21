@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from ome_zarr_writer import ScaleLevel
+from vxl_drivers.metadata import ExaspimMetadata
 from vxl_instruments.spim.instrument import AcquisitionInfo, Microscope
 from vxl_instruments.spim.task import SPIMTask
 
@@ -127,6 +128,16 @@ async def test_during_a_run_edits_and_device_actions_are_refused_and_a_stop_canc
     assert stepping.view.value.activities == ()
     stored = await stepping._records.acquisitions.get(acquisition_id)
     assert stored.status == "cancelled"
+
+
+async def test_a_task_with_empty_required_metadata_refuses_the_start(stepping: Microscope) -> None:
+    await stepping.set_metadata_class(ExaspimMetadata)
+
+    with pytest.raises(RejectedError, match="Subject id is empty") as caught:
+        await stepping.start_acquisition(_STORAGE, "ana")
+
+    assert [problem.loc for problem in caught.value.problems] == [("plan", 0, "metadata", "subject_id")]
+    assert stepping.view.value.activities == ()
 
 
 async def test_a_step_scan_paced_by_the_program_takes_every_frame(config_data: dict[str, Any], tmp_path: Path) -> None:

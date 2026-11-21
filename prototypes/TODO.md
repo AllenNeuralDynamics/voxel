@@ -46,8 +46,8 @@ Not built. Agreed in `station.md`, `feed.md`, `gateway.md` and `lab.md`.
 
 - **The new station web app**, built to the design of the Lab prototype,
   [Voxel Station Prototype](https://claude.ai/artifact/UzEN1tGhqsHrEzcZEgBXJA) (a private Claude artifact): the Run,
-  History, Light, Timing, Profiles, Devices and Config pages, the Live profile panel and the stage view. Its folder in
-  `web/` is still to be picked.
+  History, Light, Timing, Profiles, Devices and Config pages, the Live profile panel and the stage view. It goes in
+  `web/station`, which holds an empty app today.
 
 - **The feed** (`feed.md`): topics instead of whole views, global topic names with the publisher's prefix, 2 sockets
   per window, slow clients merged, never dropped.
@@ -57,6 +57,10 @@ Not built. Agreed in `station.md`, `feed.md`, `gateway.md` and `lab.md`.
   written feed spec and black-box tests, so another gateway program can replace it.
 - **`vxl station start`** (`station.md`): the station plus a supervised gateway; `--no-gateway`; the `gateway:`
   settings.
+- **`vxl station info`** (`station.md` › The CLI around it): shows the station's id, name, folder, instruments and
+  storage.
+- **History listing** (`records.md` › Listing and filters): 1 list method on `AcquisitionStore` taking an instrument,
+  a status and a from/to time, and an index on `instrument, created_at_us`.
 - **The lab** (`lab.md`): `vxl lab start`, `lab.yaml`, lab topics, the lab page; later the token, login and the Zarr
   viewer.
 - **The public schema of `acquisition.json`** (`records.md` › Open), which the gateway and outside readers use.
@@ -66,3 +70,8 @@ Not built. Agreed in `station.md`, `feed.md`, `gateway.md` and `lab.md`.
 
 - **The Task card and the History Tasks tab** (`metadata.md`), and its 4 open questions, for example a `/` in key
   values.
+- **The rest of its backend** (`metadata.md` › Backend changes needed, To decide): the lock of
+  provenance fields after a run, which needs a design first. Built:
+  the nested exaSPIM models, `key()`, `key_field()`, `required()` with its check at Start, the deep merge of a metadata edit, and `metadata_schema` in the view.
+- **`Instrument.interface` has no path to a window** (the instrument's operations and the view's schema). It is fixed
+  for the session, so it can be a topic sent only in a full message, as `instrument.config`.
