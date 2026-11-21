@@ -10,8 +10,10 @@ from .base import ScanController
 class SimulatedScanController(ScanController):
     """Timer-only scan controller: a pass lasts its configured duration times ``time_scale``."""
 
-    def __init__(self, uid: str, *, gate_outputs: dict[str, str], time_scale: float = 1.0) -> None:
-        super().__init__(uid, gate_outputs=gate_outputs)
+    def __init__(
+        self, uid: str, *, gate_outputs: dict[str, str], move_velocity_mm_s: float, time_scale: float = 1.0
+    ) -> None:
+        super().__init__(uid, gate_outputs=gate_outputs, move_velocity_mm_s=move_velocity_mm_s)
         self._time_scale = time_scale
 
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:

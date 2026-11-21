@@ -6,7 +6,7 @@ from seqsweep.hal import HAL
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanPattern
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
-RUN_POLL_S = 0.2
+RUN_POLL_S = 0.05
 
 
 class SeqSweep:
@@ -165,6 +165,7 @@ class SeqSweep:
         defaults = self.config.default
         scan_axis_is_x = derived.scan_axis == "x"
         try:
+            move_velocity_mm_s = await scan_controller.move_velocity_mm_s.get()
             await scan_controller.configure(pass_config, derived)
             for chamber in job.chambers or [None]:  # no chamber: one run at the current position
                 for strip in range(job.num_strips):
@@ -177,7 +178,7 @@ class SeqSweep:
                         )
                         start_um = pass_config.scan_end_um if job.direction is ScanDirection.REVERSE else pass_config.scan_start_um
                         x_mm, y_mm = (start_um / 1000, step_mm) if scan_axis_is_x else (step_mm, start_um / 1000)
-                        await scan_controller.move_to(x_mm, y_mm)
+                        await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
                         await scan_controller.wait_motion_end()
                         self.log.info("Moved to X=%.3f mm, Y=%.3f mm (%sstrip %d/%d)", x_mm, y_mm, label, strip + 1, job.num_strips)
                     self.log.info("%sstrip %d/%d", label.capitalize(), strip + 1, job.num_strips)

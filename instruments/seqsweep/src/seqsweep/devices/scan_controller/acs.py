@@ -52,7 +52,6 @@ class AcsControllerConfig(FrozenModel):
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
-    move_velocity_mm_s: float = Field(gt=0, description="Speed of positioning moves, not scans")
     origin_mm: tuple[float, float] = Field(description="Home position (X, Y)")
     limits_mm: dict[Literal["x", "y"], tuple[float, float]] = Field(description="Reachable range per axis")
 
@@ -73,10 +72,10 @@ def _split_output(output: str) -> tuple[int, int]:
 
 
 class AcsController(ScanController):
-    """The real ACS scan controller; the keyword arguments after ``gate_outputs`` are the ``AcsControllerConfig`` fields."""
+    """The real ACS scan controller; the keyword arguments after ``move_velocity_mm_s`` are the ``AcsControllerConfig`` fields."""
 
-    def __init__(self, uid: str, *, gate_outputs: dict[str, str], **config: object) -> None:
-        super().__init__(uid, gate_outputs=gate_outputs)
+    def __init__(self, uid: str, *, gate_outputs: dict[str, str], move_velocity_mm_s: float, **config: object) -> None:
+        super().__init__(uid, gate_outputs=gate_outputs, move_velocity_mm_s=move_velocity_mm_s)
         self._config = AcsControllerConfig.model_validate(config)
         self._lock = threading.RLock()  # one vendor handle: serialize calls and multi-call sequences
         self._sp = self._import_library()
@@ -141,7 +140,7 @@ class AcsController(ScanController):
             for axis in self._axes:
                 self._sp.Enable(self._hc, axis, self._sp.SYNCHRONOUS, True)
                 self._sp.WaitMotorEnabled(self._hc, axis, 1, MOTION_TIMEOUT_MS, True)
-                self._sp.SetVelocity(self._hc, axis, self._config.move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
+                self._sp.SetVelocity(self._hc, axis, self._move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
                 self._sp.SetAcceleration(self._hc, axis, self._config.scan_accel, self._sp.SYNCHRONOUS, True)
                 self._sp.SetDeceleration(self._hc, axis, self._config.scan_decel, self._sp.SYNCHRONOUS, True)
 
@@ -297,7 +296,7 @@ class AcsController(ScanController):
             for axis in self._axes:
                 sp.Halt(self._hc, axis, sp.SYNCHRONOUS, True)
                 # An aborted pass leaves the scan axis at the scan speed; later moves use the current velocity
-                sp.SetVelocity(self._hc, axis, self._config.move_velocity_mm_s, sp.SYNCHRONOUS, True)
+                sp.SetVelocity(self._hc, axis, self._move_velocity_mm_s, sp.SYNCHRONOUS, True)
             for output in self._gate_outputs.values():
                 self._clear_output(output)
 
@@ -328,7 +327,7 @@ class AcsController(ScanController):
             "pixel_size_mm": derived.pixel_size_um / 1000,
             "scan_speed_mm_s": derived.scan_speed_mm_s,
             "line_pulse_ms": self._config.line_pulse_width_ms,
-            "move_speed_mm_s": self._config.move_velocity_mm_s,
+            "move_speed_mm_s": self._move_velocity_mm_s,
             "accel": self._config.scan_accel,
             "decel": self._config.scan_decel,
             "limit_min_mm": low,

@@ -23,10 +23,18 @@ class ScanController(Device):
 
     __DEVICE_TYPE__: ClassVar[str] = SeqSweepDeviceType.SCAN_CONTROLLER
 
-    def __init__(self, uid: str, *, gate_outputs: dict[str, str]) -> None:
+    def __init__(self, uid: str, *, gate_outputs: dict[str, str], move_velocity_mm_s: float) -> None:
         super().__init__(uid=uid)
+        if move_velocity_mm_s <= 0:
+            raise ValueError("move_velocity_mm_s must be positive")
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self._gate_outputs = dict(gate_outputs)
+        self._move_velocity_mm_s = move_velocity_mm_s
+
+    @property
+    @describe(label="Move speed", desc="Speed of positioning moves in mm/s, not the scan speed")
+    def move_velocity_mm_s(self) -> float:
+        return self._move_velocity_mm_s
 
     @property
     @describe(label="Running", desc="Whether a pass is in progress", stream=True)

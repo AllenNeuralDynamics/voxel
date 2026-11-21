@@ -15,6 +15,7 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
     def __init__(self, adapter: Adapter[ScanController]) -> None:
         super().__init__(adapter)
         self.is_running: DeviceProperty[bool] = self.props.property("is_running", bool)
+        self.move_velocity_mm_s: DeviceProperty[float] = self.props.property("move_velocity_mm_s", lambda value: float(value))
 
     async def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         """Load the pass geometry and gating."""

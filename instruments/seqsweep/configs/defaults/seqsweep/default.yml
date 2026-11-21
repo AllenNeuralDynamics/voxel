@@ -53,7 +53,7 @@ hal:
           laser_658: OUT2
         axis_x: 0
         axis_y: 1
-        scan_buffer: 1  # TODO: confirm this program buffer is free; the scan pass is loaded into it on connect
+        scan_buffer: 4  # TODO: confirm this program buffer is free; the scan pass is loaded into it on connect
         line_pulse_width_ms: 0.001
         scan_accel: 6000
         scan_decel: 6000
