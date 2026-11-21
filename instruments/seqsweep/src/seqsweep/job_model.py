@@ -1,7 +1,9 @@
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import Field
+from typing import Self
+
+from pydantic import Field, model_validator
 from vxlib.schema import FrozenModel
 
 
@@ -15,18 +17,24 @@ class ScanPattern(StrEnum):
     SNAKE = "snake"  # strips alternate direction (needs the camera scan direction switched per strip)
 
 
+def strip_direction(pattern: ScanPattern, strip_in_chamber: int) -> ScanDirection:
+    """Direction of a strip: always forward for ``same_direction``; ``snake`` alternates, starting forward in each chamber."""
+    if pattern is ScanPattern.SAME_DIRECTION or strip_in_chamber % 2 == 0:
+        return ScanDirection.FORWARD
+    return ScanDirection.REVERSE
+
+
 class ScanPassConfig(FrozenModel):
-    """One strip pass along the scan axis (mm, Hz). Stage speed and line pitch follow from the optics."""
+    """One strip pass along the scan axis (mm, Hz), as the scan controller needs it.
+
+    Built by ``SeqSweep`` from the job; not written by hand.
+    Stage speed and line pitch follow from the optics.
+    """
 
     scan_start_mm: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
     scan_end_mm: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
     scan_margin_mm: float = Field(
         ge=0, description="Run-up and run-out outside the imaged range, at each end (the buffer's MARGIN)"
-    )
-    step_margin_mm: float = Field(
-        default=0.0,
-        ge=0,
-        description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
     )
     # Validate against camera config
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
@@ -47,14 +55,39 @@ class DerivedScan(FrozenModel):
 
 
 class ScanJob(FrozenModel):
-    """One scan job: a pass geometry repeated over ``num_strips`` strips of a sample chamber."""
+    """One scan job: the whole scan across ``chambers``, ``num_strips`` strips in each.
+
+    Every value of the scan is in the job, so a saved job replays the same scan; the direction of each strip
+    follows from ``scan_pattern``. The rig limits (safe range, edge margin, line rate) are in the config.
+    """
 
     name: str = Field(default="seqsweep job", min_length=1)
     chambers: list[int] = Field(
         default_factory=list,
         description="Sample chambers, scanned in this order; each Y start comes from the defaults. Empty: no Y moves",
     )
-    direction: ScanDirection = ScanDirection.FORWARD
     # TODO Validate the number of strips does not exceed the next chamber's start position
     num_strips: int = Field(default=1, ge=1, description="Frames per chamber, stepped along Y")
-    pass_config: ScanPassConfig
+    scan_start_mm: float = Field(description="Scan-axis position where the imaged range starts (gates open)")
+    scan_end_mm: float = Field(description="Scan-axis position where the imaged range ends (gates close)")
+    scan_margin_mm: float = Field(
+        ge=0, description="Run-up and run-out outside the imaged range, at each end (the buffer's MARGIN)"
+    )
+    scan_pattern: ScanPattern = Field(
+        default=ScanPattern.SAME_DIRECTION,
+        description="same_direction: every strip scans the same way; snake: strips alternate (not implemented yet)",
+    )
+    # TODO temporary: remove once the Y start of a strip is settled
+    step_margin_mm: float = Field(
+        default=0.0,
+        ge=0,
+        description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
+    )
+    line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
+    lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the scan")
+
+    @model_validator(mode="after")
+    def _check_scan_range(self) -> Self:
+        if self.scan_start_mm >= self.scan_end_mm:
+            raise ValueError("scan_start_mm must be below scan_end_mm")
+        return self

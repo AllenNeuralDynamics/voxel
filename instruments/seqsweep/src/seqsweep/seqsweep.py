@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from seqsweep.hal import HAL
-from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanPattern
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanPattern, strip_direction
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 RUN_POLL_S = 0.05
@@ -61,7 +61,7 @@ class SeqSweep:
             raise RuntimeError("a scan is already running")
         scan_job = ScanJob.model_validate(job or {})
         self._check_job(scan_job)
-        self._derived = self.derive_scan(scan_job.pass_config)
+        self._derived = self.derive_scan(self._pass_config(scan_job))
         self._log_derived(scan_job.name, self._derived)
         self._status, self._error = "running", None
         # Launch in the background
@@ -95,6 +95,16 @@ class SeqSweep:
     async def stage_status(self) -> dict[str, dict[str, float | bool | int]]:
         """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""
         return await self._hal.scan_controller.read_status()
+
+    def _pass_config(self, job: ScanJob) -> ScanPassConfig:
+        """The geometry every strip of the job runs, as the scan controller takes it."""
+        return ScanPassConfig(
+            scan_start_mm=job.scan_start_mm,
+            scan_end_mm=job.scan_end_mm,
+            scan_margin_mm=job.scan_margin_mm,
+            line_rate_hz=job.line_rate_hz,
+            lasers=job.lasers,
+        )
 
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
         """Apply the optics to a pass: pixel size, stage speed, strip width and distances (travel = capture + 2 x margin)."""
@@ -133,10 +143,11 @@ class SeqSweep:
         )
 
     def _check_job(self, job: ScanJob) -> None:
-        """Raise ``ValueError`` if the job names an unknown chamber, leaves the safe scan range or exceeds the line rate."""
+        """Raise ``ValueError`` if the job uses an unsupported pattern, names an unknown chamber, leaves the safe scan range
+        or exceeds the margin or line rate limits."""
         defaults = self.config.default
-        if defaults.scan_pattern is not ScanPattern.SAME_DIRECTION:
-            raise ValueError(f"scan_pattern '{defaults.scan_pattern}' is not implemented yet; use 'same_direction'")
+        if job.scan_pattern is not ScanPattern.SAME_DIRECTION:
+            raise ValueError(f"scan_pattern '{job.scan_pattern}' is not implemented yet; use 'same_direction'")
         if not job.chambers and job.num_strips > 1:
             raise ValueError("num_strips > 1 needs at least one chamber to step from")
         unknown = [chamber for chamber in job.chambers if chamber not in defaults.chambers_step_mm]
@@ -144,22 +155,22 @@ class SeqSweep:
             raise ValueError(f"chambers {unknown} are not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}")
         if defaults.scan_safe_range_mm is not None:
             low_mm, high_mm = defaults.scan_safe_range_mm
-            start_mm, end_mm = sorted((job.pass_config.scan_start_mm, job.pass_config.scan_end_mm))
-            if start_mm < low_mm or end_mm > high_mm:
-                raise ValueError(f"scan {start_mm:g}..{end_mm:g} mm is outside scan_safe_range_mm [{low_mm:g}, {high_mm:g}]")
-        if job.pass_config.scan_margin_mm > defaults.chamber_edge_margin_mm:
+            if job.scan_start_mm < low_mm or job.scan_end_mm > high_mm:
+                raise ValueError(
+                    f"scan {job.scan_start_mm:g}..{job.scan_end_mm:g} mm is outside scan_safe_range_mm "
+                    f"[{low_mm:g}, {high_mm:g}]"
+                )
+        if job.scan_margin_mm > defaults.chamber_edge_margin_mm:
             raise ValueError(
-                f"scan_margin_mm {job.pass_config.scan_margin_mm:g} exceeds chamber_edge_margin_mm "
-                f"{defaults.chamber_edge_margin_mm:g}"
+                f"scan_margin_mm {job.scan_margin_mm:g} exceeds chamber_edge_margin_mm {defaults.chamber_edge_margin_mm:g}"
             )
-        line_rate_hz = job.pass_config.line_rate_hz
-        if defaults.max_line_rate_hz is not None and line_rate_hz > defaults.max_line_rate_hz:
-            raise ValueError(f"line rate {line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
+        if defaults.max_line_rate_hz is not None and job.line_rate_hz > defaults.max_line_rate_hz:
+            raise ValueError(f"line rate {job.line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
 
     async def _run_passes(self, job: ScanJob, derived: DerivedScan) -> None:
         """Configure once, then per strip: move to the strip start, run one pass, wait for it to finish."""
         scan_controller = self._hal.scan_controller
-        pass_config = job.pass_config
+        pass_config = self._pass_config(job)
         defaults = self.config.default
         scan_axis_is_x = derived.scan_axis == "x"
         try:
@@ -168,19 +179,20 @@ class SeqSweep:
             for chamber in job.chambers or [None]:  # no chamber: one run at the current position
                 for strip in range(job.num_strips):
                     label = f"chamber {chamber}, " if chamber is not None else ""
+                    direction = strip_direction(job.scan_pattern, strip)
                     if chamber is not None:
                         step_mm = (
                             defaults.chambers_step_mm[chamber]
-                            + pass_config.step_margin_mm
+                            + job.step_margin_mm
                             + strip * derived.tdi_image_width_um / 1000
                         )
-                        start_mm = pass_config.scan_end_mm if job.direction is ScanDirection.REVERSE else pass_config.scan_start_mm
+                        start_mm = pass_config.scan_end_mm if direction is ScanDirection.REVERSE else pass_config.scan_start_mm
                         x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
                         await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
                         await scan_controller.wait_motion_end()
                         self.log.info("Moved to X=%.3f mm, Y=%.3f mm (%sstrip %d/%d)", x_mm, y_mm, label, strip + 1, job.num_strips)
                     self.log.info("%sstrip %d/%d", label.capitalize(), strip + 1, job.num_strips)
-                    await scan_controller.run(job.direction)
+                    await scan_controller.run(direction)
                     while await scan_controller.is_running.get():
                         await asyncio.sleep(RUN_POLL_S)
             self._status = "finished"

@@ -80,5 +80,4 @@ default:
     2: 155.0
     3: 109.75   
   scan_safe_range_mm: [125.0, 178.75]  # TODO confirm with Miki; set to the imaged range of "Stage buffer_112026.txt"
-  scan_pattern: same_direction  # same_direction | snake (snake is not implemented yet)
   max_line_rate_hz: 470000 # camera limit; keep in step with the camera .cpp config

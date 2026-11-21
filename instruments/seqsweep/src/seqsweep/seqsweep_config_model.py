@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from vxlib.schema import FrozenModel
 
 from seqsweep.hal import SeqSweepHardwareTopology
-from seqsweep.job_model import ScanPattern
 
 
 class HandlerConfig(BaseModel):
@@ -66,14 +65,10 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     )
     scan_safe_range_mm: tuple[float, float] | None = Field(
         default=None,
-        description="Range along the scan axis kept clear of the sample chamber edges; passes are checked against it",
+        description="Range along the scan axis kept clear of the sample chamber edges; a job's scan range is checked against it",
     )
     max_line_rate_hz: float | None = Field(
         default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"
-    )
-    scan_pattern: ScanPattern = Field(
-        default=ScanPattern.SAME_DIRECTION,
-        description="same_direction: every strip scans the same way; snake: strips alternate (not implemented yet)",
     )
     # TODO: lasers, passes
 
