@@ -7,20 +7,21 @@ Maps the variables in `Stage buffer_062226.txt` to the SeqSweep Python names.
 | `AX_X` / `AX_Y` | axis indices | `axis_x` / `axis_y` (`AcsControllerConfig`) |
 | `X0` | scan start, imaged range | `scan_start_um` (µm, not mm) |
 | `X_end` | scan end, imaged range | `scan_end_um` (µm) |
-| `Y0`, `Y_SAMP_1/2/3` | strip start, chamber Y positions | `chambers_step_mm` (`{1: 200.25, 2: 155.0, 3: 109.75}`); the strip's own cross-scan position is not found yet |
+| `Y_SAMP_1/2/3` | chamber Y positions (lower edge) | `chambers_step_mm` (`{1: 200.25, 2: 155.0, 3: 109.75}`) |
+| `Y0` | first strip's Y; `Y0 - Y_SAMP_n` is the offset from the chamber edge | `step_margin_um` (job, µm; the same for every chamber in the job) |
 | `Y_POS` | strip-axis position of strip `i` (`Y0 + i * FOV_Y`), calculated | `strip_pos_mm` (proposed name, not in the code yet); see the worked example below |
 | `NUM_STRIPS` | frames per chamber | `num_strips` (job, default 1) |
 | `TDI_PIXEL_SIZE` | sensor pixel size | `optics.tdi_pixel_um` |
 | `MAG` | magnification | `optics.magnification` |
 | `TDI_PIX_WIDTH` | sensor width (px) | `optics.tdi_image_width_px` |
-| `TDI_STAGES` | overscan, in pixels | `optics.overscan_px` |
+| `TDI_STAGES` | unused in the new buffer (was the lead-in, in pixels) | none |
 | `PIXEL_SIZE` (mm) | pixel on sample | `pixel_size_um` (µm); also the stage travel per line trigger |
 | `FOV_Y` | strip width on sample | `tdi_image_width_um` |
-| `MARGIN` | lead-in/out distance | `overscan_um` |
+| `MARGIN` | lead-in/out distance | `pass_config.scan_margin_um` (job, µm) |
 | `CAPTURE_DISTANCE` | `abs(X_end - X0)` | `capture_mm` |
 | `travel_len` | capture plus 2 × margin | `travel_mm` |
 | `X_ABS_MIN/MAX`, `Y_ABS_MIN/MAX` | stage range | `limits_mm` (`AcsControllerConfig`) |
-| `X_SCAN_MIN/MAX` | scan ± margin | derived from `scan_start_um`, `scan_end_um`, `overscan_um`; may not have its own name |
+| `X_SCAN_MIN/MAX` | scan ± margin | derived from `scan_start_um`, `scan_end_um`, `scan_margin_um`; may not have its own name |
 | `origin` | home | `origin_mm` |
 | `LINE_RATE` | camera line rate | `line_rate_hz` (pass config); `max_line_rate_hz` is only the limit it is checked against |
 | `VEL_X` | scan speed, calculated: `LINE_RATE * PIXEL_SIZE` | `scan_speed_mm_s` (`seqsweep.py`: `line_rate_hz * pixel_size_um / 1000`) |
