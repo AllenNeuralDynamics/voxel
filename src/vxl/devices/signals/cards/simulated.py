@@ -2,7 +2,7 @@
 
 ``SimulatedDaqmx`` fakes pin discovery and tracks pin allocation in memory, shared
 across output engines exactly like the real hub. The in-memory engines that use it
-live in ``vxl.devices.daq.clocked`` and ``vxl.devices.daq.on_demand``.
+live in ``vxl.devices.signals.on_demand``, and in ``vxl._legacy.devices.daq.clocked`` for the legacy app.
 """
 
 import re

@@ -1,6 +1,6 @@
-from vxl.devices.daq.clocked import Signals
-from vxl.devices.daq.clocked.simulated import SimulatedSignalGenerator
-from vxl.devices.daq.clocked.waveform import validate_waveform
+from vxl._legacy.devices.daq.clocked import Signals
+from vxl._legacy.devices.daq.clocked.simulated import SimulatedSignalGenerator
+from vxl._legacy.devices.daq.clocked.waveform import validate_waveform
 from vxl.devices.signals.cards.simulated import SimulatedDaqmx
 
 

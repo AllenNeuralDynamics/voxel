@@ -3,8 +3,8 @@ import pytest
 from pydantic import ValidationError
 from vxlib.quantity import Frequency, Time
 
-from vxl.devices.daq.clocked import Signals
-from vxl.devices.daq.clocked.waveform import (
+from vxl._legacy.devices.daq.clocked import Signals
+from vxl._legacy.devices.daq.clocked.waveform import (
     DerivedMirror,
     DerivedOffset,
     DerivedScale,

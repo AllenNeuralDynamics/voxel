@@ -160,7 +160,7 @@ class TigerLinearAxis(ContinuousAxis):
         self.hub.box.set_logical_position({self._axis_label: float(position * self.POS_MULT)})
         self.log.debug("Logical position set to %s um", position)
 
-    @property
+    @ContinuousAxis.upper_limit.getter
     def upper_limit(self) -> float:
         mm = self._get_cached_param("upper_limit", TigerParams.LIMIT_HIGH) or 0.0
         return mm * self._MM_TO_UM
@@ -170,7 +170,7 @@ class TigerLinearAxis(ContinuousAxis):
         self.log.debug("Setting upper limit to %s um", value)
         self.hub.box.set_param(TigerParams.LIMIT_HIGH, {self._axis_label: float(value / self._MM_TO_UM)})
 
-    @property
+    @ContinuousAxis.lower_limit.getter
     def lower_limit(self) -> float:
         mm = self._get_cached_param("lower_limit", TigerParams.LIMIT_LOW) or 0.0
         return mm * self._MM_TO_UM

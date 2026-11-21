@@ -33,9 +33,9 @@ from vxlib.schema import FrozenModel
 from vxlib.vector import Transform, Vec3D
 
 from vxl._legacy.devices.axes.continuous import ContinuousAxisHandle, StepMode, TTLStepperConfig
+from vxl._legacy.devices.daq.clocked import Signals
 from vxl._legacy.hal import HAL, HardwareTopology
 from vxl.devices.camera import AreaCameraHandle, AreaROI, CaptureState
-from vxl.devices.daq.clocked import Signals
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
 from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, resolve_metadata_class

@@ -1,7 +1,7 @@
 hal:
   devices:
     ao_main:
-      target: vxl.devices.daq.clocked.ni.NiSignalGenerator
+      target: vxl._legacy.devices.daq.clocked.ni.NiSignalGenerator
       init:
         hub: nidaq_1
         ports:
@@ -23,7 +23,7 @@ hal:
       init:
         slots: {"0": "BP525", "1": "BP600", "2": "BP700"}
     laser_488:
-      target: &laser_target vxl.devices.laser.simulated.SimulatedLaser
+      target: &laser_target vxl._legacy.devices.laser.simulated.SimulatedLaser
       autosave: [source_power_setpoint_mw, output_level_percent]
       init: {wavelength: 488, source_enable_delay_s: 1}
     laser_561:

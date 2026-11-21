@@ -121,6 +121,8 @@ See the [driver module](src/vxl_drivers/power_meters/thorlabs.py) for setup note
 | --- | --- | --- |
 | ASI Tiger controller | `vxl_drivers.tigerhub.TigerHub` | Serial support included |
 | ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
+| ASI Tiger XYZ stage | `vxl_drivers.axes.tiger_stage.TigerXYZStage` | 3 Tiger axes; `raster_scan()` for X/Y |
+| ASI Tiger raster scan | `vxl_drivers.tigerhub.raster.TigerRasterScan` | Fast and slow axis letters on 1 card |
 | Thorlabs MFF101 flip mount | `vxl_drivers.axes.thorlabs.MFF101` | `thorlabs` extra |
 
 #### ASI Tiger linear axis: checks on the real stage
@@ -137,13 +139,14 @@ stage before a run depends on them:
 5. `halt` stops the whole card (ASI has no per-axis halt): confirm which axes share a card on each rig.
 6. The lowest speed an axis holds steady (`SPEED_RANGE_UM_S` guesses 1 µm/s).
 
+To watch a Tiger stage's position live: `uv run python -m vxl_drivers.axes.tiger_stage --port COM3`.
+
 The axis drivers below are on the legacy continuous axis (`vxl._legacy.devices.axes.continuous`), which only the
 legacy app uses.
 
 | Hardware | Target | Python support |
 | --- | --- | --- |
 | ASI Tiger linear axis | `vxl_drivers._legacy.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
-| ASI Tiger XYZ stage | `vxl_drivers._legacy.axes.stage.TigerXYZStage` | Configured with a `TigerHub` |
 | Micronix MMC-100 controller | `vxl_drivers._legacy.axes.mmc.MMCHub` | Serial support included |
 | Micronix MMC-100 linear axis | `vxl_drivers._legacy.axes.mmc.MMCLinearAxis` | Configured with an `MMCHub` |
 

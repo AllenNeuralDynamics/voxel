@@ -8,11 +8,11 @@ from pydantic import Field, ValidationInfo, field_validator, model_validator
 from rigup.device import OperationRequest
 from vxlib.schema import FrozenModel, identifier
 
+from vxl._legacy.devices.daq.clocked import Signals
 from vxl._legacy.hal import DiscreteAxisPositions, HardwareTopology
 from vxl._legacy.hal.topology import SelectRoutingDefinition, SplitRoutingDefinition
 from vxl._utils.color import Color
 from vxl.devices.camera import AreaROI
-from vxl.devices.daq.clocked import Signals
 from vxl.metadata import ExperimentMetadata, MetadataCls
 
 from .errors import Violation, ViolationLoc, assignment_violations

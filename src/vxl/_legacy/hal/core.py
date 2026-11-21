@@ -10,10 +10,10 @@ from rigup.device import DeviceHandle, DeviceInterface
 from rigup.rig import Rig
 
 from vxl._legacy.devices.axes.continuous import ContinuousAxisHandle
+from vxl._legacy.devices.daq.clocked import SignalGeneratorHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.camera import AreaCameraHandle
-from vxl.devices.daq.clocked import SignalGeneratorHandle
 
 from .errors import HALError, HALStartupError, Violation, ViolationLoc
 from .topology import HardwareTopology, OpticalRouteDefinition

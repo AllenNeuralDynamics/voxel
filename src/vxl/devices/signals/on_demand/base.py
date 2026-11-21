@@ -3,18 +3,11 @@ import time
 from abc import abstractmethod
 from collections.abc import Mapping
 
-import numpy as np
 from rigup.device import Device, DeviceController, DeviceHandle
 from rigup.interface import StreamTier, action, fact, failsafe
 from vxlib.quantity import VoltageRange
 
 from vxl.devices.base import DeviceType
-from vxl.devices.daq.clocked.waveform import BaseWaveform
-
-# Software update rate for shaped playback. Sleep granularity on a general-purpose
-# OS is coarse (single-digit to ~15 ms), so this is a modest default — on-demand
-# shape playback is for slow, non-critical profiles, not precise waveforms.
-_DEFAULT_UPDATE_HZ = 100.0
 
 
 class OnDemandAOController(DeviceController["OnDemandAO"], streaming={"fast": 0.1}):
@@ -36,12 +29,6 @@ class OnDemandAOController(DeviceController["OnDemandAO"], streaming={"fast": 0.
     @action(desc="Drive a port to a voltage for a duration, then to rest")
     async def pulse(self, port: str, volts: float, duration_s: float, rest_volts: float = 0.0) -> None:
         await self._run(self.device.pulse, port, volts, duration_s, rest_volts)
-
-    @action(label="Play Waveform", desc="Play a shaped waveform software-paced (coarse; no clock)")
-    async def play(
-        self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ
-    ) -> None:
-        await self._run(self.device.play, port, waveform, duration_s, update_hz)
 
     @failsafe(desc="Release all outputs to a safe state")
     async def reset(self) -> None:
@@ -124,35 +111,6 @@ class OnDemandAO(Device, kind=DeviceType.DAQ_AO, controller=OnDemandAOController
         time.sleep(duration_s)
         self.set_voltage(port, rest_volts)
 
-    def play(self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ) -> None:
-        """Play a shaped ``waveform`` on ``port`` by software-paced sampling.
-
-        With no sample clock, the shape is sampled at ``update_hz`` and written one
-        point at a time with a sleep between. Coarse and jittery (OS scheduling), so
-        only for slow, non-critical profiles — e.g. a ramp on aux pins while a clocked
-        task owns the card's timing. Use a ``SignalGenerator`` when precision
-        matters. Blocking; runs for ``duration_s``.
-
-        ``waveform`` must be a concrete shape (``BaseWaveform``), not a derived
-        waveform — deriving needs sibling channels, which single-port playback has none of.
-        """
-        self._resolve_port(port)
-        if duration_s <= 0:
-            raise ValueError(f"duration_s must be > 0, got {duration_s}")
-        if update_hz <= 0:
-            raise ValueError(f"update_hz must be > 0, got {update_hz}")
-
-        n = max(1, round(duration_s * update_hz))
-        samples = waveform.get_array(n)
-        # Fail before emitting anything if the shape leaves the hardware range.
-        self._check_voltage(float(np.min(samples)))
-        self._check_voltage(float(np.max(samples)))
-
-        dt = duration_s / n
-        for v in samples:
-            self.set_voltage(port, float(v))
-            time.sleep(dt)
-
 
 class OnDemandAOHandle(DeviceHandle["OnDemandAO"]):
     """Typed async handle for ``OnDemandAO`` devices."""
@@ -162,11 +120,6 @@ class OnDemandAOHandle(DeviceHandle["OnDemandAO"]):
 
     async def pulse(self, port: str, volts: float, duration_s: float, rest_volts: float = 0.0) -> None:
         await self.call("pulse", port, volts, duration_s, rest_volts)
-
-    async def play(
-        self, port: str, waveform: BaseWaveform, duration_s: float, update_hz: float = _DEFAULT_UPDATE_HZ
-    ) -> None:
-        await self.call("play", port, waveform, duration_s, update_hz)
 
     async def reset(self) -> None:
         await self.call("reset")

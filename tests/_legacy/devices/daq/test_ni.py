@@ -3,8 +3,8 @@
 import pytest
 from rigup.device import Device
 
-from vxl.devices.daq.clocked.ni import NiSignalGenerator
-from vxl.devices.daq.clocked.waveform import validate_waveform
+from vxl._legacy.devices.daq.clocked.ni import NiSignalGenerator
+from vxl._legacy.devices.daq.clocked.waveform import validate_waveform
 
 from .helpers import _signals, _triangle
 

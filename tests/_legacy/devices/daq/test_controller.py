@@ -1,7 +1,7 @@
 import pytest
 
-from vxl.devices.daq.clocked import SignalGeneratorController
-from vxl.devices.daq.clocked.waveform import validate_waveform
+from vxl._legacy.devices.daq.clocked import SignalGeneratorController
+from vxl._legacy.devices.daq.clocked.waveform import validate_waveform
 
 from .helpers import _make_generator, _signals, _triangle
 

@@ -10,6 +10,7 @@ from rigup.device.handle import PropModels
 from vxl_records import SQLiteRecords, StorageSpec
 from vxlib.reactivity import Cell
 
+from vxl._legacy.devices.laser.simulated import SimulatedLaser
 from vxl._legacy.instrument import (
     AcquisitionRequest,
     Activity,
@@ -23,7 +24,6 @@ from vxl._legacy.instrument import (
 )
 from vxl._legacy.instrument.config import AcquisitionTask, Point2D, WriterPatch, XYDefinition, XYMode, ZRange
 from vxl._legacy.instrument.errors import InstrumentBusyError, OperationRejectedError, StartupError, Violation
-from vxl.devices.laser.simulated import SimulatedLaser
 from vxl.system import System
 
 

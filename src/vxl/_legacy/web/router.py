@@ -18,6 +18,7 @@ from vxl_records import (
 )
 from vxlib.history import Change
 
+from vxl._legacy.devices.daq.clocked import Signals
 from vxl._legacy.instrument import (
     AcquisitionRequest,
     Instrument,
@@ -37,7 +38,6 @@ from vxl._legacy.station.models import SessionInfo, StationFeedView, StationInfo
 from vxl._legacy.station.station import Station
 from vxl._legacy.station.templates import InstrumentTemplates
 from vxl._utils.color import ColormapGroup, get_colormap_catalog
-from vxl.devices.daq.clocked import Signals
 from vxl.live.protocol import VOXEL_LIVE_FRAMING_VERSION
 from vxl.metadata import resolve_metadata_class
 

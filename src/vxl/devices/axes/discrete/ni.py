@@ -3,10 +3,10 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from vxl.devices.daq.on_demand.ni import NiOnDemandAO, NiOnDemandDO
+from vxl.devices.axes.discrete.base import SlotName
 from vxl.devices.signals.cards.ni import NiDaqmx
+from vxl.devices.signals.on_demand.ni import NiOnDemandAO, NiOnDemandDO
 
-from .base import SlotName
 from .pulse import PulseDiscreteAxis
 
 

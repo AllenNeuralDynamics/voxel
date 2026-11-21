@@ -1,9 +1,8 @@
 import time
 from collections.abc import Mapping
 
-from vxl.devices.daq.on_demand import OnDemandAO, OnDemandDO
-
-from .base import DiscreteAxis, DiscreteAxisState, SlotContent
+from vxl.devices.axes.discrete.base import DiscreteAxis, DiscreteAxisState, SlotContent
+from vxl.devices.signals.on_demand import OnDemandAO, OnDemandDO
 
 _DEFAULT_ACTIVE_VOLTAGE = 5.0
 _DEFAULT_INACTIVE_VOLTAGE = 0.0

@@ -95,6 +95,16 @@ class TigerLinearAxis(LinearAxis):
     # -- reads ------------------------------------------------------------------------------------------------------
 
     @property
+    def label(self) -> str:
+        """The controller's letter for this axis, such as ``X``."""
+        return self._label
+
+    @property
+    def hub(self) -> TigerHub:
+        """The hub of the controller this axis is on."""
+        return self._hub
+
+    @property
     def position(self) -> float:
         steps = self._cached("position_steps")
         if steps is None:

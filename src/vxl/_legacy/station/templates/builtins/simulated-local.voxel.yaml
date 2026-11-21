@@ -8,7 +8,7 @@ hal:
       target: vxl.devices.signals.cards.simulated.SimulatedDaqmx
       init: { device_name: "MockDev1" }
     daq:
-      target: vxl.devices.daq.SimulatedSignalGenerator
+      target: vxl._legacy.devices.daq.SimulatedSignalGenerator
       init:
         hub: daq_hub
         ports:
@@ -23,7 +23,7 @@ hal:
           sensor_size_px: {x: 14192, y: 10640}
           pixel_size_um: {x: 3.76, y: 3.76}
     laser_488:
-      target: &laser_target vxl.devices.laser.simulated.SimulatedLaser
+      target: &laser_target vxl._legacy.devices.laser.simulated.SimulatedLaser
       autosave: [source_power_setpoint_mw, output_level_percent]
       init:
         wavelength: 488
