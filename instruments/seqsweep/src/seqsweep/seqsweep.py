@@ -172,7 +172,7 @@ class SeqSweep:
                     if chamber is not None:
                         step_mm = (
                             defaults.chambers_step_mm[chamber]
-                            + job.step_margin_um / 1000
+                            + pass_config.step_margin_um / 1000
                             + strip * derived.tdi_image_width_um / 1000
                         )
                         start_um = pass_config.scan_end_um if job.direction is ScanDirection.REVERSE else pass_config.scan_start_um

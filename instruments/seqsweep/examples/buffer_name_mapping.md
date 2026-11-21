@@ -8,7 +8,7 @@ Maps the variables in `Stage buffer_062226.txt` to the SeqSweep Python names.
 | `X0` | scan start, imaged range | `scan_start_um` (µm, not mm) |
 | `X_end` | scan end, imaged range | `scan_end_um` (µm) |
 | `Y_SAMP_1/2/3` | chamber Y positions (lower edge) | `chambers_step_mm` (`{1: 200.25, 2: 155.0, 3: 109.75}`) |
-| `Y0` | first strip's Y; `Y0 - Y_SAMP_n` is the offset from the chamber edge | `step_margin_um` (job, µm; the same for every chamber in the job) |
+| `Y0` | first strip's Y; `Y0 - Y_SAMP_n` is the offset from the chamber edge | `pass_config.step_margin_um` (job, µm; the same for every chamber in the job) |
 | `Y_POS` | strip-axis position of strip `i` (`Y0 + i * FOV_Y`), calculated | `strip_pos_mm` (proposed name, not in the code yet); see the worked example below |
 | `NUM_STRIPS` | frames per chamber | `num_strips` (job, default 1) |
 | `TDI_PIXEL_SIZE` | sensor pixel size | `optics.tdi_pixel_um` |

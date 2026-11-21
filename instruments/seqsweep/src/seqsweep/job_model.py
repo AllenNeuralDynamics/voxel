@@ -23,6 +23,11 @@ class ScanPassConfig(FrozenModel):
     scan_margin_um: float = Field(
         ge=0, description="Run-up and run-out outside the imaged range, at each end (the buffer's MARGIN)"
     )
+    step_margin_um: float = Field(
+        default=0.0,
+        ge=0,
+        description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
+    )
     # Validate against camera config
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
     lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
@@ -48,11 +53,6 @@ class ScanJob(FrozenModel):
     chambers: list[int] = Field(
         default_factory=list,
         description="Sample chambers, scanned in this order; each Y start comes from the defaults. Empty: no Y moves",
-    )
-    step_margin_um: float = Field(
-        default=0.0,
-        ge=0,
-        description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
     )
     direction: ScanDirection = ScanDirection.FORWARD
     # TODO Validate the number of strips does not exceed the next chamber's start position
