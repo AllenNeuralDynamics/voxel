@@ -84,22 +84,22 @@ rig:
       init: {box: COM3}
     x_axis:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: x, units: um}
+      init: {hub: tiger_controller, axis_label: x}
     y_axis:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: v, units: um}
+      init: {hub: tiger_controller, axis_label: v}
     z_axis:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: z, units: um}
+      init: {hub: tiger_controller, axis_label: z}
     left_focus:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: a, units: um}
+      init: {hub: tiger_controller, axis_label: a}
     right_focus:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: b, units: um}
+      init: {hub: tiger_controller, axis_label: b}
     camera_focus:
       target: vxl_drivers.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: m, units: um}
+      init: {hub: tiger_controller, axis_label: m}
 
   autosave:                                       # the properties that a change by a person saves in the active profile
     camera:    [exposure_time_ms, binning, pixel_format]

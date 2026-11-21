@@ -45,8 +45,8 @@ hal:
       init: {box: COM3}
 
     x_axis:
-      target: vxl_drivers._legacy.axes.asi.TigerLinearAxis
-      init: {hub: tiger_controller, axis_label: x, units: um}
+      target: vxl_drivers.axes.asi.TigerLinearAxis
+      init: {hub: tiger_controller, axis_label: x}
 ```
 
 A hub and the devices that depend on it must run in the same process. See the [rigup README](../rigup/) for local,
@@ -120,10 +120,25 @@ See the [driver module](src/vxl_drivers/power_meters/thorlabs.py) for setup note
 | Hardware | Target | Python support |
 | --- | --- | --- |
 | ASI Tiger controller | `vxl_drivers.tigerhub.TigerHub` | Serial support included |
+| ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
 | Thorlabs MFF101 flip mount | `vxl_drivers.axes.thorlabs.MFF101` | `thorlabs` extra |
 
+#### ASI Tiger linear axis: checks on the real stage
+
+Written on 2026-11-20 from ASI's docs (docs.asiimaging.com) and tested against a fake controller. These need the real
+stage before a run depends on them:
+
+1. A sweep's pulses: is there one exactly at the stop, how many come for a span, and do they leave on the card's TTL
+   output with no `TTL Y` setting?
+2. After a sweep, does the stage go back to the start by itself (the retrace)?
+3. The run-up (`run_up`): the driver estimates speed x (ramp / 2 + 50 ms) x 1.5 + 20 µm. Measure the real one.
+4. Steps: 1 relative move on the ring buffer in TTL-triggered mode steps on every pulse. Check that it stops once the
+   driver disarms it at the last step, and how close a pulse may come before the disarm.
+5. `halt` stops the whole card (ASI has no per-axis halt): confirm which axes share a card on each rig.
+6. The lowest speed an axis holds steady (`SPEED_RANGE_UM_S` guesses 1 µm/s).
+
 The axis drivers below are on the legacy continuous axis (`vxl._legacy.devices.axes.continuous`), which only the
-legacy app uses. A Tiger linear axis on the new axis API is being written in their place.
+legacy app uses.
 
 | Hardware | Target | Python support |
 | --- | --- | --- |

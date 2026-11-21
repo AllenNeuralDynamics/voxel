@@ -70,6 +70,44 @@ class HaltOp:
         return Request(payload=_line("\\"), decode=ack("HALT"))
 
 
+class CardHaltOp:
+    """HALT addressed to 1 card ('<addr>HALT'): stops motion on that card only, so both axes of a 2-axis card. The
+    bare '\\' shortcut stops every card. A halt that interrupts a commanded move answers ':N-21', which still means it
+    stopped. https://docs.asiimaging.com/commands/halt"""
+
+    OP = "HALT"
+
+    @staticmethod
+    def _decode(frames: Sequence[Reply]) -> None:
+        r = one(frames, CardHaltOp.OP)
+        if r.kind == "ERR" and "-21" not in (r.text or ""):
+            raise ASIDecodeError(CardHaltOp.OP, r)
+
+    @staticmethod
+    def request(card_hex: int) -> Request[None]:
+        return Request(payload=_line("HALT", None, card_hex), decode=CardHaltOp._decode)
+
+
+class StatusByteOp:
+    """The status byte of 1 axis, via RDSBYTE as decimal ('RS X' -> ':A 138'). Bits from 0: commanded move, axis
+    enabled, motor on, joystick enabled, ramping, ramping up, upper limit closed, lower limit closed.
+    https://docs.asiimaging.com/commands/rdsbyte"""
+
+    OP = "RDSBYTE"
+
+    @staticmethod
+    def _decode(frames: Sequence[Reply]) -> int:
+        r = one(frames, StatusByteOp.OP)
+        text = (r.text or "").strip()
+        if r.kind == "ERR" or not text.isdigit():
+            raise ASIDecodeError(StatusByteOp.OP, r)
+        return int(text)
+
+    @staticmethod
+    def request(axis: str) -> Request[int]:
+        return Request(payload=_line("RS", _fmt_axes([axis])), decode=StatusByteOp._decode)
+
+
 class IsAxisBusyOp:
     """Check whether axes are busy, via RDSTAT ('RS <AXIS>?').
 

@@ -16,12 +16,14 @@ from vxl_drivers.tigerhub.ops.joystick import (
     JoystickSetMappingOp,
 )
 from vxl_drivers.tigerhub.ops.motion import (
+    CardHaltOp,
     HaltOp,
     HereOp,
     HomeOp,
     IsAxisBusyOp,
     MoveAbsOp,
     MoveRelOp,
+    StatusByteOp,
     WhereOp,
 )
 from vxl_drivers.tigerhub.ops.params import (
@@ -142,7 +144,7 @@ class TigerBox:
             return self._info
 
         build_report = transact(self.t, GetBuildOp.request(None))
-        card_hex_to_mods: Mapping[int, set[str]] = {}
+        card_hex_to_mods: dict[int, set[str]] = {}
         for addr in build_report.hex_addr:
             card_hex_to_mods[addr] = transact(self.t, GetCardMods.request(addr))
         who_items = transact(self.t, GetWhoOp.request())
@@ -281,6 +283,14 @@ class TigerBox:
 
     def halt(self) -> None:
         transact(self.t, HaltOp.request())
+
+    def halt_card(self, card_hex: int) -> None:
+        """Stop motion on 1 card only: both axes of a 2-axis card, and no other card."""
+        transact(self.t, CardHaltOp.request(card_hex))
+
+    def status_byte(self, axis: str) -> int:
+        """The status byte of ``axis``: bit 6 is the upper limit closed, bit 7 the lower limit closed."""
+        return transact(self.t, StatusByteOp.request(axis.upper()))
 
     def is_axis_moving(self, axes: Sequence[str]) -> dict[str, bool]:
         # Asked in hardware order so the frame-to-axis mapping holds whether the controller answers
@@ -566,6 +576,37 @@ class TigerBox:
             transact(self.t, ScanRunOp.request(card_addr, "P"))
         except Exception as e:
             raise RuntimeError("Failed to stop scan.") from e
+
+    def configure_single_axis_scan(self, axis: str, cfg: ScanRConfig) -> float:
+        """Program a 1-line scan of ``axis`` alone: no slow axis (slow axis id 9, "a true single-axis scan"), 1 line,
+        and the line of ``cfg``. Give back the pulse interval in µm the hardware will really use.
+        https://docs.asiimaging.com/commands/scan, https://docs.asiimaging.com/commands/scanv"""
+        ax = self.info().axes.get(axis.upper())
+        if ax is None or ax.card_hex is None or ax.axis_id is None:
+            err = f"Unknown or unassigned axis {axis!r}"
+            raise ValueError(err)
+        transact(
+            self.t,
+            ScanBindAxesOp.request(ax.card_hex, fast_axis_id=ax.axis_id, slow_axis_id=9, pattern=ScanPattern.RASTER),
+        )
+        transact(self.t, ScanVOp.request(ax.card_hex, ScanVConfig(start_mm=0.0, stop_mm=0.0, line_count=1).to_kv()))
+        kv, actual_um = cfg.to_kv(self.info(), fast_axis_id=ax.label)
+        transact(self.t, ScanROp.request(ax.card_hex, kv))
+        return actual_um
+
+    def start_card_scan(self, card_hex: int) -> None:
+        """Start the scan programmed on 1 card ('<addr>SCAN S')."""
+        transact(self.t, ScanRunOp.request(card_hex, "S"))
+
+    def stop_card_scan(self, card_hex: int) -> None:
+        """Stop the scan on 1 card ('<addr>SCAN P'); it goes idle after its cleanup."""
+        transact(self.t, ScanRunOp.request(card_hex, "P"))
+
+    def disarm_ttl(self, card_hex: int) -> None:
+        """Turn off the TTL input functions of 1 card ('TTL X=0') and clear its ring buffer, so pulses move nothing."""
+        self.set_ttl_config(card_hex, TTLConfig(in0_mode=TTLIn0Mode.OFF))
+        transact(self.t, SetRingBufferModeOp.request(card_hex, clear_buffer=True))
+        self._step_shoot_session = None
 
     # --- Array Scan ---
     def configure_array_scan(
