@@ -68,9 +68,15 @@ class StationConfig(System):
         return {"Base": BASE_METADATA_SCHEMA, **self.metadata_schemas}
 
     @classmethod
+    def station_dir(cls) -> Path:
+        """The legacy station's own folder, ``legacy`` in the Voxel home: its config, instruments, records and file
+        catalog. The machine's files stay in the Voxel home."""
+        return system.voxel_home() / "legacy"
+
+    @classmethod
     def config_path(cls) -> Path:
         """Return the required control-station configuration path."""
-        return system.voxel_home() / "station.yaml"
+        return cls.station_dir() / "station.yaml"
 
     @classmethod
     def settings_customise_sources(

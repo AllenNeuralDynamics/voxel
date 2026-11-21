@@ -63,7 +63,7 @@ Built on 2026-11-20 in `omezarr/src/ome_zarr_writer/writer.py`.
 Built on 2026-11-20. `WriterSettings.batch_frames` (128 by default) gives the frames in 1 batch; the writer rounds it
 up to whole shards (`rounded_batch_frames`), so it sets the stops of a step scan and the memory of a slot directly,
 whatever the pyramid depth. It replaced `batch_shards` everywhere: the SPIM `WriterFields`, the legacy `WriterPatch`
-and the legacy web app (rebuilt), and the saved `~/.voxel/instruments/*/state.json` files, each given the batch it had
+and the legacy web app (rebuilt), and the saved legacy `state.json` files (now in `~/.voxel/legacy/instruments/`), each given the batch it had
 before. The exaSPIM template sets `batch_frames: 8`.
 
 A camera reports its open image's real batch (`AreaCameraHandle.batch_frames()`): a small frame can get fewer levels,

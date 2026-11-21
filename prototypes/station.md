@@ -82,7 +82,7 @@ Agreed so far (product, then action):
 | Command | Does | Status |
 | --- | --- | --- |
 | `vxl station init` | Writes `station.yaml` | built |
-| `vxl station check` | Checks `station.yaml` and every instrument folder it finds, and shows the paths it found | not built |
+| `vxl station check` | Checks `station.yaml` and every instrument folder it finds, and shows the paths it found | built (2026-11-20) |
 | `vxl station info` | Shows the station: id, name, folder, instruments, storage | not built |
 | `vxl station start` | Starts the processes above. `--with-lab` also starts the lab server; `--no-share` skips the share service even when `station.yaml` has `share:` (decided 2026-11-19) | not built |
 | `vxl node start <node_id>` | Starts a device node | built |

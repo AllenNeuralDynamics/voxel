@@ -5,9 +5,9 @@ from pathlib import Path
 from vxl._legacy.instrument import InstrumentStore
 from vxl._legacy.instrument.config import InstrumentConfig
 from vxl._utils.files import load_and_validate_yaml
-from vxl.cli.check import run_check
+from vxl.cli.legacy import run_check
 
-TEMPLATE = Path(__file__).parents[2] / "src/vxl/_legacy/station/templates/builtins/simulated-local.voxel.yaml"
+TEMPLATE = Path(__file__).parents[3] / "src/vxl/_legacy/station/templates/builtins/simulated-local.voxel.yaml"
 
 
 def test_check_valid_config() -> None:

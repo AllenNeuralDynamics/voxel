@@ -66,9 +66,9 @@ class StationConfig(System):
 
     @classmethod
     def station_dir(cls) -> Path:
-        """The station's own folder, ``new`` in the Voxel home: its config, instruments and records. The machine's
-        files (process registry, ``.env``, data roots) stay in the Voxel home."""
-        return system.voxel_home() / "new"
+        """The station's own folder, the Voxel home itself: its config, instruments and records, next to the machine's
+        files (process registry, ``.env``, data roots). The legacy station keeps its own under ``legacy``."""
+        return system.voxel_home()
 
     @classmethod
     def config_path(cls) -> Path:

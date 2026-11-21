@@ -10,10 +10,10 @@ from types import ModuleType
 from typing import TextIO
 from uuid import UUID
 
-from .check import run_check
 from .devices.shell import run as run_devices
 from .node import serve as serve_node
-from .station import import_catalog, initialize, initialize_legacy
+from .station import initialize
+from .station import run_check as check_station
 
 _DEFAULT_HOST = str(IPv4Address(0))
 
@@ -28,6 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     station = _group(products, "station", "set up and run a station")
     init = station.add_parser("init", help="create the station's station.yaml")
     _identity(init)
+    check_parser = station.add_parser("check", help="check station.yaml and the station's instrument folders")
+    check_parser.add_argument("paths", nargs="*", type=Path, help="instrument folders (default: all of the station)")
+    check_parser.add_argument("--json", action="store_true", dest="as_json", help="emit machine-readable JSON")
 
     node = _group(products, "node", "host devices for a station on this machine")
     start = node.add_parser("start", help="start a device node")
@@ -84,6 +87,11 @@ def _load_optional(module: str, extra: str, stderr: TextIO) -> ModuleType | None
         return None
 
 
+def _legacy() -> ModuleType:
+    """The legacy commands, loaded only when one runs, so the other commands never import the legacy app."""
+    return import_module("vxl.cli.legacy")
+
+
 def run(
     argv: Sequence[str] | None = None,
     *,
@@ -101,6 +109,8 @@ def run(
             return 0
         case "station", "init":
             return initialize(args.name, station_id=args.station_id, output=output, errors=errors)
+        case "station", "check":
+            return check_station(args.paths, as_json=args.as_json, output=output)
         case "node", "start":
             serve_node(args.node_id, args.address, debug=args.debug)
             return 0
@@ -118,11 +128,11 @@ def run(
                 return 2
             return qt_app.launch(args.config, verbose=args.verbose)
         case "legacy", "check":
-            return run_check(args.paths, as_json=args.as_json, output=output)
+            return _legacy().run_check(args.paths, as_json=args.as_json, output=output)
         case "legacy", "init":
-            return initialize_legacy(args.name, station_id=args.station_id, output=output, errors=errors)
+            return _legacy().initialize_legacy(args.name, station_id=args.station_id, output=output, errors=errors)
         case "legacy", "import-catalog":
-            return import_catalog(output=output, errors=errors)
+            return _legacy().import_catalog(output=output, errors=errors)
         case product, action:
             raise AssertionError(f"Unhandled command: {product} {action}")
 

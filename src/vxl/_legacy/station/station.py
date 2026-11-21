@@ -58,10 +58,10 @@ class Station:
         if lease_drain_timeout_s <= 0:
             raise ValueError("lease_drain_timeout_s must be positive")
         self._config = config
-        self._config.dir.mkdir(parents=True, exist_ok=True)
+        self._config.station_dir().mkdir(parents=True, exist_ok=True)
         self.instruments_dir.mkdir(exist_ok=True)
         self._records = records or SQLiteRecords(
-            self._config.dir / "records.sqlite3",
+            self._config.station_dir() / "records.sqlite3",
             resolve_root=lambda spec: (
                 self._config.resolve_storage(StorageSpec.model_validate(spec.model_dump())).target
             ),
@@ -100,7 +100,7 @@ class Station:
     @property
     def instruments_dir(self) -> Path:
         """Root holding the station's ``<name>.voxel`` instrument directories."""
-        return self._config.dir / "instruments"
+        return self._config.station_dir() / "instruments"
 
     def discover_instruments(self) -> dict[str, InstrumentInspection]:
         """Inspect every installed instrument without opening hardware."""

@@ -1,4 +1,6 @@
 import io
+import subprocess
+import sys
 from importlib import import_module
 from typing import TextIO
 from uuid import UUID
@@ -46,8 +48,13 @@ def test_node_command_uses_the_cli_node_launcher(monkeypatch: pytest.MonkeyPatch
     assert called == [("cameras", "tcp://127.0.0.1:5555", True)]
 
 
-@pytest.mark.parametrize(("product", "target"), [("station", "initialize"), ("legacy", "initialize_legacy")])
-def test_init_dispatches_to_its_station_initializer(product: str, target: str, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("product", "module", "target"),
+    [("station", "vxl.cli.main", "initialize"), ("legacy", "vxl.cli.legacy", "initialize_legacy")],
+)
+def test_init_dispatches_to_its_station_initializer(
+    product: str, module: str, target: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     called: list[tuple[str, object]] = []
 
     def initialize(name: str, *, station_id: UUID | None, output: TextIO, errors: TextIO) -> int:
@@ -55,7 +62,7 @@ def test_init_dispatches_to_its_station_initializer(product: str, target: str, m
         called.append((name, station_id))
         return 0
 
-    monkeypatch.setattr(main_module, target, initialize)
+    monkeypatch.setattr(import_module(module), target, initialize)
 
     status = main_module.run(
         [product, "init", "--name", "scope", "--id", "12345678-1234-5678-1234-567812345678"],
@@ -65,3 +72,12 @@ def test_init_dispatches_to_its_station_initializer(product: str, target: str, m
 
     assert status == 0
     assert called == [("scope", main_module.UUID("12345678-1234-5678-1234-567812345678"))]
+
+
+def test_the_new_commands_never_import_the_legacy_app() -> None:
+    code = (
+        "import sys, importlib; importlib.import_module('vxl.cli.main').run(['station']); "
+        "print(sorted(name for name in sys.modules if name.startswith(('vxl._legacy', 'vxl_records'))))"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert result.stdout.strip().splitlines()[-1] == "[]"

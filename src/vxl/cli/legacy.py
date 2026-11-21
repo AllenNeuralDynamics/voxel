@@ -1,13 +1,23 @@
-"""Static instrument checking and terminal/JSON reporting."""
+"""The commands of the legacy app: checking its instrument configs, creating its station, and importing its file
+catalog. Only ``vxl legacy`` loads this module."""
 
-import json
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
+from uuid import UUID
+
+from pydantic import ValidationError
+from vxl_records import RecordsError, SQLiteRecords
 
 from vxl._legacy.instrument.errors import Violation
 from vxl._legacy.instrument.store import InstrumentInspection, InstrumentStore
-from vxl.system import System, load_voxel_env
+from vxl._legacy.station.station import StationConfig as LegacyStationConfig
+from vxl.storage import StorageSpec
+from vxl.system import load_voxel_env
+
+from .report import CheckedTarget, write_report
+from .station import initialize_with
 
 
 @dataclass(frozen=True)
@@ -49,7 +59,7 @@ def _children(path: Path) -> list[Path]:
 def collect_checks(paths: list[Path]) -> list[TargetCheck]:
     """Expand requested files/directories and check each concrete target."""
     if not paths:
-        root = System().dir / "instruments"
+        root = LegacyStationConfig.station_dir() / "instruments"
         return [_check_path(path) for path in _children(root)] if root.is_dir() else []
 
     targets: list[TargetCheck] = []
@@ -67,55 +77,12 @@ def collect_checks(paths: list[Path]) -> list[TargetCheck]:
     return targets
 
 
-def _violation_text(violation: Violation) -> str:
-    code = f"[{violation.code}] " if violation.code else ""
-    location = ".".join(str(part) for part in violation.loc)
-    prefix = f"{location}: " if location else ""
-    return f"{code}{prefix}{violation.msg}".replace("\n", "\n    ")
-
-
-def _write_text(checks: list[TargetCheck], output: TextIO) -> None:
-    if not checks:
-        output.write("No installed instruments found.\n")
-        return
-
-    for index, checked in enumerate(checks):
-        output.write(f"{checked.path}: {'valid' if checked.ok else 'invalid'}\n")
-        output.writelines(f"  - {_violation_text(violation)}\n" for violation in checked.violations)
-        if index != len(checks) - 1:
-            output.write("\n")
-
-    valid = sum(checked.ok for checked in checks)
-    invalid = len(checks) - valid
-    output.write(f"\nChecked {len(checks)} target(s): {valid} valid, {invalid} invalid\n")
-
-
-def _write_json(checks: list[TargetCheck], output: TextIO) -> None:
-    payload = {
-        "ok": all(checked.ok for checked in checks),
-        "targets": [
-            {
-                "path": str(checked.path),
-                "ok": checked.ok,
-                "violations": [
-                    violation.model_dump(mode="json", exclude_none=True) for violation in checked.violations
-                ],
-            }
-            for checked in checks
-        ],
-    }
-    json.dump(payload, output, indent=2)
-    output.write("\n")
-
-
 def run_check(paths: list[Path], *, as_json: bool, output: TextIO) -> int:
     """Check targets, render the result, and return a process exit code."""
     load_voxel_env()
     checks = collect_checks(paths)
-    if as_json:
-        _write_json(checks, output)
-    else:
-        _write_text(checks, output)
+    targets = [CheckedTarget(checked.path, checked.ok, checked.violations) for checked in checks]
+    write_report(targets, as_json=as_json, output=output, nothing="No installed instruments found.")
 
     if any(
         violation.code is not None and violation.code.startswith("target.")
@@ -124,3 +91,32 @@ def run_check(paths: list[Path], *, as_json: bool, output: TextIO) -> int:
     ):
         return 2
     return 0 if all(checked.ok for checked in checks) else 1
+
+
+def initialize_legacy(name: str, *, station_id: UUID | None, output: TextIO, errors: TextIO) -> int:
+    """Create the legacy station's ``station.yaml`` and report a shell-friendly status."""
+    return initialize_with(LegacyStationConfig, name, station_id=station_id, output=output, errors=errors)
+
+
+def import_catalog(*, output: TextIO, errors: TextIO) -> int:
+    """Import the legacy file catalog into the station's SQLite records database."""
+    load_voxel_env()
+    try:
+        station = LegacyStationConfig.load()
+        records = SQLiteRecords(
+            station.station_dir() / "records.sqlite3",
+            resolve_root=lambda spec: station.resolve_storage(StorageSpec.model_validate(spec.model_dump())).target,
+        )
+        result = asyncio.run(records.acquisitions.import_legacy_file_catalog(station.station_dir() / "catalog"))
+    except (OSError, RecordsError, ValidationError) as exc:
+        errors.write(f"{exc}\n")
+        return 2
+
+    output.write(
+        f"Imported {result.imported} acquisition(s); {result.unchanged} already matched. "
+        "Legacy catalog files were left unchanged.\n"
+    )
+    return 0
+
+
+__all__ = ["collect_checks", "import_catalog", "initialize_legacy", "run_check"]

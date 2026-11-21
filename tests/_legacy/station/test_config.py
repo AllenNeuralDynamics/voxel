@@ -60,15 +60,15 @@ def test_station_config_initialize_promotes_system_config_and_preserves_file_ide
     assert loaded.scratch == Path("/node-scratch")
     assert loaded.max_ram_fraction == 0.6
     assert (home / "system.yaml").is_file()
-    assert (home / "station.yaml").is_file()
+    assert (home / "legacy" / "station.yaml").is_file()
 
     with pytest.raises(FileExistsError, match="already configured"):
         StationConfig.initialize("scope-b")
 
 
 def test_station_file_gives_the_metadata_forms(voxel_home: Path) -> None:
-    voxel_home.mkdir()
-    station = voxel_home / "station.yaml"
+    (voxel_home / "legacy").mkdir(parents=True)
+    station = voxel_home / "legacy" / "station.yaml"
     head = "schema_version: 1\nid: 12345678-1234-5678-1234-567812345678\nname: scope\n"
 
     station.write_text(head, encoding="utf-8")

@@ -75,16 +75,19 @@ generator does not report its resolution today.
 
 - **Never drop a knob.** Dropping it on load would erase it from state.json on the next save, with no trace.
 - **Shape mistakes are refused**, like any other bad field: an empty label, an unknown `field`.
-- **Fit mistakes are cautions that keep the knob** and never block an edit: the generator has no timeline in the
-  profile, the wire has no signal, the signal's kind has no such field, 2 knobs on the same number. The row says
-  "Not available" with the reason; Diagnostics lists the caution. Blocking would refuse unrelated edits:
-  `set_generator_timeline` refuses any timeline that leaves the profile with problems, so changing `lens_left` from a
-  wave to a constant would be refused because of a knob on `center`.
-- **This needs warnings in the problems system.** `Issue` has `level: "error" | "warning"`, but `Problem` is always an
-  error and `Problems` holds only `Problem`. Pick: a separate `Caution` (an `Issue` with `level: "warning"`) and
-  `Cautions` list, so every existing `if problems:` keeps meaning "refuse". `Warning` cannot be the name: ruff reports
-  `A001` (it shadows a Python builtin). `Alert` does not fit: it is wrong in a running instrument and ends by itself
-  when the state changes back, while a broken knob is wrong in data and lasts until someone edits it.
+- **Fit mistakes are warning-level problems that keep the knob** and never block an edit: the generator has no
+  timeline in the profile, the wire has no signal, the signal's kind has no such field, 2 knobs on the same number.
+  The row says "Not available" with the reason; Diagnostics lists the warning. Blocking would refuse unrelated edits:
+  `set_generator_timeline` refuses any timeline that leaves the profile with error-level problems, so changing
+  `lens_left` from a wave to a constant must not be refused because of a knob on `center`.
+- **This needs warnings in the problems system.** Decided on 2026-11-20: `Problem` takes `level: "error" | "warning"`
+  (the field `Issue` already has), as LSP diagnostics and the VS Code Problems panel do. Only error-level problems
+  refuse: refusing checks use `problems.errors()`, and `Problems.raise_if_any` raises only those. `Problem` and
+  `Problems` stay (not folded into `Issue`/`Issues`): `Issue` remains the umbrella word, as in the app's Issues tab,
+  and a data check's `Problems` cannot hold an `Alert`. Rejected: a separate `Caution`/`Cautions` type ("Caution" is a
+  severity word in ANSI Z535 and FAA alerting, and a laser-label word in a lab), and `Warning` (ruff `A001`, a Python
+  builtin). `Alert` does not fit: it is wrong in a running instrument and ends by itself when the state changes back,
+  while a broken knob is wrong in data and lasts until someone edits it.
 
 ## Undo
 
@@ -111,11 +114,11 @@ devices, generators included, with no restart (`acquisition.md`, "Resources"), s
 
 | # | Addition | Where |
 |---|---|---|
-| 1 | `Caution` and `Cautions` | `vxlib/src/vxlib/issues.py` |
+| 1 | `Problem.level` (error or warning) and `Problems.errors()`; `raise_if_any` raises only errors; refusing checks use `errors()` | `vxlib/src/vxlib/issues.py`, its callers |
 | 2 | `TuningKnob` (`label`, `generator`, `wire`, `field`) | `src/vxl/instrument/state.py` |
 | 3 | `Profile.tuning_knobs`, default empty | `state.py` |
 | 4 | `tuning_knobs` in the base `ProfileFields`, so every kind's `update_profile` edits the list | `state.py` |
-| 5 | `Profile.cautions(config)`: the fit checks above, apart from `Profile.problems` | `state.py` |
+| 5 | The fit checks above, as warning-level problems in `Profile.problems` | `state.py` |
 | 6 | Bounds and step helpers (scale tables read backward for levels; edge placement for times) | `signals.py`, `samples.py` |
 | 7 | A knob view in the instrument view: each knob's current value, unit, bounds, step, and whether it is available. 1 field in `InstrumentView` and 1 line in `_view_sources`. | `base.py` |
 | 8 | A turn method on the base instrument, `set_tuning_knob(generator, wire, field, value)`: change 1 number of the active profile, run the profile checks, load the generator, save | `base.py` |
