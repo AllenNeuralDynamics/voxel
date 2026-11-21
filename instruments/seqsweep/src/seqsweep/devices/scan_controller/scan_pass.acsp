@@ -34,7 +34,7 @@ int Channels(8) = (100,100,0,0,0,0,0,0)
 lc.AssignChannels(Channels)
 lc.SetConfigOut(0, 0, 0)
 
-! Run-up to the start of the pass
+! Go to the start of the lead-in
 VEL(scan_axis) = move_speed_mm_s
 PTP/e(scan_axis), run_start
 TILL ^MST(scan_axis).#MOVE
@@ -43,6 +43,7 @@ TILL ^MST(scan_axis).#MOVE
 chLine = lc.FixedDistPulse(line_pulse_ms, scan_dir * pixel_size_mm, scan_dir * overscan_mm, scan_dir * (overscan_mm + capture))
 
 ! Laser gating is not enabled yet (next PR): no lc.LaserEnable() / lc.LaserDisable() here.
+! One move: lead-in + capture + lead-out
 VEL(scan_axis) = scan_speed_mm_s
 PTP/e(scan_axis), run_end
 TILL ^MST(scan_axis).#MOVE
