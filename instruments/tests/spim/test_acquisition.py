@@ -46,13 +46,16 @@ def _sweep_z(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-async def _open(data: dict[str, Any], tmp_path: Path, *, depth_um: float = 4) -> Microscope:
+async def _open(
+    data: dict[str, Any], tmp_path: Path, *, depth_um: float = 4, points: tuple[tuple[float, float], ...] = ((0, 0),)
+) -> Microscope:
     folder = InstrumentFolder.create(template(data), "left", tmp_path)
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / "data" / spec.path)
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     microscope = Microscope(folder, records=records, system=system)
     await microscope.open()
-    region = {"outline": {"kind": "explicit_points", "points": [{"x": 0, "y": 0}]}, "bounds": [0, depth_um]}
+    outline = {"kind": "explicit_points", "points": [{"x": x, "y": y} for x, y in points]}
+    region = {"outline": outline, "bounds": [0, depth_um]}
     task = SPIMTask.complete({"id": "brain", "region": region, "profiles": ["gfp"]}, microscope.view.value.state.task)
     await microscope.add_task(task)
     await microscope.update_writer_settings(max_level=ScaleLevel.L2, batch_frames=4)  # a visit takes 2 batches
@@ -156,3 +159,19 @@ async def test_progress_reaches_the_record_while_a_visit_runs(config_data: dict[
         unsubscribe()
         await microscope.close()
     assert any(0 < frames < 20 for frames in written), written
+
+
+async def test_an_alternating_scan_steps_every_2nd_stop_back_down(config_data: dict[str, Any], tmp_path: Path) -> None:
+    config_data["default"]["task"]["path"]["scan"] = {"z": "alternate"}
+    microscope = await _open(_wired(config_data), tmp_path, points=((0, 0), (500, 0)))
+    try:
+        acquisition_id = await microscope.start_acquisition(_STORAGE, "ana")
+        await _finish(microscope)
+        stored = await microscope._records.acquisitions.get(acquisition_id)
+        position = (await microscope.stage_position())["z"]
+    finally:
+        await microscope.close()
+    assert [visit.status for visit in stored.visits] == ["completed", "completed"]
+    steps = [visit.images()["camera"].transform.steps[0].z for visit in stored.visits]
+    assert steps == [1.0, -1.0]
+    assert position == pytest.approx(-1.0, abs=0.5)  # the 2nd stop steps from 4 µm down, 1 step past its last frame

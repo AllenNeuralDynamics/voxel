@@ -91,7 +91,7 @@ def test_explicit_points_place_1_volume_on_each() -> None:
     assert _stops(volumes, "x", "y") == [("gfp", "0", "0"), ("gfp", "5000", "9000")]
 
 
-def test_a_region_drawn_from_the_side_tiles_y_and_z_and_every_stop_sweeps_the_same_x() -> None:
+def test_a_region_drawn_from_the_side_tiles_y_and_z_and_every_stop_sweeps_the_same_x_back_and_forth() -> None:
     side = {"kind": "convex_hull", "points": [{"x": 0, "z": 0}, {"x": 3000, "z": 0}, {"x": 1500, "z": 1200}]}
     volumes = _plan("x-sweep-oblique.yaml", _sensor(6.5, 2048, 2048), {"outline": side, "bounds": [0, 1500]})
     assert _stops(volumes, "y", "z") == [
@@ -102,7 +102,19 @@ def test_a_region_drawn_from_the_side_tiles_y_and_z_and_every_stop_sweeps_the_sa
         ("gfp", "391", "1079"),
         ("gfp", "1109", "1079"),
     ]
-    assert {v.scan for v in volumes} == {volumes[0].scan}
+    assert {_frames(v.scan) for v in volumes} == {_frames(volumes[0].scan)}  # the template's X alternates
+    assert [v.scan.spacing > 0 for v in volumes] == [True, False, True, False, True, False]
+    assert all(v.start.x == v.scan.first for v in volumes)
+
+
+def _frames(run: AxisRun) -> tuple[float, ...]:
+    """The frame positions a run covers, low to high, rounded to 0.01 µm."""
+    return tuple(sorted(round(run.first + run.spacing * i, 2) for i in range(run.count)))
+
+
+def test_a_forward_scan_runs_every_stop_from_the_low_end() -> None:
+    volumes = _plan("z-step.yaml", _EXA, _box([0, 100], x=(0, 20000), y=(0, 15000)))
+    assert {v.scan for v in volumes} == {AxisRun("z", 0.0, 1.0, 101)}
 
 
 def test_profile_major_runs_every_stop_of_1_profile_before_the_next() -> None:

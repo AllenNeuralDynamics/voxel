@@ -126,6 +126,14 @@ Left as they are, on purpose:
 `Records.record` and `Recording.visit` already set every status: a normal end completes, a cancel cancels, an error
 fails, missing frames fail the visit, and visits that never started are skipped. The loop never names a status.
 
+## Scan direction
+
+With `path.scan: {<axis>: alternate}` on the task, every 2nd stop along the tile path runs from the far end back
+(`plan_task`): its `AxisRun` starts at the last frame position with a negative spacing, over the same frame
+positions, so the stage never travels back across the region. All profiles at 1 stop run the same way. A step scan
+arms negative steps, a sweep runs `last < first`, and the image's transform gets a reversed axis, so every pixel
+still lands at its specimen position.
+
 ## The batch loop
 
 A visit runs in batches of the writer's `batch_frames`. The writer's ring holds several batches in memory while
@@ -194,8 +202,7 @@ the writer cannot take are dropped by whole batches and reported.
 ## To do
 
 - Reading the drivers' dropped frames: see `src/vxl/devices/camera/dropped-frames.md`.
-- The planner ignores the task's scan direction (`path.scan`, such as `alternate`): every run goes low to high.
-- Memory per camera, checked at Start, and the batch set in frames: see `writer.md`.
+- Memory per camera, checked at Start: see `writer.md`.
 - A new ASI Tiger axis driver with `sweep` and `arm_steps`, outside `instruments/`; ask before starting it.
 
 ## Simulation notes

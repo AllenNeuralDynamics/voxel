@@ -59,20 +59,29 @@ def plan_task(
         previous = state.positions_at({**stage, scan.axis: span.middle}, previous)
         stops.append((stage, previous))
 
-    def volume(stage: Mapping[SpecimenAxis, float], picks: Mapping[str, AxisPosition], profile_id: ProfileId) -> Volume:
-        """1 profile at 1 stop. ``stage`` is the stop's position on the tiled axes."""
+    alternate = task.path.scan.get(scan.axis) == "alternate"
+
+    def volume(
+        index: int, stage: Mapping[SpecimenAxis, float], picks: Mapping[str, AxisPosition], profile_id: ProfileId
+    ) -> Volume:
+        """1 profile at stop ``index``. ``stage`` is the stop's position on the tiled axes. With ``alternate`` on the
+        scan axis, every 2nd stop runs from the far end back, over the same frame positions."""
         profile = state.profiles[profile_id]
         positions, frames = _light(config, profile, picks, sensors)
         count = math.floor(span.length / profile.spacing + _COUNT_TOLERANCE) + 1
-        run = AxisRun(scan.axis, span.low, profile.spacing, count, _sweep_speed(scan, profile, profile_id))
-        at = {**stage, scan.axis: span.low}
+        backward = alternate and index % 2 == 1
+        first = span.low + profile.spacing * (count - 1) if backward else span.low
+        spacing = -profile.spacing if backward else profile.spacing
+        run = AxisRun(scan.axis, first, spacing, count, _sweep_speed(scan, profile, profile_id))
+        at = {**stage, scan.axis: first}
         start = Vec3D(z=at["z"], y=at["y"], x=at["x"])
         transforms = {camera: run.transform(frame, start) for camera, frame in frames.items()}
         return Volume(task.id, profile_id, start, run, positions, transforms)
 
+    # Both orders pass each stop's place on the tile path, so a stop's direction is the same for every profile.
     if task.iteration == "position_major":
-        return [volume(stage, picks, profile) for stage, picks in stops for profile in task.profiles]
-    return [volume(stage, picks, profile) for profile in task.profiles for stage, picks in stops]
+        return [volume(i, stage, picks, p) for i, (stage, picks) in enumerate(stops) for p in task.profiles]
+    return [volume(i, stage, picks, p) for p in task.profiles for i, (stage, picks) in enumerate(stops)]
 
 
 def _light(
