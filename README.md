@@ -35,7 +35,7 @@ cd voxel
 
 uv sync --all-packages --extra web
 vp -C web install --frozen-lockfile
-vp -C web/station build
+vp -C web/legacy build
 
 uv run vxl legacy init --name my-microscope
 uv run vxl legacy web
@@ -125,7 +125,7 @@ interfaces; the other distributions have narrower library boundaries.
 | [`vxl-records`](records/) | SQLite-backed acquisition, preset, and log records |
 | [`ome-zarr-writer`](omezarr/) | Streaming multiscale OME-Zarr writing |
 | [`vxlib`](vxlib/) | Shared reactive primitives, schemas, and utilities |
-| [`web/station`](web/station/) | SvelteKit frontend compiled into `vxl._legacy.web` package data |
+| [`web/legacy`](web/legacy/) | SvelteKit frontend compiled into `vxl._legacy.web` package data |
 | [`web/kit`](web/kit/) | Shared Svelte UI kit used by the web apps |
 
 The non-published [`bench`](bench/) workspace contains OME-Zarr performance and behavior benchmarks.
@@ -150,7 +150,7 @@ uv run pytest
 vp -C web run -r check
 ```
 
-For frontend development, run `vp -C web/station dev` beside `uv run vxl legacy web`. Build the frontend and Python
+For frontend development, run `vp -C web/legacy dev` beside `uv run vxl legacy web`. Build the frontend and Python
 release artifacts together with `uv run scripts/build.py`.
 
 Package-specific boundaries and workflows are documented in their respective READMEs. Types and docstrings remain

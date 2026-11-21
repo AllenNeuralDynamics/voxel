@@ -106,6 +106,7 @@ src/vxl/
 └── cli/                station.py, lab.py: the only place that starts a publisher and a gateway together
 gateway/                vxl_gateway, its own workspace package; imports only vxl.feed
 web/kit, web/station, web/lab   the browser apps; web/lab later holds the Zarr viewer
+web/legacy                      the old station app, frozen, until legacy goes
 ```
 
 - `vxl.station` and `vxl.lab` have the same shape and never import each other.

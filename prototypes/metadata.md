@@ -81,9 +81,9 @@ From the class's JSON schema only, for any class:
 
 | # | Change | Where |
 |---|---|---|
-| 1 | Nested objects: resolve `$ref`/`$defs` and draw a group per object | `web/station/src/lib/features/run/MetadataEditor.svelte` |
+| 1 | Nested objects: resolve `$ref`/`$defs` and draw a group per object | `web/legacy/src/lib/features/run/MetadataEditor.svelte` |
 | 2 | The key mark: the key field first, in the task's heading, and the Run page grouped by it | `MetadataEditor.svelte`, the Run page |
-| 3 | `JsonSchemaProperty` gains `$ref`, `properties` and the key mark | `web/station/src/lib/core/model/types.ts` |
+| 3 | `JsonSchemaProperty` gains `$ref`, `properties` and the key mark | `web/legacy/src/lib/core/model/types.ts` |
 | 4 | The read view and Edit, with no layout shift; after a run only annotations open | `MetadataEditor.svelte` |
 
 ## Open questions

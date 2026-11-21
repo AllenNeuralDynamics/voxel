@@ -1,6 +1,6 @@
 packages:
   - kit
-  - station
+  - legacy
 
 # Packages that both the kit and an app list. 1 version here means 1 copy, so they share the same Svelte runtime.
 catalog:

@@ -105,7 +105,7 @@ which the content sets. There is no neutral note: use `frame-tinted`.
 - Add one only when 2 or more places need it and no frame fits.
 - It sets corners, edge and background only.
 - Its name says what it does to the box, not where it is used.
-- Add it to the tables above and to the Surfaces page of the UI Lab, in `web/station/src/routes/(dashboard)/ui-lab/surfaces/`.
+- Add it to the tables above and to the Surfaces page of the UI Lab, in `web/legacy/src/routes/(dashboard)/ui-lab/surfaces/`.
 
 ## Control fills
 

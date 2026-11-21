@@ -11,7 +11,7 @@ export default defineConfig({
       internalPattern: ['$app/', '$env/', '$lib/', '@voxel/', '~icons/'],
       groups: ['side_effect', 'builtin', 'external', 'internal', ['parent', 'sibling', 'index'], 'unknown']
     },
-    sortTailwindcss: { stylesheet: './station/src/routes/layout.css', functions: ['cn', 'tv'] },
+    sortTailwindcss: { stylesheet: './legacy/src/routes/layout.css', functions: ['cn', 'tv'] },
     ignorePatterns: ['pnpm-lock.yaml']
   }
 });

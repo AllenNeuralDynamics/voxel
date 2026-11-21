@@ -240,7 +240,7 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  station:
+  legacy:
     dependencies:
       '@bokuweb/zstd-wasm':
         specifier: ^0.0.27

@@ -64,7 +64,7 @@ uv run vxl legacy web
 In another terminal, run the Vite development server:
 
 ```bash
-vp -C web/station dev
+vp -C web/legacy dev
 ```
 
 Open the URL reported by Vite. During development, `/api` requests are proxied to `http://localhost:8000`; discovery
@@ -90,7 +90,7 @@ through those models and render their reactive state rather than parsing wire pa
 ## Build the packaged interface
 
 ```bash
-vp -C web/station build
+vp -C web/legacy build
 ```
 
 The static adapter writes the production SPA directly to `src/vxl/_legacy/web/static/` in the workspace root. That directory is generated, ignored
@@ -108,8 +108,8 @@ uv run scripts/build.py
 From the workspace root:
 
 ```bash
-vp -C web/station run check
-vp -C web/station build
+vp -C web/legacy run check
+vp -C web/legacy build
 ```
 
 `check` runs Svelte and TypeScript validation, the Oxfmt format check, Oxlint, and the frame-class check. A production build additionally catches
