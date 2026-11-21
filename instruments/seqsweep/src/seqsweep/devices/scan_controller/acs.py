@@ -265,6 +265,9 @@ class AcsController(ScanController):
         self._check_in_limits("y", y_mm)
         axis_x, axis_y = self._axes
         with self._lock:
+            # A scan pass leaves the scan axis at the scan speed, so set the positioning speed on every move.
+            for axis in self._axes:
+                self._sp.SetVelocity(self._hc, axis, self._config.move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
             self._sp.ToPointM(self._hc, 0, [axis_x, axis_y, -1], [x_mm, y_mm], self._sp.SYNCHRONOUS, True)
 
     @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")
