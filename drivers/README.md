@@ -123,6 +123,8 @@ See the [driver module](src/vxl_drivers/power_meters/thorlabs.py) for setup note
 | ASI Tiger linear axis | `vxl_drivers.axes.asi.TigerLinearAxis` | Configured with a `TigerHub` |
 | ASI Tiger XYZ stage | `vxl_drivers.axes.tiger_stage.TigerXYZStage` | 3 Tiger axes; `raster_scan()` for X/Y |
 | ASI Tiger raster scan | `vxl_drivers.tigerhub.raster.TigerRasterScan` | Fast and slow axis letters on 1 card |
+| Micronix MMC-100 controller | `vxl_drivers.axes.mmc.MMCHub` | Serial support included |
+| Micronix MMC-100 linear axis | `vxl_drivers.axes.mmc.MMCLinearAxis` | Moves to positions only (no steps or sweeps); `go_home` after power-on |
 | Thorlabs MFF101 flip mount | `vxl_drivers.axes.thorlabs.MFF101` | `thorlabs` extra |
 
 #### ASI Tiger linear axis: checks on the real stage
