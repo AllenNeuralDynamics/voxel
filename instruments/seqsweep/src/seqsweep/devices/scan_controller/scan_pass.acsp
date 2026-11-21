@@ -48,6 +48,9 @@ VEL(scan_axis) = scan_speed_mm_s
 PTP/e(scan_axis), run_end
 TILL ^MST(scan_axis).#MOVE
 
+! Back to the positioning speed: moves started without a velocity use the axis's current one
+VEL(scan_axis) = move_speed_mm_s
+
 pulse_count = lc.GetPulseCounts(chLine)
 
 lc.SetConfigOut(0, 0, 0)

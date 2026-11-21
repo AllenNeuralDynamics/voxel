@@ -45,8 +45,8 @@ class ScanController(Device):
         pass
 
     @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
-    def move_to(self, x_mm: float, y_mm: float) -> None:
-        # TODO: start the positioning move
+    def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
+        # TODO: start the positioning move; None: the controller's configured positioning speed
         pass
 
     @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")

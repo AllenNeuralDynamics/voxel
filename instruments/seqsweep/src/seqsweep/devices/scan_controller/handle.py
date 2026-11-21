@@ -24,9 +24,9 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         """Start one strip pass in the given direction without blocking."""
         await self.call("run", direction)
 
-    async def move_to(self, x_mm: float, y_mm: float) -> None:
-        """Start a move to an absolute (X, Y) position in mm."""
-        await self.call("move_to", x_mm, y_mm)
+    async def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
+        """Start a move to an absolute (X, Y) position in mm; ``velocity_mm_s`` None uses the configured speed."""
+        await self.call("move_to", x_mm, y_mm, velocity_mm_s)
 
     async def move_by(self, dx_mm: float, dy_mm: float) -> None:
         """Start a move by a relative (X, Y) step in mm."""
