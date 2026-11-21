@@ -173,10 +173,10 @@ class ContinuousAxis(Device):
 
     unit: ClassVar[str]
 
-    @property
+    @number(step=lambda self: self._get_position_step())
     @stream("fast", units=lambda device: device.unit)
-    @abstractmethod
-    def position(self) -> float: ...
+    def position(self) -> float:
+        return self._get_position()
 
     @property
     @stream("fast", label="Moving")
@@ -223,6 +223,13 @@ class ContinuousAxis(Device):
     @fact(desc="The pins that can take pulses to step on, and that can send a sweep's pulses")
     @abstractmethod
     def pins(self) -> list[Pin]: ...
+
+    @abstractmethod
+    def _get_position(self) -> float: ...
+
+    @abstractmethod
+    def _get_position_step(self) -> float | None:
+        """The smallest change of position that the axis reports, or ``None`` when the driver does not know it."""
 
     @abstractmethod
     def _get_speed(self) -> float: ...

@@ -90,6 +90,7 @@ class MMCLinearAxis(LinearAxis):
             self._limits = Span(
                 self._from_mm(self._query_float(Cmd.LOWER_LIMIT)), self._from_mm(self._query_float(Cmd.UPPER_LIMIT))
             )
+            self._position_step = self._query_float(Cmd.ENCODER_RESOLUTION)
             self._apply_initial_deadband(desired_deadband)
             for command, value, name in initial_kinematics:
                 if value is not None:
@@ -100,8 +101,11 @@ class MMCLinearAxis(LinearAxis):
 
     # The new axis API --------------------------------------------------------------------------------------------
 
-    @property
-    def position(self) -> float:
+    def _get_position_step(self) -> float | None:
+        """A guess: 1 encoder count, in µm. The step of the theoretical position is not checked on a controller."""
+        return self._position_step
+
+    def _get_position(self) -> float:
         return self._from_mm(self._read_position().theoretical)
 
     @property
@@ -295,6 +299,7 @@ class MMCLinearAxis(LinearAxis):
     @encoder_resolution_um_per_count.setter
     def encoder_resolution_um_per_count(self, value: float) -> None:
         self.hub.command(self.axis_id, Cmd.ENCODER_RESOLUTION, value)
+        self._position_step = value
 
     @property
     @stream("slow", label="Encoder Velocity", desc="Velocity measured by the encoder.")

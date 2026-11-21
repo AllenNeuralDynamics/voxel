@@ -68,7 +68,7 @@ export function deviceReading(device: DeviceHandle): string | null {
     const state = device.state;
     if (!state) return null;
     const label = (slot: number | null) => device.labelAt(slot) ?? (slot == null ? null : `Slot ${slot}`);
-    return state.is_moving ? `Moving to ${label(state.target) ?? 'a new slot'}` : label(state.position);
+    return state.is_moving ? `Moving to ${label(state.target) ?? 'a new slot'}` : label(state.slot);
   }
   if (device instanceof AxisHandle) {
     const position = device.position?.value;

@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import logging
 from collections.abc import AsyncIterator
@@ -8,19 +7,16 @@ from uuid import UUID, uuid4
 
 import pytest
 from vxlib.issues import Problems
-from vxlib.reactivity import Cell, Emitter
 from vxlib.vector import Transform, Vec3D
 
 from vxl import system as system_module
 from vxl.instrument.base import Instrument
 from vxl.instrument.config import InstrumentConfig
 from vxl.instrument.state import InstrumentState
-from vxl.live import LiveEmission, LiveLayer, LiveSourceEmission
 from vxl.records import Acquisition, Image, Visit
 from vxl.station.config import StationConfig
-from vxl.station.errors import NotFoundError
-from vxl.station.feed import StationFeed
-from vxl.station.station import SessionInfo, SessionView, Station, StationStatus, StationView
+from vxl.station.errors import NotFoundError, RejectedError
+from vxl.station.station import Station, StationStatus
 from vxl.storage import StorageSpec
 
 _TRANSFORM = Transform(
@@ -111,8 +107,7 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
     view = state.session.instrument
     assert set(view.devices) == {"camera", "laser", "x_axis", "y_axis", "z_axis"}
     assert view.activities == ()
-    written = (await StationFeed(station.config.info, station.view, station.live).snapshot()).model_dump(mode="json")
-    assert written["session"]["instrument"]["config"]["target"].endswith("._Kind")
+    assert view.config.target.endswith("._Kind")
 
     async with station.instrument(info.id) as instrument:
         await instrument.set_device_properties("camera", {"exposure_time_ms": 12.5})
@@ -121,6 +116,13 @@ async def test_a_session_shows_the_open_instrument_and_closes(station: Station) 
     assert session.instrument.devices["camera"].props["exposure_time_ms"].value == 12.5
 
     await station.close_session(info.id)
+    assert station.view.value.status is StationStatus.IDLE
+
+
+async def test_a_name_that_cannot_be_a_folder_is_refused(station: Station) -> None:
+    with pytest.raises(RejectedError, match="may use only letters"):
+        await station.open_session("bad name!")
+
     assert station.view.value.status is StationStatus.IDLE
 
 
@@ -137,42 +139,6 @@ async def test_a_session_that_fails_to_open_leaves_the_station_idle(station: Sta
     state = station.view.value
     assert state.status is StationStatus.IDLE
     assert state.error is not None
-
-
-def _active(session: str) -> StationView:
-    """An active station view whose session has only an identity: the feed reads no more of it."""
-    info = SessionInfo(id=UUID(int=int(session)), instrument_name="bench")
-    return StationView(status=StationStatus.ACTIVE, session=SessionView.model_construct(info=info))
-
-
-@pytest.mark.parametrize(("then", "delivered"), [(_active("1"), 1), (_active("2"), 0), (StationView(), 0)])
-async def test_the_feed_drops_queued_frames_when_the_session_changes(then: StationView, delivered: int) -> None:
-    station, live = Cell(_active("1")), Emitter[LiveSourceEmission]()
-    feed = StationFeed(StationConfig(id=UUID(int=0), name="scope").info, station, live)
-    frames: list[LiveEmission] = []
-
-    async def keep(frame: LiveEmission) -> None:
-        frames.append(frame)
-
-    feed.frames.subscribe(keep)
-
-    await live.emit(("camera", LiveLayer.OVERVIEW, b"frame", None))  # the feed takes the frames it is given
-    await station.set(then)  # before the feed delivers the queued frame
-    await asyncio.sleep(0.05)
-
-    assert len(frames) == delivered
-    await feed.close()
-
-
-async def test_the_feed_ends_every_connection_when_the_station_closes(station: Station) -> None:
-    feed = StationFeed(station.config.info, station.view, station.live)
-
-    async with feed.connect() as connection:
-        await station.close()
-        async with asyncio.timeout(1):
-            seen = [view async for view in connection]
-
-    assert all(view.status is StationStatus.CLOSED for view in seen)
 
 
 async def test_opening_an_instrument_that_does_not_exist_is_not_found(station: Station) -> None:

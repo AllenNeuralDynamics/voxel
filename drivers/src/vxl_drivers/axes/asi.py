@@ -104,8 +104,10 @@ class TigerLinearAxis(LinearAxis):
         """The hub of the controller this axis is on."""
         return self._hub
 
-    @property
-    def position(self) -> float:
+    def _get_position_step(self) -> float | None:
+        return 1 / STEPS_PER_UM
+
+    def _get_position(self) -> float:
         steps = self._cached("position_steps")
         if steps is None:
             steps = self._hub.box.get_position([self._label])[self._label]

@@ -37,8 +37,8 @@ class MFF101(DiscreteAxis):
 
     @property
     def state(self) -> DiscreteAxisState:
-        position = self._inst.get_state()
-        return DiscreteAxisState(position=position, target=self._target, is_moving=position is None)
+        slot = self._inst.get_state()
+        return self._state_at(slot, target=self._target, is_moving=slot is None)
 
     def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         if slot not in (0, 1):

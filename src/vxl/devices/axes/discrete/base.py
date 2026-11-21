@@ -28,12 +28,14 @@ SlotName = Annotated[str, BeforeValidator(slot_label)]
 class DiscreteAxisState(BaseModel, frozen=True):
     """Discrete-axis feedback and command state.
 
-    ``position`` is a feedback-resolved slot or ``None``. ``target`` retains the
-    last successfully issued slot across arrival, halt, timeout, and external moves.
-    Both indices are zero-based; an unset target is ``None``.
+    ``slot`` is the slot that the feedback resolves to, or ``None`` between slots. ``position`` is the label of that
+    slot, as ``move_to`` takes it, or ``None`` between slots and at a slot with no label. ``target`` retains the last
+    successfully issued slot across arrival, halt, timeout, and external moves. Both indices are zero-based; an unset
+    target is ``None``. A driver makes a state with ``DiscreteAxis._state_at``, which adds the label.
     """
 
-    position: int | None
+    position: str | None
+    slot: int | None
     target: int | None
     is_moving: bool
 
@@ -137,6 +139,11 @@ class DiscreteAxis(Axis[str], kind=DeviceType.DISCRETE_AXIS):
         """
 
     # Helper methods _________________________________________________________________________________________________
+
+    def _state_at(self, slot: int | None, *, target: int | None, is_moving: bool) -> DiscreteAxisState:
+        """The state of the axis at ``slot``, with the label of that slot as its position."""
+        position = None if slot is None else self._labels.get(slot)
+        return DiscreteAxisState(position=position, slot=slot, target=target, is_moving=is_moving)
 
     def index_of(self, label: str) -> int:
         """Return the first slot matching ``label``; raise ``KeyError`` if absent."""

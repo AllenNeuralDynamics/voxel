@@ -138,6 +138,27 @@ async def test_a_power_out_of_range_is_refused_and_nothing_changes(instrument: B
     assert (await _light(instrument))["power"] == 30
 
 
+async def test_a_power_that_is_no_number_is_refused(instrument: BasicInstrument) -> None:
+    await instrument.set_power_mode("full")
+
+    with pytest.raises(RejectedError, match="nan is not a power"):
+        await instrument.set_power("aotf", float("nan"))
+
+
+async def test_a_position_that_the_device_cannot_take_is_refused_and_nothing_changes(
+    instrument: BasicInstrument,
+) -> None:
+    before = instrument.view.value.state.positions
+
+    with pytest.raises(RejectedError, match=r"'flip' cannot take the position 5\.0"):
+        await instrument.set_position_rule("flip", 5.0)
+    with pytest.raises(RejectedError, match="'flip' has no slot 'up'"):
+        await instrument.set_position_rule("flip", "up")
+
+    assert instrument.view.value.state.positions == before
+    assert instrument.view.value.history.undo_label is None
+
+
 async def test_the_timelines_of_a_profile_say_what_controls_each_device(instrument: BasicInstrument) -> None:
     assert (await _light(instrument))["controls"] == ("software", "digital")
     await instrument.select_profile("align")

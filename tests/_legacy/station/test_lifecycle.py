@@ -17,9 +17,10 @@ from vxl._legacy.instrument import (
     InstrumentConfig,
     InstrumentState,
 )
+from vxl._legacy.live import VoxelLivePacket
 from vxl._legacy.station.models import StationStatus
 from vxl._legacy.station.station import Station, StationConfig
-from vxl.live import LiveLayer, LiveSourceEmission, VoxelLivePacket
+from vxl.live import LiveLayer, LiveSourceEmission
 from vxl.live.protocol import StagePosition
 
 if TYPE_CHECKING:
@@ -179,7 +180,7 @@ async def test_close_failure_faults_station_and_retains_session_identity(
     await instrument.stream_revision.set(1)
     state_view = await station.feed.snapshot()
     position = StagePosition(x=1, y=2, z=3)
-    await instrument.preview.emit(("gfp", LiveLayer.OVERVIEW, b"VXLF", position))
+    await instrument.preview.emit(("gfp", LiveLayer.OVERVIEW, b"VXSF", position))
     await asyncio.sleep(0)
     frame = VoxelLivePacket.from_packed(delivered[-1][2])
     assert frame.header.seq == 0

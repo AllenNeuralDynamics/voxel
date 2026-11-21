@@ -49,7 +49,7 @@
     return shown.map(({ wheel, filter, channels }) => {
       const name = displayName(wheel.id);
       const moving = wheel.connected && wheel.state?.is_moving === true;
-      const slot = wheel.connected ? (moving ? wheel.state?.target : wheel.state?.position) : null;
+      const slot = wheel.connected ? (moving ? wheel.state?.target : wheel.state?.slot) : null;
       const actual = slot == null ? null : (wheel.labelAt(slot) ?? `Slot ${slot}`);
       const inPlace = !moving && actual === filter;
       const value = slot == null ? undefined : String(slot);
@@ -96,7 +96,7 @@
 
   function moveWheel(wheel: DiscreteAxisHandle, value: string): void {
     const slot = Number(value);
-    if (value === '' || (wheel.state?.position === slot && !wheel.state.is_moving)) return;
+    if (value === '' || (wheel.state?.slot === slot && !wheel.state.is_moving)) return;
     reportFailure(wheel.move(slot));
   }
 </script>

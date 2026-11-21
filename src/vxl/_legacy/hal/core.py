@@ -96,7 +96,7 @@ class RouteDimension:
         props = await handle.props.get("state", "labels")
         state = DiscreteAxisState.model_validate(props["state"].unwrap().value)
         labels = _SELECTOR_LABELS.validate_python(props["labels"].unwrap().value)
-        return labels.get(state.position) if not state.is_moving and state.position is not None else None
+        return labels.get(state.slot) if not state.is_moving and state.slot is not None else None
 
 
 class HAL:

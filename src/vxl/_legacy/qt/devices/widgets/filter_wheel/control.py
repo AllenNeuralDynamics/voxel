@@ -168,7 +168,7 @@ class FilterWheelControl(QWidget):
         """Display feedback or an explicitly identified target."""
         if self._status_label is None or self._graphic is None:
             return
-        slot = state.target if state.is_moving and state.target is not None else state.position
+        slot = state.target if state.is_moving and state.target is not None else state.slot
         if slot is None:
             slot = state.target
         if self._graphic.selected_slot != slot:
@@ -180,7 +180,7 @@ class FilterWheelControl(QWidget):
             if state.is_moving:
                 prefix = "Moving to" if state.target is not None else "Moving; position"
             else:
-                prefix = "Target" if state.position is None else "Position"
+                prefix = "Target" if state.slot is None else "Position"
             text = f"{prefix} {slot}: {label}"
         self._status_label.setText(text)
 

@@ -39,13 +39,8 @@ class StationNotConfiguredError(VoxelError):
     """There is no ``station.yaml``."""
 
 
-class FeedLaggedError(VoxelError):
-    """A connection to the station's feed fell too far behind."""
-
-
 __all__ = [
     "BusyError",
-    "FeedLaggedError",
     "NotFoundError",
     "RejectedError",
     "StartupError",

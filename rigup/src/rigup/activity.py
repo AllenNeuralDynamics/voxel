@@ -71,8 +71,8 @@ _operations: ContextVar[frozenset[object]] = ContextVar("operations", default=fr
 
 class ActivityScheduler:
     """Serialize operations and track running activities. Scheduling is not time-based: an operation waits only for
-    the operation before it. ``covers`` maps a resource to the resources it also stands for, such as a hub and its
-    axes."""
+    the operation before it. :attr:`operation` names the operation that runs now. ``covers`` maps a resource to the
+    resources it also stands for, such as a hub and its axes."""
 
     def __init__(self, covers: Mapping[Resource, Collection[Resource]] | None = None) -> None:
         self._covers = covers or {}
@@ -80,6 +80,12 @@ class ActivityScheduler:
         self._operation: object | None = None
         self._running: dict[Activity, tuple[Stop, Restart | None]] = {}
         self._activities = Cell[tuple[ActivityInfo, ...]](())
+        self._name = Cell[str | None](None)
+
+    @property
+    def operation(self) -> Readable[str | None]:
+        """The name of the operation that runs now, or ``None``. An operation inside another keeps the outer name."""
+        return self._name
 
     @property
     def activities(self) -> Readable[tuple[ActivityInfo, ...]]:
@@ -99,11 +105,15 @@ class ActivityScheduler:
             self._operation = object()
             token = _operations.set(_operations.get() | {self._operation})
             try:
+                await self._name.set(name)
                 async with self._cleared(name, requires, restart=restart):
                     yield
             finally:
-                _operations.reset(token)
-                self._operation = None
+                try:
+                    await self._name.set(None)  # still inside the operation: a subscriber that runs one does not wait
+                finally:
+                    _operations.reset(token)
+                    self._operation = None
 
     async def start(
         self, info: ActivityInfo, requires: Collection[Resource], *, stop: Stop, restart: Restart | None = None

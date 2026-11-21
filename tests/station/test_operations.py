@@ -37,6 +37,8 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[BasicInstrument], Mapping[str
     "move_stage": {"x": 10.0, "wait": True},
     "lights_off": {},
     "lasers_off": {},
+    "save_to_profile": {"device_id": "camera", "properties": ["exposure_time_ms"]},
+    "restore_from_profile": {"device_id": "camera", "properties": ["exposure_time_ms"]},
     "undo": {},
     "redo": {},
     "stop": {},

@@ -6,6 +6,7 @@ Provides float, integer, and non-negative-validated variants:
 - UVec2D, UVec3D: Non-negative float vectors (all components >= 0)
 - UIVec2D, UIVec3D: Non-negative (unsigned) integer vectors (all components >= 0)
 - Span: 2 numbers in the order they were given, with ``low`` and ``high``
+- StagePosition: an XYZ stage position in micrometers
 - Transform: where each element of a 3D array sits in space
 
 Components are named everywhere: vectors are built with keywords, and they are saved as maps such as
@@ -19,8 +20,10 @@ from itertools import product
 from typing import Annotated, Any, Literal, NamedTuple, Self, final
 
 import numpy as np
-from pydantic import Field, GetCoreSchemaHandler
+from pydantic import Field, FiniteFloat, GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
+
+from vxlib.schema import FrozenModel
 
 
 def _finite(value: object) -> bool:
@@ -383,6 +386,14 @@ class Span(NamedTuple):
     @property
     def middle(self) -> float:
         return (self.a + self.b) / 2
+
+
+class StagePosition(FrozenModel):
+    """Best-known XYZ position in micrometers when a source frame was first observed."""
+
+    x: FiniteFloat
+    y: FiniteFloat
+    z: FiniteFloat
 
 
 @dataclass(frozen=True)

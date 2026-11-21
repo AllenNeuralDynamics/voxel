@@ -17,7 +17,7 @@ class PulseDiscreteAxis(DiscreteAxis):
     active level for ``_PULSE_DURATION_S`` while forcing every other line to the
     inactive level, then returns all lines to inactive — one batch write per phase,
     so exactly one line is ever asserted. The wheel controller reads the pulse as a
-    position select. Feedback is unavailable: ``state.position`` remains ``None``;
+    position select. Feedback is unavailable: ``state.slot`` remains ``None``;
     ``state.target`` records the last issued selection. Movement status covers pulse
     execution, with physical settling unobserved.
 
@@ -103,7 +103,7 @@ class PulseDiscreteAxis(DiscreteAxis):
 
     @property
     def state(self) -> DiscreteAxisState:
-        return DiscreteAxisState(position=None, target=self._target, is_moving=self._is_moving)
+        return self._state_at(None, target=self._target, is_moving=self._is_moving)
 
     def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         del wait, timeout_s  # the pulse is synchronous and fixed-duration; nothing to wait on

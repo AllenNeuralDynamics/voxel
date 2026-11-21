@@ -23,7 +23,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         self._settle = float(settle_seconds)
         if not math.isfinite(self._settle) or self._settle < 0:
             raise ValueError("settle_seconds must be finite and non-negative")
-        self._state = DiscreteAxisState(position=start_pos, target=None, is_moving=False)
+        self._state = self._state_at(start_pos, target=None, is_moving=False)
         self._settle_deadline: float | None = None
         self.log.debug(
             "SimulatedDiscreteAxis %s: Initialized at position %s with %s slots",
@@ -36,7 +36,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
     @property
     def state(self) -> DiscreteAxisState:
         if self._settle_deadline is not None and time.monotonic() >= self._settle_deadline:
-            self._state = DiscreteAxisState(position=self._state.target, target=self._state.target, is_moving=False)
+            self._state = self._state_at(self._state.target, target=self._state.target, is_moving=False)
             self._settle_deadline = None
         return self._state
 
@@ -46,11 +46,11 @@ class SimulatedDiscreteAxis(DiscreteAxis):
             msg = f"Invalid slot {slot}; valid range is 0..{self.slot_count - 1}"
             raise ValueError(msg)
 
-        if self.state.position == slot or self._settle == 0:
-            self._state = DiscreteAxisState(position=slot, target=slot, is_moving=False)
+        if self.state.slot == slot or self._settle == 0:
+            self._state = self._state_at(slot, target=slot, is_moving=False)
             self._settle_deadline = None
         else:
-            self._state = DiscreteAxisState(position=None, target=slot, is_moving=True)
+            self._state = self._state_at(None, target=slot, is_moving=True)
             self._settle_deadline = time.monotonic() + self._settle
         if wait:
             self.await_movement(timeout_s)
@@ -63,7 +63,7 @@ class SimulatedDiscreteAxis(DiscreteAxis):
         """Halt motion, retaining the target and any resolved position."""
         state = self.state
         self._settle_deadline = None
-        self._state = DiscreteAxisState(position=state.position, target=state.target, is_moving=False)
+        self._state = self._state_at(state.slot, target=state.target, is_moving=False)
 
     def await_movement(self, timeout_s: float | None = None) -> None:
         """Wait for idle using a monotonic timeout in seconds."""

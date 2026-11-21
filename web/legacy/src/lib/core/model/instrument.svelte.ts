@@ -538,8 +538,8 @@ export class Instrument {
         for (const id of selectorIds) {
           const handle = selector(id);
           const state = handle?.state;
-          if (!handle || !state || state.is_moving || state.position === null) return undefined;
-          const label = handle.labelAt(state.position);
+          if (!handle || !state || state.is_moving || state.slot === null) return undefined;
+          const label = handle.labelAt(state.slot);
           if (label == null) return undefined;
           positions.set(id, label);
         }

@@ -5,13 +5,16 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pydantic import BaseModel, Field
 from rigup.activity import ActivityBusyError, ActivityInfo
+from rigup.device import DeviceInterface, PropModel
 from vxlib.issues import Problems
 
 from vxl.instrument.base import Instrument
 from vxl.instrument.basic import BasicInstrument
 from vxl.instrument.config import InstrumentConfig
 from vxl.instrument.folder import InstrumentFolder
+from vxl.instrument.hal import DeviceView
 from vxl.instrument.state import InstrumentState, ProfileFields, Task
+from vxl.instrument.store import Merge
 from vxl.metadata import ExperimentMetadata, key, required
 from vxl.records import Records
 from vxl.station.errors import NotFoundError, RejectedError, StartupError
@@ -22,7 +25,6 @@ from .support import bench
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from vxl.instrument.hal import DeviceView
 
 _AXIS = "vxl.devices.axes.continuous.simulated.SimulatedLinearAxis"
 
@@ -120,6 +122,120 @@ async def test_a_property_set_is_written_and_shown(instrument: _Bench) -> None:
     assert instrument.view.value.devices["camera"].props["exposure_time_ms"].value == 12.5
 
 
+def _alerts(instrument: _Bench) -> list[tuple[str, tuple[str | int, ...]]]:
+    return [(alert.code, alert.loc) for alert in instrument.view.value.alerts]
+
+
+async def test_a_device_that_differs_from_the_profile_is_an_alert_until_either_takes_the_others_value(
+    instrument: _Bench,
+) -> None:
+    exposure = ("device.inconsistent_with_profile", ("devices", "camera", "props", "exposure_time_ms"))
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 20.0})
+    assert _alerts(instrument) == []  # the profile sets no exposure yet
+
+    await instrument.save_to_profile("camera", ["exposure_time_ms"])
+    assert instrument.view.value.state.profiles["main"].props == {"camera": {"exposure_time_ms": 20.0}}
+    assert instrument.view.value.history.undo_label == "Save to profile"
+
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 35.0})
+    assert _alerts(instrument) == [exposure]
+    since = instrument.view.value.alerts[0].since
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 36.0})
+    assert instrument.view.value.alerts[0].since == since
+    assert "is 36.0, the profile has 20.0" in instrument.view.value.alerts[0].msg
+
+    await instrument.restore_from_profile("camera", ["exposure_time_ms"])
+    assert instrument.view.value.devices["camera"].props["exposure_time_ms"].value == 20.0
+    assert _alerts(instrument) == []
+
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 36.0})
+    await instrument.save_to_profile("camera", ["exposure_time_ms"])
+    assert _alerts(instrument) == []
+
+
+async def test_a_number_differs_from_the_profile_by_more_than_half_a_step(instrument: _Bench) -> None:
+    exposure = ("device.inconsistent_with_profile", ("devices", "camera", "props", "exposure_time_ms"))
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 20})
+    assert instrument.view.value.devices["camera"].props["exposure_time_ms"].step == 0.001
+
+    # A profile can hold a finer value than the camera reports: within half a step, the camera is at that value.
+    await instrument._store.update({("profiles", "main", "props", "camera"): Merge({"exposure_time_ms": 20.0004})})
+    assert _alerts(instrument) == []
+
+    await instrument._store.update({("profiles", "main", "props", "camera"): Merge({"exposure_time_ms": 20.0006})})
+    assert _alerts(instrument) == [exposure]
+
+
+def test_the_position_of_an_axis_with_named_slots_is_the_label_of_its_slot() -> None:
+    def wheel(position: str | None, slot: int | None) -> DeviceView:
+        state = {"position": position, "slot": slot, "target": 1, "is_moving": False}
+        return DeviceView(
+            interface=DeviceInterface(id="fw", kind="discrete_axis"), props={"state": PropModel[Any](value=state)}
+        )
+
+    assert Instrument._last_value(wheel("RFP", 1), "position") == ("RFP", None)
+    assert Instrument._last_value(wheel(None, 1), "position") == (1, None)  # no label: differs from every label
+    assert Instrument._last_value(wheel(None, None), "position") is None  # between slots: nothing to compare
+
+
+async def test_the_view_names_the_operation_that_runs_and_the_alerts_stay_as_they_were_inside_it(
+    instrument: _Bench,
+) -> None:
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 20.0})
+    await instrument.save_to_profile("camera", ["exposure_time_ms"])
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 35.0})
+    seen: list[tuple[str | None, int]] = []
+    instrument.view.subscribe(lambda view: seen.append((view.operation, len(view.alerts))))
+
+    await instrument.restore_from_profile("camera", ["exposure_time_ms"])
+
+    assert seen[0] == ("restore from the profile", 1)
+    assert seen[-1] == (None, 0)
+    assert {alerts for operation, alerts in seen if operation is not None} == {1}  # as they were, until it ends
+
+
+async def test_saving_or_restoring_a_value_that_is_not_there_is_not_found(instrument: _Bench) -> None:
+    with pytest.raises(NotFoundError, match="has not reported"):
+        await instrument.save_to_profile("camera", ["no_such_property"])
+    with pytest.raises(NotFoundError, match="The active profile has no"):
+        await instrument.restore_from_profile("camera", ["exposure_time_ms"])
+    with pytest.raises(NotFoundError, match="Device 'nope' not found"):
+        await instrument.save_to_profile("nope", [])
+    with pytest.raises(NotFoundError, match="Device 'nope' not found"):
+        await instrument.restore_from_profile("nope", [])
+
+
+async def test_a_profile_takes_only_what_a_device_can_set_and_never_a_stage_position(instrument: _Bench) -> None:
+    with pytest.raises(RejectedError, match="cannot set"):
+        await instrument.save_to_profile("camera", ["frame_size_mb"])
+    with pytest.raises(RejectedError, match="is a stage axis"):
+        await instrument.save_to_profile("x_axis", ["position"])
+
+    assert instrument.view.value.state.profiles["main"].props == {}
+    await instrument.apply_profile()  # the profile still applies
+
+
+async def test_a_save_to_the_profile_is_undone_as_1_step(instrument: _Bench) -> None:
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 20.0})
+    await instrument.save_to_profile("camera", ["exposure_time_ms"])
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 35.0})
+
+    await instrument.undo()
+
+    assert instrument.view.value.state.profiles["main"].props == {}
+    assert _alerts(instrument) == []  # the profile sets no exposure again
+
+
+async def test_a_metadata_edit_replaces_a_map_of_free_keys_whole(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    await instrument.set_metadata_class(_SubjectMetadata)
+    await instrument._update_task_metadata("brain", {"tags": {"a": "1", "b": "2"}})
+
+    await instrument._update_task_metadata("brain", {"tags": {"a": "9"}})
+
+    assert _metadata(instrument)["tags"] == {"a": "9"}
+
+
 async def test_the_views_are_empty_after_close(instrument: _Bench) -> None:
     await instrument.close()
 
@@ -138,6 +254,23 @@ async def test_move_stage_moves_only_the_given_axes(instrument: _Bench) -> None:
     stage = instrument._hal.stage
     positions = {axis: await stage[axis].position.get() for axis in ("x", "y", "z")}
     assert positions == {"x": 100, "y": 0, "z": 250}
+
+
+async def test_a_stage_move_outside_the_limits_is_refused_and_no_axis_moves(instrument: _Bench) -> None:
+    stage = instrument._hal.stage
+    limit = (await stage["z"].get_limits()).high
+
+    for z in (limit + 1, float("inf"), float("nan")):
+        with pytest.raises(RejectedError, match=r"The stage cannot go to .* on z"):
+            await instrument.move_stage(x=100, z=z, wait=True)
+
+    assert await stage["x"].position.get() == 0
+
+
+async def test_a_metadata_form_that_is_no_metadata_class_is_refused(instrument: _Bench) -> None:
+    for path in ("no.such.Thing", "os.getcwd", "nodots"):
+        with pytest.raises(RejectedError, match="not the path of a metadata class"):
+            await instrument.execute("set_metadata_class", {"cls": path})
 
 
 async def _nothing() -> None:
@@ -240,6 +373,8 @@ class _SubjectMetadata(ExperimentMetadata):
     subject_id: str = key(default="")
     experimenters: list[str] = required(default_factory=list)
     chamber: _Chamber = Field(default_factory=_Chamber)
+    spare: _Chamber | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
 
 
 async def _with_task(instrument: _Bench) -> None:
@@ -296,21 +431,26 @@ async def test_the_view_gives_the_schema_of_the_metadata_form_with_the_plan_that
     schema = instrument.view.value.metadata_schema
     assert schema["properties"]["subject_id"]["isKey"] is True
     assert schema["properties"]["chamber"] == {"$ref": "#/$defs/_Chamber", "isAnnotation": False}
-    assert set(seen) == {(True, True)}  # the new schema never shows with the old plan, nor the old with the new
+    assert seen[-1] == (True, True)
+    assert all(schema == plan for schema, plan in seen)  # never the new schema with the old plan, nor the reverse
 
 
 async def test_each_required_metadata_field_left_empty_is_a_problem_at_its_field(instrument: _Bench) -> None:
     await _with_task(instrument)
     await instrument.set_metadata_class(_SubjectMetadata)  # a task with empty required fields is still accepted
-    await instrument._update_task_metadata("brain", {"experimenters": ["ana"], "chamber": {"medium": ""}})
+    fields = {"experimenters": ["ana"], "chamber": {"medium": " "}, "spare": {"medium": ""}}
+    await instrument._update_task_metadata("brain", fields)
 
     problems = instrument._metadata_problems()
 
     assert [(problem.loc, problem.msg) for problem in problems] == [
         (("plan", 0, "metadata", "subject_id"), "brain: Subject id is empty."),
         (("plan", 0, "metadata", "chamber", "medium"), "brain: Medium is empty."),
+        (("plan", 0, "metadata", "spare", "medium"), "brain: Medium is empty."),
     ]
-    await instrument._update_task_metadata("brain", {"subject_id": "M-2816", "chamber": {"medium": "oil"}})
+    await instrument._update_task_metadata(
+        "brain", {"subject_id": "M-2816", "chamber": {"medium": "oil"}, "spare": None}
+    )
     assert not instrument._metadata_problems()
 
 

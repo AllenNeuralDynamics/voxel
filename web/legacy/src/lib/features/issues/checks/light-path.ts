@@ -19,7 +19,7 @@ export const filtersInPlace: Check = function* ({ instrument }) {
   }
   for (const { wheel, filter, channels } of wheels.values()) {
     if (!wheel.connected || wheel.state?.is_moving) continue;
-    const slot = wheel.state?.position;
+    const slot = wheel.state?.slot;
     const actual = slot == null ? null : (wheel.labelAt(slot) ?? `Slot ${slot}`);
     if (actual === filter) continue;
     yield {

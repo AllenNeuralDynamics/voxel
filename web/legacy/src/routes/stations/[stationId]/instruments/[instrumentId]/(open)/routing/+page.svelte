@@ -91,7 +91,7 @@
         <div class="col-span-full grid grid-cols-subgrid items-center gap-y-2 px-2.5 pt-2.5 pb-3.5">
           {#each instrument.filterWheels as wheel (wheel.id)}
             {@const moving = Boolean(wheel.state?.is_moving) || movingWheels.has(wheel.id)}
-            {@const current = wheel.labelAt(wheel.state?.position)}
+            {@const current = wheel.labelAt(wheel.state?.slot)}
             {@const saved = profileFilters[wheel.id]}
             {@const offProfile = saved != null && current != null && current !== saved}
             {@const found = issues.about({ device: wheel.id })}

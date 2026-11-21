@@ -52,11 +52,7 @@ class MappedDiscreteAxis(DiscreteAxis):
     def state(self) -> DiscreteAxisState:
         is_moving = self._axis.is_moving
         physical_position = self._axis.position
-        return DiscreteAxisState(
-            position=self._slot_at(physical_position),
-            target=self._target,
-            is_moving=is_moving,
-        )
+        return self._state_at(self._slot_at(physical_position), target=self._target, is_moving=is_moving)
 
     def _slot_at(self, physical_position: float) -> int | None:
         candidates = [

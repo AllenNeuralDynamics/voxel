@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 def _selector(position, moving, *, target=0):
     props = {
         "state": Result.ok(
-            SimpleNamespace(value=DiscreteAxisState(position=position, target=target, is_moving=moving).model_dump())
+            SimpleNamespace(
+                value=DiscreteAxisState(position=None, slot=position, target=target, is_moving=moving).model_dump()
+            )
         ),
         "labels": Result.ok(SimpleNamespace(value={"0": "left", "1": "right", "2": None})),
     }

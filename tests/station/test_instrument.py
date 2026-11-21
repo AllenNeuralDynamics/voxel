@@ -320,7 +320,7 @@ async def _exposure(instrument: BasicInstrument) -> float:
 
 
 async def _filter_slot(instrument: BasicInstrument) -> int | None:
-    return (await instrument.get_device_properties("fw", ["state"])).results["state"].unwrap().value["position"]
+    return (await instrument.get_device_properties("fw", ["state"])).results["state"].unwrap().value["slot"]
 
 
 async def _nothing() -> None:

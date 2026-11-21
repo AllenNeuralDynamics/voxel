@@ -8,21 +8,16 @@ import cv2
 import msgpack
 import numpy as np
 from numcodecs import Zstd
-from pydantic import Field, FiniteFloat, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from vxlib.schema import FrozenModel, SparseModel
+from vxlib.vector import StagePosition
 
-SOURCE_MAGIC = b"VXLF"
+SOURCE_MAGIC = b"VXSF"
 SOURCE_FRAMING_VERSION = 1
 SOURCE_SCHEMA_VERSION = 1
 SOURCE_ENCODING = "u16-zstd-byte-shuffle-v1"
 SOURCE_PREFIX = Struct(">4sBI")
 MAX_SOURCE_HEADER_BYTES = 64 * 1024
-
-DELIVERY_MAGIC = b"VXLP"
-VOXEL_LIVE_FRAMING_VERSION = 1
-VOXEL_LIVE_SCHEMA_VERSION = 1
-DELIVERY_PREFIX = Struct(">4sBI")
-MAX_DELIVERY_HEADER_BYTES = 64 * 1024
 
 # Level 1 is the measured low-latency point for real preview frames. The frame checksum lets
 # consumers reject corruption before uploading pixels; it is part of the v1 encoding contract.
@@ -126,17 +121,7 @@ class LiveLayer(StrEnum):
     VIEWPORT = "viewport"
 
 
-class StagePosition(FrozenModel):
-    """Best-known XYZ position in micrometers when a source frame was first observed."""
-
-    x: FiniteFloat
-    y: FiniteFloat
-    z: FiniteFloat
-
-
-type LiveKey = tuple[str, LiveLayer]
 type LiveSourceEmission = tuple[str, LiveLayer, bytes, StagePosition | None]
-type LiveEmission = tuple[str, LiveLayer, bytes]
 
 
 class SourceRectPx(FrozenModel):
@@ -206,27 +191,8 @@ def _parse_preview_source(
 
 
 def live_source_header(packed: bytes | bytearray | memoryview) -> LiveSourceHeader:
-    """Parse and validate only the VXLF header without copying its compressed payload."""
+    """Parse and validate only the VXSF header without copying its compressed payload."""
     return _parse_preview_source(packed)[1]
-
-
-class StreamCursor(FrozenModel):
-    """Position in one identified ordered stream."""
-
-    stream_id: str = Field(min_length=1)
-    seq: int = Field(ge=0)
-
-
-class VoxelLiveHeader(FrozenModel):
-    """Voxel delivery ordering and authoritative application-state association."""
-
-    delivery_schema_version: Literal[1] = VOXEL_LIVE_SCHEMA_VERSION
-    channel_id: str = Field(min_length=1)
-    seq: int = Field(ge=0)
-    state_cursor: StreamCursor
-    stamped_at_unix_us: int = Field(ge=0)
-    frame_byte_length: int = Field(gt=0)
-    position_um: StagePosition | None = None
 
 
 @dataclass(frozen=True)
@@ -314,75 +280,3 @@ class LiveFrame:
                 f"decoded payload is {len(shuffled)} bytes; expected {self.header.uncompressed_byte_length}"
             )
         return byte_unshuffle_u16(shuffled, width=self.header.width, height=self.header.height)
-
-
-@dataclass(frozen=True)
-class VoxelLivePacket:
-    """Voxel delivery header plus an opaque packed VXLF frame."""
-
-    header: VoxelLiveHeader
-    frame: bytes
-
-    def __post_init__(self) -> None:
-        if len(self.frame) != self.header.frame_byte_length:
-            raise ValueError(f"frame is {len(self.frame)} bytes; expected {self.header.frame_byte_length}")
-
-    @classmethod
-    def wrap(
-        cls,
-        frame: bytes | bytearray | memoryview,
-        *,
-        channel_id: str,
-        seq: int,
-        state_cursor: StreamCursor,
-        stamped_at_unix_us: int,
-        position_um: StagePosition | None = None,
-    ) -> Self:
-        """Wrap an already-packed VXLF frame without parsing or copying its payload twice."""
-        packed_frame = bytes(frame)
-        return cls(
-            header=VoxelLiveHeader(
-                channel_id=channel_id,
-                seq=seq,
-                state_cursor=state_cursor,
-                stamped_at_unix_us=stamped_at_unix_us,
-                frame_byte_length=len(packed_frame),
-                position_um=position_um,
-            ),
-            frame=packed_frame,
-        )
-
-    @classmethod
-    def from_packed(cls, packed: bytes | bytearray | memoryview) -> Self:
-        """Parse Voxel delivery framing while leaving the VXLF frame opaque."""
-        packet = memoryview(packed)
-        if len(packet) < DELIVERY_PREFIX.size:
-            raise ValueError("Voxel preview packet is truncated before its prefix")
-        magic, framing_version, header_length = DELIVERY_PREFIX.unpack_from(packet)
-        if magic != DELIVERY_MAGIC:
-            raise ValueError("invalid Voxel preview magic")
-        if framing_version != VOXEL_LIVE_FRAMING_VERSION:
-            raise ValueError(f"unsupported Voxel preview framing version: {framing_version}")
-        if not 0 < header_length <= MAX_DELIVERY_HEADER_BYTES:
-            raise ValueError(f"invalid station preview header length: {header_length}")
-
-        frame_offset = DELIVERY_PREFIX.size + header_length
-        if len(packet) <= frame_offset:
-            raise ValueError("Voxel preview packet is truncated before its frame")
-        try:
-            unpacked = msgpack.unpackb(packet[DELIVERY_PREFIX.size : frame_offset], raw=False)
-        except (msgpack.ExtraData, msgpack.FormatError, msgpack.StackError, ValueError) as exc:
-            raise ValueError("invalid Voxel preview MessagePack header") from exc
-        if not isinstance(unpacked, dict):
-            raise ValueError("Voxel preview header must be a MessagePack map")
-        return cls(
-            header=VoxelLiveHeader.model_validate(unpacked),
-            frame=bytes(packet[frame_offset:]),
-        )
-
-    def pack(self) -> bytes:
-        """Serialize the Voxel delivery header and unchanged VXLF frame."""
-        header = cast("bytes", msgpack.packb(self.header.model_dump(mode="json"), use_bin_type=True))
-        if not 0 < len(header) <= MAX_DELIVERY_HEADER_BYTES:
-            raise ValueError(f"Voxel preview header is too large: {len(header)} bytes")
-        return DELIVERY_PREFIX.pack(DELIVERY_MAGIC, VOXEL_LIVE_FRAMING_VERSION, len(header)) + header + self.frame

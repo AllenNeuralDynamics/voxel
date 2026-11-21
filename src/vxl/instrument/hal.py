@@ -195,11 +195,7 @@ class HAL:
     async def router_positions(self) -> dict[DeviceId, str | None]:
         """Where each device that sends the light a different way is now, by its slot's label: ``None`` while it is at
         no slot. Reads each device's state."""
-        positions: dict[DeviceId, str | None] = {}
-        for device_id, axis in self._routers.items():
-            labels = {str(slot): label for slot, label in axis.props.cache["labels"].value.items()}
-            positions[device_id] = labels.get(str((await axis.state.get()).position))
-        return positions
+        return {device_id: (await axis.state.get()).position for device_id, axis in self._routers.items()}
 
     async def light_power_ranges(self) -> dict[DeviceId, tuple[Quantity, Quantity]]:
         """The lowest and highest power of each laser and modulator, in its own unit."""

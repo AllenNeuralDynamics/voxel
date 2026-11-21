@@ -31,12 +31,12 @@ def test_mapped_axis_delegates_motion_and_resolves_slot() -> None:
         tolerance=0.5,
     )
 
-    assert mapped.state == DiscreteAxisState(position=0, target=None, is_moving=False)
+    assert mapped.state == DiscreteAxisState(position="left", slot=0, target=None, is_moving=False)
 
     mapped.move_to("right", wait=True)
 
     assert continuous.position == 100
-    assert mapped.state == DiscreteAxisState(position=1, target=1, is_moving=False)
+    assert mapped.state == DiscreteAxisState(position="right", slot=1, target=1, is_moving=False)
 
 
 def test_mapped_axis_reports_unknown_position_and_preserves_commanded_target() -> None:
@@ -52,14 +52,14 @@ def test_mapped_axis_reports_unknown_position_and_preserves_commanded_target() -
         home="left",
     )
     move(continuous, 50)
-    assert mapped.state == DiscreteAxisState(position=None, target=None, is_moving=False)
+    assert mapped.state == DiscreteAxisState(position=None, slot=None, target=None, is_moving=False)
 
     mapped.move_to_slot(1, wait=True)
     move(continuous, 0)
-    assert mapped.state == DiscreteAxisState(position=0, target=1, is_moving=False)
+    assert mapped.state == DiscreteAxisState(position="left", slot=0, target=1, is_moving=False)
 
     mapped.home(wait=True)
-    assert mapped.state == DiscreteAxisState(position=0, target=0, is_moving=False)
+    assert mapped.state == DiscreteAxisState(position="left", slot=0, target=0, is_moving=False)
 
 
 def test_a_mapped_axis_without_a_home_slot_cannot_home() -> None:
@@ -128,7 +128,7 @@ def test_owned_mapped_axis_builds_delegates_and_closes_private_axis(monkeypatch:
     mapped.dispose()
     mapped.dispose()
 
-    assert mapped.state == DiscreteAxisState(position=1, target=1, is_moving=False)
+    assert mapped.state == DiscreteAxisState(position="right", slot=1, target=1, is_moving=False)
     assert close_calls == 1
 
 

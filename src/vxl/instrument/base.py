@@ -6,10 +6,12 @@ from collections.abc import AsyncGenerator, Collection, Hashable, Mapping, Seque
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast, get_args, get_origin
 
 from pydantic import SerializeAsAny, ValidationError
+from pydantic_core import to_jsonable_python
 from rigup.activity import ActivityInfo, ActivityScheduler, Resource
 from rigup.build import dependencies
 from rigup.device import PropResults, Result
@@ -17,14 +19,16 @@ from rigup.device.handle import NotObservedError
 from rigup.interface import OperationInfo, OperationParamsError, action, bind_operations, failsafe, query
 from vxlib.asyncio import gather_all
 from vxlib.history import Change, HistoryState, UndoHistory
-from vxlib.issues import KeyPath, Problems
+from vxlib.issues import Alert, Issue, KeyPath, Problems
 from vxlib.reactivity import Cell, Computed, Derived, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
+from vxlib.vector import StagePosition
 
 from vxl.devices.axes.continuous.base import ContinuousAxisHandle
+from vxl.devices.axes.discrete.base import DiscreteAxisState
 from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
-from vxl.devices.base import DeviceId
+from vxl.devices.base import DeviceId, DeviceType
 from vxl.devices.signals.generator.base import Cycle, InputEdges, OwnClock
 from vxl.instrument.config import InstrumentConfig
 from vxl.instrument.geometry import camera_frame
@@ -46,7 +50,6 @@ from vxl.instrument.state import (
 )
 from vxl.instrument.store import InstrumentStore, Merge, StateValues
 from vxl.live import LiveSourceEmission, LiveViewport
-from vxl.live.protocol import StagePosition
 from vxl.metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from vxl.optics import AxisPosition, SpecimenAxis
 from vxl.records import Records
@@ -69,9 +72,9 @@ _OPEN_EDIT: ContextVar["Instrument.StateEdit | None"] = ContextVar("open_edit", 
 class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     """The open instrument as a screen sees it: its ``rig.yaml``, its saved state and default state, the next edit to
     undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, the object
-    stores that every camera can write to, the live image, and the JSON Schema of the form that each task's metadata
-    has. ``config`` and the states keep every field of the kind of instrument. A kind with more to show adds fields in
-    its own class."""
+    stores that every camera can write to, the live image, the JSON Schema of the form that each task's metadata
+    has, the name of the operation that runs now, and what is wrong now. ``config`` and the states keep every field
+    of the kind of instrument. A kind with more to show adds fields in its own class."""
 
     config: SerializeAsAny[C]
     state: SerializeAsAny[S]
@@ -84,6 +87,8 @@ class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     remote_stores: dict[str, Remote]
     live: LiveView
     metadata_schema: dict[str, Any]
+    operation: str | None
+    alerts: tuple[Alert, ...]
 
 
 class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = InstrumentView[C, S]]:
@@ -142,6 +147,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._live: LiveRelay | None = None
         self._planes: Computed[tuple[Plane, ...]] | None = None
         self._boxes: dict[DeviceId, Box | None] = {}
+        self._alerts: Computed[tuple[Alert, ...]] | None = None
         self._view: Computed[V] | None = None
 
     @property
@@ -279,12 +285,18 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         z: float | None = None,
         wait: bool = False,
     ) -> None:
-        """Move the given stage axes, in micrometers."""
+        """Move the given stage axes, in micrometers. Raise :class:`RejectedError`, and move no axis, when a position
+        is outside the limits of its axis."""
         stage = self.config.stage
         moves: dict[SpecimenAxis, float] = {
             axis: value for axis, value in zip(stage.axes(), (x, y, z), strict=True) if value is not None
         }
         async with self._scheduler.run("move the stage", requires={stage.device(axis) for axis in moves}):
+            for axis, value in moves.items():
+                limits = await self._hal.stage[axis].get_limits()
+                if not limits.low <= value <= limits.high:
+                    reach = f"{limits.low:g}..{limits.high:g} µm"
+                    raise RejectedError(f"The stage cannot go to {value:g} µm on {axis} (it can go to {reach}).")
             await asyncio.gather(*(self._hal.stage[axis].move_to(value, wait=wait) for axis, value in moves.items()))
 
     @query(on="stage", verb="position")
@@ -309,6 +321,55 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         profile_id = self._active_profile.value
         async with self._scheduler.run("apply the profile", requires=self._profile_requires(profile_id)):
             await self._apply_profile(profile_id)
+
+    @action(on="devices", key="device_id", verb="save_to_profile")
+    async def save_to_profile(self, device_id: DeviceId, properties: Sequence[str]) -> None:
+        """Save the value that a device last reported for each named property into the active profile, as 1 edit.
+        The ``position`` of an axis goes to the profile's positions. No device changes. Raise :class:`NotFoundError`
+        when the device has not reported a property, and :class:`RejectedError` for a property that cannot be set,
+        the position of a stage axis, and a slot with no label."""
+        async with self._state_edit("Save to profile") as edit:
+            self._hal.device(device_id)
+            view = self._hal.device_views.value[device_id]
+            found = {name: self._last_value(view, name) for name in properties}
+            if missing := sorted(name for name, value in found.items() if value is None):
+                raise NotFoundError(f"'{device_id}' has not reported {missing}")
+            values: dict[KeyPath, Any] = {}
+            active = self._active_profile.value
+            if "position" in found:
+                position = cast("tuple[Any, float | None]", found.pop("position"))[0]
+                if device_id in self._config.stage.devices().values():
+                    raise RejectedError(f"'{device_id}' is a stage axis: a profile does not set its position")
+                if "labels" in view.props and not isinstance(position, str):
+                    raise RejectedError(f"'{device_id}' is at slot {position}, which has no label")
+                values["profiles", active, "positions", device_id] = position
+            if fixed := sorted(name for name in found if view.interface.props[name].access != "rw"):
+                raise RejectedError(f"'{device_id}' cannot set {fixed}, so a profile cannot hold them")
+            if found:
+                props = {name: to_jsonable_python(value[0]) for name, value in found.items() if value is not None}
+                values["profiles", active, "props", device_id] = Merge(props)
+            if values:
+                await edit.record(values)
+
+    @action(on="devices", key="device_id", verb="restore_from_profile")
+    async def restore_from_profile(self, device_id: DeviceId, properties: Sequence[str]) -> None:
+        """Set each named property of a device to the value that the active profile has for it; ``position`` moves an
+        axis to the profile's position. It cannot be undone. Raise :class:`NotFoundError` when the profile has no
+        value for a property."""
+        handle = self._hal.device(device_id)
+        async with self._scheduler.run("restore from the profile", requires={device_id}):
+            profile = self._store.value.profiles[self._active_profile.value]
+            wanted = {**profile.props.get(device_id, {})}
+            if device_id in profile.positions:
+                wanted["position"] = profile.positions[device_id]
+            if missing := sorted(set(properties) - wanted.keys()):
+                raise NotFoundError(f"The active profile has no {missing} for '{device_id}'")
+            if "position" in properties:
+                await self._move_axis(device_id, wanted["position"])
+            if props := {name: wanted[name] for name in properties if name != "position"}:
+                results = await handle.props.set(**props)
+                if failed := sorted(name for name, result in results.results.items() if not result.is_ok):
+                    raise RejectedError(f"'{device_id}' refused the properties {failed}")
 
     @action(on="generators", key="generator", verb="set_timeline")
     async def set_generator_timeline(self, generator: DeviceId, timeline: Timeline) -> None:
@@ -373,7 +434,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         async with self._state_edit("Update task metadata") as edit:
             index = self._task_index(task_id)
             metadata = self._store.value.plan[index].metadata
-            await edit.record({("plan", index, "metadata"): self._merged(metadata, fields)})
+            form = self._store.value.metadata_cls
+            await edit.record({("plan", index, "metadata"): form.merged(metadata, fields)})
 
     async def _remove_tasks(self, task_ids: Sequence[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""
@@ -406,8 +468,15 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         *,
         edit_id: str | None = None,
     ) -> None:
-        """Set how a device gets its position for every profile: always 1 position, or by following the stage."""
+        """Set how a device gets its position for every profile: always 1 position, or by following the stage. While
+        the instrument is open, raise :class:`RejectedError` for a position that the device cannot take, as an open
+        does."""
         async with self._state_edit("Set position rule", edit_id=edit_id) as edit:
+            if self._live is not None:
+                state = self._store.value
+                candidate = state.model_copy(update={"positions": {**state.positions, device_id: rule}})
+                if errors := (await self._axis_position_problems(candidate)).errors():
+                    raise RejectedError(str(errors), errors)
             await edit.record({("positions", device_id): rule})
 
     # === Light ===
@@ -487,6 +556,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     def _view_sources(self) -> dict[str, Readable[Any]]:
         """Each changing field of :attr:`view`, by its name there. A kind of instrument with more to show adds its
         own fields to these."""
+        if self._alerts is None:
+            triggers = (self._store, self._active_profile, self._hal.device_views, self._scheduler.operation)
+            self._alerts = Computed[tuple[Alert, ...]](*triggers, initial=(), fn=self._work_out_alerts)
         return {
             "state": self._store,
             "default_state": self._store.default_state,
@@ -498,7 +570,59 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             "remote_stores": self._remote_stores,
             "live": self._live_view,
             "metadata_schema": self._metadata_schema,
+            "operation": self._scheduler.operation,
+            "alerts": self._alerts,
         }
+
+    def _live_issues(self) -> list[Issue]:
+        """What is wrong with the running instrument now: a warning for each property and each position that the
+        active profile sets and that the device last reported with another value. A number differs when it is off by
+        more than half of the property's step. A kind of instrument adds its own issues to these."""
+        profile = self._store.value.profiles[self._active_profile.value]
+        views = self._hal.device_views.value
+        wanted: dict[tuple[DeviceId, str], Any] = {
+            (device, name): value for device, props in profile.props.items() for name, value in props.items()
+        }
+        wanted.update({(device, "position"): position for device, position in profile.positions.items()})
+        issues: list[Issue] = []
+        for (device, name), value in wanted.items():
+            if device not in views or (found := self._last_value(views[device], name)) is None:
+                continue
+            live, step = found
+            if isinstance(value, int | float) and isinstance(live, int | float) and not isinstance(value, bool):
+                tolerance = step / 2 if step else 1e-9 * max(1.0, abs(value))
+                same = math.isclose(value, live, abs_tol=tolerance)
+            else:
+                same = to_jsonable_python(value) == to_jsonable_python(live)
+            if not same:
+                msg = f"{device}: {name} is {live}, the profile has {value}."
+                loc = ("devices", device, "props", name)
+                issues.append(Issue(code="device.inconsistent_with_profile", level="warning", msg=msg, loc=loc))
+        return issues
+
+    @staticmethod
+    def _last_value(view: DeviceView, name: str) -> tuple[Any, float | None] | None:
+        """The value of a property that a device last reported, with its step. The ``position`` of an axis with named
+        slots is in its ``state``: the label of its slot, or the number of a slot that has no label. ``None`` when
+        the device has not reported it, or is between slots."""
+        if name == "position" and view.interface.kind == DeviceType.DISCRETE_AXIS and "state" in view.props:
+            state = DiscreteAxisState.model_validate(view.props["state"].value)
+            if state.slot is None:
+                return None
+            return (state.slot if state.position is None else state.position), None
+        prop = view.props.get(name)
+        return None if prop is None else (prop.value, prop.step)
+
+    def _work_out_alerts(self, previous: tuple[Alert, ...]) -> tuple[Alert, ...]:
+        """The alerts now, each with the time it began. They stay as they were while an operation runs: a device
+        differs from its profile for a moment while a profile is applied."""
+        if self._scheduler.operation.value is not None:
+            return previous
+        since = {(alert.code, alert.loc): alert.since for alert in previous}
+        now = datetime.now(UTC)
+        return tuple(
+            Alert(**issue.model_dump(), since=since.get((issue.code, issue.loc), now)) for issue in self._live_issues()
+        )
 
     async def _apply_profile(self, profile_id: ProfileId) -> None:
         """Set the devices to a saved profile, in order: every light dark, device positions (the instrument's at the
@@ -560,12 +684,11 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         positions: dict[str, AxisPosition] = dict(profile.positions)
         for device_id, router in hal.routers.items():
             try:
-                labels = {str(slot): label for slot, label in router.props.cache["labels"].value.items()}
-                slot = labels.get(str(router.state.value.position))
-            except (KeyError, NotObservedError):
+                position = router.state.value.position
+            except NotObservedError:
                 continue
-            if slot is not None:
-                positions[device_id] = slot
+            if position is not None:
+                positions[device_id] = position
         frames: dict[DeviceId, Transform] = {}
         for camera in profile.lights():
             try:
@@ -729,6 +852,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if device not in ranges:
                 raise RejectedError(f"'{device}' is not a laser or a modulator")
             lowest, highest = ranges[device]
+            if not math.isfinite(value):
+                raise RejectedError(f"{value} is not a power")
             power = Quantity.of(value, lowest.unit)
             active = self._active_profile.value
             before = self._store.value.profiles[active].power.get(device)
@@ -775,12 +900,11 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     async def _open_problems(self) -> Problems:
         """The problems that an open finds once the devices answer. An instrument adds its own to these."""
-        return await self._axis_position_problems()
+        return await self._axis_position_problems(self._store.value)
 
-    async def _axis_position_problems(self) -> Problems:
-        """The saved positions that their device cannot take: a name that is not one of a discrete axis's slots, or a
-        position for a device that is not an axis of that kind."""
-        state = self._store.value
+    async def _axis_position_problems(self, state: InstrumentState) -> Problems:
+        """The positions in ``state`` that their device cannot take: a name that is not one of a discrete axis's
+        slots, or a position for a device that is not an axis of that kind."""
         wanted: list[tuple[KeyPath, DeviceId, AxisPosition]] = []
         for device, rule in state.positions.items():
             names = rule.order if isinstance(rule, StageFollowRule) else [rule]
@@ -803,18 +927,6 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             elif not (isinstance(handle, ContinuousAxisHandle) and isinstance(position, float)):
                 problems.add("position.wrong_kind", f"'{device}' cannot take the position {position!r}.", *loc)
         return problems
-
-    @staticmethod
-    def _merged(values: Mapping[str, Any], changes: Mapping[str, Any]) -> dict[str, Any]:
-        """``values`` with ``changes`` over them. Where both hold a map, the maps are merged the same way."""
-        merged = dict(values)
-        for name, change in changes.items():
-            value = merged.get(name)
-            if isinstance(value, Mapping) and isinstance(change, Mapping):
-                merged[name] = Instrument._merged(cast("Mapping[str, Any]", value), cast("Mapping[str, Any]", change))
-            else:
-                merged[name] = change
-        return merged
 
     def _metadata_problems(self) -> Problems:
         """A problem for each required metadata field that a task of the plan leaves empty, at that field."""

@@ -62,11 +62,8 @@ class Scene:
     def view(self, pixel_um: Vec2D, exposure: float) -> SpecimenView:
         """What the camera sees now, with sensor pixels of ``pixel_um`` and an ``exposure`` of 1 at 10 ms."""
         self._find_missing()
-        positions = {
-            name: device.labels.get(position)
-            for name, device in self._devices.items()
-            if isinstance(device, DiscreteAxis) and (position := device.state.position) is not None
-        }
+        states = {name: device.state for name, device in self._devices.items() if isinstance(device, DiscreteAxis)}
+        positions = {name: state.position for name, state in states.items() if state.slot is not None}
         center = Vec3D(x=self._position("x"), y=self._position("y"), z=self._position("z"))
         focus = self._position("focus") - self._focus_at if "focus" in self._follows else 0.0
         try:

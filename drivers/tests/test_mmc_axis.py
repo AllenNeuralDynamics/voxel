@@ -29,6 +29,7 @@ class _FakeHub:
             Cmd.ACCELERATION: "10.0",
             Cmd.MAXIMUM_VELOCITY: "5.0",
             Cmd.MAXIMUM_ACCELERATION: "100.0",
+            Cmd.ENCODER_RESOLUTION: "0.05",
         }
     )
     sent: list[tuple[Cmd, tuple[str | float, ...]]] = field(default_factory=list)
@@ -61,6 +62,7 @@ def axis(hub: _FakeHub) -> MMCLinearAxis:
 
 def test_positions_limits_and_speeds_are_in_microns(axis: MMCLinearAxis, hub: _FakeHub) -> None:
     assert axis.position == pytest.approx(1500.0)
+    assert axis.position.step == pytest.approx(0.05)  # 1 encoder count
     assert (axis.limits.low, axis.limits.high) == (pytest.approx(-12_500.0), pytest.approx(12_500.0))
     assert axis.speed == pytest.approx(2_000.0)
     axis.move_to(250.0)
@@ -91,9 +93,11 @@ def test_faults_come_from_the_status_byte(axis: MMCLinearAxis, hub: _FakeHub, st
 
 
 def test_moving_follows_the_status_byte(axis: MMCLinearAxis, hub: _FakeHub) -> None:
-    assert axis.is_moving is False
+    stopped = axis.is_moving
     hub.replies[Cmd.STATUS] = "0"
-    assert axis.is_moving is True
+    moving = axis.is_moving
+
+    assert (stopped, moving) == (False, True)
 
 
 def test_closing_gives_the_axis_back(axis: MMCLinearAxis, hub: _FakeHub) -> None:

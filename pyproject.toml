@@ -55,6 +55,7 @@ qt = [
 [project.scripts]
 vxl = "vxl.cli:main"
 voxel = "vxl.cli:main"
+vxl-server = "vxl.web.server:main"
 
 [project.urls]
 Repository = "https://github.com/AllenNeuralDynamics/voxel"

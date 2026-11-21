@@ -1,7 +1,8 @@
 # Records
 
 Discussed on 2026-11-18 and 2026-11-19. **Built** in `src/vxl/records/` (2026-11-19), tested in
-`tests/records/`. The records history in the gateway and the public schema are not built. Replaces `vxl_records` for the new core;
+`tests/records/`. The records history is built in the server; the public schema is not built. Replaces `vxl_records`
+for the new core;
 `vxl_records` stays frozen for legacy and goes with it. The loop that writes the records is in `acquisition.md`.
 
 ## Lines
@@ -81,7 +82,7 @@ Agreed and built on 2026-11-20 (`Image.dropped`, the `gaps` status, `frames_drop
 - The acquisition has no `metadata` field of its own. It is in `instrument_state.plan[].metadata`, and a visit names
   its task.
 - Frozen at Start. vxl gives the lab the facts as they were; a lab corrects them in its own systems.
-- Later option: corrections through `vxl.station.api`, stored next to the acquisition, never in it.
+- Later option: corrections through the station's HTTP operations, stored next to the acquisition, never in it.
 
 ## Writes
 
@@ -93,37 +94,38 @@ Agreed and built on 2026-11-20 (`Image.dropped`, the `gaps` status, `frames_drop
 ## Logs
 
 - `LogJournal` keeps the log lines: each line goes to SQLite first, then to subscribers.
-- Live lines reach every window through the station feed and the gateway.
-- The gateway serves the full log of 1 acquisition.
+- Live lines reach every window through the station feed and the server.
+- The server serves the full log of 1 acquisition.
 - At the end, `acquisition.log.jsonl` is written next to `acquisition.json`, 1 time, so the log travels with the data.
   S3 cannot add lines to a file. `Records.record` calls `AcquisitionStore.write_log` when the acquisition ends.
 
 ## Public contract
 
-Live data comes through the gateway. Stored data has 1 source, the records database, with 2 outputs that share 1
+Live data comes through the server. Stored data has 1 source, the records database, with 2 outputs that share 1
 schema:
 
-| | Gateway, live | Gateway, records history | `acquisition.json` |
+| | Server, live | Server, records history | `acquisition.json` |
 | --- | --- | --- | --- |
 | Job | live: status, progress, logs, frames | stored: history, search, full logs | the copy that travels with the data |
-| How | 1 feed from the station, fanned out (`gateway.md`) | the gateway's capped process reads the database (WAL) | written by the station at each life step |
+| How | 1 feed from the station, fanned out (`server.md`) | the server's capped process reads the database (WAL) | written by the station at each life step |
 | Freshness | live | as stored | life steps |
 
 The records history and `acquisition.json` carry the record's `revision`, so a reader can tell which is newer.
 
-## Records history in the gateway
+## Records history in the server
 
-Not built. Replaces the share service (2026-11-20, `gateway.md`).
+Built on 2026-11-20 (`History` in `src/vxl/web/server.py`), except the cap by OS priority and the public read schema.
+Replaces the share service (`server.md`).
 
-- The gateway serves stored data next to the live feed: history, `acquisition.json`, full logs.
+- The server serves stored data next to the live feed: history, `acquisition.json`, full logs.
 - Its own process: its own GIL, its own CPU share. Reads SQLite in WAL mode, so it never blocks station writes.
 - Capped: lower OS priority, a limit on requests at once.
-- It reads the database through the public read schema, so a gateway in another language can read it too.
+- It reads the database through the public read schema, so a server in another language can read it too.
 - Big data comes from storage (Zarr, `acquisition.json`), never through the station.
 
 ## Listing and filters
 
-Discussed on 2026-11-20 for the History page. Nothing here is built.
+Discussed on 2026-11-20 for the History page. Built on 2026-11-20: the list with its filters, in the server.
 
 **For now: only filters the database answers with its indexes.** History filters by status and by a range of the
 created time ("Any time", "Today", "Last 7 days", "Last 30 days"), newest first.
@@ -131,10 +133,13 @@ created time ("Any time", "Today", "Last 7 days", "Last 30 days"), newest first.
 - The table already has what they need (`migrations/0001_initial.sql`): `created_at_us`, an index on it for
   acquisitions that are not archived, and an index on `status, created_at_us`. "Failed, in the last 7 days" is an
   indexed query.
-- Missing: a store method with conditions. `AcquisitionStore` has only `list_all()`, which returns every record in full.
-  Add 1 list method taking an instrument, a status and a from/to time, using those indexes.
-- Add an index on `instrument, created_at_us`: each station page lists 1 instrument, and the `instrument` column has
-  no index today.
+- Built: the server reads the list itself (`History` in `vxl.web.server`):
+  `GET /api/stations/<id>/history/acquisitions` with `status`, `instrument`, `from`, `to` (ISO 8601 times of creation)
+  and `limit`, newest first, with `id`, `revision`, `instrument`, `status` and `created_at` for each. So
+  `AcquisitionStore` needs no list method for the History page; it still has only `list_all()`, which returns every
+  record in full.
+- Missing: an index on `instrument, created_at_us`. Each station page lists 1 instrument, and the `instrument`
+  column has no index today.
 - A custom range, in the app only (not the Lab): a last menu item, "Custom range…", opens bits-ui's date range
   picker; the box then shows the range ("Created: 12–18 Nov"). The kit already depends on `bits-ui` and
   `@internationalized/date` but has no date picker part yet. The created-time index serves any from/to range, so the

@@ -14,16 +14,10 @@ from PySide6.QtGui import QImage
 from vxlib.lifecycle import Teardown
 
 from vxl._legacy.instrument import Instrument
+from vxl._legacy.live import VoxelLiveHeader, VoxelLivePacket
 from vxl._legacy.station.feed import StationFeed
 from vxl._legacy.station.models import StationFeedView, StreamCursor
-from vxl.live import (
-    LiveFrame,
-    LiveLayer,
-    LiveSourceHeader,
-    LiveViewport,
-    VoxelLiveHeader,
-    VoxelLivePacket,
-)
+from vxl.live import LiveFrame, LiveLayer, LiveSourceHeader, LiveViewport
 
 log = logging.getLogger(__name__)
 

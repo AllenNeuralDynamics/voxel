@@ -184,7 +184,7 @@ export function parseLivePacket(data: ArrayBuffer): ParsedLivePacket {
   const frame = packet.subarray(deliveryPrefix.bodyStart);
   validateDelivery(delivery, frame.byteLength);
 
-  const sourcePrefix = parsePrefix(frame, 'VXLF', 'live frame', SOURCE_PROTOCOL_VERSION);
+  const sourcePrefix = parsePrefix(frame, 'VXSF', 'live frame', SOURCE_PROTOCOL_VERSION);
   const source = decodeHeader<LiveSourceHeader>(frame, sourcePrefix.headerStart, sourcePrefix.bodyStart, 'live frame');
   validateSource(source);
   return { delivery, source, payload: frame.subarray(sourcePrefix.bodyStart) };

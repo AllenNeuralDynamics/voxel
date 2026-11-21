@@ -2,9 +2,10 @@
 
 import importlib
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, BeforeValidator, Field, PlainSerializer
+from pydantic.fields import FieldInfo
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
 BASE_METADATA_SCHEMA = "vxl.metadata.ExperimentMetadata"
@@ -78,8 +79,21 @@ class ExperimentMetadata(BaseModel):
     @classmethod
     def empty_required(cls, values: Mapping[str, Any]) -> list[tuple[tuple[str, ...], str]]:
         """Return each required field that ``values`` leaves empty, as its path and its title. A field inside a
-        group has the group's name first in its path. Empty is ``""``, ``None``, an empty list or an empty map."""
+        group has the group's name first in its path. Empty is ``None``, text with nothing but spaces, an empty list
+        or an empty map."""
         return cls._empty_in(cls, values)
+
+    @classmethod
+    def merged(cls, values: Mapping[str, Any], changes: Mapping[str, Any]) -> dict[str, Any]:
+        """Return ``values`` with ``changes`` over them. A group is changed field by field: its fields that
+        ``changes`` does not name keep their values. Any other value, such as a map of free keys, is replaced whole."""
+        return cls._merged_in(cls, values, changes)
+
+    @staticmethod
+    def _group(info: FieldInfo) -> type[BaseModel] | None:
+        """The model of a field that is a group, also when the group may be ``None``."""
+        options = [info.annotation, *get_args(info.annotation)]
+        return next((option for option in options if isinstance(option, type) and issubclass(option, BaseModel)), None)
 
     @staticmethod
     def _empty_in(form: type[BaseModel], values: Mapping[str, Any]) -> list[tuple[tuple[str, ...], str]]:
@@ -87,14 +101,25 @@ class ExperimentMetadata(BaseModel):
         for name, info in form.model_fields.items():
             value = values.get(name)
             extra = info.json_schema_extra if isinstance(info.json_schema_extra, dict) else {}
-            if isinstance(info.annotation, type) and issubclass(info.annotation, BaseModel):
-                group = value if isinstance(value, Mapping) else {}
-                found += [
-                    ((name, *path), title) for path, title in ExperimentMetadata._empty_in(info.annotation, group)
-                ]
-            elif (extra.get("isRequired") or extra.get("isKey")) and value in ("", None, [], {}):
+            if (group := ExperimentMetadata._group(info)) is not None and isinstance(value, Mapping):
+                found += [((name, *path), title) for path, title in ExperimentMetadata._empty_in(group, value)]
+                continue
+            empty = value in (None, [], {}) or (isinstance(value, str) and not value.strip())
+            if empty and (extra.get("isRequired") or extra.get("isKey")):
                 found.append(((name,), info.title or name.replace("_", " ").capitalize()))
         return found
+
+    @staticmethod
+    def _merged_in(form: type[BaseModel], values: Mapping[str, Any], changes: Mapping[str, Any]) -> dict[str, Any]:
+        merged = dict(values)
+        for name, change in changes.items():
+            info, value = form.model_fields.get(name), merged.get(name)
+            group = None if info is None else ExperimentMetadata._group(info)
+            if group is not None and isinstance(value, Mapping) and isinstance(change, Mapping):
+                merged[name] = ExperimentMetadata._merged_in(group, value, change)
+            else:
+                merged[name] = change
+        return merged
 
     @classmethod
     def model_json_schema(
@@ -135,14 +160,13 @@ def resolve_class_from_path(v: Any) -> type[ExperimentMetadata]:
     if isinstance(v, type) and issubclass(v, ExperimentMetadata):
         return v
 
-    # If it's a string, import it
+    # If it's a string, import it. A path that names no metadata class is a value that does not fit, not a failure
+    # of the program, so that the model's validation reports it.
     if isinstance(v, str):
-        module_path, class_name = v.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        cls = getattr(module, class_name)
-        if not issubclass(cls, ExperimentMetadata):
-            raise TypeError(f"'{v}' is not an ExperimentMetadata subclass")
-        return cls
+        try:
+            return resolve_metadata_class(v)
+        except (ImportError, AttributeError, TypeError, ValueError) as error:
+            raise ValueError(f"'{v}' is not the path of a metadata class: {error}") from error
 
     raise ValueError("Must be a class or a valid import path string.")
 

@@ -31,4 +31,4 @@ def test_a_slot_that_holds_a_part_takes_its_name() -> None:
 
     assert wheel.labels == {0: "BP525", 1: "empty"}
     wheel.move_to("BP525", wait=True)
-    assert wheel.state.position == 0
+    assert (wheel.state.position, wheel.state.slot) == ("BP525", 0)

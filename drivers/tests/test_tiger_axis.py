@@ -119,6 +119,7 @@ def test_opening_disarms_and_positions_are_in_tenths_of_a_micron(axis: TigerLine
     assert box.named("move_abs") == [{"X": pytest.approx(123.4 * STEPS_PER_UM)}]
     box.position_steps = 500
     assert axis.position == pytest.approx(50.0)
+    assert axis.position.step == pytest.approx(0.1)  # a profile position within half of it is the same place
     assert axis.limits.low == pytest.approx(-50_000.0)
 
 

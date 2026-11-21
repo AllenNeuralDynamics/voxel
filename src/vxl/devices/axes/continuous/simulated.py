@@ -63,8 +63,10 @@ class SimulatedContinuousAxis(ContinuousAxis):
             wiring.register(self)
             wiring.listen(self.id, "ttl_in", lambda on: self.pulse_in("ttl_in") if on else None)
 
-    @property
-    def position(self) -> float:
+    def _get_position_step(self) -> float | None:
+        return None
+
+    def _get_position(self) -> float:
         elapsed = time.monotonic() - self._started
         at = self._rest
         for leg in self._legs:

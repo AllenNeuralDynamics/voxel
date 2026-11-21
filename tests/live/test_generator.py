@@ -6,7 +6,7 @@ from collections.abc import Callable
 import numpy as np
 from vxlib.imaging.writer import FrameLease
 
-from vxl.live import LatestFrameQueue, LiveFrame, LiveGenerator, LiveLayer, LiveViewport
+from vxl.live import LiveFrame, LiveGenerator, LiveLayer, LiveViewport
 from vxl.live.generator import RENDER_CAP
 
 
@@ -64,22 +64,6 @@ async def test_no_viewport_frame_at_full_viewport() -> None:
         gen.close()
 
     assert all(frame.header.layer is not LiveLayer.VIEWPORT for frame in captured)
-
-
-async def test_latest_frame_queue_replaces_only_the_matching_pending_stream() -> None:
-    queue = LatestFrameQueue()
-    overview = ("488", LiveLayer.OVERVIEW)
-    viewport = ("488", LiveLayer.VIEWPORT)
-
-    queue.put(overview, b"sending")
-    assert await queue.get() == (overview, b"sending")
-
-    queue.put(overview, b"stale")
-    queue.put(overview, b"latest")
-    queue.put(viewport, b"viewport")
-
-    assert await queue.get() == (overview, b"latest")
-    assert await queue.get() == (viewport, b"viewport")
 
 
 async def test_overview_and_viewport_share_capture_identity_and_resize_exactly() -> None:

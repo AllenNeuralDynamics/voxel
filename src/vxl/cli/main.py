@@ -14,6 +14,7 @@ from .devices.shell import run as run_devices
 from .node import serve as serve_node
 from .station import initialize
 from .station import run_check as check_station
+from .station import start as start_station
 
 _DEFAULT_HOST = str(IPv4Address(0))
 
@@ -31,6 +32,8 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser = station.add_parser("check", help="check station.yaml and the station's instrument folders")
     check_parser.add_argument("paths", nargs="*", type=Path, help="instrument folders (default: all of the station)")
     check_parser.add_argument("--json", action="store_true", dest="as_json", help="emit machine-readable JSON")
+    start_parser = station.add_parser("start", help="start the station service and its server")
+    start_parser.add_argument("--headless", action="store_true", help="start no server: the station has no windows")
 
     node = _group(products, "node", "host devices for a station on this machine")
     start = node.add_parser("start", help="start a device node")
@@ -87,6 +90,22 @@ def _load_optional(module: str, extra: str, stderr: TextIO) -> ModuleType | None
         return None
 
 
+def _start_station(*, headless: bool, output: TextIO, errors: TextIO) -> int:
+    """Start the station service and its server. They need the ``web`` extra."""
+    service = _load_optional("vxl.web.station.service", "web", errors)
+    if service is None:
+        return 2
+    return start_station(service.StationService, headless=headless, output=output, errors=errors)
+
+
+def _legacy_web(args: argparse.Namespace, errors: TextIO) -> int:
+    web_app = _load_optional("vxl._legacy.web.app", "web", errors)
+    if web_app is None:
+        return 2
+    web_app.serve(host=args.host, port=args.port, debug=args.debug)
+    return 0
+
+
 def _legacy() -> ModuleType:
     """The legacy commands, loaded only when one runs, so the other commands never import the legacy app."""
     return import_module("vxl.cli.legacy")
@@ -111,17 +130,15 @@ def run(
             return initialize(args.name, station_id=args.station_id, output=output, errors=errors)
         case "station", "check":
             return check_station(args.paths, as_json=args.as_json, output=output)
+        case "station", "start":
+            return _start_station(headless=args.headless, output=output, errors=errors)
         case "node", "start":
             serve_node(args.node_id, args.address, debug=args.debug)
             return 0
         case "devices", "shell":
             return run_devices(args.config, args.devices, log=args.log)
         case "legacy", "web":
-            web_app = _load_optional("vxl._legacy.web.app", "web", errors)
-            if web_app is None:
-                return 2
-            web_app.serve(host=args.host, port=args.port, debug=args.debug)
-            return 0
+            return _legacy_web(args, errors)
         case "legacy", "qt":
             qt_app = _load_optional("vxl._legacy.qt.app", "qt", errors)
             if qt_app is None:

@@ -11,11 +11,12 @@ from rigup.node._broadcast import pack, unpack
 from vxl_records import LogEntry
 from vxlib.schema import FrozenModel
 
+from vxl._legacy.live import LatestFrameQueue, LiveEmission, LiveKey
 from vxl._legacy.station.errors import StationFeedLaggedError
 from vxl._legacy.station.feed import StationFeedConnection
 from vxl._legacy.station.models import StationFeedView, StationState
 from vxl._legacy.station.station import Station
-from vxl.live import LatestFrameQueue, LiveEmission, LiveKey, LiveViewport
+from vxl.live import LiveViewport
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown

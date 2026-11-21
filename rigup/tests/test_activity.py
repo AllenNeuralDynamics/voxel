@@ -81,6 +81,36 @@ async def test_an_operation_inside_an_operation_does_not_wait(bench: _Bench) -> 
     assert bench.log == ["set laser", "profile applied"]
 
 
+async def test_the_scheduler_names_the_operation_that_runs_and_keeps_the_outer_name(bench: _Bench) -> None:
+    named: list[str | None] = []
+    bench.scheduler.operation.subscribe(named.append)
+
+    async with bench.scheduler.run("outer", requires=()), bench.scheduler.run("inner", requires=()):
+        assert bench.scheduler.operation.value == "outer"
+    with pytest.raises(ValueError, match="failed"):
+        async with bench.scheduler.run("failing", requires=()):
+            raise ValueError("failed")
+
+    assert named == ["outer", None, "failing", None]
+
+
+async def test_a_subscriber_that_runs_an_operation_when_one_ends_does_not_wait_for_it(bench: _Bench) -> None:
+    ran: list[str] = []
+
+    async def follow_up(name: str | None) -> None:
+        if name is None and not ran:
+            async with bench.scheduler.run("follow-up", requires=()):
+                ran.append("follow-up")
+
+    bench.scheduler.operation.subscribe(follow_up)
+
+    async with asyncio.timeout(1):
+        async with bench.scheduler.run("first", requires=()):
+            pass
+
+    assert ran == ["follow-up"]
+
+
 async def test_an_operation_that_requires_nothing_of_a_preview_runs_live(bench: _Bench) -> None:
     await bench.start_preview()
     bench.log.clear()

@@ -7,21 +7,15 @@ import numpy as np
 import pytest
 
 from vxl.live.protocol import (
-    DELIVERY_MAGIC,
-    DELIVERY_PREFIX,
     SOURCE_FRAMING_VERSION,
     SOURCE_MAGIC,
     SOURCE_PREFIX,
-    VOXEL_LIVE_FRAMING_VERSION,
     LiveFrame,
     LiveLayer,
     LiveSourceHeader,
     LiveViewport,
     SourceRectPx,
-    StagePosition,
-    StreamCursor,
     ValidBits,
-    VoxelLivePacket,
     byte_shuffle_u16,
     byte_unshuffle_u16,
 )
@@ -92,33 +86,6 @@ def test_packet_header_contains_only_source_owned_metadata() -> None:
     assert "histogram" not in header
     assert "levels" not in header
     assert "bit_packing" not in header
-
-
-@pytest.mark.parametrize("position", [None, StagePosition(x=1, y=-2, z=3.5)])
-def test_delivery_packet_wraps_frame_without_modifying_it(position: StagePosition | None) -> None:
-    frame = _source_frame(np.arange(12, dtype=np.uint16).reshape(3, 4)).pack()
-    delivery = VoxelLivePacket.wrap(
-        frame,
-        channel_id="channel-1",
-        seq=9,
-        state_cursor=StreamCursor(stream_id="state-1", seq=17),
-        stamped_at_unix_us=1_234_567,
-        position_um=position,
-    )
-
-    packed = delivery.pack()
-    magic, version, _header_length = DELIVERY_PREFIX.unpack_from(packed)
-    parsed = VoxelLivePacket.from_packed(packed)
-
-    assert (magic, version) == (DELIVERY_MAGIC, VOXEL_LIVE_FRAMING_VERSION)
-    assert parsed.header.channel_id == "channel-1"
-    assert parsed.header.seq == 9
-    assert parsed.header.state_cursor == StreamCursor(stream_id="state-1", seq=17)
-    assert parsed.header.stamped_at_unix_us == 1_234_567
-    assert parsed.header.position_um == position
-    assert parsed.header.model_dump()["position_um"] == (position.model_dump() if position else None)
-    assert parsed.frame == frame
-    assert LiveFrame.from_packed(parsed.frame).header.camera_id == "camera-1"
 
 
 @pytest.mark.parametrize(

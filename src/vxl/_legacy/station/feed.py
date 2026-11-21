@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING
 
 from vxlib.reactivity import Emitter
 
-from vxl.live import LatestFrameQueue, LiveEmission, LiveSourceEmission, VoxelLivePacket
+from vxl._legacy.live import LatestFrameQueue, LiveEmission, VoxelLivePacket
+from vxl.live import LiveSourceEmission
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable

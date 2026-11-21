@@ -14,8 +14,15 @@ is in git.
 - **Joined edits** (`src/vxl/instrument/base.py`): an edit opened inside another joins it. The outermost block makes 1
   history entry; if it raises, every path goes back. So 1 request is 1 undo step.
 - **`BasicInstrument`** (`vxl.instrument.basic`): a ready-made kind a `rig.yaml` can name and run with no code.
-- **The HTTP layer is a try-out** in `prototypes/interface/` (`web.py`, `demo.py`), on the real code. The real one is
-  `vxl.station.api` (`station.md`); the try-out goes when it is built.
+- **The HTTP layer is in `vxl.web.station`** (built 2026-11-20 from the try-out in `prototypes/interface/`, deleted on
+  2026-11-21 and kept in git; made leaner on 2026-11-21). `InstrumentRouter` (`instrument.py`) is the routes of 1 open instrument: a
+  FastAPI router, not an app. `StationService` (`service.py`) owns the app: it passes each
+  `/api/stations/<id>/instrument/...` request to the router of the open session, made at the first request of a session,
+  and adds the station's own routes: `GET /api/stations/<id>/instruments`, `POST /api/stations/<id>/session:open` (body
+  `{"instrument": "<name>"}`) and `POST /api/stations/<id>/session:close`, and the feed sockets under
+  `/api/stations/<id>/feed/`. Each answer to a request that is not a read carries `Vxl-Feed-Cursor`. Every failure is
+  answered in 1 place (`ProblemDetails` in `vxl.web.problems`); an instrument that does not start answers `422` with its
+  problems. The router serves its own API page at `/instrument/openapi.json`.
 
 ## Rules
 
@@ -66,42 +73,66 @@ One test builds the route table of every kind we ship.
 - **The base declares only operations every kind has in full:** undo, redo, apply profile, device operations.
 - **An override of a declared method repeats the declaration** and keeps its signature and what it does.
 
-## HTTP rules for `vxl.station.api`
+## HTTP rules for the station's operations
 
-Built in the try-out; the real API keeps them.
+Built in `vxl.web.station`, except where a rule says "not built".
 
 - **Errors** are `application/problem+json` (RFC 9457) with `type`, `title`, `status`, `detail`, `instance`, and an
-  `errors` member listing refused arguments. `400` not JSON, `404` unknown item, device or operation, `409` busy,
-  `422` refused, `500` other. Unknown routes answer the same way.
+  `errors` member listing refused arguments, or the problems that the instrument gave. `400` not JSON (`NaN` and
+  `Infinity` are not JSON, RFC 8259 §6), `404` unknown item, device or operation, `405` with `Allow`, `409` busy, no
+  open session, or a part that a running activity holds, `422` refused, `500` other. Unknown routes answer the same
+  way. A path with a `/` at its end is unknown: no redirect.
+- **Only a typed error gets its status.** The statuses are in `InstrumentRouter.statuses`. A method that raises a
+  built-in error for bad input (`ValueError`, `RuntimeError`) answers `500`, so a method checks its input and
+  raises `RejectedError`. A refusal that comes back from a device arrives as a `RuntimeError`: the instrument checks
+  before it calls the device, as `move_stage` does with the limits of each axis.
 - **`ETag` on every read and every answer with an item**: a hash of that item. `If-Match` on update and delete
-  answers `412` when stale; `If-None-Match` on a read answers `304`. `If-Match` is optional for now; the UI always
-  sends it. Require it (`428`, RFC 6585) when many users share a station.
+  answers `412` when stale, also on `PATCH /devices/{id}`; `If-None-Match` on a read answers `304`. `If-Match` is
+  optional for now; the UI always sends it. Require it (`428`, RFC 6585) when many users share a station.
 - **PATCH is `application/merge-patch+json`** (RFC 7396): the API merges the patch into the current item and calls
-  the method with whole field values.
+  the method with whole field values. Not built: the HTTP layer passes the fields of the patch to the method as they
+  are, and the method decides what a nested value replaces.
 - **A write answers the item and its `ETag`, plus `Vxl-Feed-Cursor`**, an opaque Structured Field String
-  (RFC 9651), so the UI can wait until its feed caught up. No `X-` prefix (RFC 6648). Browsers need
-  `Access-Control-Expose-Headers` to read it.
+  (RFC 9651), so the UI can wait until its feed caught up. No `X-` prefix (RFC 6648). Built: the value is
+  `"<stream_id>:<seq>"` of the state feed, on each answer to a request that is not a read. Browsers need
+  `Access-Control-Expose-Headers` to read it from another origin; a window reads it from its own server. It covers
+  what the operation itself changed. A value that a device reports later, such as after `PATCH /devices/{id}`,
+  arrives in a later message.
 - **An action that starts an activity answers `202` with a `Location`** to the activity or the run (AIP-151, Azure
-  `operation-location`), seen from the method's return type. Short actions answer `200` or `204`.
+  `operation-location`), seen from the method's return type. Not built: `POST /acquisition:start` answers `200`
+  with the id of the acquisition. Short actions answer `200` or `204`.
 - **Device routes go through the instrument:** `PATCH /devices/{id}` calls `set_device_properties`,
   `POST /devices/{id}:{operation}` calls `execute_device_command`, both through the scheduler, checked against
   `view.devices[id].interface` and refused with `422` before reaching the device.
-- Under a gateway, every route sits under `/stations/<id>/` (`gateway.md`).
+- Every route sits under `/api/stations/<id>/`, at the station service and at its server (`server.md`); the routes
+  of the open instrument sit under `/api/stations/<id>/instrument/`. The paths outside `/api` belong to the pages of
+  the web app, such as `/stations/<id>/run` (decided 2026-11-21).
 
 ## SPIM routes, as an example
 
+SPIM declares 33 operations (2026-11-21). A resource of the state sits under `/state`; another target is a noun of
+its own. Some of them, each under `/api/stations/<id>/instrument`:
+
 | Route | Method |
 | --- | --- |
-| `GET /plan`, `GET /plan/{task_id}` | from the view |
-| `POST /plan`, `PATCH /plan/{task_id}`, `DELETE /plan/{task_id}` | `add_task`, `update_task`, `remove_task` |
-| `POST /plan:reorder` | `reorder` |
-| `PATCH /profiles/{profile_id}`, `PATCH /writer`, `PATCH /preview` | `update_profile`, `update_writer`, `update_preview` |
+| `GET /state/plan`, `GET /state/plan/{task_id}` | from the view |
+| `POST /state/plan`, `PATCH /state/plan/{task_id}` | `add_task`, `update_task` |
+| `POST /state/plan:remove`, `POST /state/plan:reorder` | `remove_tasks`, `reorder_tasks` |
+| `PATCH /state/profiles/{profile_id}`, `PATCH /state/writer` | `update_profile`, `update_writer_settings` |
+| `POST /state/profiles:apply`, `POST /state/profiles/{profile_id}:select` | `apply_profile`, `select_profile` |
 | `POST /preview:start`, `POST /preview:stop` | `start_preview`, `stop_preview` |
-| `GET /openapi.json` | made by FastAPI from all of the above |
+| `POST /acquisition:start`, `POST /acquisition:stop` | `start_acquisition`, `stop_acquisition` |
+| `POST /history:undo`, `POST /history:redo` | `undo`, `redo` |
+| `GET /stage:position`, `POST /stage:move` | `stage_position`, `move_stage` |
+| `POST /devices/{device_id}:save_to_profile`, `:restore_from_profile` | `save_to_profile`, `restore_from_profile` |
+| `GET /devices/{id}`, `PATCH /devices/{id}`, `POST /devices/{id}:{operation}` | the device routes |
+| `GET /interface`, `GET /openapi.json` | the instrument's interface, and the API page of these routes |
 
 ## Open
 
 - Status codes for create and no content: `201` and `204`, or `200` everywhere.
+- Reads exist only for a state resource that has a create, an update or a delete. The other parts of the view are
+  read from the feed. Decide whether every part of the view gets a `GET`.
 - `Vec3D` (`vxlib`) has no JSON Schema, so the view schema cannot be made as is.
 - A `NotFoundError` next to `RejectedError`, so methods can say "no such item" themselves.
 - Versioning: the guides disagree (AIP `/v1/`, Azure `api-version`, Zalando media type); nothing to cite as the

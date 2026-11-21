@@ -7,9 +7,9 @@ processing and composition.
 
 "Live" names the frames; "preview" names the instrument's mode of exploring by hand. Frames also flow during a run.
 
-The new core (`vxl.station`) implements the path from the camera to `StationFeed`, the planes, and the viewport. The
-web layer and the Qt app still use the old instrument (`vxl._legacy.instrument`, `vxl._legacy.station`); they move to the new
-core later.
+The new core (`vxl.station`) implements the path from the camera to the feed's frame topics, the planes, and the
+viewport. The web layer and the Qt app still use the old instrument (`vxl._legacy.instrument`,
+`vxl._legacy.station`); they move to the new core later.
 
 ## Ownership and routing
 
@@ -21,8 +21,10 @@ Live metadata is split at the boundary where it becomes known:
   old stream and sends the packed frame on with the stage position from when that frame number was first seen,
   without decoding it. `Instrument.live` gives these frames out, keyed by camera; `Station.live` passes on those of
   the open instrument.
-- `StationFeed` assigns the delivery sequence, stamps the frame against its current station-state cursor, and wraps
-  the packed source frame without decoding it. The delivery header's `channel_id` field carries the camera's id.
+- `StationTopics` (`vxl.web.station.topics`) gives each frame of the active session to the `FeedPublisher`
+  (`vxl.web.feed`)
+  under the feed topic `instrument.frames.<camera>.<layer>`. The publisher links the frame to its current state
+  cursor and sends the packed source frame on without decoding it.
 - The client owns levels, color mapping, interpolation, layer composition, grouping pictures into panels, and other
   display state.
 
@@ -30,10 +32,13 @@ No histogram is carried on the source frame. A client that needs one can calcula
 
 Each camera capture can produce two independently replaceable layers:
 
-| Layer | Camera topic | Instrument output | Station | Station delivery | Source region |
+| Layer | Camera topic | Instrument output | Station | Feed topic | Source region |
 | --- | --- | --- | --- | --- | --- |
-| `overview` | `live` | `Instrument.live` | `Station.live` | `StationFeed.frames` | The read-out region, up to 2048 pixels wide |
-| `viewport` | `live_viewport` | `Instrument.live` | `Station.live` | `StationFeed.frames` | Current viewport plus overscan, up to 2048 pixels wide |
+| `overview` | `live` | `Instrument.live` | `Station.live` | `instrument.frames.<camera>.overview` | The read-out region, up to 2048 pixels wide |
+| `viewport` | `live_viewport` | `Instrument.live` | `Station.live` | `instrument.frames.<camera>.viewport` | Current viewport plus overscan, up to 2048 pixels wide |
+
+A camera topic is a rigup device topic. A feed topic is the dotted name that the readers of the feed get, under the
+publisher's prefix (`stations.<id>.`).
 
 The overview stays at a constant maximum width regardless of zoom. At the full viewport there is no separate
 viewport layer to generate.
@@ -99,7 +104,8 @@ Every source frame is independently decodable:
 9-byte prefix | MessagePack source header | Zstandard payload
 ```
 
-The prefix contains the `VXLF` magic, framing version, and MessagePack header length. The source header contains:
+The prefix contains the `VXSF` magic (Voxel source frame), framing version, and MessagePack header length. The
+source header contains:
 
 - source schema version and encoding identifier
 - `camera_id`, `source_stream_id`, `frame_idx`, and `layer`
@@ -110,32 +116,36 @@ The prefix contains the `VXLF` magic, framing version, and MessagePack header le
 
 It intentionally excludes `channel_id`, histograms, levels, color maps, and display state.
 
-`VoxelLivePacket` wraps that complete source packet without parsing or modifying it:
+A `FrameMessage` (`vxl.web.feed`) carries complete source packets to the readers of the feed, without parsing or
+modifying them, as a `VXFP` packet (Voxel frame packet):
 
 ```text
-9-byte prefix | MessagePack delivery header | complete VXLF source packet
+9-byte prefix | MessagePack header | 1 complete VXSF source packet for each topic
 ```
 
-The `VXLP` delivery header contains `delivery_schema_version`, `channel_id`, `seq`, `state_cursor`,
-`stamped_at_unix_us`, and `frame_byte_length`. `state_cursor` contains the `StationFeed` stream ID and sequence.
-It identifies the latest materialized station state when `StationFeed` wrapped the camera frame; the timestamp
-records when that association was made. The delivery `seq` increases across wrapped frames. Sequence gaps are
-expected when latest-only queues replace frames. Camera-owned fields such as `layer` are not duplicated in this
-header.
+The prefix contains the `VXFP` magic, the framing version, and the MessagePack header length. The header contains the
+message's `cursor` (`stream_id` and `seq`), `sent_at_unix_us`, and `topics`: for each frame topic, its `state`
+cursor, its `position_um`, and its `frame_byte_length`. The source packets follow the header in the order of its
+topics. A message usually holds 1 topic, and more only when frames waited for a slow reader. `state` is the
+publisher's state cursor when it took the frame. The message `seq` increases across messages; gaps are expected,
+since only the newest frame of each topic waits for a reader. Camera-owned fields such as `layer` are not duplicated
+in the header; the topic name ends with the layer. VXFP carries camera frames only.
 
-VXLP also carries nullable `position_um: {x, y, z}`: the stage position that the stage last reported when the
+The legacy apps have their own packet, `VXLP` (`VoxelLivePacket` in `vxl._legacy.live`), which holds 1 source frame
+under a `channel_id`. A reader of 1 packet refuses the other by its magic.
+
+Each topic's nullable `position_um: {x, y, z}` is the stage position that the stage last reported when the
 relay first saw that frame number. This is not synchronized exposure-time positioning. The relay keeps the latest
 16 frame positions per camera and reuses them for overview and regenerated viewport packets, also after the preview
 stops, so a zoom of a stopped image keeps its place. A position is unknown until every stage axis has reported.
-Stream resets and instrument close clear these associations. The camera-owned VXLF packet and delivery
-`state_cursor` are unchanged.
+Stream resets and instrument close clear these associations. The camera-owned VXSF packet is unchanged.
 
 A screen places each picture from its plane's `Picture` and the frame's `position_um`, so a stopped image keeps its
 true place when the stage moves. A new `stream_revision` clears the old images.
 
-`StationFeed.frames` emits the packed `VXLP` packets. Consumers correlate `state_cursor` with the reliable
-station-state stream, use the session identity and `stream_revision` to invalidate old display generations, and
-reject stale or out-of-order frames.
+`FeedPublisher.connect_frames()` gives the frame messages. Consumers correlate each frame's `state` cursor with the
+state messages, use the session identity and `stream_revision` to invalidate old display generations, and reject
+stale or out-of-order frames.
 
 Every layer, including `overview`, is positioned from `source_rect_px`. The `layer` field selects replacement
 and composition behavior; it never implies that the represented rectangle covers the full sensor.
@@ -193,9 +203,9 @@ The generator's operational API is deliberately small:
 ## Consumers
 
 Today both consumers take frames from the old instrument. Qt subscribes to its station feed, decodes each
-`VoxelLivePacket` away from the UI thread, and composites the overview and viewport layers as grayscale intensity
-images. The web client receives the same delivery packets over the dedicated live WebSocket, decodes Zstandard in a
-worker, and uploads the shuffled byte planes to shared WebGPU textures. Both place every layer from
-`source_rect_px`, correlate frames with station state, invalidate old generations, and treat sequence gaps as
+`VoxelLivePacket` (`VXLP`) away from the UI thread, and composites the overview and viewport layers as
+grayscale intensity images. The web client receives the same delivery packets over the dedicated live WebSocket,
+decodes Zstandard in a worker, and uploads the shuffled byte planes to shared WebGPU textures. Both place every layer
+from `source_rect_px`, correlate frames with station state, invalidate old generations, and treat sequence gaps as
 expected frame drops. Moving them to the new core means reading `view.live` and zooming through
 `update_viewport`.

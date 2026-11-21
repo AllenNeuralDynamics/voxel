@@ -7,12 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 from vxlib.reactivity import Emitter
 from vxlib.schema import FrozenModel
-from vxlib.vector import Transform, Vec3D
+from vxlib.vector import StagePosition, Transform, Vec3D
 
 from vxl.devices.base import DeviceId
 from vxl.devices.camera import AreaCameraHandle
 from vxl.live import LiveLayer, LiveSourceEmission, LiveViewport, live_source_header
-from vxl.live.protocol import StagePosition
 
 if TYPE_CHECKING:
     from vxlib.lifecycle import Teardown

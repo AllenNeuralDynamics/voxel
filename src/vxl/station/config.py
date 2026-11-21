@@ -1,8 +1,7 @@
 """The station's own configuration and identity: ``station.yaml`` in the station folder."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Literal, Self
+from pathlib import Path
+from typing import Literal, Self
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -14,9 +13,6 @@ from vxl.metadata import BASE_METADATA_SCHEMA, resolve_metadata_class
 from vxl.station.errors import StationNotConfiguredError
 from vxl.system import System
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 class StationInfo(BaseModel):
     """Stable public identity of a Voxel control station."""
@@ -25,6 +21,17 @@ class StationInfo(BaseModel):
 
     id: UUID
     name: str
+
+
+class ServerSettings(BaseModel):
+    """How the station's server runs: the ``port`` that windows open, another server program to start in place of
+    ``vxl-server`` (``command``), and the folder of the built web app to serve (``web``)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    port: int = Field(default=8000, ge=1, le=65535)
+    command: str | None = None
+    web: Path | None = None
 
 
 class _SystemFieldsEnvSource(EnvSettingsSource):
@@ -49,6 +56,7 @@ class StationConfig(System):
     metadata_schemas: dict[str, str] = Field(
         default_factory=dict, description="menu name -> dotted path of an ExperimentMetadata subclass"
     )
+    server: ServerSettings = Field(default_factory=ServerSettings)
 
     @field_validator("metadata_schemas")
     @classmethod
@@ -129,4 +137,4 @@ class StationConfig(System):
         return StationInfo(id=self.id, name=self.name)
 
 
-__all__ = ["StationConfig", "StationInfo"]
+__all__ = ["ServerSettings", "StationConfig", "StationInfo"]

@@ -16,7 +16,7 @@ from vxl.instrument.base import Instrument, InstrumentView
 from vxl.instrument.folder import InstrumentFolder
 from vxl.live import LiveSourceEmission
 from vxl.records import Records
-from vxl.station.errors import BusyError, NotFoundError
+from vxl.station.errors import BusyError, NotFoundError, RejectedError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Mapping
@@ -373,7 +373,10 @@ class Station:
         await self._view.set(StationView(status=StationStatus.IDLE, error=_describe_error(launch_error)))
 
     def _instrument_home(self, instrument_name: str) -> Path:
-        check_identifier(instrument_name, "Instrument name")
+        try:
+            check_identifier(instrument_name, "Instrument name")
+        except ValueError as error:
+            raise RejectedError(str(error)) from error
         return self.instruments_dir / f"{instrument_name}.voxel"
 
     def _ensure_file_operation_allowed(self) -> None:

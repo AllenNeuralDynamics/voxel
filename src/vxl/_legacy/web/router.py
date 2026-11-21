@@ -34,11 +34,11 @@ from vxl._legacy.instrument.config import (
     TaskPatch,
     WriterPatch,
 )
+from vxl._legacy.live import VOXEL_LIVE_FRAMING_VERSION
 from vxl._legacy.station.models import SessionInfo, StationFeedView, StationInfo
 from vxl._legacy.station.station import Station
 from vxl._legacy.station.templates import InstrumentTemplates
 from vxl._utils.color import ColormapGroup, get_colormap_catalog
-from vxl.live.protocol import VOXEL_LIVE_FRAMING_VERSION
 from vxl.metadata import resolve_metadata_class
 
 station_router = APIRouter(prefix="/stations", tags=["station"])

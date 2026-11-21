@@ -77,6 +77,11 @@ split between its cameras (`RamBudget`). The writer fits 2 to 4 slots in it (`MI
 `sizing.py`); a slot costs a batch plus its pyramid and the worker's buffers (`per_slot_bytes`). If 2 do not fit, the
 image fails to open with `RingSizingError`, today at the first visit.
 
+Seen on 2026-11-21, on a laptop with a budget of 14.9 GB: the simulated `z-step.yaml` template with its own writer
+settings (`batch_frames: 128`, `max_level: 3`) needs 60 GB for 1 slot. `start_acquisition` answered with an id, the
+record was made, and the visit then failed with "cannot fit 2 batch slots". With `batch_frames: 2` and
+`max_level: 1` the same acquisition completed.
+
 - **Camera query:** for an image (its transform) and the writer settings, give the memory per slot, the camera's
   budget and how many slots fit. It reuses `per_slot_bytes` and `slots_for_budget`, and runs on the camera's computer
   where the budget is.

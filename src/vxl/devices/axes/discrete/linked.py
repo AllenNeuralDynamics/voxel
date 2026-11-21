@@ -45,16 +45,16 @@ class LinkedDiscreteAxis(DiscreteAxis):
     @property
     def state(self) -> DiscreteAxisState:
         states = {member.id: member.state for member in self._members}
-        position = next(
+        at = next(
             (
                 index
                 for index, targets in self._slot_targets.items()
-                if all(states[device_id].position == slot for device_id, slot in targets.items())
+                if all(states[device_id].slot == slot for device_id, slot in targets.items())
             ),
             None,
         )
         is_moving = any(state.is_moving for state in states.values())
-        return DiscreteAxisState(position=position, target=self._target, is_moving=is_moving)
+        return self._state_at(at, target=self._target, is_moving=is_moving)
 
     def move_to_slot(self, slot: int, *, wait: bool = False, timeout_s: float | None = None) -> None:
         targets = self._slot_targets.get(slot)

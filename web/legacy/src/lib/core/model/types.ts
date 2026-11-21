@@ -36,7 +36,8 @@ export type IlluminationAssemblyConfig = OpticalAssemblyConfig;
 export type DiscreteAxisPositions = Record<string, string>;
 
 export interface DiscreteAxisState {
-  readonly position: number | null;
+  readonly position: string | null;
+  readonly slot: number | null;
   readonly target: number | null;
   readonly is_moving: boolean;
 }
