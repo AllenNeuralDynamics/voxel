@@ -42,11 +42,9 @@
       bind:this={names}
       class="flex h-ui-sm min-w-0 items-center gap-1.5 rounded-md px-2 transition-colors group-hover:bg-element-hover group-data-[state=open]:bg-element-hover"
     >
-      <span class={cn('min-w-0 truncate', openName ? 'text-success-fg' : 'text-fg-muted')}>{station.name}</span>
+      <span class="min-w-0 truncate text-fg-muted">{station.name}</span>
       <span class="shrink-0 text-fg-faint" aria-hidden="true">/</span>
-      <span
-        class={cn('min-w-0 truncate font-medium', selected && selected === openName ? 'text-success-fg' : 'text-fg')}
-        >{selected ? displayName(selected) : 'Select instrument…'}</span
+      <span class="min-w-0 truncate font-medium text-fg">{selected ? displayName(selected) : 'Select instrument…'}</span
       >
     </span>
   </DropdownMenu.Trigger>
@@ -61,7 +59,8 @@
         aria-label={`${displayName(name)}${open ? ', open' : ''}${problems ? ', configuration issues' : ''}`}
         onclick={() => selection.select(name)}
       >
-        <span class={cn('min-w-0 flex-1 truncate', open && 'text-success-fg')}>{displayName(name)}</span>
+        <span class="min-w-0 flex-1 truncate">{displayName(name)}</span>
+        {#if open}<span class="shrink-0 text-sm text-fg-muted">Open</span>{/if}
         {#if problems}
           <span class="shrink-0" role="img" aria-label="Configuration issues" title={problems}>
             <TriangleAlert class="size-3.5 text-warning-fg" aria-hidden="true" />

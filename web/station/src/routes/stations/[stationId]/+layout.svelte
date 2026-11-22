@@ -3,8 +3,9 @@
 
   import { afterNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { provideInstrumentSelection, provideStationContext } from '$lib/context.svelte';
+  import { provideAppBar, provideInstrumentSelection, provideStationContext } from '$lib/context.svelte';
   import type { ConnectionState } from '$lib/model/client.svelte';
+  import AppBar from '$lib/shell/AppBar.svelte';
   import * as Rail from '$lib/shell/rail';
   import StationMenu from '$lib/shell/StationMenu.svelte';
   import VoxelLogo from '$lib/shell/VoxelLogo.svelte';
@@ -34,6 +35,7 @@
 
   const station = provideStationContext();
   const selection = provideInstrumentSelection(station, () => params);
+  const appBar = provideAppBar();
   onMount(() => station.initialize(params.stationId));
   onDestroy(() => station.dispose());
 
@@ -197,8 +199,10 @@
   </div>
   <PaneGroup direction="horizontal" bind:ref={frameRef} class="h-full min-w-0 flex-1 bg-shell text-fg">
     <Pane {...pagePane} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <div class="app-bar px-4">
-        <StationMenu {selection} />
+      <div class="app-bar min-w-0 px-4">
+        <AppBar bar={appBar}>
+          {#snippet start()}<StationMenu {selection} />{/snippet}
+        </AppBar>
       </div>
       <PaneGroup direction="vertical" bind:ref={pageColumnEl} class="min-h-0">
         <Pane bind:this={bodyRef} {...body} collapsible class="min-h-0">
@@ -223,7 +227,7 @@
         </Pane>
       </PaneGroup>
       <footer aria-label="Log and issues">
-        <div class="status-bar gap-[0.15rem] pr-[0.85rem] pl-[0.6rem]" role="tablist">
+        <div class="status-bar gap-0.5 pr-[0.85rem] pl-2" role="tablist">
           {@render tab('Log', logOpen && logTab.get() === 'log', () => pickLogTab('log'))}
           {@render tab('Issues', logOpen && logTab.get() === 'issues', () => pickLogTab('issues'))}
           <button
@@ -279,7 +283,7 @@
         </Pane>
       </PaneGroup>
       <footer aria-label="Live stream">
-        <div class="status-bar gap-[0.15rem] pr-[0.85rem] pl-[0.6rem]" role="tablist">
+        <div class="status-bar gap-0.5 pr-[0.85rem] pl-2" role="tablist">
           {@render tab('Power', streamOpen && streamTab.get() === 'power', () => pickStreamTab('power'))}
           <span class="flex-1"></span>
           {@render tab('Stream', streamOpen && streamTab.get() === 'stream', () => pickStreamTab('stream'))}
