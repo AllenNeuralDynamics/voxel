@@ -147,7 +147,7 @@
             </div>
           </div>
         </Pane>
-        <PaneDivider direction="horizontal" ondblclick={togglePanel} />
+        <PaneDivider ondblclick={togglePanel} />
         <Pane bind:this={panelRef} {...panel} collapsible minSize={20} maxSize={55} class="min-h-0 bg-pane">
           <IssueViewer
             params={{ stationId: instrument.stationId, instrumentId: instrument.id }}

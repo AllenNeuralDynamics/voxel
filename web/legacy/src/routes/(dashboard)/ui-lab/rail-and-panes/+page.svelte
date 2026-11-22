@@ -57,13 +57,13 @@
             <Pane defaultSize={40} minSize={20} class="bg-pane p-3">
               <span class="text-sm text-fg-muted">Content</span>
             </Pane>
-            <PaneDivider direction="vertical" />
+            <PaneDivider />
             <Pane defaultSize={60} minSize={20} class="bg-canvas p-3">
               <span class="text-sm text-fg-muted">Viewer</span>
             </Pane>
           </PaneGroup>
         </div>
-        <figcaption class="px-1 {lab.code}">PaneDivider direction="vertical"</figcaption>
+        <figcaption class="px-1 {lab.code}">PaneGroup direction="horizontal"</figcaption>
       </figure>
       <figure class="flex flex-col gap-1.5">
         <div class="isolate h-56 overflow-hidden frame-bordered">
@@ -71,13 +71,13 @@
             <Pane defaultSize={65} minSize={30} class="bg-canvas p-3">
               <span class="text-sm text-fg-muted">Preview</span>
             </Pane>
-            <PaneDivider direction="horizontal" />
+            <PaneDivider />
             <Pane defaultSize={35} minSize={20} class="bg-pane p-3">
               <span class="text-sm text-fg-muted">Logs</span>
             </Pane>
           </PaneGroup>
         </div>
-        <figcaption class="px-1 {lab.code}">PaneDivider direction="horizontal"</figcaption>
+        <figcaption class="px-1 {lab.code}">PaneGroup direction="vertical"</figcaption>
       </figure>
     </section>
   </div>

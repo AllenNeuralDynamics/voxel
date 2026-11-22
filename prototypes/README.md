@@ -18,6 +18,7 @@ whether it is built.
 | `lab.md` | The lab publisher, its lab page and the later data viewer | not built |
 | `station.md` | How the station's parts fit together, and where each lives | built, except the lab and `vxl station info` |
 | `tuning-knobs.md` | Tuning knobs | backend built; UI in the Lab only |
+| `orphans.md` | Child processes that outlive a hard kill of the station, and how each kind ends with it | researched; not built |
 | `TODO.md` | All pending work, in 1 list, with links to the notes | — |
 
 ## Code
@@ -25,4 +26,5 @@ whether it is built.
 | File | What |
 | --- | --- |
 | `demo.py` | A session on a simulated SPIM microscope (`uv run -m prototypes.demo`) |
+| `orphans/` | Try-outs for `orphans.md`: what outlives a hard kill (`today.py`), 4 ways to notice it (`ways.py`), and the ZMQ disconnect (`zmq_watch.py`) |
 | `calibration.py` | Power meter readings on each light path, in `calibration.json` |

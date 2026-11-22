@@ -150,12 +150,12 @@
           {@render children()}
         </main>
       </Pane>
-      <PaneDivider direction="vertical" splits={barSplits} />
+      <PaneDivider splits={barSplits} />
       <Pane {...viewerPane} role="region" aria-label="Viewer" class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)]">
         <ViewerPane instrumentId={selection.current} />
       </Pane>
       {#if app.instrument}
-        <PaneDivider direction="vertical" splits={barSplits} />
+        <PaneDivider splits={barSplits} />
         <Pane
           {...deckPane}
           role="region"

@@ -1,4 +1,5 @@
-"""Build the web frontend before packaging Voxel."""
+"""Build the web apps into the Python package, then package Voxel. Each app builds into its own ``static`` folder
+inside ``src/vxl``, which git ignores and the wheel includes."""
 
 import shutil
 import subprocess
@@ -7,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
-STATION = WEB / "station"
+APPS = (WEB / "station", WEB / "legacy")
 
 
 def _run(command: list[str], *, cwd: Path) -> None:
@@ -21,7 +22,8 @@ def _run(command: list[str], *, cwd: Path) -> None:
 
 def main() -> None:
     _run(["vp", "install", "--frozen-lockfile"], cwd=WEB)
-    _run(["vp", "build"], cwd=STATION)
+    for app in APPS:
+        _run(["vp", "build"], cwd=app)
     _run(["uv", "build", *sys.argv[1:]], cwd=ROOT)
 
 

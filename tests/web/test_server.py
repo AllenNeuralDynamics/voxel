@@ -10,6 +10,7 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -20,11 +21,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from vxlib.vector import Transform, Vec3D
+from websockets.asyncio.client import ClientConnection, connect
+from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from vxl.records import Acquisition, Image, Records, Visit
 from vxl.storage import StorageSpec
 from vxl.web.client import FeedClient
-from vxl.web.feed import FeedPublisher
+from vxl.web.feed import FeedPublisher, StateMessage
 from vxl.web.server import Server
 from vxl.web.sockets import FeedSockets, Listener
 
@@ -77,6 +80,7 @@ async def front(tmp_path: Path) -> AsyncIterator[_Front]:
             web=tmp_path / "web",
         )
         async with server, Listener(server.app) as listener:
+            await (await _open(f"ws://127.0.0.1:{listener.port}/api/stations/s/feed/state")).close()
             yield _Front(publisher, records, f"http://127.0.0.1:{listener.port}")
 
 
@@ -165,7 +169,18 @@ async def test_a_service_that_does_not_answer_gives_a_502_problem() -> None:
     assert json.loads(content)["status"] == 502
 
 
-async def test_the_server_reads_the_feed_again_after_the_service_refuses_it() -> None:
+async def _open(url: str) -> ClientConnection:
+    """A feed socket at ``url``, once the server takes readers: it refuses them with 503 while it has no feed."""
+    while True:
+        try:
+            return await connect(url)
+        except InvalidStatus as error:
+            if error.response.status_code != HTTPStatus.SERVICE_UNAVAILABLE:
+                raise
+            await asyncio.sleep(0.05)
+
+
+async def test_a_window_waits_while_the_service_is_gone_and_gets_its_full_message_when_it_is_back() -> None:
     publisher = FeedPublisher("stations.s")
     publisher.publish({"status": "idle"})
     feed = Starlette(routes=FeedSockets(publisher).routes("/api/stations/s"))
@@ -173,15 +188,36 @@ async def test_the_server_reads_the_feed_again_after_the_service_refuses_it() ->
     async with asyncio.timeout(20), Listener(Starlette()) as no_feed:  # a program that refuses the feed sockets
         server = Server(f"http://127.0.0.1:{no_feed.port}/api/stations/s")
         async with server, Listener(server.app) as listener:
-            reader = FeedClient(f"ws://127.0.0.1:{listener.port}/api/stations/s")
-            async with aclosing(reader.state()) as messages:
-                empty = await anext(messages)
-                await no_feed.__aexit__(None, None, None)
-                async with Listener(feed, port=no_feed.port):
-                    kept = await anext(messages)
+            url = f"ws://127.0.0.1:{listener.port}/api/stations/s/feed/state"
+            with pytest.raises(InvalidStatus) as refused:
+                await connect(url)
+            await no_feed.__aexit__(None, None, None)
+            async with Listener(feed, port=no_feed.port), await _open(url) as window:
+                first = StateMessage.model_validate_json(await window.recv())
 
-    assert (empty.full, empty.topics) == (True, {})
-    assert kept.topics == {"stations.s.status": "idle"}
+    assert refused.value.response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+    assert (first.full, first.topics) == (True, {"stations.s.status": "idle"})
+
+
+async def test_the_windows_feed_closes_when_the_service_stops_and_the_server_still_answers() -> None:
+    publisher = FeedPublisher("stations.s")
+    feed = Starlette(routes=FeedSockets(publisher).routes("/api/stations/s"))
+
+    async with asyncio.timeout(20), Listener(feed) as service:
+        server = Server(f"http://127.0.0.1:{service.port}/api/stations/s")
+        async with server, Listener(server.app) as listener:
+            base = f"127.0.0.1:{listener.port}/api"
+            async with await _open(f"ws://{base}/stations/s/feed/state") as window:
+                await window.recv()
+                publisher.close()  # the service stops
+                with pytest.raises(ConnectionClosed):
+                    await window.recv()
+            with pytest.raises(InvalidStatus) as refused:
+                await connect(f"ws://{base}/stations/s/feed/frames")
+            fronted = await call(f"http://{base}")
+
+    assert refused.value.response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+    assert (fronted[0], json.loads(fronted[2])) == (200, {"service": "/api/stations/s"})
 
 
 @pytest.mark.parametrize("upstream", ["http://127.0.0.1:5600", "http://127.0.0.1:5600/stations/s"])

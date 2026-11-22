@@ -4,6 +4,7 @@ station service with its server."""
 import asyncio
 import contextlib
 import errno
+import inspect
 import logging
 import signal
 import socket
@@ -125,14 +126,22 @@ class StationRun:
             await self._keep_server(self._server_command(service))
 
     def _server_command(self, service: "StationService") -> list[str]:
-        """The server program and its flags, which are the same for every server program."""
+        """The server program and its flags, which are the same for every server program. The web app is the folder
+        that ``server.web`` names, or else the built app in the package of the service, when it is there."""
         settings = self._config.server
         program = [settings.command] if settings.command else [sys.executable, "-m", "vxl.web.server"]
         flags = ["--upstream", service.url, "--port", str(settings.port)]
         flags += ["--records", str(service.station.records.path), "--data", str(self._config.store)]
-        if settings.web is not None:
-            flags += ["--web", str(settings.web)]
+        web = settings.web or self._built_app()
+        if web is not None:
+            flags += ["--web", str(web)]
         return program + flags
+
+    def _built_app(self) -> Path | None:
+        """The built web app of the service: the ``static`` folder next to its module. ``None`` when it is not
+        built."""
+        folder = Path(inspect.getfile(self._service)).parent / "static"
+        return folder if (folder / "index.html").is_file() else None
 
     async def _keep_server(self, command: Sequence[str]) -> None:
         port = self._config.server.port

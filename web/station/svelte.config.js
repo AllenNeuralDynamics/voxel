@@ -5,9 +5,13 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 const config = {
   preprocess: vitePreprocess(),
   kit: {
-    // A single-page app: every route falls back to index.html. Where the built files are served from is not decided
-    // yet, so they go to the default build/ folder.
-    adapter: adapter({ fallback: 'index.html' })
+    // A single-page app: every route falls back to index.html. The built files go into the Python package, next to
+    // the station's web code, so that `vxl station start` serves them.
+    adapter: adapter({
+      pages: '../../src/vxl/web/station/static',
+      assets: '../../src/vxl/web/station/static',
+      fallback: 'index.html'
+    })
   }
 };
 

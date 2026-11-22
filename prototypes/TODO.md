@@ -79,8 +79,10 @@ operations, `StationService`), the server and `vxl station start`; all of it is 
   starts an activity (`POST /acquisition:start` answers `200` with the id), and the merge of a PATCH in the HTTP
   layer. Also the open points (`interface.md` › Open).
 - **The server's leftovers** (`server.md` › As built): a window that subscribes to only some topics, the cap on the
-  process, the public read schema of the records, frames read only while a window watches, how a window learns that
-  the service is gone, and where the built web app lives.
+  process, the public read schema of the records, frames read only while a window watches, and a release step that
+  builds the web app before the wheel.
+- **Children that outlive the station** (`orphans.md`): researched and prototyped; picks made, not built. Left:
+  the flag's name, 1 run on Windows, and a go for the changes in `rigup/` and `omezarr/`.
 - **A setting for the station's local port** (`station.md` › Open), and a way to create an instrument folder from a
   template without Python (`Station.create_instrument` has no command and no route).
 - **`vxl station info`** (`station.md` › The CLI around it): shows the station's id, name, folder, instruments and

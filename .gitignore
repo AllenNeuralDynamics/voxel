@@ -20,3 +20,6 @@ notes
 
 # web/legacy build
 src/vxl/_legacy/web/static/
+
+# web/station build
+src/vxl/web/station/static/

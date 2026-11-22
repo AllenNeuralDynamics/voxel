@@ -80,7 +80,7 @@ this.
 server:
   port: 8000                      # optional, default 8000
   command: vxl-server             # optional: another server program
-  web: /path/to/the/built/app     # optional: the web app to serve
+  web: /path/to/the/built/app     # optional: another web app, in place of the one in the package
 ```
 
 Built (`ServerSettings` in `vxl.station.config`); `vxl station init` writes the section. The station service's own

@@ -66,9 +66,10 @@ _TIMEOUT_S = 120.0
 _CALLS_AT_ONCE = 32
 """How many calls wait for the service at once: more than the default thread pool, which the history also uses."""
 
-_READ_AGAIN_S = 1.0
+_READ_AGAIN_S = 0.5
+"""The first wait before the server reads the feed of its service again. The service is on the same computer."""
 
-_READ_AGAIN_MAX_S = 30.0
+_READ_AGAIN_MAX_S = 5.0
 
 _MAX_ROWS = 1000
 
@@ -287,9 +288,10 @@ class Server:
     does not answer, and any other path under ``/api`` is not found. Every path outside ``/api`` belongs to the web
     app in ``web``, when given, so that its pages can have addresses such as ``/stations/<id>/run``.
 
-    A reader that connects before the service gets an empty full message, and the service's full message once it is
-    there. The server reads the feed of the service for as long as it runs: when that fails, it starts again after a
-    wait."""
+    The server reads the feed of the service for as long as it runs, 1 connection at a time. Until the service's first
+    full message arrives, and again from the moment that connection ends, its feed sockets refuse readers with
+    ``503`` and close the open ones. So a closed socket and a refused one, with ``GET /api`` answering, tell a window
+    that the service has stopped. The server reads the feed again after a wait that doubles from 0.5 s to 5 s."""
 
     def __init__(
         self, upstream: str, *, records: Path | None = None, data: Path | None = None, web: Path | None = None
@@ -301,7 +303,7 @@ class Server:
         self._prefix = prefix
         self._service = address.netloc
         self._relay = FeedRelay()
-        self._client = FeedClient("ws" + upstream.removeprefix("http"))
+        self._client = FeedClient("ws" + upstream.removeprefix("http"), reconnect=False)
         self._tasks: list[asyncio.Task[None]] = []
         self._calls = ThreadPoolExecutor(max_workers=_CALLS_AT_ONCE, thread_name_prefix="vxl-server-call")
         routes: list[BaseRoute] = [Route(_API, self._service_path), *FeedSockets(self._relay).routes(prefix)]
@@ -318,7 +320,7 @@ class Server:
 
     async def __aenter__(self) -> Self:
         self._tasks = [
-            asyncio.create_task(self._keep_reading(self._client.state, self._relay.send)),
+            asyncio.create_task(self._keep_reading(self._client.state, self._relay.send, lost=self._lost)),
             asyncio.create_task(self._keep_reading(self._client.frames, self._relay.send_frames)),
         ]
         return self
@@ -333,12 +335,15 @@ class Server:
         self._calls.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
-    async def _keep_reading[M](read: Callable[[], AsyncGenerator[M]], give: Callable[[M], None]) -> None:
-        """Give each message that the service sends to the relay. A message that does not follow the last one is
-        dropped. Any other failure, such as a service that answers with something else than the feed, is logged, and
-        the reading starts again after a wait that doubles from 1 second to 30 while it fails."""
+    async def _keep_reading[M](
+        read: Callable[[], AsyncGenerator[M]], give: Callable[[M], None], *, lost: Callable[[str], None] | None = None
+    ) -> None:
+        """Give each message that the service sends to the relay, 1 connection at a time, and call ``lost`` with the
+        reason each time a connection ends or cannot open. A message that does not follow the last one is dropped.
+        The reading starts again after a wait that doubles from 0.5 s to 5 s while it fails."""
         wait = _READ_AGAIN_S
         while True:
+            reason = "the service closed its feed"
             try:
                 async with aclosing(read()) as messages:
                     async for message in messages:
@@ -347,10 +352,18 @@ class Server:
                             give(message)
                         except ValueError as error:
                             logger.warning("Dropped a message of the service: %s", error)
-            except Exception:
-                logger.exception("Reading the feed of the service failed; starting again in %.0f s", wait)
+            except Exception as error:  # such as a service that is gone, or that answers with something else
+                reason = repr(error)
+            if lost is not None:
+                lost(reason)
             await asyncio.sleep(wait)
             wait = min(wait * 2, _READ_AGAIN_MAX_S)
+
+    def _lost(self, reason: str) -> None:
+        """The state feed of the service ended: close the windows' feed sockets until it is back."""
+        if not self._relay.closed:
+            logger.warning("Lost the feed of the service (%s); the windows wait for it", reason)
+        self._relay.close()
 
     async def _service_path(self, _: Request) -> JSONResponse:
         """The path of the service that this server fronts: its own answer, also while the service is gone."""

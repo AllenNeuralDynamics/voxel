@@ -213,7 +213,10 @@ class FeedConnection[M: _Message]:
 class FeedRelay:
     """Gives each message of 1 service to every connection, unchanged, with no transport of its own. It keeps the last
     value of each state topic, so a new connection starts with 1 full message. Frames are not kept: a connection gets
-    the frames sent while it is open, the newest of each topic."""
+    the frames sent while it is open, the newest of each topic.
+
+    A relay is closed until a full message arrives, and :meth:`close` closes it again when its source is gone. While
+    it is closed, it accepts no connection and drops each message that is not full."""
 
     def __init__(self) -> None:
         self._state = StateMessage(
@@ -222,11 +225,11 @@ class FeedRelay:
         self._frames_at: FeedCursor | None = None
         self._state_readers: set[_Waiting[StateMessage]] = set()
         self._frame_readers: set[_Waiting[FrameMessage]] = set()
-        self._closed = False
+        self._closed = True  # until the first full message
 
     @property
     def closed(self) -> bool:
-        """Whether :meth:`close` ran: no new connection is accepted."""
+        """Whether the relay has no source now: it accepts no connection until the next full message."""
         return self._closed
 
     def snapshot(self) -> StateMessage:
@@ -234,9 +237,13 @@ class FeedRelay:
         return self._state
 
     def send(self, message: StateMessage) -> None:
-        """Give a state message to every state connection. A full message replaces every topic kept, and drops the
-        frames that wait."""
+        """Give a state message to every state connection. A full message replaces every topic kept, drops the
+        frames that wait, and opens a closed relay. While the relay is closed, a message that is not full is
+        dropped."""
+        if self._closed and not message.full:
+            return
         self._state = self._state.merge(message)
+        self._closed = False
         for reader in self._state_readers:
             reader.offer(message)
         if message.full:
@@ -265,7 +272,8 @@ class FeedRelay:
             yield connection
 
     def close(self) -> None:
-        """End every connection after the message that waits for it, and accept no more."""
+        """The source is gone: end every connection after the message that waits for it, and accept none until the
+        next full message."""
         self._closed = True
         for reader in (*self._state_readers, *self._frame_readers):
             reader.end()
@@ -294,6 +302,7 @@ class FeedPublisher(FeedRelay):
         super().__init__()
         self._prefix = prefix
         self._frame_cursor = FeedCursor(stream_id=uuid.uuid4().hex, seq=0)
+        self.replace({})  # a publisher is its own source: it is open from the start
 
     def publish(self, topics: Mapping[str, JsonValue]) -> None:
         """Send the topics that changed, each with its new value. ``None`` removes a topic, and so does a number that

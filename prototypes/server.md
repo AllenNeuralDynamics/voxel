@@ -98,7 +98,7 @@ uv run vxl lab start
 server:
   port: 8000                      # optional, default 8000
   command: vxl-server             # optional: another server program, for example a Rust one
-  web: /path/to/the/built/app     # optional: the web app to serve
+  web: /path/to/the/built/app     # optional: another web app, in place of the one in the package
 ```
 
 `lab.yaml` has the same `server:` section. On a computer that runs both, the 2 servers need 2 ports.
@@ -146,8 +146,17 @@ upstream, `axum` for windows, `tokio::sync::broadcast` with `bytes::Bytes` for t
   Outside `/api`, the server serves the web app from `--web`; a path that is no file gets `index.html`.
 - **The feed job reuses the feed code:** the server reads the service with `FeedClient` and gives each message,
   unchanged, to a `FeedRelay`, which `FeedSockets` serves. The service's cursors reach the windows as they are.
-  When the reading fails for any reason, such as a service that refuses the socket, the server logs it and reads
-  again, after a wait that doubles from 1 s to 30 s.
+  The server reads 1 connection at a time (`FeedClient(..., reconnect=False)`), and tries again after a wait that
+  doubles from 0.5 s to 5 s.
+- **A window learns that the service is gone** (built 2026-11-21). A relay is closed until a full message arrives.
+  When the state connection to the service ends, the server closes the relay: the windows' feed sockets close, and
+  new ones get `503` until the service's first full message is back. The window then asks `GET /api`: an answer
+  means "the station stopped", no answer means "the server is down". No topic and no route was added, so the server
+  still owns no state. A `503` is a "try again" for the websockets library, so a Python reader (the lab, a notebook)
+  waits and connects again; the `403` of before made it stop for good. uvicorn 0.52 logs a false error after each
+  `503` refusal; `Listener` drops that log line. Checked in a real run: the open window closed at once when the
+  service stopped, and a new one got in about 0.4 s after the service was back. A service that hangs is seen only by
+  the keepalive ping of websockets: 20–40 s.
 - **Operations pass through Python's `http.client`, in the server's own pool of 32 threads,** so the server needs
   no new dependency and a slow service cannot hold up the history. The path and the query pass as the bytes that
   the window sent (`a%2Fb` stays `a%2Fb`), and a header that is given more than once stays that way, in both
@@ -169,9 +178,11 @@ Not built, or known and left:
 - The cap on the process: a lower OS priority.
 - The public read schema of the records: the history gives the stored record, which has no status for each visit.
 - The server always reads the frame socket of its service, also when no window watches.
-- A window does not learn that the service is gone: the server keeps the last values. A topic for it would be state
-  that the server owns.
-- Where the built web app lives when `vxl` is installed: `server.web` names a folder by hand today.
+- Built on 2026-11-21: the built web app lives in the package, at `src/vxl/web/station/static/` (the lab's at
+  `src/vxl/web/lab/static/` later). `vp -C web/station build` fills it; git ignores it. `vxl station start` gives
+  it to the server as `--web` when `server.web` is not set (`StationRun._built_app`: the `static` folder next to
+  the service's module). The server stays general: it gets the folder only through `--web`. A wheel holds the
+  folder as it is when the wheel is built (checked with `uv build --wheel`), so build the web app first.
 
 ## Battle test
 
@@ -306,6 +317,16 @@ The same job has other names elsewhere.
   The rule "the server serves the same path as the service, and never renames" stays.
 - **The station's id stays a UUID.** It must be unique with no one to check it, and it is in the records. A readable
   station id was considered and dropped.
+- **The process tree stays:** the station is the parent and the server is its child. Considered: the server inside
+  the station, as legacy did (no orphan server, but no CPU split, no crash isolation and no other server program),
+  and a small supervisor that runs both as siblings (a service manager does that job).
+- **A window learns that the service is gone from its closed feed socket and `GET /api`** (see "As built").
+  Considered: a topic from the server (state that the server owns) and a field in `GET /api` (the window would poll
+  it).
+- **Children that outlive the station need research first.** A hard kill of `vxl station start` leaves the server,
+  rigup device nodes and the writer's worker processes and shared memory. Legacy had the same, except the server.
+  To prototype: what stays today, on macOS and Windows; a pipe on stdin, polling the parent id, or the OS's own way;
+  what service managers do (`TODO.md`).
 
 ## Open
 

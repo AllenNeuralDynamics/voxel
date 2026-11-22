@@ -25,7 +25,8 @@ class StationInfo(BaseModel):
 
 class ServerSettings(BaseModel):
     """How the station's server runs: the ``port`` that windows open, another server program to start in place of
-    ``vxl-server`` (``command``), and the folder of the built web app to serve (``web``)."""
+    ``vxl-server`` (``command``), and a folder of a built web app to serve in place of the one in the package
+    (``web``)."""
 
     model_config = ConfigDict(frozen=True)
 

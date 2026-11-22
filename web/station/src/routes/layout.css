@@ -3,3 +3,34 @@
 
 /* The kit is its own package, so Tailwind scans its files too. */
 @source '../../../kit/src';
+
+/* The sizes of the station window's frame, as the Voxel Station Prototype has them. */
+:root {
+  --app-bar-height: 3.25rem;
+  --status-bar-height: 2.4rem;
+  --rail-width: 4.4rem;
+  /* The live image is always dark, in both themes. */
+  --image-bg: #060606;
+}
+
+@theme inline {
+  --spacing-app-bar: var(--app-bar-height);
+  --spacing-status-bar: var(--status-bar-height);
+  --spacing-rail: var(--rail-width);
+  --color-image: var(--image-bg);
+}
+
+/* One part of the top bar. Each pane has its own part, and the parts line up as 1 bar. */
+@utility app-bar {
+  @apply flex h-app-bar shrink-0 items-center border-b border-line-muted bg-shell;
+}
+
+/* The bar at the foot of a pane: the page's Log and Issues tabs, and the Live profile's status. */
+@utility status-bar {
+  @apply h-status-bar flex shrink-0 items-center border-t border-line-muted bg-shell;
+}
+
+/* What acts on the station while the app is not connected to it: nothing there takes input, and its controls fade. */
+[inert] :is(button, input, select, textarea, [role='slider']) {
+  opacity: 0.5;
+}

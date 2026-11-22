@@ -10,10 +10,12 @@ from vxl.web.feed import FrameMessage, StateMessage
 
 class FeedClient:
     """Reads the feed at ``url``, the address of 1 service, such as ``ws://host:8000/api/stations/<id>``. Each stream
-    connects again by itself when its connection ends, for as long as the caller reads it."""
+    connects again by itself when its connection ends, for as long as the caller reads it. With ``reconnect`` false,
+    each stream reads 1 connection: it ends when the connection closes, and raises when it fails."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, *, reconnect: bool = True) -> None:
         self._url = url.rstrip("/")
+        self._reconnect = reconnect
 
     async def state(self) -> AsyncGenerator[StateMessage]:
         """Each state message. The first one of every connection is full, and its reader starts over from it."""
@@ -27,7 +29,13 @@ class FeedClient:
                 yield FrameMessage.from_packed(data)
 
     async def _messages(self, socket: str) -> AsyncGenerator[str | bytes]:
-        async for connection in connect(f"{self._url}/feed/{socket}", max_size=None, compression=None):
+        url = f"{self._url}/feed/{socket}"
+        if not self._reconnect:
+            async with connect(url, max_size=None, compression=None) as connection:
+                async for data in connection:
+                    yield data
+            return
+        async for connection in connect(url, max_size=None, compression=None):
             try:
                 async for data in connection:
                     yield data

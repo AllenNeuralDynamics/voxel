@@ -9,6 +9,8 @@ const VIA_KIT = { regex: '^(\\.\\./)+kit(/|$)', message: 'Import the kit through
 
 export default defineConfig({
   plugins: [tailwindcss(), kitIcons(), sveltekit()],
+  // In dev, the station's server answers the data paths; `vxl station start` runs it on port 8000.
+  server: { proxy: { '/api': { target: 'http://localhost:8000', ws: true } } },
   lint: {
     ignorePatterns: ['static/**'],
     rules: {

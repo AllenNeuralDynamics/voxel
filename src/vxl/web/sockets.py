@@ -2,12 +2,15 @@
 
 import asyncio
 import contextlib
+import logging
 import socket
 from collections.abc import Awaitable, Callable, Generator
+from http import HTTPStatus
 from types import TracebackType
 from typing import Any, Self
 
 import uvicorn
+from starlette.responses import Response
 from starlette.routing import WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -18,7 +21,7 @@ class FeedSockets:
     """The state socket and the frame socket of a relay, as routes of a Starlette or FastAPI app:
     ``<prefix>/feed/state`` sends each state message as JSON text, and ``<prefix>/feed/frames`` sends each frame
     message as 1 VXFP packet. A message is written 1 time for the readers that get it together. A reader sends
-    nothing."""
+    nothing. While the relay is closed, both refuse a reader with ``503``, which a reader takes as "try again"."""
 
     def __init__(self, relay: FeedRelay) -> None:
         self._relay = relay
@@ -33,15 +36,15 @@ class FeedSockets:
         ]
 
     async def _state(self, socket: WebSocket) -> None:
-        if self._relay.closed:  # the feed ended; refuse the reader before the handshake
-            await socket.close()
+        if self._relay.closed:
+            await socket.send_denial_response(Response(status_code=HTTPStatus.SERVICE_UNAVAILABLE))
             return
         with self._relay.connect() as connection:
             await self._serve(socket, connection, lambda message: socket.send_text(self._as_text(message)))
 
     async def _frames(self, socket: WebSocket) -> None:
         if self._relay.closed:
-            await socket.close()
+            await socket.send_denial_response(Response(status_code=HTTPStatus.SERVICE_UNAVAILABLE))
             return
         with self._relay.connect_frames() as connection:
             await self._serve(socket, connection, lambda message: socket.send_bytes(self._as_packet(message)))
@@ -109,9 +112,16 @@ class Listener:
             timeout_graceful_shutdown=2,
         )
         self._server = _EmbeddedServer(config)
+        logging.getLogger("uvicorn.error").addFilter(self._not_a_refusal)  # the same function: added 1 time
         self._task: asyncio.Task[None] | None = None
         self.host = host
         self.port = port
+
+    @staticmethod
+    def _not_a_refusal(record: logging.LogRecord) -> bool:
+        """Whether a log line of uvicorn is not its false error after a refused socket: uvicorn 0.52 logs that error
+        when an app answers a socket with an HTTP status (``send_denial_response``), and still sends the status."""
+        return record.getMessage() != "ASGI callable returned without completing handshake."
 
     async def __aenter__(self) -> Self:
         listening = socket.create_server((self.host, self.port), backlog=2048)  # here, so that a taken port raises
