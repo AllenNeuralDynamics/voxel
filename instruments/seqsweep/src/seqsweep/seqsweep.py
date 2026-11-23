@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from seqsweep.hal import HAL
-from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanPattern, strip_direction
+from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanTraversal, strip_direction
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 RUN_POLL_S = 0.05
@@ -146,8 +146,8 @@ class SeqSweep:
         """Raise ``ValueError`` if the job uses an unsupported pattern, names an unknown chamber, leaves the safe scan range
         or exceeds the margin or line rate limits."""
         defaults = self.config.default
-        if job.scan_pattern is not ScanPattern.SAME_DIRECTION:
-            raise ValueError(f"scan_pattern '{job.scan_pattern}' is not implemented yet; use 'same_direction'")
+        if job.traversal is not ScanTraversal.SWEEP:
+            raise ValueError(f"traversal '{job.traversal}' is not implemented yet; use 'sweep'")
         if not job.chambers and job.num_strips > 1:
             raise ValueError("num_strips > 1 needs at least one chamber to step from")
         unknown = [chamber for chamber in job.chambers if chamber not in defaults.chambers_step_mm]
@@ -179,7 +179,7 @@ class SeqSweep:
             for chamber in job.chambers or [None]:  # no chamber: one run at the current position
                 for strip in range(job.num_strips):
                     label = f"chamber {chamber}, " if chamber is not None else ""
-                    direction = strip_direction(job.scan_pattern, strip)
+                    direction = strip_direction(job.traversal, strip)
                     if chamber is not None:
                         step_mm = (
                             defaults.chambers_step_mm[chamber]

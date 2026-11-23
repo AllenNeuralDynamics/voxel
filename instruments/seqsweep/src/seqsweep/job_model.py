@@ -12,14 +12,16 @@ class ScanDirection(StrEnum):
     REVERSE = "reverse"  # scan_end_mm → scan_start_mm
 
 
-class ScanPattern(StrEnum):
-    SAME_DIRECTION = "same_direction"  # every strip scans the same way; the stage returns to the start between strips
+class ScanTraversal(StrEnum):
+    """How the strips of a chamber are ordered; same words as Voxel's ``TileOrder`` (``sweep_*`` / ``snake_*``)."""
+
+    SWEEP = "sweep"  # every strip scans the same way; the stage returns to the start between strips
     SNAKE = "snake"  # strips alternate direction (needs the camera scan direction switched per strip)
 
 
-def strip_direction(pattern: ScanPattern, strip_in_chamber: int) -> ScanDirection:
-    """Direction of a strip: always forward for ``same_direction``; ``snake`` alternates, starting forward in each chamber."""
-    if pattern is ScanPattern.SAME_DIRECTION or strip_in_chamber % 2 == 0:
+def strip_direction(traversal: ScanTraversal, strip_in_chamber: int) -> ScanDirection:
+    """Direction of a strip: always forward for ``sweep``; ``snake`` alternates, starting forward in each chamber."""
+    if traversal is ScanTraversal.SWEEP or strip_in_chamber % 2 == 0:
         return ScanDirection.FORWARD
     return ScanDirection.REVERSE
 
@@ -58,7 +60,7 @@ class ScanJob(FrozenModel):
     """One scan job: the whole scan across ``chambers``, ``num_strips`` strips in each.
 
     Every value of the scan is in the job, so a saved job replays the same scan; the direction of each strip
-    follows from ``scan_pattern``. The rig limits (safe range, edge margin, line rate) are in the config.
+    follows from ``traversal``. The rig limits (safe range, edge margin, line rate) are in the config.
     """
 
     name: str = Field(default="seqsweep job", min_length=1)
@@ -73,9 +75,9 @@ class ScanJob(FrozenModel):
     scan_margin_mm: float = Field(
         ge=0, description="Run-up and run-out outside the imaged range, at each end (the buffer's MARGIN)"
     )
-    scan_pattern: ScanPattern = Field(
-        default=ScanPattern.SAME_DIRECTION,
-        description="same_direction: every strip scans the same way; snake: strips alternate (not implemented yet)",
+    traversal: ScanTraversal = Field(
+        default=ScanTraversal.SWEEP,
+        description="sweep: every strip scans the same way; snake: strips alternate (not implemented yet)",
     )
     # TODO temporary: remove once the Y start of a strip is settled
     step_margin_mm: float = Field(

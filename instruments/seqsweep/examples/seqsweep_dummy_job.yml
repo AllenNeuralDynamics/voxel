@@ -6,7 +6,7 @@ num_strips: 5  # passes or frames per chamber
 scan_start_mm: 125.0  # X0: imaged range along the scan axis starts here; must be below scan_end_mm
 scan_end_mm: 178.75  # X_end: imaged range ends here
 scan_margin_mm: 6.0  # MARGIN: run-up and run-out at each end; travel = capture + 2 x margin
-scan_pattern: same_direction  # same_direction | snake (snake is not implemented yet)
+traversal: sweep  # sweep | snake, as Voxel's TileOrder (snake is not implemented yet)
 step_margin_mm: 8.33  # TODO temporary: chamber lower edge to first strip; Y0 118.08 - chamber 3 edge 109.75 (applies to every chamber)
 line_rate_hz: 470000  # camera line rate; pixel pitch and stage speed follow from the optics
 lasers: [laser_532]
