@@ -56,7 +56,6 @@ class SeqSweep:
 
         Replaces any paused or failed job. A ``resume_state`` in ``job`` starts from that pass.
         """
-        # Test stub: one pass on the scan controller; strips are validated but not stepped yet
         if self._scan_task is not None and not self._scan_task.done():
             raise RuntimeError("a scan is already running")
         scan_job = ScanJob.model_validate(job or {})
@@ -181,7 +180,12 @@ class SeqSweep:
                     step_mm = (
                         defaults.chambers_step_mm[chamber] + job.step_margin_mm + strip * derived.tdi_image_width_um / 1000
                     )
-                    start_mm = pass_config.scan_end_mm if direction is ScanDirection.REVERSE else pass_config.scan_start_mm
+                    # Go to the start of the lead-in, as the scan buffer's run_start: the margin sits before the imaged range,
+                    # at X0 going forward and at X_end going reverse (snake)
+                    if direction is ScanDirection.REVERSE:
+                        start_mm = pass_config.scan_end_mm + pass_config.scan_margin_mm
+                    else:
+                        start_mm = pass_config.scan_start_mm - pass_config.scan_margin_mm
                     x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
                     await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
                     await scan_controller.wait_motion_end()
