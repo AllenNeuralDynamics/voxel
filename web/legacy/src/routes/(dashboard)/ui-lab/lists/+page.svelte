@@ -36,7 +36,7 @@
         <RadioBar
           value={layout}
           options={Object.keys(LAYOUTS) as SortableLayout[]}
-          formatLabel={(option) => LAYOUTS[option]}
+          display={(option) => LAYOUTS[option]}
           onChange={(option) => (layout = option)}
           size="xs"
           aria-label="Layout"

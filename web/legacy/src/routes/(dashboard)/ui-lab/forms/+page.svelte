@@ -54,7 +54,7 @@
           <RadioBar
             value={trigger}
             options={TRIGGERS}
-            formatLabel={displayName}
+            display={displayName}
             onChange={(next) => (trigger = next)}
             aria-label="Trigger"
           />

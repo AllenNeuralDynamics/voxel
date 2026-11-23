@@ -1,11 +1,15 @@
 import { tv } from 'tailwind-variants';
 
-/** TextBox, Select and RadioBar share this box, so they line up and look the same at each size. */
+/**
+ * TextBox, Select and RadioBar share this box, so they line up and look the same at each size. Looks: `filled` has a
+ * fill and an outline, `soft` only the fill, `plain` neither.
+ */
 export const box = tv({
   base: 'rounded ring-1 ring-inset',
   variants: {
     variant: {
       filled: 'bg-element-bg ring-control-line',
+      soft: 'bg-element-bg ring-transparent',
       plain: 'ring-transparent'
     },
     size: {
@@ -33,11 +37,11 @@ export const box = tv({
     { row: true, size: 'md', class: 'h-ui-md' },
     { row: true, size: 'lg', class: 'h-ui-lg' },
     {
-      variant: 'filled',
+      variant: ['filled', 'soft'],
       state: ['idle', 'busy'],
       class: 'focus-visible:ring-focus has-focus-visible:ring-focus'
     },
-    { variant: 'filled', state: 'idle', hover: true, class: 'hover:bg-element-hover' },
+    { variant: ['filled', 'soft'], state: 'idle', hover: true, class: 'hover:bg-element-hover' },
     {
       variant: 'plain',
       state: ['idle', 'busy'],

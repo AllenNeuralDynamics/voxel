@@ -4,7 +4,7 @@
  */
 import { createContext } from 'svelte';
 
-import { Station } from '$lib/model/station.svelte';
+import { Station } from '$lib/core/model/station.svelte';
 import { AppBar, type AppBarContent } from '$lib/shell/app-bar.svelte';
 import { InstrumentSelection } from '$lib/shell/selection.svelte';
 

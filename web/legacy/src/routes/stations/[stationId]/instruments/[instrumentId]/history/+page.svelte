@@ -71,7 +71,7 @@
     <RadioBar
       value={filter}
       options={FILTERS}
-      formatLabel={(option) => FILTER_LABELS[option]}
+      display={(option) => FILTER_LABELS[option]}
       onChange={(option) => (filter = option)}
       aria-label="Show acquisitions"
     />

@@ -344,7 +344,7 @@
                     size="lg"
                     value={mode}
                     options={MODES}
-                    formatLabel={displayName}
+                    display={displayName}
                     onChange={(next) => (mode = next)}
                     aria-label="Mode"
                   />
@@ -354,7 +354,7 @@
                     size="lg"
                     value={mode}
                     options={MODES}
-                    formatLabel={displayName}
+                    display={displayName}
                     disabled
                     onChange={() => {}}
                     aria-label="Locked mode"
@@ -419,7 +419,7 @@
           <RadioBar
             value={mode}
             options={MODES}
-            formatLabel={displayName}
+            display={displayName}
             onChange={(next) => (mode = next)}
             size="xs"
             orientation="vertical"

@@ -67,7 +67,7 @@
     <RadioBar
       value={themes.prefs.get().mode}
       options={modes}
-      formatLabel={displayName}
+      display={displayName}
       onChange={(mode) => themes.setMode(mode)}
       size="md"
       aria-label="Mode"

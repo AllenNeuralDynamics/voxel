@@ -10,7 +10,7 @@ import asyncio
 import datetime
 import logging
 import time
-from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Collection, Mapping, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
@@ -18,10 +18,10 @@ from uuid import UUID
 from vxlib.imaging.writer import FrameRange
 from vxlib.issues import Failure
 
-from vxl.storage import ImageLocation
+from vxl.storage import ImageLocation, LocationStatus
 
 from ._database import Database
-from .acquisition import Acquisition, AcquisitionResult, Visit, VisitResult
+from .acquisition import Acquisition, AcquisitionResult, Image, Visit, VisitResult
 from .errors import CaptureError
 from .logs import LogEntry, LogJournal
 from .store import AcquisitionStore, RootResolver
@@ -75,6 +75,20 @@ class VisitRecording:
                 camera: images[camera].model_copy(update={"locations": [where]}) for camera, where in locations.items()
             }
             return {"channels": visit.with_images(opened).channels}
+
+        await self._run.change_visit(self._index, change)
+
+    async def images_closed(self, closed: Collection[str]) -> None:
+        """Save how each opened image ended at its location: available for each camera in ``closed``, whose image
+        closed with every frame it collected written, and failed for every other camera."""
+
+        def change(visit: Visit) -> Mapping[str, object]:
+            ended: dict[str, Image] = {}
+            for camera, image in visit.images().items():
+                status = LocationStatus.AVAILABLE if camera in closed else LocationStatus.FAILED
+                locations = [where.model_copy(update={"status": status}) for where in image.locations]
+                ended[camera] = image.model_copy(update={"locations": locations})
+            return {"channels": visit.with_images(ended).channels}
 
         await self._run.change_visit(self._index, change)
 

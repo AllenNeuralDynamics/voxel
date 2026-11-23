@@ -7,8 +7,7 @@ Researched and prototyped on 2026-11-21. Not built. Asked for in `server.md` ›
 
 When the station process is killed hard (SIGKILL, a crash, Windows TerminateProcess), nothing ends its children.
 
-**Today**, no instrument in `instruments/src` or `~/.voxel/instruments` has `nodes:`, so `Rig` puts every device in
-the station's own process (`LocalNode`, `rigup/src/rigup/rig.py` › `_create_nodes`). The station then has 2 kinds of
+**Without `nodes:`**, `Rig` puts every device in the station's own process (`LocalNode`, `rigup/src/rigup/rig.py` › `_create_nodes`). The station then has 2 kinds of
 child:
 
 | Child | Started by | What it holds |
@@ -16,7 +15,8 @@ child:
 | the server (`python -m vxl.web.server`) | `StationRun` (`src/vxl/cli/station.py`) | port 8000; windows see old data |
 | a writer worker, and the multiprocessing resource tracker | the camera's controller, through `OMEZarrWriter` (`src/vxl/devices/camera/area.py`), which makes `BatchSlot`s (`omezarr/src/ome_zarr_writer/slot.py`): a `ProcessPoolExecutor` with the spawn context | shared memory, made with `track=False`: up to hundreds of GB |
 
-**Only with `nodes:` in a rig file**, which rigup supports and no instrument uses yet:
+**Only with `nodes:` in a rig file.** Of the templates, only `z-step-4-nodes.yaml` has them: 1 `subprocess` node
+per camera. No instrument in `~/.voxel/instruments` has them.
 
 - A `subprocess` node is 1 more child of the station (`python -m rigup.node`, `SubprocessNode`). A writer worker is
   then a child of the node that runs the camera, not of the station.

@@ -100,7 +100,7 @@
     <RadioBar
       value={viewerMode}
       options={VIEWER_MODES}
-      formatLabel={(mode) => viewerModeLabels[mode]}
+      display={(mode) => viewerModeLabels[mode]}
       onChange={(mode) => prefs.viewer.mode.set(mode)}
       size="md"
       aria-label="View"

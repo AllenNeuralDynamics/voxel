@@ -19,7 +19,7 @@ from vxlib.reactivity import Cell, Readable
 
 from vxl.devices.axes.continuous.base import Pulses, Sweep
 from vxl.devices.base import DeviceId
-from vxl.devices.camera import AreaROI
+from vxl.devices.camera import AreaROI, CaptureState
 from vxl.devices.camera.handle import AreaCameraHandle
 from vxl.devices.signals.generator.base import InputEdges, OwnClock
 from vxl.instrument.base import Instrument, InstrumentView
@@ -424,34 +424,48 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         settings = self._store.value.writer
         when_full = "drop" if scan.motion == "sweep" else "wait"
         channel_of = {camera: channel for channel, of in profile.channels.items() for camera in of}
-        async with AsyncExitStack() as images:
-            locations: dict[str, ImageLocation] = {}
-            for camera, handle in cameras.items():
-                folder = PurePosixPath(f"{index:06d}", volume.profile, channel_of[camera], camera)
-                image = handle.image(storage, folder, volume.transforms[camera], settings, when_full)
-                locations[camera] = await images.enter_async_context(image)
-                # The camera streams its progress; each change goes to the record, which saves at most once a second.
-                images.callback(handle.progress.subscribe(partial(self._frames_collected, visit, camera)))
-            await visit.images_opened(locations)
-            await self._reset_live(tuple(cameras))
-            try:
-                if scan.motion == "sweep":
-                    await self._sweep_scan(volume, profile, cameras)
-                elif scan.pacer == "software":
-                    await self._software_scan(volume, profile, cameras)
-                else:
-                    await self._step_scan(volume, profile, cameras)
-            except BaseException:
+        locations: dict[str, ImageLocation] = {}
+        try:
+            async with AsyncExitStack() as images:
+                for camera, handle in cameras.items():
+                    folder = PurePosixPath(f"{index:06d}", volume.profile, channel_of[camera], camera)
+                    image = handle.image(storage, folder, volume.transforms[camera], settings, when_full)
+                    locations[camera] = await images.enter_async_context(image)
+                    # The camera streams its progress to the record, which saves it at most once a second.
+                    images.callback(handle.progress.subscribe(partial(self._frames_collected, visit, camera)))
+                await visit.images_opened(locations)
+                await self._reset_live(tuple(cameras))
                 try:
-                    await self._stop_scan_devices(profile, cameras)
+                    if scan.motion == "sweep":
+                        await self._sweep_scan(volume, profile, cameras)
+                    elif scan.pacer == "software":
+                        await self._software_scan(volume, profile, cameras)
+                    else:
+                        await self._step_scan(volume, profile, cameras)
                 except BaseException:
-                    logger.exception("The scan's devices did not stop cleanly after the visit failed")
-                raise
-            await self._stop_scan_devices(profile, cameras)
-            for camera, handle in cameras.items():
-                await visit.frames(camera, (await handle.progress.get()).collected)
-                if dropped := await handle.dropped():
-                    await visit.frames_dropped(camera, dropped)
+                    try:
+                        await self._stop_scan_devices(profile, cameras)
+                    except BaseException:
+                        logger.exception("The scan's devices did not stop cleanly after the visit failed")
+                    raise
+                await self._stop_scan_devices(profile, cameras)
+                for camera, handle in cameras.items():
+                    await visit.frames(camera, (await handle.progress.get()).collected)
+                    if dropped := await handle.dropped():
+                        await visit.frames_dropped(camera, dropped)
+        finally:
+            if locations:
+                # A camera reports CLOSED only once its image closed with no error; opening an image resets it.
+                states = await asyncio.gather(*(cameras[c].capture.get() for c in locations), return_exceptions=True)
+                closed = [
+                    camera
+                    for camera, state in zip(locations, states, strict=True)
+                    if not isinstance(state, BaseException) and state.state is CaptureState.CLOSED
+                ]
+                try:
+                    await visit.images_closed(closed)
+                except Exception:
+                    logger.exception("The image locations of visit %d could not be saved", index)
 
     @staticmethod
     async def _frames_collected(visit: VisitRecording, camera: DeviceId, progress: WriterProgress) -> None:

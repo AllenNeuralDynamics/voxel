@@ -43,8 +43,11 @@
 
 <script lang="ts" generics="T extends string | number">
   import { RadioGroup, type RadioGroupRootProps } from 'bits-ui';
+  import type { Component } from 'svelte';
+  import type { SvelteHTMLElements } from 'svelte/elements';
 
   import { cn } from '../../utils/cn';
+  import { displayName } from '../../utils/format';
   import { box } from '../box';
   import { type EnumeratedProps, optionKey, useEnumerated } from './enumerated.svelte';
 
@@ -53,12 +56,20 @@
     'child' | 'children' | 'class' | 'disabled' | 'orientation' | 'ref' | 'style' | 'value' | `on${string}`
   >;
 
-  /** Picks 1 of 2 to 4 short options. All options show, and 1 click picks. Use a Select for a longer list. */
+  /**
+   * Picks 1 of 2 to 4 short options. All options show, and 1 click picks. Use a Select for a longer list. An option
+   * shows as text or as an icon; an icon's option is its name, for screen readers and as its tooltip.
+   */
   type Props = EnumeratedProps<T> &
     Attributes & {
-      /** The text of an option. By default, the option shows as it is. */
-      formatLabel?: (option: T) => string;
+      /** What an option shows: its text, or its icon. By default, the option shows as it is. */
+      display?: (option: T) => string | Component<SvelteHTMLElements['svg']>;
       disabled?: boolean;
+      /**
+       * The track: `filled` has a fill and an outline, `soft` only the fill, and `plain` none, so only the picked option
+       * shows a fill.
+       */
+      variant?: 'filled' | 'soft' | 'plain';
       /** `xs` is lower than the other boxes, for a compact row. */
       size?: 'xs' | 'sm' | 'md' | 'lg';
       /** `vertical` stacks the options in a column. Each option keeps the height it has in a row. */
@@ -71,8 +82,9 @@
     options,
     onChange,
     model,
-    formatLabel = String,
+    display = String,
     disabled = false,
+    variant = 'filled',
     size = 'sm',
     orientation = 'horizontal',
     class: className,
@@ -91,14 +103,32 @@
   class={styles.root({
     // The shared box has no xs size, so an xs bar takes its text size from its own styles.
     class: cn(
-      box({ size: size === 'xs' ? undefined : size, state: control.disabled ? 'locked' : 'idle', hover: false }),
+      box({
+        variant,
+        size: size === 'xs' ? undefined : size,
+        state: control.disabled ? 'locked' : 'idle',
+        hover: false
+      }),
       className
     )
   })}
 >
   {#each control.options as option (option)}
-    <RadioGroup.Item value={optionKey(option)} class={styles.option()}>
-      <span class="truncate">{formatLabel(option)}</span>
-    </RadioGroup.Item>
+    {@const shown = display(option)}
+    {#if typeof shown === 'string'}
+      <RadioGroup.Item value={optionKey(option)} class={styles.option()}>
+        <span class="truncate">{shown}</span>
+      </RadioGroup.Item>
+    {:else}
+      {@const Icon = shown}
+      <RadioGroup.Item
+        value={optionKey(option)}
+        class={styles.option()}
+        aria-label={displayName(String(option))}
+        title={displayName(String(option))}
+      >
+        <Icon class="size-4" aria-hidden="true" />
+      </RadioGroup.Item>
+    {/if}
   {/each}
 </RadioGroup.Root>

@@ -1,6 +1,8 @@
 /** Station-scoped REST plus the station's state feed, a WebSocket of topics. */
 import { SvelteSet } from 'svelte/reactivity';
 
+import { Topics } from './topics.svelte';
+
 /**
  * `service-stopped`: the station's server answers, but its station service does not. `server-down`: the server does
  * not answer. Both keep retrying.
@@ -18,10 +20,23 @@ export interface StateMessage {
   topics: Record<string, unknown>;
 }
 
+/** 1 REST request, as the request log keeps it. `status` is 0 when the station did not answer. */
+export interface RequestRecord {
+  method: HttpMethod;
+  path: string;
+  body: unknown;
+  sentAt: number;
+  ms: number;
+  status: number;
+  error: string | null;
+}
+
 export interface ClientOptions {
   initialReconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
 }
+
+const REQUESTS_KEPT = 200;
 
 const DEFAULT_OPTIONS: Required<ClientOptions> = {
   initialReconnectDelayMs: 500,
@@ -46,10 +61,13 @@ export class Client {
   state = $state<ConnectionState>('idle');
   reconnectAttempts = $state(0);
   isConnected = $derived(this.state === 'connected');
+  /** The last value of each topic of the feed. A full message after a reconnect replaces them all. */
+  readonly topics = new Topics();
+  /** The last REST requests, oldest first. */
+  requests = $state.raw<RequestRecord[]>([]);
 
   #socket: WebSocket | null = null;
   #socketPath = '';
-  #messageHandlers = new SvelteSet<(message: StateMessage) => void>();
   #openHandlers = new SvelteSet<() => void>();
   #shouldReconnect = false;
   #initialReconnectDelay: number;
@@ -79,8 +97,7 @@ export class Client {
       for (const callback of this.#openHandlers) callback();
     };
     socket.onmessage = (event) => {
-      const message = JSON.parse(event.data as string) as StateMessage;
-      for (const callback of this.#messageHandlers) callback(message);
+      this.topics.apply(JSON.parse(event.data as string) as StateMessage);
     };
     socket.onclose = () => {
       if (this.#socket === socket) this.#socket = null;
@@ -102,11 +119,6 @@ export class Client {
     this.#reconnectDelay = this.#initialReconnectDelay;
     this.#clearReconnectTimer();
     this.connect(this.#socketPath);
-  }
-
-  onMessage(callback: (message: StateMessage) => void): Unsub {
-    this.#messageHandlers.add(callback);
-    return () => this.#messageHandlers.delete(callback);
   }
 
   onOpen(callback: () => void): Unsub {
@@ -131,6 +143,24 @@ export class Client {
   }
 
   async #fetch<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
+    const sentAt = Date.now();
+    const started = performance.now();
+    const record = (status: number, error: string | null) => {
+      const entry = { method, path, body, sentAt, ms: performance.now() - started, status, error };
+      this.requests = [...this.requests.slice(1 - REQUESTS_KEPT), entry];
+    };
+    try {
+      const { status, value } = await this.#send<T>(method, path, body);
+      record(status, null);
+      return value;
+    } catch (error) {
+      if (error instanceof ApiError) record(error.status, error.message);
+      else record(0, String(error));
+      throw error;
+    }
+  }
+
+  async #send<T>(method: HttpMethod, path: string, body?: unknown): Promise<{ status: number; value: T }> {
     const init: RequestInit = { method };
     if (body !== undefined) {
       init.headers = { 'Content-Type': method === 'PATCH' ? 'application/merge-patch+json' : 'application/json' };
@@ -143,9 +173,8 @@ export class Client {
       throw new ApiError(0, error, 'The station did not answer.', method, path);
     }
     if (!response.ok) throw await this.#toError(response, method, path);
-    if (response.status === 204) return undefined as T;
-    const text = await response.text();
-    return (text ? JSON.parse(text) : undefined) as T;
+    const text = response.status === 204 ? '' : await response.text();
+    return { status: response.status, value: (text ? JSON.parse(text) : undefined) as T };
   }
 
   /** The server answers failures as problem details (RFC 9457): `title`, `detail`, and the refused arguments. */

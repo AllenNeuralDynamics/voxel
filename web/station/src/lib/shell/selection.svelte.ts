@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
-import type { Station } from '$lib/model/station.svelte';
+import type { Station } from '$lib/core/model/station.svelte';
 import { reportFailure } from '@voxel/kit/failures';
 
 /**

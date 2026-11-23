@@ -11,28 +11,22 @@
 </script>
 
 <script lang="ts">
-  import { DropdownMenu } from '../..';
+  import { RadioBar } from '../..';
   import { themes } from '../theme.svelte';
 
-  // A pick keeps the menu open, so the change shows at once.
+  /** Picks the light, dark or auto mode, as icons. In a menu, a pick keeps the menu open, so the change shows at once. */
+  let { size = 'sm', class: className = 'w-full' }: { size?: 'xs' | 'sm'; class?: string } = $props();
+
   const prefs = $derived(themes.prefs.get());
 </script>
 
-<DropdownMenu.RadioGroup
-  value={prefs.mode}
-  onValueChange={(mode) => themes.setMode(mode as Mode)}
+<RadioBar
   aria-label="Mode"
-  class="grid grid-cols-3 gap-0.5"
->
-  {#each MODES as mode (mode.value)}
-    <DropdownMenu.RadioItem
-      value={mode.value}
-      closeOnSelect={false}
-      aria-label={mode.label}
-      title={mode.label}
-      class="justify-center rounded-sm ps-0 pe-0 text-fg-muted data-[state=checked]:bg-element-selected data-[state=checked]:text-fg [&>span:first-child]:hidden"
-    >
-      <mode.icon />
-    </DropdownMenu.RadioItem>
-  {/each}
-</DropdownMenu.RadioGroup>
+  variant="soft"
+  {size}
+  class={className}
+  options={MODES.map((mode) => mode.value)}
+  value={prefs.mode}
+  onChange={(mode) => themes.setMode(mode)}
+  display={(value) => MODES.find((mode) => mode.value === value)?.icon ?? value}
+/>

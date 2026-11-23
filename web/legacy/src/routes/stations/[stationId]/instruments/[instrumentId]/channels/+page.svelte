@@ -160,7 +160,7 @@
     <RadioBar
       value={view}
       options={VIEWS}
-      formatLabel={(option) => (option === 'inline' ? 'View 1' : 'View 2')}
+      display={(option) => (option === 'inline' ? 'View 1' : 'View 2')}
       onChange={(option) => (view = option)}
       aria-label="Card layout"
     />

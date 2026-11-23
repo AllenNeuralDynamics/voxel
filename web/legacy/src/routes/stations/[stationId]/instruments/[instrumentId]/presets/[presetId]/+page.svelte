@@ -310,7 +310,7 @@
           <RadioBar
             value={view}
             options={VIEWS}
-            formatLabel={(option) => VIEW_LABELS[option]}
+            display={(option) => VIEW_LABELS[option]}
             onChange={(option) => prefs.presets.view.set(option)}
             size="xs"
             aria-label="Comparison view"

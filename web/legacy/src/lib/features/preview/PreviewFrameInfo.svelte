@@ -179,7 +179,7 @@
       <RadioBar
         value={spanMs}
         options={SPANS}
-        formatLabel={spanLabel}
+        display={spanLabel}
         onChange={(value) => span.set(value)}
         size="xs"
         aria-label="Time span"

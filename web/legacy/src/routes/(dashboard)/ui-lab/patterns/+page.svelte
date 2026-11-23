@@ -116,7 +116,7 @@
           <RadioBar
             value={grouping}
             options={['node', 'type']}
-            formatLabel={(option) => (option === 'node' ? 'Node' : 'Type')}
+            display={(option) => (option === 'node' ? 'Node' : 'Type')}
             onChange={(option) => (grouping = option)}
             aria-label="Group by"
           />

@@ -26,7 +26,7 @@
           <RadioBar
             value={prefs.spatialUnit.get()}
             options={SPATIAL_UNITS}
-            formatLabel={(unit) => getSpatialUnit(unit).label}
+            display={(unit) => getSpatialUnit(unit).label}
             onChange={(unit) => prefs.spatialUnit.set(unit)}
             size="md"
             aria-label="Distance unit"

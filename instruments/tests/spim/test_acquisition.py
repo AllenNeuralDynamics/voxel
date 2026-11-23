@@ -11,6 +11,7 @@ from vxl_drivers.metadata import ExaspimMetadata
 from vxl_instruments.spim.instrument import AcquisitionInfo, Microscope
 from vxl_instruments.spim.task import SPIMTask
 
+from vxl.devices.camera.area import AreaCameraController
 from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Acquisition, Records
 from vxl.station.errors import RejectedError
@@ -95,9 +96,25 @@ async def test_a_step_scan_takes_every_frame_and_records_a_completed_visit(stepp
     assert [visit.image_status("camera") for visit in stored.visits] == ["completed"]
     location = stored.visits[0].images()["camera"].locations[0]
     assert "000000/gfp/gfp/camera" in str(location.model_dump())  # visit, profile, channel, camera
+    assert location.status == "available"
     assert stepping.view.value.power_mode == "full"
     position = (await stepping.stage_position())["z"]
     assert position == pytest.approx(stored.visits[0].images()["camera"].frames_total, abs=0.5)
+
+
+async def test_an_image_whose_close_fails_is_failed_at_its_location(
+    stepping: Microscope, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken(controller: AreaCameraController) -> None:
+        raise OSError(f"the disk of {controller.device.id} is full")
+
+    monkeypatch.setattr(AreaCameraController, "_close_image", broken)
+    acquisition_id = await stepping.start_acquisition(_STORAGE, "ana")
+    await _finish(stepping)
+
+    stored = await stepping._records.acquisitions.get(acquisition_id)
+    assert stored.visits[0].status == "failed"
+    assert [where.status for where in stored.visits[0].images()["camera"].locations] == ["failed"]
 
 
 async def test_a_sweep_takes_every_frame_on_the_stage_pulses(sweeping: Microscope) -> None:

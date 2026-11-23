@@ -7,17 +7,17 @@
   import type { Action, AppBar, Crumb } from '$lib/shell/app-bar.svelte';
   import { Breadcrumb, Button, DropdownMenu, RadioBar } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
-  import { displayName } from '@voxel/kit/format';
   import { Check, Ellipsis } from '@voxel/kit/icons';
 
   /**
    * The page's app bar: `start` (the station menu), then the page's crumbs, its status and its actions. When they do
    * not fit, parts fold in steps: 1 the status shows only its icon, 2 buttons and custom actions go into a menu, 3 so
    * do choices, 4 the crumbs between `start` and the last fold into a menu. A primary action, and a custom action
-   * without a menu, never fold. The last crumb truncates when even step 4 does not fit. At the end, while another
-   * instrument than the one on show is open, the bar names it; a click shows it. That never folds either.
+   * without a menu, never fold. The last crumb truncates when even step 4 does not fit. At the end, while the
+   * instrument on show is not the open one, a button opens it; it asks first while another one is open. Then `end`,
+   * such as the profile while the live profile is in another window. Neither folds.
    */
-  let { bar, start }: { bar: AppBar; start: Snippet } = $props();
+  let { bar, start, end }: { bar: AppBar; start: Snippet; end?: Snippet } = $props();
 
   const STEPS = [0, 1, 2, 3, 4];
 
@@ -27,10 +27,10 @@
 
   const station = getVoxelStation();
   const selection = getInstrumentSelection();
-  const elsewhere = $derived.by(() => {
-    const open = station.session?.instrument_name;
-    return open && open !== selection.selected ? open : null;
-  });
+  // The instrument on show, while it is not the open one.
+  const closed = $derived(
+    selection.selected && selection.selected !== station.session?.instrument_name ? selection.selected : null
+  );
 
   // The width that is left after `start`, and the width the row takes at each step, measured on hidden copies. So a
   // fold never changes what is measured, and the bar does not flip between 2 steps.
@@ -117,7 +117,7 @@
       options={action.options}
       value={action.value}
       onChange={action.onChange}
-      formatLabel={action.formatLabel}
+      display={action.formatLabel}
       disabled={action.disabled}
     />
   {:else}
@@ -208,13 +208,15 @@
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   {/if}
-  {#if elsewhere}
-    <button
-      type="button"
-      class="h-ui-sm shrink-0 rounded-md px-2 whitespace-nowrap text-warning-fg hover:bg-element-hover"
-      onclick={() => elsewhere && selection.select(elsewhere)}>{displayName(elsewhere)} is open</button
+  {#if closed}
+    <Button
+      size="sm"
+      class="shrink-0"
+      disabled={station.status === 'opening'}
+      onclick={() => closed && selection.askToOpen(closed)}>{station.status === 'opening' ? 'Opening…' : 'Open'}</Button
     >
   {/if}
+  {#if end}<div class="flex shrink-0 items-center gap-2">{@render end()}</div>{/if}
 {/snippet}
 
 <div class="flex h-full min-w-0 flex-1 items-center">

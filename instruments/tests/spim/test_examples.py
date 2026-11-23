@@ -14,12 +14,13 @@ _CHAINS = {
     "exaspim-v1.yaml": (("ao_main",), {"camera": "ao_main.camera_trigger", "z_axis": "ao_main.z_step"}),
     "z-step.yaml": (("ao_main",), {"camera": "ao_main.camera_trigger", "z_axis": "ao_main.z_step"}),
     "z-step-4-cameras.yaml": (("ao_main",), {"z_axis": "ao_main.z_step"}),
+    "z-step-4-nodes.yaml": (("ao_main",), {"z_axis": "ao_main.z_step"}),
     "z-sweep.yaml": (("z_axis",), {"ao_main": "z_axis.z_pulse", "camera": "ao_main.camera_trigger"}),
     "x-sweep-oblique.yaml": (("x_axis",), {"ao_main": "x_axis.x_pulse", "camera": "ao_main.camera_trigger"}),
 }
 """Each shipped template, with what starts by itself and the wires that start other devices in every profile."""
 
-_SIMULATED = ["z-step.yaml", "z-sweep.yaml", "z-step-4-cameras.yaml", "x-sweep-oblique.yaml"]
+_SIMULATED = ["z-step.yaml", "z-sweep.yaml", "z-step-4-cameras.yaml", "z-step-4-nodes.yaml", "x-sweep-oblique.yaml"]
 """The templates on simulated drivers, which open on any computer."""
 
 

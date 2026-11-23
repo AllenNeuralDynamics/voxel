@@ -28,7 +28,7 @@ In the tables below, "every layer" means the 5 solid layers: `--canvas`, `--pane
 | `surfaces.css`                                              | The derived tokens, the frames and the notes                                                          |
 | `theme.svelte.ts`                                           | The theme list, the saved mode, theme, density and mark color choices, and the code that applies them |
 | `pickers/AppearanceMenu.svelte`                             | The quick appearance settings, in a menu                                                              |
-| `pickers/ModeSwitch.svelte`                                 | The light, dark and auto switch, inside a menu                                                        |
+| `pickers/ModeSwitch.svelte`                                 | The light, dark and auto switch, as an icon RadioBar                                                  |
 | `pickers/ThemePicker.svelte`, `pickers/MarkSettings.svelte` | The full appearance settings, for a settings page                                                     |
 | `colors.ts`                                                 | Color helpers, such as the color of a wavelength, and the logo colors                                 |
 | `index.ts`                                                  | The code exports of this folder (`@voxel/kit/style`)                                                  |

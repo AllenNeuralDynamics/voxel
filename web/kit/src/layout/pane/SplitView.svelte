@@ -1,49 +1,29 @@
 <script lang="ts" generics="Id extends string">
-  import { Pane, PaneGroup } from 'paneforge';
-  import { ElementSize } from 'runed';
   import { type Snippet, untrack } from 'svelte';
 
-  import { ArrowLeftRight, ArrowUpDown, PanelBottom, PanelRight } from '../../icons';
-  import { cn } from '../../utils/cn';
+  import { displayName } from '../../utils/format';
   import { pref } from '../../utils/pref';
-  import { createPaneSize, type PaneSize, type PaneSizeBounds } from './pane-size.svelte';
-  import PaneDivider from './PaneDivider.svelte';
-
-  type Direction = 'horizontal' | 'vertical';
-
-  /** The extents of 1 pane in rem: its width while the panes sit side by side, its height while they are stacked. */
-  interface SplitPane {
-    horizontal?: Omit<PaneSizeBounds, 'persist'>;
-    vertical?: Omit<PaneSizeBounds, 'persist'>;
-  }
+  import AutoSplit, { type SplitPane } from './AutoSplit.svelte';
 
   /**
-   * The panes sit side by side while each fits at its horizontal default (or its min), and are stacked otherwise; the
-   * person can stack them anyway and turn their order around. Each pane shows the snippet of its name.
+   * An {@link AutoSplit} that the person can stack anyway and turn around, with 1 button that steps through the
+   * layouts: the first pane left, right, top, then bottom, or only top and bottom while the panes do not fit side by
+   * side. Each pane shows the snippet of its name.
    */
   type Props = {
     /** The panes, in their first order. */
     panes: Record<Id, SplitPane>;
     /** Saves the order, the choice to stack, and each extent that has a default, under this key. */
     persist: string;
-    /** Out: the buttons that stack the panes and turn their order around, to show anywhere on the page. */
+    /** Out: the button that steps through the layouts, to show anywhere on the page. */
     controls?: Snippet;
     class?: string;
   } & Record<NoInfer<Id>, Snippet>;
 
   let { panes, persist, controls = $bindable(), class: className, ...snippets }: Props = $props();
-  const uid = $props.id();
   const content = $derived(snippets as unknown as Record<Id, Snippet>);
 
-  // The panes, their bounds and the key are read once, as `createPaneSize` reads its bounds once.
-  const { bounds, key } = untrack(() => ({ bounds: panes, key: persist }));
-  const ids = Object.keys(bounds) as Id[];
-
-  // The box around the group is measured, not the group: paneforge sets the group's ref again when its direction
-  // changes.
-  let boxEl = $state<HTMLElement | null>(null);
-  let groupEl = $state<HTMLElement | null>(null);
-  const box = new ElementSize(() => boxEl);
+  const { ids, key } = untrack(() => ({ ids: Object.keys(panes) as Id[], key: persist }));
   const stacked = pref(`ui:split:${key}:stacked`, false);
   const savedOrder = pref<Id[]>(`ui:split:${key}:order`, ids);
 
@@ -51,73 +31,61 @@
     const kept = savedOrder.get();
     return kept.length === ids.length && ids.every((id) => kept.includes(id)) ? kept : ids;
   });
-  const fits = $derived.by(() => {
-    const width = box.width || boxEl?.getBoundingClientRect().width || 0;
-    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    const needed = ids.reduce(
-      (sum, id) => sum + (bounds[id].horizontal?.default ?? bounds[id].horizontal?.min ?? 0),
-      0
-    );
-    return width > 0 && width / rem >= needed;
+
+  let split = $state<ReturnType<typeof AutoSplit<Id>>>();
+  const layout = $derived(split?.layout() ?? 'vertical');
+  // Asked to sit side by side, yet stacked: too narrow, so only top and bottom are left.
+  const narrow = $derived(!stacked.get() && layout === 'vertical');
+
+  type Side = 'left' | 'right' | 'top' | 'bottom';
+  /** Where the first pane sits, side by side or stacked, in the order shown. */
+  const sideOf = (beside: boolean, first: boolean): Side =>
+    beside ? (first ? 'left' : 'right') : first ? 'top' : 'bottom';
+  const firstShown = $derived(order[0] === ids[0]);
+  const side = $derived(sideOf(layout === 'horizontal', firstShown));
+  // The next layout: left, right, top, bottom, then left again; only top and bottom while narrow.
+  const next = $derived.by(() => {
+    if (narrow) return { stack: false, first: !firstShown };
+    if (layout === 'horizontal') return firstShown ? { stack: false, first: false } : { stack: true, first: true };
+    return firstShown ? { stack: true, first: false } : { stack: false, first: true };
   });
-  const direction: Direction = $derived(fits && !stacked.get() ? 'horizontal' : 'vertical');
+  const nextSide = $derived(narrow ? sideOf(false, next.first) : sideOf(!next.stack, next.first));
+  const ROTATION: Record<Side, number> = { left: 0, top: 90, right: 180, bottom: 270 };
 
-  // Only an extent with a default is saved: `createPaneSize` needs one, and a pane without one takes the space left.
-  const sizes = Object.fromEntries(
-    ids.map((id) => {
-      const size = (way: Direction) => {
-        const extent = bounds[id][way];
-        const persisted = extent?.default === undefined ? undefined : `split:${key}:${id}:${way}`;
-        return createPaneSize(() => groupEl, { ...extent, persist: persisted });
-      };
-      return [id, { horizontal: size('horizontal'), vertical: size('vertical') }];
-    })
-  ) as Record<Id, Record<Direction, PaneSize>>;
+  function step(): void {
+    stacked.set(next.stack);
+    savedOrder.set(next.first === (order[0] === ids[0]) ? order : order.toReversed());
+  }
 
-  controls = buttons;
+  controls = button;
 </script>
 
-{#snippet buttons()}
-  <span class="flex h-ui-md shrink-0 overflow-hidden rounded-md border border-control-line bg-element-bg">
-    {#if fits}
-      {@const label = stacked.get() ? 'Side by side' : 'Stacked'}
-      <button
-        type="button"
-        class="grid h-full w-[2.75rem] place-items-center text-fg-muted hover:bg-element-hover hover:text-fg"
-        title={label}
-        aria-label={label}
-        onclick={() => stacked.set(!stacked.get())}
-      >
-        {#if stacked.get()}
-          <PanelRight class="size-4" aria-hidden="true" />
-        {:else}
-          <PanelBottom class="size-4" aria-hidden="true" />
-        {/if}
-      </button>
-    {/if}
-    <button
-      type="button"
-      class="grid h-full w-[2.75rem] place-items-center text-fg-muted hover:bg-element-hover hover:text-fg"
-      title="Swap"
-      aria-label="Swap"
-      onclick={() => savedOrder.set(order.toReversed())}
-    >
-      {#if direction === 'horizontal'}
-        <ArrowLeftRight class="size-4" aria-hidden="true" />
-      {:else}
-        <ArrowUpDown class="size-4" aria-hidden="true" />
-      {/if}
-    </button>
-  </span>
+{#snippet button()}
+  {@const label = `${displayName(ids[0])} on the ${nextSide}`}
+  <button
+    type="button"
+    class="grid h-ui-md w-[2.75rem] shrink-0 place-items-center rounded-md border border-control-line bg-element-bg text-fg-muted hover:bg-element-hover hover:text-fg"
+    title={label}
+    aria-label={label}
+    onclick={step}
+  >
+    <!-- A box split in 2, the first pane's half shaded, turned to the side it sits on now. -->
+    <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
+      <g transform="rotate({ROTATION[side]} 12 12)" stroke="currentColor" stroke-width="2" fill="none">
+        <rect x="3" y="3" width="7.5" height="18" fill="currentColor" fill-opacity="0.75" stroke="none" />
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M10.5 3v18" />
+      </g>
+    </svg>
+  </button>
 {/snippet}
 
-<div bind:this={boxEl} class={cn('size-full', className)}>
-  <PaneGroup {direction} bind:ref={groupEl}>
-    {#each order as id, index (id)}
-      {#if index > 0}<PaneDivider />{/if}
-      <Pane id="{uid}-{id}" order={index} {...sizes[id][direction]}>
-        {@render content[id]()}
-      </Pane>
-    {/each}
-  </PaneGroup>
-</div>
+<AutoSplit
+  bind:this={split}
+  {panes}
+  {persist}
+  arrange={stacked.get() ? 'vertical' : 'auto'}
+  {order}
+  class={className}
+  {...content}
+/>

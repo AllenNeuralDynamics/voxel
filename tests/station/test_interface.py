@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 from rigup.interface import action, create, delete, query, update
 from vxlib.schema import Key
 
-from vxl.instrument.interface import check_operations, route_of
+from vxl.instrument.interface import InstrumentInterface, check_operations
+from vxl.web.station.interface import HttpInstrumentInterface
 
 
 class Item(BaseModel):
@@ -59,7 +60,9 @@ def _fresh(function: Callable[..., Any]) -> Callable[..., Any]:
 
 def _check(**methods: Callable[..., Any]) -> dict[str, tuple[str, str]]:
     kind = type("Kind", (), methods)
-    return {name: route_of(info, State) for name, info in check_operations(kind, State).items()}
+    interface = InstrumentInterface(id="0" * 26, kind="Kind", operations=check_operations(kind, State), view={})
+    routed = HttpInstrumentInterface.of(interface, State)
+    return {name: (info.method, info.path) for name, info in routed.operations.items()}
 
 
 async def _add(self: Any, item: Item) -> None: ...

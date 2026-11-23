@@ -39,9 +39,10 @@ from starlette.exceptions import HTTPException
 from vxlib.schema import key_field
 
 from vxl.instrument.base import Instrument
-from vxl.instrument.interface import Target, in_state, route_of, target_of
+from vxl.instrument.interface import Target, in_state
 from vxl.station.errors import BusyError, NotFoundError, VoxelError
 from vxl.web.problems import ProblemDetails, Statuses
+from vxl.web.station.interface import HttpInstrumentInterface
 
 type Lease = Callable[[], AbstractAsyncContextManager[Instrument[Any, Any, Any]]]
 """Gives the instrument for the time of 1 operation."""
@@ -84,19 +85,19 @@ class InstrumentRouter(APIRouter):
         super().__init__(responses=ProblemDetails.described(), redirect_slashes=False)
         self._kind = type(instrument)
         self._view = instrument.view
-        self._interface = instrument.interface
+        self._interface = HttpInstrumentInterface.of(instrument.interface, self._kind.state_cls)
         self._lease: Lease = lease or (lambda: contextlib.nullcontext(instrument))
         self._schemas: dict[str, Any] = {}
         resources: set[str] = set()
-        for info in self._kind.operations.values():
-            method, path = route_of(info, self._kind.state_cls)
+        for info in self._interface.operations.values():
+            path = info.path
             if info.key is not None:  # the key convertor never takes in a ``:verb``
                 path = path.replace(f"{{{info.key}}}", f"{{{info.key}:key}}")
             endpoint, extra, status = self._operation(info)
             self.add_api_route(
                 path,
                 endpoint,
-                methods=[method],
+                methods=[info.method],
                 status_code=status,
                 summary=info.label,
                 description=info.desc or "",
@@ -116,7 +117,7 @@ class InstrumentRouter(APIRouter):
         """The endpoint of 1 operation, its details for the API page, and its success status."""
         state = self._kind.state_cls
         standard = info.intent in ("create", "update", "delete")
-        target = target_of(state, info.resource) if standard and info.resource else None
+        target = Target.of(state, info.resource) if standard and info.resource else None
         on_state = info.resource is not None and in_state(state, info.resource)
 
         async def endpoint(request: Request) -> Response:
@@ -179,7 +180,7 @@ class InstrumentRouter(APIRouter):
             return self._read(request, self._at(resource))
 
         self.add_api_route(path, whole, methods=["GET"], operation_id=f"get_{resource}")
-        if target_of(self._kind.state_cls, resource).key is None:
+        if Target.of(self._kind.state_cls, resource).key is None:
             return
 
         async def one(request: Request, key: str) -> Response:

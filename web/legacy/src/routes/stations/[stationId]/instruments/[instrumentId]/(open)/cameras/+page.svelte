@@ -72,7 +72,7 @@
         <RadioBar
           class="col-span-2"
           model={prop.model as EnumeratedModel<string | number>}
-          formatLabel={format}
+          display={format}
           disabled={!editable}
           aria-label={fullName}
         />

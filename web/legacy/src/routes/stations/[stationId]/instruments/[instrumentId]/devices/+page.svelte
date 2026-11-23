@@ -66,7 +66,7 @@
     <RadioBar
       value={grouping}
       options={GROUPINGS}
-      formatLabel={(option) => (option === 'node' ? 'Node' : 'Type')}
+      display={(option) => (option === 'node' ? 'Node' : 'Type')}
       onChange={(option) => prefs.devices.groupBy.set(option)}
       aria-label="Group devices by"
     />

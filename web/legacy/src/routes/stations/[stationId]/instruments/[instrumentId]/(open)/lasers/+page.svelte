@@ -98,7 +98,7 @@
       {:else if prop?.model instanceof EnumeratedModel}
         <RadioBar
           model={prop.model as EnumeratedModel<number>}
-          formatLabel={reading}
+          display={reading}
           disabled={!editable}
           aria-label={fullName}
         />
@@ -168,7 +168,7 @@
             <RadioBar
               value={modes.find((mode) => mode === laser.modulationMode?.value)}
               options={modes}
-              formatLabel={(mode) => MODE_LABELS[mode]}
+              display={(mode) => MODE_LABELS[mode]}
               onChange={(mode) => laser.setModulationMode(mode)}
               disabled={unavailable || enabled}
               size="xs"

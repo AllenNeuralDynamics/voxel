@@ -168,7 +168,7 @@
       {:else if prop?.model instanceof EnumeratedModel}
         <RadioBar
           model={prop.model as EnumeratedModel<number>}
-          formatLabel={reading}
+          display={reading}
           disabled={!editable}
           aria-label={fullName}
         />

@@ -167,6 +167,22 @@ async def test_the_run_cannot_change_after_its_block(records: Records) -> None:
             pass
 
 
+async def test_an_image_that_closed_is_available_at_its_location_and_one_that_did_not_failed(records: Records) -> None:
+    acquisition = _acquisition(visits=2)
+    async with records.record(acquisition) as run:
+        async with run.visit(0) as visit:
+            await _capture(visit, 10)
+            await visit.images_closed(["camera"])
+        async with run.visit(1) as visit:
+            await _capture(visit, 10)
+            await visit.images_closed([])
+
+    stored = await records.acquisitions.get(acquisition.id)
+    locations = [visit.images()["camera"].locations for visit in stored.visits]
+    assert [[where.status for where in found] for found in locations] == [["available"], ["failed"]]
+    assert locations[0][0] == _LOCATION.model_copy(update={"status": LocationStatus.AVAILABLE})  # only the status
+
+
 async def test_progress_is_saved_without_a_file_write_and_an_older_snapshot_is_ignored(
     records: Records, tmp_path: Path
 ) -> None:
