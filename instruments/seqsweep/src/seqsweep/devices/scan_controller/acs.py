@@ -332,8 +332,7 @@ class AcsController(ScanController):
             "decel": self._config.scan_decel,
             "limit_min_mm": low,
             "limit_max_mm": high,
-            "scan_axis": self._axis_index(derived.scan_axis),
-        }
+            "scan_axis": self._axis_index(derived.scan_axis),        }
         for name, value in parameters.items():
             self._write(name, value)
         self._pass = (config, derived)

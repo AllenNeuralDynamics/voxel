@@ -9,4 +9,3 @@ scan_margin_mm: 6.0  # MARGIN: run-up and run-out at each end; travel = capture 
 traversal: sweep  # sweep | snake, as Voxel's TileOrder (snake is not implemented yet)
 step_margin_mm: 8.33  # TODO temporary: chamber lower edge to first strip; Y0 118.08 - chamber 3 edge 109.75 (applies to every chamber)
 line_rate_hz: 470000  # camera line rate; pixel pitch and stage speed follow from the optics
-lasers: [laser_532]

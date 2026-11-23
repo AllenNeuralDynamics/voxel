@@ -25,6 +25,10 @@ END
 ACC(scan_axis) = accel
 DEC(scan_axis) = decel
 
+
+! --------------------------------------------------------------
+! LCI INITIALIZATION
+! --------------------------------------------------------------
 lc.Init()
 lc.SetSafetyMasks(1, 1)
 lc.SetMotionAxes(scan_axis)
@@ -32,8 +36,14 @@ lc.SetMotionAxes(scan_axis)
 ! Channel 0: line trigger pulse train
 int Channels(8) = (100,100,0,0,0,0,0,0)
 lc.AssignChannels(Channels)
+
+! Disconnect configurable output initially
 lc.SetConfigOut(0, 0, 0)
 
+
+! --------------------------------------------------------------
+! MAIN SCAN (One strip)
+! --------------------------------------------------------------
 ! Go to the start of the lead-in
 VEL(scan_axis) = move_speed_mm_s
 PTP/e(scan_axis), run_start
@@ -42,11 +52,14 @@ TILL ^MST(scan_axis).#MOVE
 ! Pulse positions are relative to where the scan move starts
 chLine = lc.FixedDistPulse(line_pulse_ms, scan_dir * pixel_size_mm, scan_dir * overscan_mm, scan_dir * (overscan_mm + capture))
 
-! Laser gating is not enabled yet (next PR): no lc.LaserEnable() / lc.LaserDisable() here.
+lc.LaserEnable()
+
 ! One move: lead-in + capture + lead-out
 VEL(scan_axis) = scan_speed_mm_s
 PTP/e(scan_axis), run_end
 TILL ^MST(scan_axis).#MOVE
+
+lc.LaserDisable()
 
 ! Back to the positioning speed: moves started without a velocity use the axis's current one
 VEL(scan_axis) = move_speed_mm_s
