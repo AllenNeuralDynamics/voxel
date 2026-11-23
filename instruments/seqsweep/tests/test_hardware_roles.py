@@ -12,7 +12,7 @@ from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
 ACS_TARGET = "seqsweep.devices.scan_controller.simulated.SimulatedScanController"
-ACS_INIT = {"gate_outputs": {"laser_532": "OUT0"}}
+ACS_INIT = {"move_velocity_mm_s": 50}
 
 
 def _topology(scan_controller: str = "acs") -> SeqSweepHardwareTopology:

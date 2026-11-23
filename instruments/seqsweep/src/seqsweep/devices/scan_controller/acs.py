@@ -25,10 +25,8 @@ MST_ENABLE = 0x00000001  # Motor state flags (SPiiPlus Python manual, 6.16)
 MST_INPOS = 0x00000010
 MST_MOVE = 0x00000020
 MST_ACC = 0x00000040
-
 PST_RUN = 0x00000002  # Program state flag: the buffer is running (manual, ProgramStates)
 
-MOTION_TIMEOUT_MS = 60_000
 SCAN_PASS_FILE = Path(__file__).with_name("scan_pass.acsp")  # ACSPL+ program for one strip pass
 NO_INDEX = -1  # ACSC_NONE: "global variable" buffer, and "no array index" for scalars
 D_BUFFER = 64 # the D-Buffer (ACSPL+ reference, USGBUF); TODO: confirm for the real controller's firmware
@@ -52,6 +50,7 @@ class AcsControllerConfig(FrozenModel):
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
+    motion_timeout_s: float = Field(gt=0, description="Give up waiting for a motor to enable or a move to end after this long")
     origin_mm: tuple[float, float] = Field(description="Home position (X, Y)")
     limits_mm: dict[Literal["x", "y"], tuple[float, float]] = Field(description="Reachable range per axis")
 
@@ -77,6 +76,7 @@ class AcsController(ScanController):
     def __init__(self, uid: str, *, move_velocity_mm_s: float, **config: object) -> None:
         super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s)
         self._config = AcsControllerConfig.model_validate(config)
+        self._motion_timeout_ms = int(self._config.motion_timeout_s * 1000)
         self._lock = threading.RLock()  # one vendor handle: serialize calls and multi-call sequences
         self._sp = self._import_library()
         self._hc = -1
@@ -139,7 +139,7 @@ class AcsController(ScanController):
         with self._lock:
             for axis in self._axes:
                 self._sp.Enable(self._hc, axis, self._sp.SYNCHRONOUS, True)
-                self._sp.WaitMotorEnabled(self._hc, axis, 1, MOTION_TIMEOUT_MS, True)
+                self._sp.WaitMotorEnabled(self._hc, axis, 1, self._motion_timeout_ms, True)
                 self._sp.SetVelocity(self._hc, axis, self._move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
                 self._sp.SetAcceleration(self._hc, axis, self._config.scan_accel, self._sp.SYNCHRONOUS, True)
                 self._sp.SetDeceleration(self._hc, axis, self._config.scan_decel, self._sp.SYNCHRONOUS, True)
@@ -283,7 +283,9 @@ class AcsController(ScanController):
         self.move_to(*self._config.origin_mm)
 
     @describe(label="Wait Motion End", desc="Block until both axes have settled")
-    def wait_motion_end(self, timeout_ms: int = MOTION_TIMEOUT_MS) -> None:
+    def wait_motion_end(self, timeout_ms: int | None = None) -> None:
+        """``timeout_ms`` None: use ``motion_timeout_s`` from the config."""
+        timeout_ms = self._motion_timeout_ms if timeout_ms is None else timeout_ms
         with self._lock:
             for axis in self._axes:
                 self._sp.WaitMotionEnd(self._hc, axis, timeout_ms, True)

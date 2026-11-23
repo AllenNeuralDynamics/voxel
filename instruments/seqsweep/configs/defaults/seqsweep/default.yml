@@ -49,11 +49,12 @@ hal:
         port: 701
         axis_x: 0
         axis_y: 1
-        scan_buffer: 4  # TODO: confirm this program buffer is free; the scan pass is loaded into it on connect
+        scan_buffer: 4
         line_pulse_width_ms: 0.001
         scan_accel: 6000
         scan_decel: 6000
         move_velocity_mm_s: 50  # positioning moves, not scans
+        motion_timeout_s: 60  # give up waiting for a motor to enable or a move to end; the longest move is ~270 mm, about 5 s
         origin_mm: [155.0, 155.0]
         limits_mm:
           x: [20, 290]
