@@ -196,8 +196,6 @@ class SeqSweep:
                     await scan_controller.run(direction)
                     while await scan_controller.is_running.get():
                         await asyncio.sleep(RUN_POLL_S)
-            self.log.info("Homing after the scan")
-            await scan_controller.go_home()  # not on abort or failure: the stage stays where it stopped
             self._status = "finished"
         except asyncio.CancelledError:
             await scan_controller.abort()
