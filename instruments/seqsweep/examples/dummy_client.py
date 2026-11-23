@@ -12,6 +12,7 @@ from one_liner.client import RouterClient  # type: ignore
 
 
 STEP_MM = 1.0
+STAGE_TEST_START_MM = (155.0, 155.0)  # inside limits_mm, where move_by is allowed
 CHECK_X_MM = 151.875  # middle of the scan range 125..178.75
 CHAMBER_Y_MM = (109.75, 155.0, 200.25)  # chambers_step_mm of chambers 3, 2, 1
 POLL_S = 2.0
@@ -39,6 +40,12 @@ def test_stage(client: RouterClient) -> None:
     stage_call(client, "stage_go_home")
     stage_call(client, "stage_wait_motion_end")
     print_position(client, "at home")
+
+    # Home (0, 0) is outside limits_mm, so move_by from there would be rejected: step inside the limits first
+    print(f"\n--- Stage test: move into the limits, to {STAGE_TEST_START_MM} ---")
+    stage_call(client, "stage_move_to", x_mm=STAGE_TEST_START_MM[0], y_mm=STAGE_TEST_START_MM[1])
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "start")
 
     print(f"\n--- Stage test: move by +{STEP_MM} mm in X and Y ---")
     stage_call(client, "stage_move_by", dx_mm=STEP_MM, dy_mm=STEP_MM)
