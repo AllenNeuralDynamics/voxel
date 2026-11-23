@@ -341,16 +341,16 @@ class AcsController(ScanController):
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         low, high = self._config.limits_mm[derived.scan_axis]
         parameters: dict[str, float | int] = {
-            "overscan_mm": derived.scan_margin_mm,
+            "scan_margin_mm": derived.scan_margin_mm,
             "pixel_size_mm": derived.pixel_size_um / 1000,
             "scan_speed_mm_s": derived.scan_speed_mm_s,
-            "line_pulse_ms": self._config.line_pulse_width_ms,
+            "line_pulse_width_ms": self._config.line_pulse_width_ms,
             "move_velocity_mm_s": self._move_velocity_mm_s,
-            "accel": self._config.scan_accel,
-            "decel": self._config.scan_decel,
+            "scan_accel": self._config.scan_accel,
+            "scan_decel": self._config.scan_decel,
             "limit_min_mm": low,
             "limit_max_mm": high,
-            "scan_axis": self._axis_index(derived.scan_axis),        }
+            "scan_axis": self._axis_index(derived.scan_axis),}
         for name, value in parameters.items():
             self._write(name, value)
         self._pass = (config, derived)
