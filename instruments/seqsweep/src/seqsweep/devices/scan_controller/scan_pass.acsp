@@ -34,7 +34,7 @@ lc.SetSafetyMasks(1, 1)
 lc.SetMotionAxes(scan_axis)
 
 ! Channel 0: line trigger pulse train
-int Channels(8) = (100,100,0,0,0,0,0,0)
+int Channels(8) = (100,0,0,0,0,0,0,0)
 lc.AssignChannels(Channels)
 
 ! Disconnect configurable output initially

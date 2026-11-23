@@ -64,8 +64,8 @@ class ScanJob(FrozenModel):
 
     name: str = Field(default="seqsweep job", min_length=1)
     chambers: list[int] = Field(
-        default_factory=list,
-        description="Sample chambers, scanned in this order; each Y start comes from the defaults. Empty: no Y moves",
+        min_length=1,
+        description="Sample chambers, scanned in this order; each Y start comes from the defaults",
     )
     # TODO Validate the number of strips does not exceed the next chamber's start position
     num_strips: int = Field(default=1, ge=1, description="Frames per chamber, stepped along Y")
@@ -82,7 +82,7 @@ class ScanJob(FrozenModel):
     step_margin_mm: float = Field(
         default=0.0,
         ge=0,
-        description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
+        description="Distance from each chamber's step position to the first strip, along the step axis (across the scan)",
     )
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
 

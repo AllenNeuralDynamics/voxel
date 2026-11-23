@@ -147,8 +147,6 @@ class SeqSweep:
         defaults = self.config.default
         if job.traversal is not ScanTraversal.SWEEP:
             raise ValueError(f"traversal '{job.traversal}' is not implemented yet; use 'sweep'")
-        if not job.chambers and job.num_strips > 1:
-            raise ValueError("num_strips > 1 needs at least one chamber to step from")
         unknown = [chamber for chamber in job.chambers if chamber not in defaults.chambers_step_mm]
         if unknown:
             raise ValueError(f"chambers {unknown} are not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}")
@@ -177,22 +175,19 @@ class SeqSweep:
             await scan_controller.configure(pass_config, derived)
             self.log.info("Homing before the scan")
             await scan_controller.go_home()
-            for chamber in job.chambers or [None]:  # no chamber: one run at the current position
+            for chamber in job.chambers:
                 for strip in range(job.num_strips):
-                    label = f"chamber {chamber}, " if chamber is not None else ""
                     direction = strip_direction(job.traversal, strip)
-                    if chamber is not None:
-                        step_mm = (
-                            defaults.chambers_step_mm[chamber]
-                            + job.step_margin_mm
-                            + strip * derived.tdi_image_width_um / 1000
-                        )
-                        start_mm = pass_config.scan_end_mm if direction is ScanDirection.REVERSE else pass_config.scan_start_mm
-                        x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
-                        await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
-                        await scan_controller.wait_motion_end()
-                        self.log.info("Moved to X=%.3f mm, Y=%.3f mm (%sstrip %d/%d)", x_mm, y_mm, label, strip + 1, job.num_strips)
-                    self.log.info("%sstrip %d/%d", label.capitalize(), strip + 1, job.num_strips)
+                    step_mm = (
+                        defaults.chambers_step_mm[chamber] + job.step_margin_mm + strip * derived.tdi_image_width_um / 1000
+                    )
+                    start_mm = pass_config.scan_end_mm if direction is ScanDirection.REVERSE else pass_config.scan_start_mm
+                    x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
+                    await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
+                    await scan_controller.wait_motion_end()
+                    self.log.info(
+                        "Moved to X=%.3f mm, Y=%.3f mm (chamber %d, strip %d/%d)", x_mm, y_mm, chamber, strip + 1, job.num_strips
+                    )
                     await scan_controller.run(direction)
                     while await scan_controller.is_running.get():
                         await asyncio.sleep(RUN_POLL_S)
