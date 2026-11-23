@@ -4,8 +4,8 @@
 ! Names follow the Python names; positions in mm, speeds in mm/s.
 
 global real home_x_mm, home_y_mm
+global real move_velocity_mm_s               ! the config's value; scan_pass.acsp declares the same variable
 global int home_axis_x, home_axis_y          ! controller axis indices
-! move_velocity_mm_s (the config's value) is declared global in scan_pass.acsp, which is compiled first
 
 VEL(home_axis_x) = move_velocity_mm_s
 VEL(home_axis_y) = move_velocity_mm_s
