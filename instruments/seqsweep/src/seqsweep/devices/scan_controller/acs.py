@@ -29,7 +29,6 @@ PST_RUN = 0x00000002  # Program state flag: the buffer is running (manual, Progr
 
 SCAN_PASS_FILE = Path(__file__).with_name("scan_pass.acsp")  # ACSPL+ program for one strip pass
 NO_INDEX = -1  # ACSC_NONE: "global variable" buffer, and "no array index" for scalars
-D_BUFFER = 64 # the D-Buffer (ACSPL+ reference, USGBUF); TODO: confirm for the real controller's firmware
 LCI_DECLARATION = "global LCI lc"  # the LCI struct the scan pass calls as lc.*
 LCI_DECLARATION_PATTERN = re.compile(r"^\s*global\s+LCI\s+lc\b", re.IGNORECASE | re.MULTILINE)
 CLEAR_ALL_LINES = 100_000
@@ -47,6 +46,7 @@ class AcsControllerConfig(FrozenModel):
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
     scan_buffer: int = Field(ge=0, description="Controller program buffer that holds the scan pass; it is overwritten on connect")
+    d_buffer: int = Field(ge=0, description="Index of the controller's D-Buffer, where the global LCI struct is declared; depends on the firmware")
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
@@ -58,6 +58,8 @@ class AcsControllerConfig(FrozenModel):
     def _check_ranges(self) -> Self:
         if self.communication_option == "ethernet_tcp" and (self.address is None or self.port is None):
             raise ValueError("address and port are required when communication_option is ethernet_tcp")
+        if self.scan_buffer >= self.d_buffer:
+            raise ValueError(f"scan_buffer {self.scan_buffer} must be below d_buffer {self.d_buffer}")
         for axis, (low, high) in self.limits_mm.items():
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
@@ -158,11 +160,12 @@ class AcsController(ScanController):
             # The D-Buffer cannot change while another buffer is compiled, so decompile the scan buffer first.
             sp.StopBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
             sp.ClearBuffer(self._hc, self._config.scan_buffer, 1, CLEAR_ALL_LINES, sp.SYNCHRONOUS, True)
-            d_buffer = sp.UploadBuffer(self._hc, D_BUFFER, 0, UPLOAD_BYTES, sp.SYNCHRONOUS, True)
-            if LCI_DECLARATION_PATTERN.search(d_buffer or ""):
+            d_buffer = self._config.d_buffer
+            declarations = sp.UploadBuffer(self._hc, d_buffer, 0, UPLOAD_BYTES, sp.SYNCHRONOUS, True)
+            if LCI_DECLARATION_PATTERN.search(declarations or ""):
                 return
-            sp.AppendBuffer(self._hc, D_BUFFER, LCI_DECLARATION + "\n", None, sp.SYNCHRONOUS, True)  # existing globals kept
-            sp.CompileBuffer(self._hc, D_BUFFER, sp.SYNCHRONOUS, True)
+            sp.AppendBuffer(self._hc, d_buffer, LCI_DECLARATION + "\n", None, sp.SYNCHRONOUS, True)  # existing globals kept
+            sp.CompileBuffer(self._hc, d_buffer, sp.SYNCHRONOUS, True)
         self.log.info("Declared '%s' in the controller D-Buffer", LCI_DECLARATION)
 
     def _load_scan_pass(self) -> None:
