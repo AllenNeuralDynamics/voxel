@@ -43,8 +43,6 @@ hal:
     acs:
       target: seqsweep.devices.scan_controller.simulated.SimulatedScanController
       init:
-        gate_outputs:
-          laser_532: OUT0
         move_velocity_mm_s: 50  # positioning moves, not scans
         time_scale: 1.0
   scan_controller: acs

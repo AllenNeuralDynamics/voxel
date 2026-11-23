@@ -47,10 +47,6 @@ hal:
         communication_option: simulator  # ethernet_tcp | simulator (SPiiPlus stand-alone simulator; address and port unused)
         address: 10.0.0.100
         port: 701
-        gate_outputs:
-          laser_532: OUT0  # TODO verify correct output mapping
-          laser_585: OUT1
-          laser_658: OUT2
         axis_x: 0
         axis_y: 1
         scan_buffer: 4  # TODO: confirm this program buffer is free; the scan pass is loaded into it on connect
