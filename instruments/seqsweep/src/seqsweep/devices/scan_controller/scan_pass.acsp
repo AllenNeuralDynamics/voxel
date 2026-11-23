@@ -4,7 +4,7 @@
 
 global real scan_start_mm, scan_end_mm       ! imaged range, written in travel order
 global real overscan_mm, pixel_size_mm, scan_speed_mm_s
-global real line_pulse_ms, move_speed_mm_s, accel, decel
+global real line_pulse_ms, move_velocity_mm_s, accel, decel   ! move_velocity_mm_s is also used by home.acsp
 global real limit_min_mm, limit_max_mm       ! reachable range of the scan axis
 global int scan_axis                         ! controller axis index
 global int scan_dir                          ! +1 towards higher positions, -1 towards lower
@@ -45,7 +45,7 @@ lc.SetConfigOut(0, 0, 0)
 ! MAIN SCAN (One strip)
 ! --------------------------------------------------------------
 ! Go to the start of the lead-in
-VEL(scan_axis) = move_speed_mm_s
+VEL(scan_axis) = move_velocity_mm_s
 PTP/e(scan_axis), run_start
 TILL ^MST(scan_axis).#MOVE
 
@@ -62,7 +62,7 @@ TILL ^MST(scan_axis).#MOVE
 lc.LaserDisable()
 
 ! Back to the positioning speed: moves started without a velocity use the axis's current one
-VEL(scan_axis) = move_speed_mm_s
+VEL(scan_axis) = move_velocity_mm_s
 
 pulse_count = lc.GetPulseCounts(chLine)
 

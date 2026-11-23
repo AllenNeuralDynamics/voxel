@@ -28,6 +28,7 @@ MST_ACC = 0x00000040
 PST_RUN = 0x00000002  # Program state flag: the buffer is running (manual, ProgramStates)
 
 SCAN_PASS_FILE = Path(__file__).with_name("scan_pass.acsp")  # ACSPL+ program for one strip pass
+HOME_FILE = Path(__file__).with_name("home.acsp")  # ACSPL+ program that moves both axes to home_mm, with no limit check
 NO_INDEX = -1  # ACSC_NONE: "global variable" buffer, and "no array index" for scalars
 LCI_DECLARATION = "global LCI lc"  # the LCI struct the scan pass calls as lc.*
 LCI_DECLARATION_PATTERN = re.compile(r"^\s*global\s+LCI\s+lc\b", re.IGNORECASE | re.MULTILINE)
@@ -46,20 +47,23 @@ class AcsControllerConfig(FrozenModel):
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
     scan_buffer: int = Field(ge=0, description="Controller program buffer that holds the scan pass; it is overwritten on connect")
+    home_buffer: int = Field(ge=0, description="Controller program buffer that holds the home move; it is overwritten on connect")
     d_buffer: int = Field(ge=0, description="Index of the controller's D-Buffer, where the global LCI struct is declared; depends on the firmware")
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
     motion_timeout_s: float = Field(gt=0, description="Give up waiting for a motor to enable or a move to end after this long")
-    origin_mm: tuple[float, float] = Field(description="Home position (X, Y)")
+    home_mm: tuple[float, float] = Field(description="Home position (X, Y); reached by the home buffer, so it may lie outside limits_mm")
     limits_mm: dict[Literal["x", "y"], tuple[float, float]] = Field(description="Reachable range per axis")
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
         if self.communication_option == "ethernet_tcp" and (self.address is None or self.port is None):
             raise ValueError("address and port are required when communication_option is ethernet_tcp")
-        if self.scan_buffer >= self.d_buffer:
-            raise ValueError(f"scan_buffer {self.scan_buffer} must be below d_buffer {self.d_buffer}")
+        if self.scan_buffer == self.home_buffer:
+            raise ValueError("scan_buffer and home_buffer must be different buffers")
+        if max(self.scan_buffer, self.home_buffer) >= self.d_buffer:
+            raise ValueError(f"scan_buffer and home_buffer must be below d_buffer {self.d_buffer}")
         for axis, (low, high) in self.limits_mm.items():
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
@@ -86,6 +90,7 @@ class AcsController(ScanController):
         self._connect()
         self._enable_axes()
         self._load_scan_pass()
+        self._load_home()
 
     # -- library and connection -------------------------------------------------------------------------------
 
@@ -157,9 +162,10 @@ class AcsController(ScanController):
         """Make sure the D-Buffer declares the LCI struct ``lc``; the scan pass uses it and structs must be global there."""
         sp = self._sp
         with self._lock:
-            # The D-Buffer cannot change while another buffer is compiled, so decompile the scan buffer first.
-            sp.StopBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
-            sp.ClearBuffer(self._hc, self._config.scan_buffer, 1, CLEAR_ALL_LINES, sp.SYNCHRONOUS, True)
+            # The D-Buffer cannot change while another buffer is compiled, so decompile our buffers first.
+            for buffer in (self._config.scan_buffer, self._config.home_buffer):
+                sp.StopBuffer(self._hc, buffer, sp.SYNCHRONOUS, True)
+                sp.ClearBuffer(self._hc, buffer, 1, CLEAR_ALL_LINES, sp.SYNCHRONOUS, True)
             d_buffer = self._config.d_buffer
             declarations = sp.UploadBuffer(self._hc, d_buffer, 0, UPLOAD_BYTES, sp.SYNCHRONOUS, True)
             if LCI_DECLARATION_PATTERN.search(declarations or ""):
@@ -176,8 +182,26 @@ class AcsController(ScanController):
             sp.LoadBuffer(self._hc, self._config.scan_buffer, SCAN_PASS_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
             sp.CompileBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
 
+    def _load_home(self) -> None:
+        """Load and compile the home program, then write its parameters once: home position, speed and axes never change."""
+        sp = self._sp
+        with self._lock:
+            sp.LoadBuffer(self._hc, self._config.home_buffer, HOME_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
+            sp.CompileBuffer(self._hc, self._config.home_buffer, sp.SYNCHRONOUS, True)
+        home_x_mm, home_y_mm = self._config.home_mm
+        axis_x, axis_y = self._axes
+        parameters: dict[str, float | int] = {
+            "home_x_mm": home_x_mm,
+            "home_y_mm": home_y_mm,
+            "move_velocity_mm_s": self._move_velocity_mm_s,  # declared by the scan pass, which is loaded first
+            "home_axis_x": axis_x,
+            "home_axis_y": axis_y,
+        }
+        for name, value in parameters.items():
+            self._write(name, value)
+
     def _write(self, name: str, value: float | int) -> None:
-        """Write a global scan-pass variable."""
+        """Write a global variable of the scan pass or home program."""
         write = self._sp.WriteInteger if isinstance(value, int) else self._sp.WriteReal
         with self._lock:
             write(self._hc, NO_INDEX, name, NO_INDEX, NO_INDEX, NO_INDEX, NO_INDEX, value, self._sp.SYNCHRONOUS, True)
@@ -281,9 +305,11 @@ class AcsController(ScanController):
         position = self.position_mm
         self.move_to(position["x"] + dx_mm, position["y"] + dy_mm)
 
-    @describe(label="Go Home", desc="Move to the configured origin")
+    @describe(label="Go Home", desc="Run the home buffer to home_mm (not limited by limits_mm); returns when it has finished")
     def go_home(self) -> None:
-        self.move_to(*self._config.origin_mm)
+        with self._lock:
+            self._sp.RunBuffer(self._hc, self._config.home_buffer, None, self._sp.SYNCHRONOUS, True)
+            self._sp.WaitProgramEnd(self._hc, self._config.home_buffer, self._motion_timeout_ms, True)
 
     @describe(label="Wait Motion End", desc="Block until both axes have settled")
     def wait_motion_end(self, timeout_ms: int | None = None) -> None:
@@ -298,6 +324,7 @@ class AcsController(ScanController):
         sp = self._sp
         with self._lock:
             sp.StopBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
+            sp.StopBuffer(self._hc, self._config.home_buffer, sp.SYNCHRONOUS, True)
             for axis in self._axes:
                 sp.Halt(self._hc, axis, sp.SYNCHRONOUS, True)
                 # An aborted pass leaves the scan axis at the scan speed; later moves use the current velocity
@@ -318,7 +345,7 @@ class AcsController(ScanController):
             "pixel_size_mm": derived.pixel_size_um / 1000,
             "scan_speed_mm_s": derived.scan_speed_mm_s,
             "line_pulse_ms": self._config.line_pulse_width_ms,
-            "move_speed_mm_s": self._move_velocity_mm_s,
+            "move_velocity_mm_s": self._move_velocity_mm_s,
             "accel": self._config.scan_accel,
             "decel": self._config.scan_decel,
             "limit_min_mm": low,

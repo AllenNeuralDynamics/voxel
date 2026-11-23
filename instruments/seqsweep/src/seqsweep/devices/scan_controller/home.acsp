@@ -1,0 +1,15 @@
+! seqsweep home: move both axes to the home position, then stop.
+! The host writes the global parameters below before it runs this buffer.
+! There is no limit check on purpose: home (0, 0) can lie outside the scan limits (limits_mm).
+! Names follow the Python names; positions in mm, speeds in mm/s.
+
+global real home_x_mm, home_y_mm
+global int home_axis_x, home_axis_y          ! controller axis indices
+! move_velocity_mm_s (the config's value) is declared global in scan_pass.acsp, which is compiled first
+
+VEL(home_axis_x) = move_velocity_mm_s
+VEL(home_axis_y) = move_velocity_mm_s
+
+PTP/e (home_axis_x, home_axis_y), home_x_mm, home_y_mm
+TILL ^MST(home_axis_x).#MOVE & ^MST(home_axis_y).#MOVE
+STOP

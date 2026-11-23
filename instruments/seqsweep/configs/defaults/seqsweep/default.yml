@@ -50,13 +50,14 @@ hal:
         axis_x: 0
         axis_y: 1
         scan_buffer: 3
+        home_buffer: 4
         d_buffer: 10  # buffers 0-9 are program buffers, the D-Buffer follows; confirm with probe_buffers.py
         line_pulse_width_ms: 0.001
         scan_accel: 6000
         scan_decel: 6000
         move_velocity_mm_s: 50  # positioning moves, not scans
         motion_timeout_s: 60  # give up waiting for a motor to enable or a move to end; the longest move is ~270 mm, about 5 s
-        origin_mm: [155.0, 155.0]
+        home_mm: [0.0, 0.0]  # reached by the home buffer, so it may lie outside limits_mm
         limits_mm:
           x: [20, 290]
           y: [20, 290]

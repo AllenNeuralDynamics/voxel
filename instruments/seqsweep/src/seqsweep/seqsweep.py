@@ -175,6 +175,8 @@ class SeqSweep:
         try:
             move_velocity_mm_s = await scan_controller.move_velocity_mm_s.get()
             await scan_controller.configure(pass_config, derived)
+            self.log.info("Homing before the scan")
+            await scan_controller.go_home()
             for chamber in job.chambers or [None]:  # no chamber: one run at the current position
                 for strip in range(job.num_strips):
                     label = f"chamber {chamber}, " if chamber is not None else ""
@@ -194,6 +196,8 @@ class SeqSweep:
                     await scan_controller.run(direction)
                     while await scan_controller.is_running.get():
                         await asyncio.sleep(RUN_POLL_S)
+            self.log.info("Homing after the scan")
+            await scan_controller.go_home()  # not on abort or failure: the stage stays where it stopped
             self._status = "finished"
         except asyncio.CancelledError:
             await scan_controller.abort()
