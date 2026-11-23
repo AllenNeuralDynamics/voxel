@@ -40,7 +40,6 @@ class ScanPassConfig(FrozenModel):
     )
     # Validate against camera config
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
-    lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the pass")
 
 
 class DerivedScan(FrozenModel):
@@ -86,7 +85,6 @@ class ScanJob(FrozenModel):
         description="Distance from each chamber's lower edge to the first strip, along the step axis (across the scan)",
     )
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
-    lasers: list[str] = Field(default_factory=list, description="Lasers gated on during the scan")
 
     @model_validator(mode="after")
     def _check_scan_range(self) -> Self:

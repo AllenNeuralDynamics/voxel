@@ -74,8 +74,8 @@ def _split_output(output: str) -> tuple[int, int]:
 class AcsController(ScanController):
     """The real ACS scan controller; the keyword arguments after ``move_velocity_mm_s`` are the ``AcsControllerConfig`` fields."""
 
-    def __init__(self, uid: str, *, gate_outputs: dict[str, str], move_velocity_mm_s: float, **config: object) -> None:
-        super().__init__(uid, gate_outputs=gate_outputs, move_velocity_mm_s=move_velocity_mm_s)
+    def __init__(self, uid: str, *, move_velocity_mm_s: float, **config: object) -> None:
+        super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s)
         self._config = AcsControllerConfig.model_validate(config)
         self._lock = threading.RLock()  # one vendor handle: serialize calls and multi-call sequences
         self._sp = self._import_library()
@@ -297,17 +297,6 @@ class AcsController(ScanController):
                 sp.Halt(self._hc, axis, sp.SYNCHRONOUS, True)
                 # An aborted pass leaves the scan axis at the scan speed; later moves use the current velocity
                 sp.SetVelocity(self._hc, axis, self._move_velocity_mm_s, sp.SYNCHRONOUS, True)
-            for output in self._gate_outputs.values():
-                self._clear_output(output)
-
-    def _clear_output(self, output: str) -> None:
-        """Drive an output low: a single bit (``OUT0.1``) or a whole port (``OUT0``)."""
-        sp = self._sp
-        if "." in output:
-            port, bit = _split_output(output)
-            sp.SetOutput(self._hc, port, bit, 0, sp.SYNCHRONOUS, True)
-        else:
-            sp.SetOutputPort(self._hc, int(output.removeprefix("OUT")), 0, sp.SYNCHRONOUS, True)
 
     def _check_in_limits(self, axis: Literal["x", "y"], position_mm: float) -> None:
         low, high = self._config.limits_mm[axis]
@@ -318,9 +307,6 @@ class AcsController(ScanController):
 
     @describe(label="Configure Scan", desc="Load pass geometry and gating")
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
-        unknown = sorted(set(config.lasers) - self._gate_outputs.keys())
-        if unknown:
-            raise ValueError(f"No gate output for lasers {unknown}")
         low, high = self._config.limits_mm[derived.scan_axis]
         parameters: dict[str, float | int] = {
             "overscan_mm": derived.scan_margin_mm,

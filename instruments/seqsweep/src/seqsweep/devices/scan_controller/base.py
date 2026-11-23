@@ -15,20 +15,15 @@ from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 
 class ScanController(Device):
-    """Vendor-neutral timing master for strip passes.
-
-    ``gate_outputs`` maps laser IDs to controller power-gate outputs, so a ``ScanPassConfig`` can name lasers
-    without knowing the wiring.
-    """
+    """Vendor-neutral timing master for strip passes."""
 
     __DEVICE_TYPE__: ClassVar[str] = SeqSweepDeviceType.SCAN_CONTROLLER
 
-    def __init__(self, uid: str, *, gate_outputs: dict[str, str], move_velocity_mm_s: float) -> None:
+    def __init__(self, uid: str, *, move_velocity_mm_s: float) -> None:
         super().__init__(uid=uid)
         if move_velocity_mm_s <= 0:
             raise ValueError("move_velocity_mm_s must be positive")
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
-        self._gate_outputs = dict(gate_outputs)
         self._move_velocity_mm_s = move_velocity_mm_s
 
     @property
@@ -44,7 +39,7 @@ class ScanController(Device):
 
     @describe(label="Configure Scan", desc="Load pass geometry and gating")
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
-        # TODO: check lasers against gate_outputs, program the controller
+        # TODO: program the controller
         pass
 
     @describe(label="Run Pass", desc="Start one strip pass in the given direction")

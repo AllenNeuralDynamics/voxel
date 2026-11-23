@@ -103,7 +103,6 @@ class SeqSweep:
             scan_end_mm=job.scan_end_mm,
             scan_margin_mm=job.scan_margin_mm,
             line_rate_hz=job.line_rate_hz,
-            lasers=job.lasers,
         )
 
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
