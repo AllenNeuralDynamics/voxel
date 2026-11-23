@@ -12,6 +12,8 @@ from one_liner.client import RouterClient  # type: ignore
 
 
 STEP_MM = 1.0
+CHECK_X_MM = 151.875  # middle of the scan range 125..178.75
+CHAMBER_Y_MM = (109.75, 155.0, 200.25)  # chambers_step_mm of chambers 3, 2, 1
 POLL_S = 2.0
 TIMEOUT_S = 3600.0
 
@@ -60,6 +62,26 @@ def test_stage(client: RouterClient) -> None:
     print_position(client, "at home")
 
 
+def test_stage2(client: RouterClient) -> None:
+    """Visit each chamber's Y position at mid scan X and wait for Enter, to see which bar is under the objective."""
+    print("\n--- Stage test 2: chamber Y positions ---")
+    stage_call(client, "stage_go_home")
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "at home")
+
+    for y_mm in CHAMBER_Y_MM:
+        print(f"\n--- Stage test 2: X={CHECK_X_MM} mm, Y={y_mm} mm ---")
+        stage_call(client, "stage_move_to", x_mm=CHECK_X_MM, y_mm=y_mm)
+        stage_call(client, "stage_wait_motion_end")
+        print_position(client, "arrived")
+        input("  Look at which bar is under the objective, then press Enter to continue...")
+
+    print("\n--- Stage test 2: go home ---")
+    stage_call(client, "stage_go_home")
+    stage_call(client, "stage_wait_motion_end")
+    print_position(client, "at home")
+
+
 def wait_for_job(client: RouterClient) -> str:
     """Poll until the job leaves ``running``; returns its final status."""
     deadline = time.monotonic() + TIMEOUT_S
@@ -87,6 +109,7 @@ def main() -> None:
     print_job_status(client)
 
     test_stage(client)
+    # test_stage2(client)  # visits the chamber Y positions; uncomment to find which bar is which chamber
 
     print("\n--- Starting Run ---")
     print(f"Response: {client.call("seqsweep", "start_acquisition", kwargs={'job': job_payload})}")

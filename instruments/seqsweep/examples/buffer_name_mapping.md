@@ -22,7 +22,7 @@ Maps the variables in `Stage buffer_062226.txt` to the SeqSweep Python names.
 | `travel_len` | capture plus 2 × margin | `travel_mm` |
 | `X_ABS_MIN/MAX`, `Y_ABS_MIN/MAX` | stage range | `limits_mm` (`AcsControllerConfig`) |
 | `X_SCAN_MIN/MAX` | scan ± margin | derived from `scan_start_mm`, `scan_end_mm`, `scan_margin_mm`; may not have its own name |
-| `origin` | home | `origin_mm` |
+| `START 2, homeA` (home move) | home position (0, 0), run by its own buffer, no limit check | `home_mm` + `home_buffer` (`AcsControllerConfig`); program `home.acsp` |
 | `LINE_RATE` | camera line rate | `line_rate_hz` (job); `max_line_rate_hz` is only the limit it is checked against |
 | `VEL_X` | scan speed, calculated: `LINE_RATE * PIXEL_SIZE` | `scan_speed_mm_s` (`seqsweep.py`: `line_rate_hz * pixel_size_um / 1000`) |
 | `LINE_PULSE_MS` | line pulse width | `line_pulse_width_ms` |
