@@ -9,10 +9,16 @@ from seqsweep.devices.scan_controller.simulated import SimulatedScanController
 from seqsweep.hal import HAL, SeqSweepHardwareTopology
 from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
-from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
+from seqsweep.seqsweep_config_model import OpticsConfig, SeqSweepInstrumentConfig, SeqSweepInstrumentDefaults
 
 ACS_TARGET = "seqsweep.devices.scan_controller.simulated.SimulatedScanController"
-ACS_INIT = {"move_velocity_mm_s": 50}
+ACS_INIT = {"move_velocity_mm_s": 50, "motion_timeout_s": 60}
+DEFAULTS = SeqSweepInstrumentDefaults(
+    scan_axis="x",
+    optics=OpticsConfig(tdi_pixel_um=5.0, magnification=20.0, tdi_image_width_px=4352),
+    chamber_edge_margin_mm=10,
+    chambers_step_mm={1: 200.25, 2: 155.0, 3: 109.75},
+)
 
 
 def _topology(scan_controller: str = "acs") -> SeqSweepHardwareTopology:
@@ -23,7 +29,7 @@ def _topology(scan_controller: str = "acs") -> SeqSweepHardwareTopology:
 
 
 def _config(topology: SeqSweepHardwareTopology) -> SeqSweepInstrumentConfig:
-    return SeqSweepInstrumentConfig(hal=topology)
+    return SeqSweepInstrumentConfig(hal=topology, default=DEFAULTS)
 
 
 def test_unknown_role_device_is_rejected_at_load():
