@@ -22,8 +22,12 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         super().__init__(adapter)
         self.is_running: DeviceProperty[bool] = self.props.property("is_running", bool)
         self.position_mm: DeviceProperty[XYPosition] = self.props.property("position_mm", XYPosition.model_validate)
-        self.move_velocity_mm_s: DeviceProperty[float] = self.props.property("move_velocity_mm_s", _FLOAT_ADAPTER.validate_python)
-        self.motion_timeout_s: DeviceProperty[float] = self.props.property("motion_timeout_s", _FLOAT_ADAPTER.validate_python)
+        self.move_velocity_mm_s: DeviceProperty[float] = self.props.property(
+            "move_velocity_mm_s", _FLOAT_ADAPTER.validate_python
+        )
+        self.motion_timeout_s: DeviceProperty[float] = self.props.property(
+            "motion_timeout_s", _FLOAT_ADAPTER.validate_python
+        )
 
     async def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         """Load the pass geometry and gating."""

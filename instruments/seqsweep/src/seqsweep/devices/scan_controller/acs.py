@@ -42,16 +42,30 @@ class AcsControllerConfig(FrozenModel):
         description="How the host talks to the controller; 'simulator' uses the SPiiPlus stand-alone simulator"
     )
     address: str | None = Field(default=None, min_length=1, description="Controller IP or host name; ethernet_tcp only")
-    port: int | None = Field(default=None, gt=0, le=65535, description="Controller TCP port (701 is the SPiiPlus stream port); ethernet_tcp only")
+    port: int | None = Field(
+        default=None,
+        gt=0,
+        le=65535,
+        description="Controller TCP port (701 is the SPiiPlus stream port); ethernet_tcp only",
+    )
     axis_x: int = Field(ge=0, description="Controller axis index of the scan axis (X)")
     axis_y: int = Field(ge=0, description="Controller axis index of the strip axis (Y)")
-    scan_buffer: int = Field(ge=0, description="Controller program buffer that holds the scan pass; it is overwritten on connect")
-    home_buffer: int = Field(ge=0, description="Controller program buffer that holds the home move; it is overwritten on connect")
-    d_buffer: int = Field(ge=0, description="Index of the controller's D-Buffer, where the global LCI struct is declared; depends on the firmware")
+    scan_buffer: int = Field(
+        ge=0, description="Controller program buffer that holds the scan pass; it is overwritten on connect"
+    )
+    home_buffer: int = Field(
+        ge=0, description="Controller program buffer that holds the home move; it is overwritten on connect"
+    )
+    d_buffer: int = Field(
+        ge=0,
+        description="Index of the controller's D-Buffer, where the global LCI struct is declared; depends on the firmware",
+    )
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
-    home_mm: tuple[float, float] = Field(description="Home position (X, Y); reached by the home buffer, so it may lie outside limits_mm")
+    home_mm: tuple[float, float] = Field(
+        description="Home position (X, Y); reached by the home buffer, so it may lie outside limits_mm"
+    )
     limits_mm: dict[Literal["x", "y"], tuple[float, float]] = Field(description="Reachable range per axis")
 
     @model_validator(mode="after")
@@ -161,7 +175,9 @@ class AcsController(ScanController):
             declarations = sp.UploadBuffer(self._hc, d_buffer, 0, UPLOAD_BYTES, sp.SYNCHRONOUS, True)
             if LCI_DECLARATION_PATTERN.search(declarations or ""):
                 return
-            sp.AppendBuffer(self._hc, d_buffer, LCI_DECLARATION + "\n", None, sp.SYNCHRONOUS, True)  # existing globals kept
+            sp.AppendBuffer(
+                self._hc, d_buffer, LCI_DECLARATION + "\n", None, sp.SYNCHRONOUS, True
+            )  # existing globals kept
             sp.CompileBuffer(self._hc, d_buffer, sp.SYNCHRONOUS, True)
         self.log.info("Declared '%s' in the controller D-Buffer", LCI_DECLARATION)
 
@@ -170,14 +186,23 @@ class AcsController(ScanController):
         sp = self._sp
         self._declare_lci()
         with self._lock:
-            sp.LoadBuffer(self._hc, self._config.scan_buffer, SCAN_PASS_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
+            sp.LoadBuffer(
+                self._hc,
+                self._config.scan_buffer,
+                SCAN_PASS_FILE.read_text(encoding="utf-8"),
+                None,
+                sp.SYNCHRONOUS,
+                True,
+            )
             sp.CompileBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
 
     def _load_home(self) -> None:
         """Load and compile the home program, then write its parameters once: home position, speed and axes never change."""
         sp = self._sp
         with self._lock:
-            sp.LoadBuffer(self._hc, self._config.home_buffer, HOME_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True)
+            sp.LoadBuffer(
+                self._hc, self._config.home_buffer, HOME_FILE.read_text(encoding="utf-8"), None, sp.SYNCHRONOUS, True
+            )
             sp.CompileBuffer(self._hc, self._config.home_buffer, sp.SYNCHRONOUS, True)
         home_x_mm, home_y_mm = self._config.home_mm
         axis_x, axis_y = self._axes
@@ -199,7 +224,9 @@ class AcsController(ScanController):
 
     def _read(self, name: str) -> float:
         with self._lock:
-            return self._sp.ReadReal(self._hc, NO_INDEX, name, NO_INDEX, NO_INDEX, NO_INDEX, NO_INDEX, self._sp.SYNCHRONOUS, True)
+            return self._sp.ReadReal(
+                self._hc, NO_INDEX, name, NO_INDEX, NO_INDEX, NO_INDEX, NO_INDEX, self._sp.SYNCHRONOUS, True
+            )
 
     # -- status -----------------------------------------------------------------------------------------------
 
@@ -262,7 +289,9 @@ class AcsController(ScanController):
         position = self.position_mm
         self.move_abs(position.x + dx_mm, position.y + dy_mm)
 
-    @describe(label="Go Home", desc="Start the home buffer to home_mm (not limited by limits_mm); returns once it has started")
+    @describe(
+        label="Go Home", desc="Start the home buffer to home_mm (not limited by limits_mm); returns once it has started"
+    )
     def go_home(self) -> None:
         with self._lock:
             self._sp.RunBuffer(self._hc, self._config.home_buffer, None, self._sp.SYNCHRONOUS, True)
@@ -298,7 +327,8 @@ class AcsController(ScanController):
             "scan_decel": self._config.scan_decel,
             "limit_min_mm": low,
             "limit_max_mm": high,
-            "scan_axis": self._axis_index(derived.scan_axis)}
+            "scan_axis": self._axis_index(derived.scan_axis),
+        }
         for name, value in parameters.items():
             self._write(name, value)
         self._pass = (config, derived)

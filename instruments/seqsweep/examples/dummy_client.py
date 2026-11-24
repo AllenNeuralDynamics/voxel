@@ -112,7 +112,7 @@ def main() -> None:
     # test_stage2(client)  # visits the chamber Y positions; uncomment to find which bar is which chamber
 
     print("\n--- Starting Run ---")
-    print(f"Response: {client.call("seqsweep", "start_acquisition", kwargs={'job': job_payload})}")
+    print(f"Response: {client.call('seqsweep', 'start_acquisition', kwargs={'job': job_payload})}")
     time.sleep(1)
 
     print("\n--- Job Status While Running ---")
@@ -126,6 +126,7 @@ def main() -> None:
     stage_call(client, "stage_go_home")
     stage_call(client, "stage_await_movement")
     print_position(client, "at home")
+
 
 if __name__ == "__main__":
     main()

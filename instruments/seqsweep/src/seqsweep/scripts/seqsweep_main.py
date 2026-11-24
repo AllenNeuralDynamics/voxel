@@ -87,6 +87,7 @@ def main():
     logging.config.dictConfig(config.logging.model_dump(by_alias=True, exclude_none=True))
 
     old_factory = logging.getLogRecordFactory()
+
     def record_factory(*args, **kwargs):
         record = old_factory(*args, **kwargs)
         record.project = "seqSweep"

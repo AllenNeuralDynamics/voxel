@@ -150,7 +150,9 @@ class SeqSweep:
             raise ValueError(f"traversal '{job.traversal}' is not implemented yet; use 'sweep'")
         unknown = [chamber for chamber in job.chambers if chamber not in defaults.chambers_step_mm]
         if unknown:
-            raise ValueError(f"chambers {unknown} are not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}")
+            raise ValueError(
+                f"chambers {unknown} are not in default.chambers_step_mm {sorted(defaults.chambers_step_mm)}"
+            )
         if defaults.scan_safe_range_mm is not None:
             low_mm, high_mm = defaults.scan_safe_range_mm
             if job.scan_start_mm < low_mm or job.scan_end_mm > high_mm:
@@ -163,7 +165,9 @@ class SeqSweep:
                 f"scan_margin_mm {job.scan_margin_mm:g} exceeds chamber_edge_margin_mm {defaults.chamber_edge_margin_mm:g}"
             )
         if defaults.max_line_rate_hz is not None and job.line_rate_hz > defaults.max_line_rate_hz:
-            raise ValueError(f"line rate {job.line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}")
+            raise ValueError(
+                f"line rate {job.line_rate_hz:g} Hz exceeds max_line_rate_hz {defaults.max_line_rate_hz:g}"
+            )
 
     async def _run_passes(self, job: ScanJob, derived: DerivedScan) -> None:
         """Configure once, then per strip: move to the strip start, run one pass, wait for it to finish."""
@@ -181,7 +185,9 @@ class SeqSweep:
                 for strip in range(job.num_strips):
                     direction = strip_direction(job.traversal, strip)
                     step_mm = (
-                        defaults.chambers_step_mm[chamber] + job.step_margin_mm + strip * derived.tdi_image_width_um / 1000
+                        defaults.chambers_step_mm[chamber]
+                        + job.step_margin_mm
+                        + strip * derived.tdi_image_width_um / 1000
                     )
                     # Go to the start of the lead-in, as the scan buffer's run_start: the margin sits before the imaged range,
                     # at X0 going forward and at X_end going reverse (snake)
@@ -193,7 +199,12 @@ class SeqSweep:
                     await scan_controller.move_abs(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
                     await scan_controller.await_movement()
                     self.log.info(
-                        "Moved to X=%.3f mm, Y=%.3f mm (chamber %d, strip %d/%d)", x_mm, y_mm, chamber, strip + 1, job.num_strips
+                        "Moved to X=%.3f mm, Y=%.3f mm (chamber %d, strip %d/%d)",
+                        x_mm,
+                        y_mm,
+                        chamber,
+                        strip + 1,
+                        job.num_strips,
                     )
                     await scan_controller.run(direction)
                     await scan_controller.await_movement()
