@@ -1,6 +1,6 @@
 from typing import Any, Literal, Self
 
-from one_liner.models import RouterServerConfig  # type: ignore
+from one_liner.models import RouterServerConfig  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from vxlib.schema import FrozenModel
 
@@ -30,7 +30,7 @@ class RouterServerPortConfig(BaseModel):
 
 
 class OpticsConfig(FrozenModel):
-    """TDI sensor and objective; sets the pixel size on the sample. No defaults: every derived value depends on these."""
+    """TDI sensor and objective; sets the pixel size on the sample. No defaults: derived values depend on these."""
 
     tdi_pixel_um: float = Field(..., gt=0, description="TDI sensor pixel size")
     magnification: float = Field(..., gt=0)
@@ -59,7 +59,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     # TODO Maybe different type of key for chambers (e.g., str instead of int)
     chambers_step_mm: dict[int, float] = Field(
         default_factory=dict,
-        description="Lower edge of each sample chamber along the step axis (across the scan); strips step upward from it",
+        description="Lower edge of each chamber along the step axis (across the scan); strips step upward from it",
     )
     chamber_edge_margin_mm: float = Field(
         ...,
@@ -68,7 +68,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     )
     scan_safe_range_mm: tuple[float, float] | None = Field(
         default=None,
-        description="Range along the scan axis kept clear of the sample chamber edges; a job's scan range is checked against it",
+        description="Scan-axis range kept clear of the chamber edges; a job's scan range is checked against it",
     )
     max_line_rate_hz: float | None = Field(
         default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"

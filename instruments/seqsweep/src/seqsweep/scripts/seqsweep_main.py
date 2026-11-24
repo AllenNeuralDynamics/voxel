@@ -5,10 +5,11 @@ import os
 import time
 from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
-from ficus.database.filesys import FileSysStore  # type: ignore
-from ficus.services.configs import get_config  # type: ignore
-from one_liner.server import RouterServer  # type: ignore
+from ficus.database.filesys import FileSysStore  # type: ignore[import-untyped]
+from ficus.services.configs import get_config  # type: ignore[import-untyped]
+from one_liner.server import RouterServer  # type: ignore[import-untyped]
 from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import SeqSweepSystemConfig
@@ -69,10 +70,7 @@ def main():
     logger = logging.getLogger()
 
     # Config
-    if args.config_dir:
-        config_dir = Path(args.config_dir).resolve()
-    else:
-        config_dir = Path(__file__).resolve().parents[3] / "configs"
+    config_dir = Path(args.config_dir).resolve() if args.config_dir else Path(__file__).resolve().parents[3] / "configs"
     data_store = FileSysStore(rootdir=config_dir, scopes={"defaults", "hostname"})
     current_scopes = {"hostname": args.hostname}
     logging_config = get_config(data_store=data_store, namespace="logging")
@@ -88,11 +86,11 @@ def main():
 
     old_factory = logging.getLogRecordFactory()
 
-    def record_factory(*args, **kwargs):
+    def record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
         record = old_factory(*args, **kwargs)
         record.project = "seqSweep"
         record.version = version("seqsweep")
-        record.comp_id = os.getenv("aibs_comp_id", "unknown")
+        record.comp_id = os.getenv("aibs_comp_id", "unknown")  # noqa: SIM112 (the lab-wide name is lowercase)
         record.msg = f"SeqSweep: {record.msg}"
         return record
 

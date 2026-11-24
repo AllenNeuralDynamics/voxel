@@ -45,7 +45,8 @@ class StageStatus(BaseModel, frozen=True):
 class ScanController(Device, ABC):
     """Vendor-neutral timing master for strip passes.
 
-    ``ABC`` is listed explicitly: rigup's ``Device`` is a plain class, so without it ``@abstractmethod`` is not enforced.
+    ``ABC`` is listed explicitly: rigup's ``Device`` is a plain class, so without it
+    ``@abstractmethod`` is not enforced.
     """
 
     __DEVICE_TYPE__: ClassVar[str] = SeqSweepDeviceType.SCAN_CONTROLLER

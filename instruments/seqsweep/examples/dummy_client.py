@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from one_liner.client import RouterClient  # type: ignore
+from one_liner.client import RouterClient  # type: ignore[import-untyped]
 
 STEP_MM = 1.0
 STAGE_TEST_START_MM = (155.0, 155.0)  # inside limits_mm, where move_rel is allowed
@@ -99,7 +99,7 @@ def main() -> None:
     client = RouterClient(rpc_port=5555, broadcast_port=5556)
     yaml_path = Path(__file__).parent / "seqsweep_dummy_job.yml"
     try:
-        with open(yaml_path) as f:
+        with yaml_path.open() as f:
             job_payload = yaml.safe_load(f)
     except FileNotFoundError:
         print(f"Job file not found: {yaml_path}")

@@ -107,7 +107,7 @@ class SeqSweep:
         )
 
     def derive_scan(self, pass_config: ScanPassConfig) -> DerivedScan:
-        """Apply the optics to a pass: pixel size, stage speed, strip width and distances (travel = capture + 2 x margin)."""
+        """Apply the optics to a pass: pixel size, speed, strip width and distances (travel = capture + 2 x margin)."""
         optics = self.config.default.optics
         capture_mm = abs(pass_config.scan_end_mm - pass_config.scan_start_mm)
         return DerivedScan(
@@ -143,8 +143,8 @@ class SeqSweep:
         )
 
     def _check_job(self, job: ScanJob) -> None:
-        """Raise ``ValueError`` if the job uses an unsupported pattern, names an unknown chamber, leaves the safe scan range
-        or exceeds the margin or line rate limits."""
+        """Raise ``ValueError`` if the job uses an unsupported pattern, names an unknown chamber, leaves the safe
+        scan range or exceeds the margin or line rate limits."""
         defaults = self.config.default
         if job.traversal is not ScanTraversal.SWEEP:
             raise ValueError(f"traversal '{job.traversal}' is not implemented yet; use 'sweep'")
@@ -162,7 +162,8 @@ class SeqSweep:
                 )
         if job.scan_margin_mm > defaults.chamber_edge_margin_mm:
             raise ValueError(
-                f"scan_margin_mm {job.scan_margin_mm:g} exceeds chamber_edge_margin_mm {defaults.chamber_edge_margin_mm:g}"
+                f"scan_margin_mm {job.scan_margin_mm:g} exceeds "
+                f"chamber_edge_margin_mm {defaults.chamber_edge_margin_mm:g}"
             )
         if defaults.max_line_rate_hz is not None and job.line_rate_hz > defaults.max_line_rate_hz:
             raise ValueError(
@@ -189,8 +190,8 @@ class SeqSweep:
                         + job.step_margin_mm
                         + strip * derived.tdi_image_width_um / 1000
                     )
-                    # Go to the start of the lead-in, as the scan buffer's run_start: the margin sits before the imaged range,
-                    # at X0 going forward and at X_end going reverse (snake)
+                    # Go to the start of the lead-in, as the scan buffer's run_start: the margin sits before the imaged
+                    # range, at X0 going forward and at X_end going reverse (snake)
                     if direction is ScanDirection.REVERSE:
                         start_mm = pass_config.scan_end_mm + pass_config.scan_margin_mm
                     else:

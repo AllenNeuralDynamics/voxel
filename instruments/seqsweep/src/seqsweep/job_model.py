@@ -80,7 +80,7 @@ class ScanJob(FrozenModel):
     step_margin_mm: float = Field(
         default=0.0,
         ge=0,
-        description="Distance from each chamber's step position to the first strip, along the step axis (across the scan)",
+        description="Distance from a chamber's step position to its first strip, along the step axis (across the scan)",
     )
     line_rate_hz: float = Field(gt=0, description="Camera line rate; stage speed = line rate x pixel size")
 

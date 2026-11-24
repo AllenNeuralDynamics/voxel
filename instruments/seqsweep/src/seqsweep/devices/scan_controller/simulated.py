@@ -54,7 +54,7 @@ class SimulatedScanController(ScanController):
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         pass
 
-    def run(self, direction: ScanDirection) -> None:
+    def run(self, direction: ScanDirection) -> None:  # noqa: ARG002
         time.sleep(1)
 
     def abort(self) -> None:

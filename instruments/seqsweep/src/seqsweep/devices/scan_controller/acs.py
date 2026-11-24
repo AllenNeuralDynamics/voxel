@@ -36,7 +36,10 @@ UPLOAD_BYTES = 65_536
 
 
 class AcsControllerConfig(FrozenModel):
-    """Connection, wiring and motion settings of the ACS controller (mm, mm/s). Every value comes from the config; no defaults."""
+    """Connection, wiring and motion settings of the ACS controller (mm, mm/s).
+
+    Every value comes from the config; no defaults.
+    """
 
     communication_option: Literal["ethernet_tcp", "simulator"] = Field(
         description="How the host talks to the controller; 'simulator' uses the SPiiPlus stand-alone simulator"
@@ -58,7 +61,7 @@ class AcsControllerConfig(FrozenModel):
     )
     d_buffer: int = Field(
         ge=0,
-        description="Index of the controller's D-Buffer, where the global LCI struct is declared; depends on the firmware",
+        description="Index of the controller's D-Buffer, where the global LCI struct is declared; firmware-dependent",
     )
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
@@ -83,7 +86,10 @@ class AcsControllerConfig(FrozenModel):
 
 
 class AcsController(ScanController):
-    """The real ACS scan controller; the keyword arguments after ``move_velocity_mm_s`` are the ``AcsControllerConfig`` fields."""
+    """The real ACS scan controller.
+
+    The keyword arguments after ``motion_timeout_s`` are the ``AcsControllerConfig`` fields.
+    """
 
     def __init__(self, uid: str, *, move_velocity_mm_s: float, motion_timeout_s: float, **config: object) -> None:
         super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s, motion_timeout_s=motion_timeout_s)
@@ -101,12 +107,12 @@ class AcsController(ScanController):
 
     @staticmethod
     def _import_library():  # noqa: ANN205
-        import numpy as np
+        import numpy as np  # noqa: PLC0415 (lazy: the vendor wheel is optional)
 
         if not hasattr(np, "chararray"):  # the vendor wheel (UploadBuffer, GetErrorString) still uses the numpy 1 name
             np.char.chararray = np.char.chararray  # type: ignore[attr-defined]
         try:
-            import SPiiPlusPython as sp  # type: ignore[import-not-found]
+            import SPiiPlusPython as sp  # type: ignore[import-not-found]  # noqa: N813, PLC0415
         except ImportError as e:
             raise ImportError(
                 "SPiiPlusPython is not installed. Install the wheel from the SPiiPlus ADK Suite "
@@ -164,7 +170,7 @@ class AcsController(ScanController):
         return self._config.axis_x if axis == "x" else self._config.axis_y
 
     def _declare_lci(self) -> None:
-        """Make sure the D-Buffer declares the LCI struct ``lc``; the scan pass uses it and structs must be global there."""
+        """Make sure the D-Buffer declares the LCI struct ``lc``, which the scan pass uses (structs must be global)."""
         sp = self._sp
         with self._lock:
             # The D-Buffer cannot change while another buffer is compiled, so decompile our buffers first.
@@ -197,7 +203,7 @@ class AcsController(ScanController):
             sp.CompileBuffer(self._hc, self._config.scan_buffer, sp.SYNCHRONOUS, True)
 
     def _load_home(self) -> None:
-        """Load and compile the home program, then write its parameters once: home position, speed and axes never change."""
+        """Load and compile the home program, then write its parameters once: they never change."""
         sp = self._sp
         with self._lock:
             sp.LoadBuffer(
@@ -271,7 +277,7 @@ class AcsController(ScanController):
 
     @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
     def move_abs(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
-        """Start the move; ``velocity_mm_s`` None keeps the current axis velocity (the positioning speed between passes)."""
+        """Start the move; ``velocity_mm_s`` None keeps the current axis velocity (the positioning speed)."""
         if velocity_mm_s is not None and velocity_mm_s <= 0:
             raise ValueError("velocity_mm_s must be positive")
         self._check_in_limits("x", x_mm)

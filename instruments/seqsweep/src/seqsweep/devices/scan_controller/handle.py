@@ -16,7 +16,7 @@ _POLL_INTERVAL_S = 0.05
 
 
 class ScanControllerHandle(DeviceHandle[ScanController]):
-    """Typed view of a scan controller: configure and run strip passes, move and home the stage, wait for motion to end."""
+    """Typed view of a scan controller: strip passes, stage moves and homing, and the wait for motion to end."""
 
     def __init__(self, adapter: Adapter[ScanController]) -> None:
         super().__init__(adapter)
