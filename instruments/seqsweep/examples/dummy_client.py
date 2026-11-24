@@ -98,7 +98,6 @@ def wait_for_job(client: RouterClient) -> str:
 def main() -> None:
     # Ports match configs/defaults/seqsweep/default.yml
     client = RouterClient(rpc_port=5555, broadcast_port=5556)
-
     yaml_path = Path(__file__).parent / "seqsweep_dummy_job.yml"
     try:
         with open(yaml_path) as f:

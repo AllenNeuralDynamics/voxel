@@ -52,14 +52,10 @@ class SimulatedScanController(ScanController):
         return StageStatus(x=axis, y=axis)
 
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
-        # TODO: store the pass and its duration
         pass
 
     def run(self, direction: ScanDirection) -> None:
-        # TODO: start a timer for duration * time_scale
-        self.log.info("Running scan in direction: %s", direction)
         time.sleep(1)
-        self.log.info("Scan completed.")
 
     def abort(self) -> None:
         # TODO: clear the timer
