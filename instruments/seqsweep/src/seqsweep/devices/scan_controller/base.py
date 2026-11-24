@@ -3,10 +3,11 @@
 On the BARSeq rig this is the ACS XY controller. One pass moves the scan axis across a strip at constant
 velocity while the controller drives every gate (frame grabbers, camera line trigger, laser power, Z ramp).
 
-Skeleton: the contract is in place; the bodies are TODO.
+Abstract contract: a subclass must implement every abstract method below or it cannot be built.
 """
 
 import logging
+from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from rigup import Device, describe
@@ -14,8 +15,11 @@ from seqsweep.devices.base import SeqSweepDeviceType
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 
-class ScanController(Device):
-    """Vendor-neutral timing master for strip passes."""
+class ScanController(Device, ABC):
+    """Vendor-neutral timing master for strip passes.
+
+    ``ABC`` is listed explicitly: rigup's ``Device`` is a plain class, so without it ``@abstractmethod`` is not enforced.
+    """
 
     __DEVICE_TYPE__: ClassVar[str] = SeqSweepDeviceType.SCAN_CONTROLLER
 
@@ -32,47 +36,47 @@ class ScanController(Device):
         return self._move_velocity_mm_s
 
     @property
+    @abstractmethod
     @describe(label="Running", desc="Whether a pass is in progress", stream=True)
     def is_running(self) -> bool:
-        # TODO: report the controller's motion/program state
-        return False
+        """Whether a pass (or a move) is in progress."""
 
     @describe(label="Configure Scan", desc="Load pass geometry and gating")
+    @abstractmethod
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
-        # TODO: program the controller
-        pass
+        """Load the pass geometry and gating into the controller."""
 
     @describe(label="Run Pass", desc="Start one strip pass in the given direction")
+    @abstractmethod
     def run(self, direction: ScanDirection) -> None:
-        # TODO: start the pass without blocking
-        pass
+        """Start the pass without blocking."""
 
     @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
+    @abstractmethod
     def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
-        # TODO: start the positioning move; None: the controller's configured positioning speed
-        pass
+        """Start the positioning move; ``velocity_mm_s`` None uses the current axis velocity."""
 
     @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")
+    @abstractmethod
     def move_by(self, dx_mm: float, dy_mm: float) -> None:
-        # TODO: start the relative move
-        pass
+        """Start the relative move."""
 
-    @describe(label="Go Home", desc="Move to the configured origin")
+    @describe(label="Go Home", desc="Move to the home position")
+    @abstractmethod
     def go_home(self) -> None:
-        # TODO: start the move to the origin
-        pass
+        """Move to the home position."""
 
     @describe(label="Wait Motion End", desc="Block until both axes have settled")
+    @abstractmethod
     def wait_motion_end(self) -> None:
-        # TODO: block until motion stops
-        pass
+        """Block until motion stops."""
 
     @describe(label="Read Status", desc="Per-axis position, motor state and faults")
+    @abstractmethod
     def read_status(self) -> dict[str, dict[str, float | bool | int]]:
-        # TODO: report the axes
-        return {}
+        """Status of the X and Y axes: ``{'x': {...}, 'y': {...}}``."""
 
     @describe(label="Abort", desc="Stop the pass and close every gate")
+    @abstractmethod
     def abort(self) -> None:
-        # TODO: halt motion and close every gate; must be safe when idle
-        pass
+        """Halt motion and close every gate; must be safe when idle."""
