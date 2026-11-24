@@ -3,25 +3,26 @@
 import asyncio
 import time
 
-from rigup.device.handle import Adapter, DeviceProperty
-
+from pydantic import TypeAdapter
 from rigup import DeviceHandle
+from rigup.device.handle import Adapter, DeviceProperty
 
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 from .base import ScanController
 
+_FLOAT_ADAPTER = TypeAdapter(float)
 _POLL_INTERVAL_S = 0.05
 
 
 class ScanControllerHandle(DeviceHandle[ScanController]):
-    """Typed view of a scan controller: load a pass, run it, abort it."""
+    """Typed view of a scan controller: configure and run strip passes, move and home the stage, wait for motion to end."""
 
     def __init__(self, adapter: Adapter[ScanController]) -> None:
         super().__init__(adapter)
         self.is_running: DeviceProperty[bool] = self.props.property("is_running", bool)
-        self.move_velocity_mm_s: DeviceProperty[float] = self.props.property("move_velocity_mm_s", lambda value: float(value))
-        self.motion_timeout_s: DeviceProperty[float] = self.props.property("motion_timeout_s", lambda value: float(value))
+        self.move_velocity_mm_s: DeviceProperty[float] = self.props.property("move_velocity_mm_s", _FLOAT_ADAPTER.validate_python)
+        self.motion_timeout_s: DeviceProperty[float] = self.props.property("motion_timeout_s", _FLOAT_ADAPTER.validate_python)
 
     async def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         """Load the pass geometry and gating."""
@@ -40,7 +41,7 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         await self.call("move_by", dx_mm, dy_mm)
 
     async def go_home(self) -> None:
-        """Start a move to the configured origin."""
+        """Start the move to the home position."""
         await self.call("go_home")
 
     async def await_motion_end(self, timeout_s: float | None = None) -> None:
