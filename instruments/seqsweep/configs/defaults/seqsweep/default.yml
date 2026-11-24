@@ -41,7 +41,7 @@ router_server_api:
       attr_name: "stage_status"
 
 # hal: the hardware blueprint (SeqSweepHardwareTopology) - rigup devices/nodes plus the role each device plays.
-# Stage values (mm, mm/s) come from "Stage buffer_062226.txt".
+# Stage values (mm, mm/s) come from "Stage buffer_112026.txt".
 hal:
   devices:
     acs:
@@ -81,5 +81,5 @@ default:
     1: 200.25
     2: 155.0
     3: 109.75   
-  scan_safe_range_mm: [125.0, 178.75]  # TODO confirm with Miki; set to the imaged range of "Stage buffer_112026.txt"
+  scan_safe_range_mm: [125.0, 178.75]  # the imaged range of "Stage buffer_112026.txt"
   max_line_rate_hz: 470000 # camera limit; keep in step with the camera .cpp config

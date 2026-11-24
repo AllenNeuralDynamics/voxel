@@ -1,8 +1,8 @@
 """ACS scan controller driver for the BARSeq XY stage.
 
 Talks to the controller through the vendor ``SPiiPlusPython`` library (install the wheel from the SPiiPlus ADK Suite;
-it is not redistributable). Connection, status, positioning and abort are implemented. Programming and running a
-scan pass (``configure`` / ``run``) is still TODO.
+it is not redistributable). Connection, status, positioning, homing, abort and the scan pass (``configure`` / ``run``)
+are implemented.
 
 Positions and speeds are in the controller's user units, which are assumed to be mm and mm/s.
 """

@@ -1,5 +1,5 @@
 ! seqsweep scan pass: one strip pass along the scan axis.
-! The host writes the global parameters below before it runs this buffer; nothing is derived here.
+! The host writes the global parameters below before it runs this buffer.
 ! Names follow the Python names; positions in mm, speeds in mm/s, accel/decel in mm/s^2.
 
 global real scan_start_mm, scan_end_mm       ! imaged range, written in travel order

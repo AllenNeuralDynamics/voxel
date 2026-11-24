@@ -81,7 +81,7 @@ class SeqSweep:
         await self._hal.scan_controller.move_rel(dx_mm, dy_mm)
 
     async def stage_go_home(self) -> None:
-        """Move the stage to its configured origin; returns once the move has started."""
+        """Move the stage to its home position (home_mm); returns once the move has started."""
         self._check_stage_free()
         await self._hal.scan_controller.go_home()
 
