@@ -19,8 +19,6 @@ from vxlib.schema import FrozenModel
 
 from .base import ScanController
 
-OUTPUT_PATTERN = re.compile(r"OUT\d+\.\d+")  # a digital output bit as OUT<port>.<bit>, e.g. OUT0.1
-
 MST_ENABLE = 0x00000001  # Motor state flags (SPiiPlus Python manual, 6.16)
 MST_INPOS = 0x00000010
 MST_MOVE = 0x00000020
@@ -67,12 +65,6 @@ class AcsControllerConfig(FrozenModel):
             if low >= high:
                 raise ValueError(f"limits_mm.{axis} must be [min, max], got [{low}, {high}]")
         return self
-
-
-def _split_output(output: str) -> tuple[int, int]:
-    """``'OUT0.1'`` -> ``(0, 1)``: the (port, bit) the library expects."""
-    port, bit = output.removeprefix("OUT").split(".")
-    return int(port), int(bit)
 
 
 class AcsController(ScanController):
@@ -247,24 +239,6 @@ class AcsController(ScanController):
                     "motor_error": sp.GetMotorError(self._hc, axis, sp.SYNCHRONOUS, True),
                 }
         return status
-
-    @describe(label="Read Output", desc="State of a digital output, e.g. OUT0.1")
-    def read_output(self, output: str) -> bool:
-        port, bit = _split_output(self._validated_output(output))
-        with self._lock:
-            return bool(self._sp.GetOutput(self._hc, port, bit, self._sp.SYNCHRONOUS, True))
-
-    @describe(label="Set Output", desc="Set a digital output, e.g. OUT0.1")
-    def set_output(self, output: str, value: bool) -> None:
-        port, bit = _split_output(self._validated_output(output))
-        with self._lock:
-            self._sp.SetOutput(self._hc, port, bit, int(value), self._sp.SYNCHRONOUS, True)
-
-    @staticmethod
-    def _validated_output(output: str) -> str:
-        if not OUTPUT_PATTERN.fullmatch(output):
-            raise ValueError(f"Output must look like 'OUT0.1', got {output!r}")
-        return output
 
     # -- motion -----------------------------------------------------------------------------------------------
 
