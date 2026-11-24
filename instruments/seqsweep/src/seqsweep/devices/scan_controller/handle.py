@@ -9,7 +9,7 @@ from rigup.device.handle import Adapter, DeviceProperty
 
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
-from .base import ScanController
+from .base import ScanController, StageStatus, XYPosition
 
 _FLOAT_ADAPTER = TypeAdapter(float)
 _POLL_INTERVAL_S = 0.05
@@ -21,6 +21,7 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
     def __init__(self, adapter: Adapter[ScanController]) -> None:
         super().__init__(adapter)
         self.is_running: DeviceProperty[bool] = self.props.property("is_running", bool)
+        self.position_mm: DeviceProperty[XYPosition] = self.props.property("position_mm", XYPosition.model_validate)
         self.move_velocity_mm_s: DeviceProperty[float] = self.props.property("move_velocity_mm_s", _FLOAT_ADAPTER.validate_python)
         self.motion_timeout_s: DeviceProperty[float] = self.props.property("motion_timeout_s", _FLOAT_ADAPTER.validate_python)
 
@@ -55,13 +56,14 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
             if time.monotonic() > deadline:
                 raise TimeoutError(f"Motion did not end within {timeout_s:g} s")
             await asyncio.sleep(_POLL_INTERVAL_S)
-        for axis, state in (await self.read_status()).items():  # a faulted axis stops, so check once the wait ends
-            if state["fault"] or state["motor_error"]:
-                raise RuntimeError(f"Axis {axis} fault {state['fault']}, motor error {state['motor_error']}")
+        status = await self.read_status()
+        for name, axis in (("x", status.x), ("y", status.y)):  # a faulted axis stops, so check once the wait ends
+            if axis.fault or axis.motor_error:
+                raise RuntimeError(f"Axis {name} fault {axis.fault}, motor error {axis.motor_error}")
 
-    async def read_status(self) -> dict[str, dict[str, float | bool | int]]:
-        """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""
-        return await self.call("read_status")
+    async def read_status(self) -> StageStatus:
+        """Per-axis motor state and faults."""
+        return StageStatus.model_validate(await self.call("read_status"))
 
     async def abort(self) -> None:
         """Stop the pass and close every gate. Safe when idle."""

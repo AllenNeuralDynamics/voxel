@@ -30,8 +30,8 @@ def stage_call(client: RouterClient, name: str, **kwargs: float) -> Any:
 
 
 def print_position(client: RouterClient, label: str) -> None:
-    status = stage_call(client, "stage_status")
-    print(f"  {label}: " + ", ".join(f"{axis}={state['position_mm']:.3f} mm" for axis, state in status.items()))
+    position = stage_call(client, "stage_position")
+    print(f"  {label}: " + ", ".join(f"{axis}={value:.3f} mm" for axis, value in position.items()))
 
 
 def test_stage(client: RouterClient) -> None:
@@ -53,13 +53,8 @@ def test_stage(client: RouterClient) -> None:
     print_position(client, "after move_rel")
 
     print("\n--- Stage test: move to (absolute) one step back ---")
-    status = stage_call(client, "stage_status")
-    stage_call(
-        client,
-        "stage_move_abs",
-        x_mm=status["x"]["position_mm"] - STEP_MM,
-        y_mm=status["y"]["position_mm"] - STEP_MM,
-    )
+    position = stage_call(client, "stage_position")
+    stage_call(client, "stage_move_abs", x_mm=position["x"] - STEP_MM, y_mm=position["y"] - STEP_MM)
     stage_call(client, "stage_await_movement")
     print_position(client, "after move_abs")
 

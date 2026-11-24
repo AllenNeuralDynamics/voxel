@@ -17,7 +17,7 @@ from rigup import describe
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 from vxlib.schema import FrozenModel
 
-from .base import ScanController
+from .base import AxisStatus, ScanController, StageStatus, XYPosition
 
 MST_ENABLE = 0x00000001  # Motor state flags (SPiiPlus Python manual, 6.16)
 MST_INPOS = 0x00000010
@@ -203,11 +203,11 @@ class AcsController(ScanController):
     # -- status -----------------------------------------------------------------------------------------------
 
     @property
-    @describe(label="Position", desc="Feedback position in mm, as {'x': ..., 'y': ...}", stream=True)
-    def position_mm(self) -> dict[str, float]:
+    @describe(label="Position", desc="Feedback position in mm", units="mm", stream=True)
+    def position_mm(self) -> XYPosition:
         with self._lock:
             x, y = (self._sp.GetFPosition(self._hc, axis, self._sp.SYNCHRONOUS, True) for axis in self._axes)
-        return {"x": x, "y": y}
+        return XYPosition(x=x, y=y)
 
     @property
     @describe(label="Running", desc="Whether a pass, the home move or any axis motion is in progress", stream=True)
@@ -221,24 +221,23 @@ class AcsController(ScanController):
             moving = any(sp.GetMotorState(self._hc, axis, sp.SYNCHRONOUS, True) & MST_MOVE for axis in self._axes)
         return program_running or moving
 
-    @describe(label="Read Status", desc="Per-axis position, motor state and faults")
-    def read_status(self) -> dict[str, dict[str, float | bool | int]]:
-        """Status of the X and Y axes: ``{'x': {...}, 'y': {...}}``."""
+    @describe(label="Read Status", desc="Per-axis motor state and faults")
+    def read_status(self) -> StageStatus:
+        """Motor state and faults of the X and Y axes."""
         sp = self._sp
-        status: dict[str, dict[str, float | bool | int]] = {}
+        axes: dict[str, AxisStatus] = {}
         with self._lock:
             for name, axis in zip(("x", "y"), self._axes, strict=True):
                 state = sp.GetMotorState(self._hc, axis, sp.SYNCHRONOUS, True)
-                status[name] = {
-                    "position_mm": sp.GetFPosition(self._hc, axis, sp.SYNCHRONOUS, True),
-                    "enabled": bool(state & MST_ENABLE),
-                    "in_position": bool(state & MST_INPOS),
-                    "moving": bool(state & MST_MOVE),
-                    "accelerating": bool(state & MST_ACC),
-                    "fault": sp.GetFault(self._hc, axis, sp.SYNCHRONOUS, True),
-                    "motor_error": sp.GetMotorError(self._hc, axis, sp.SYNCHRONOUS, True),
-                }
-        return status
+                axes[name] = AxisStatus(
+                    enabled=bool(state & MST_ENABLE),
+                    in_position=bool(state & MST_INPOS),
+                    moving=bool(state & MST_MOVE),
+                    accelerating=bool(state & MST_ACC),
+                    fault=sp.GetFault(self._hc, axis, sp.SYNCHRONOUS, True),
+                    motor_error=sp.GetMotorError(self._hc, axis, sp.SYNCHRONOUS, True),
+                )
+        return StageStatus(**axes)
 
     # -- motion -----------------------------------------------------------------------------------------------
 
@@ -260,7 +259,7 @@ class AcsController(ScanController):
     def move_rel(self, dx_mm: float, dy_mm: float) -> None:
         # Target from the feedback position, so the limit check sees the real destination.
         position = self.position_mm
-        self.move_abs(position["x"] + dx_mm, position["y"] + dy_mm)
+        self.move_abs(position.x + dx_mm, position.y + dy_mm)
 
     @describe(label="Go Home", desc="Start the home buffer to home_mm (not limited by limits_mm); returns once it has started")
     def go_home(self) -> None:

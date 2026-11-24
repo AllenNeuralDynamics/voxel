@@ -33,6 +33,9 @@ router_server_api:
     seqsweep_stage_await_movement:
       obj_name: "seqsweep"
       attr_name: "stage_await_movement"
+    seqsweep_stage_position:
+      obj_name: "seqsweep"
+      attr_name: "stage_position"
     seqsweep_stage_status:
       obj_name: "seqsweep"
       attr_name: "stage_status"

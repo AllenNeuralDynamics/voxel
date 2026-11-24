@@ -4,7 +4,7 @@ import time
 
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
-from .base import ScanController
+from .base import AxisStatus, ScanController, StageStatus, XYPosition
 
 
 class SimulatedScanController(ScanController):
@@ -43,19 +43,13 @@ class SimulatedScanController(ScanController):
     def go_home(self) -> None:
         self._x_mm, self._y_mm = self._home_mm
 
-    def read_status(self) -> dict[str, dict[str, float | bool | int]]:
-        return {
-            axis: {
-                "position_mm": position_mm,
-                "enabled": True,
-                "in_position": True,
-                "moving": False,
-                "accelerating": False,
-                "fault": 0,
-                "motor_error": 0,
-            }
-            for axis, position_mm in (("x", self._x_mm), ("y", self._y_mm))
-        }
+    @property
+    def position_mm(self) -> XYPosition:
+        return XYPosition(x=self._x_mm, y=self._y_mm)
+
+    def read_status(self) -> StageStatus:
+        axis = AxisStatus(enabled=True, in_position=True, moving=False, accelerating=False, fault=0, motor_error=0)
+        return StageStatus(x=axis, y=axis)
 
     def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         # TODO: store the pass and its duration

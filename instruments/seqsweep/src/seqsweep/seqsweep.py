@@ -89,9 +89,13 @@ class SeqSweep:
         """Block until both axes have settled."""
         await self._hal.scan_controller.await_movement()
 
-    async def stage_status(self) -> dict[str, dict[str, float | bool | int]]:
-        """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""
-        return await self._hal.scan_controller.read_status()
+    async def stage_position(self) -> dict[str, float]:
+        """The (X, Y) feedback position in mm, as ``{'x': ..., 'y': ...}``; cheap to poll."""
+        return (await self._hal.scan_controller.position_mm.get()).model_dump()
+
+    async def stage_status(self) -> dict[str, dict[str, bool | int]]:
+        """Per-axis motor state and faults: ``{'x': {...}, 'y': {...}}``."""
+        return (await self._hal.scan_controller.read_status()).model_dump()
 
     def _pass_config(self, job: ScanJob) -> ScanPassConfig:
         """The geometry every strip of the job runs, as the scan controller takes it."""

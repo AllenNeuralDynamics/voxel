@@ -10,9 +10,35 @@ import logging
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
+from pydantic import BaseModel
 from rigup import Device, describe
 from seqsweep.devices.base import SeqSweepDeviceType
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
+
+
+class XYPosition(BaseModel, frozen=True):
+    """Feedback position of the stage in mm."""
+
+    x: float
+    y: float
+
+
+class AxisStatus(BaseModel, frozen=True):
+    """Motor state and faults of one axis."""
+
+    enabled: bool
+    in_position: bool
+    moving: bool
+    accelerating: bool
+    fault: int
+    motor_error: int
+
+
+class StageStatus(BaseModel, frozen=True):
+    """Motor state and faults of both axes."""
+
+    x: AxisStatus
+    y: AxisStatus
 
 
 class ScanController(Device, ABC):
@@ -72,10 +98,16 @@ class ScanController(Device, ABC):
     def go_home(self) -> None:
         """Start the move to the home position."""
 
-    @describe(label="Read Status", desc="Per-axis position, motor state and faults")
+    @property
     @abstractmethod
-    def read_status(self) -> dict[str, dict[str, float | bool | int]]:
-        """Status of the X and Y axes: ``{'x': {...}, 'y': {...}}``."""
+    @describe(label="Position", desc="Feedback position in mm", units="mm", stream=True)
+    def position_mm(self) -> XYPosition:
+        """Current (X, Y) feedback position."""
+
+    @describe(label="Read Status", desc="Per-axis motor state and faults")
+    @abstractmethod
+    def read_status(self) -> StageStatus:
+        """Motor state and faults of the X and Y axes."""
 
     @describe(label="Abort", desc="Stop the pass and close every gate")
     @abstractmethod
