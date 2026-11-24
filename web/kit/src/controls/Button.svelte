@@ -17,10 +17,10 @@
         secondary:
           'border-control-line bg-element-bg text-fg hover:border-control-line-hover hover:bg-element-hover active:bg-element-active',
         outline:
-          'border-control-line bg-transparent hover:border-control-line-hover hover:bg-element-hover hover:text-fg focus-visible:border-focus active:bg-element-active',
+          'border-line bg-transparent font-normal hover:border-line-selected hover:bg-element-hover hover:text-fg focus-visible:border-focus active:bg-element-active',
         // A dashed edge marks the place of an item to come, such as a button that adds to a list.
         dashed:
-          'border-dashed border-control-line bg-transparent text-fg-muted hover:border-control-line-hover hover:bg-element-hover hover:text-fg focus-visible:border-focus active:bg-element-active',
+          'border-dashed border-control-line bg-transparent font-normal text-fg-muted hover:border-control-line-hover hover:bg-element-hover hover:text-fg focus-visible:border-focus active:bg-element-active',
         ghost:
           'border-transparent hover:bg-element-hover hover:text-fg focus-visible:border-focus active:bg-element-active',
         // A small action that stays in the background, for example "Restore all" above a list. As a toggle, it shows
@@ -54,13 +54,21 @@
   import type { Snippet } from 'svelte';
   import type { HTMLButtonAttributes } from 'svelte/elements';
 
+  import { reportFailure } from '../failures';
   import { Spinner } from '../shadcn/spinner';
   import { cn } from '../utils/cn';
+  import { delayedTrue } from '../utils/delayed-true.svelte';
 
-  interface Props extends HTMLButtonAttributes, ButtonVariants {
+  interface Props extends Omit<HTMLButtonAttributes, 'onclick'>, ButtonVariants {
     class?: string;
     children?: Snippet;
+    /** The page waits for something that the button did not start. */
     loading?: boolean;
+    /**
+     * When it returns a promise, the button waits for it: it takes no other click, shows its spinner once the wait
+     * passes 200 ms, and reports a failure.
+     */
+    onclick?: (event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }) => unknown;
   }
 
   let {
@@ -70,22 +78,35 @@
     children,
     loading = false,
     disabled = false,
+    onclick,
     ...restProps
   }: Props = $props();
+
+  let waiting = $state(false);
+  const slowWait = delayedTrue(() => waiting, 200);
+  const spinning = $derived(loading || slowWait.current);
+
+  function click(event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }): void {
+    const result = onclick?.(event);
+    if (!(result instanceof Promise)) return;
+    waiting = true;
+    result.catch(reportFailure).finally(() => (waiting = false));
+  }
 </script>
 
 <button
   class={buttonVariants({ variant, size, class: cn('relative', className) })}
-  disabled={disabled || loading}
-  aria-busy={loading}
+  disabled={disabled || loading || waiting}
+  aria-busy={loading || waiting}
   {...restProps}
+  onclick={click}
 >
   {#if children}
-    <span class={cn('inline-flex items-center justify-center gap-[inherit]', loading && 'invisible')}>
+    <span class={cn('inline-flex items-center justify-center gap-[inherit]', spinning && 'invisible')}>
       {@render children()}
     </span>
   {/if}
-  {#if loading}
+  {#if spinning}
     <Spinner class="absolute" />
   {/if}
 </button>

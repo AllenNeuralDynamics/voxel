@@ -1,12 +1,18 @@
+<script lang="ts" module>
+  import { PrefGroup } from '@voxel/kit/pref';
+
+  const LAB_PREFS = new PrefGroup('ui-lab');
+</script>
+
 <script lang="ts">
   import { onNavigate } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
+  import MarkSettings from '$lib/features/stage/MarkSettings.svelte';
   import { Collapsible } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { ChevronDown } from '@voxel/kit/icons';
-  import { pref } from '@voxel/kit/pref';
-  import { MarkSettings, ThemePicker } from '@voxel/kit/style';
+  import { ThemePicker } from '@voxel/kit/style';
 
   import { GROUPS, OVERVIEW, PAGES } from './nav';
 
@@ -15,7 +21,7 @@
   const CARD = 'rounded-lg bg-shell shadow-(--raised-shadow)';
 
   const current = $derived(PAGES.find((item) => item.route === page.route.id));
-  const marksOpen = pref('ui-lab:marks-open', false);
+  const marksOpen = LAB_PREFS.pref('marks-open', false);
 
   /** Scrolls the page list, and only the list, so a hidden row of the open page shows in its middle. */
   function showCurrentRow(nav: HTMLElement): void {

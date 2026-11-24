@@ -2,8 +2,8 @@
   import { type Snippet, untrack } from 'svelte';
 
   import { displayName } from '../../utils/format';
-  import { pref } from '../../utils/pref';
   import AutoSplit, { type SplitPane } from './AutoSplit.svelte';
+  import { layoutPrefs } from './pane-size.svelte';
 
   /**
    * An {@link AutoSplit} that the person can stack anyway and turn around, with 1 button that steps through the
@@ -24,8 +24,8 @@
   const content = $derived(snippets as unknown as Record<Id, Snippet>);
 
   const { ids, key } = untrack(() => ({ ids: Object.keys(panes) as Id[], key: persist }));
-  const stacked = pref(`ui:split:${key}:stacked`, false);
-  const savedOrder = pref<Id[]>(`ui:split:${key}:order`, ids);
+  const stacked = layoutPrefs.pref(`split:${key}:stacked`, false);
+  const savedOrder = layoutPrefs.pref<Id[]>(`split:${key}:order`, ids);
 
   const order = $derived.by(() => {
     const kept = savedOrder.get();
@@ -43,18 +43,20 @@
     beside ? (first ? 'left' : 'right') : first ? 'top' : 'bottom';
   const firstShown = $derived(order[0] === ids[0]);
   const side = $derived(sideOf(layout === 'horizontal', firstShown));
-  // The next layout: left, right, top, bottom, then left again; only top and bottom while narrow.
+  // The next layout, clockwise: left, top, right, bottom, then left again; only top and bottom while narrow.
   const next = $derived.by(() => {
     if (narrow) return { stack: false, first: !firstShown };
-    if (layout === 'horizontal') return firstShown ? { stack: false, first: false } : { stack: true, first: true };
-    return firstShown ? { stack: true, first: false } : { stack: false, first: true };
+    return layout === 'horizontal' ? { stack: true, first: firstShown } : { stack: false, first: !firstShown };
   });
   const nextSide = $derived(narrow ? sideOf(false, next.first) : sideOf(!next.stack, next.first));
   const ROTATION: Record<Side, number> = { left: 0, top: 90, right: 180, bottom: 270 };
 
   function step(): void {
-    stacked.set(next.stack);
-    savedOrder.set(next.first === (order[0] === ids[0]) ? order : order.toReversed());
+    // Read first: the choice to stack changes the layout, and with it `next`.
+    const { stack, first } = next;
+    const reordered = first === firstShown ? order : order.toReversed();
+    stacked.set(stack);
+    savedOrder.set(reordered);
   }
 
   controls = button;
@@ -64,7 +66,7 @@
   {@const label = `${displayName(ids[0])} on the ${nextSide}`}
   <button
     type="button"
-    class="grid h-ui-md w-[2.75rem] shrink-0 place-items-center rounded-md border border-control-line bg-element-bg text-fg-muted hover:bg-element-hover hover:text-fg"
+    class="grid h-ui-md w-[2.75rem] shrink-0 place-items-center rounded-sm border border-control-line bg-element-bg text-fg-muted hover:bg-element-hover hover:text-fg"
     title={label}
     aria-label={label}
     onclick={step}

@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
 
-  import { provideInstrumentSelection, provideStationContext } from '$lib/context.svelte';
+  import {
+    provideChannelPrefs,
+    provideColormaps,
+    provideInstrumentSelection,
+    provideStationContext
+  } from '$lib/context.svelte';
 
   import type { LayoutProps } from './$types';
 
@@ -10,6 +15,7 @@
 
   const station = provideStationContext();
   provideInstrumentSelection(station, () => params);
+  provideChannelPrefs(station, provideColormaps());
   onMount(() => station.initialize(params.stationId));
   onDestroy(() => station.dispose());
 </script>

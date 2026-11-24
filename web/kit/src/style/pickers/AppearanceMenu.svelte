@@ -10,13 +10,18 @@
 
   const prefs = $derived(themes.prefs.get());
   const ModeIcon = $derived(MODES.find((mode) => mode.value === prefs.mode)?.icon ?? Monitor);
+
+  /** Picks the theme of `variant`. When the other one is on show, the mode goes to `variant`, so the pick shows at
+   * once. */
+  function pick(variant: 'light' | 'dark', id: ThemeId): void {
+    if (variant === 'light') themes.setLight(id);
+    else themes.setDark(id);
+    if (themes.resolvedMode !== variant) themes.setMode(variant);
+  }
 </script>
 
 {#snippet themeList(variant: 'light' | 'dark')}
-  <DropdownMenu.RadioGroup
-    value={prefs[variant]}
-    onValueChange={(id) => (variant === 'light' ? themes.setLight(id as ThemeId) : themes.setDark(id as ThemeId))}
-  >
+  <DropdownMenu.RadioGroup value={prefs[variant]} onValueChange={(id) => pick(variant, id as ThemeId)}>
     {#each THEMES[variant] as theme (theme.id)}
       <DropdownMenu.RadioItem value={theme.id}>
         {theme.name}

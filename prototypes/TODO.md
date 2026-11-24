@@ -108,6 +108,17 @@ runs the open's check while the instrument is open), and the `500` answers for o
   body, and the feed sends `null` for it.
 - **`Station.close()` can raise `BusyError`** when an operation still holds the instrument. Seen once, not
   confirmed.
+- **What the acquisition record still does not say** (`records.md`; found in a review on 2026-11-22):
+  - **A node that is gone is noticed late.** A wait on a camera reads its status again every 5 s; a lost remote
+    node then fails only after rigup's 30 s call timeout. A rigup signal "this node is gone" would end it at once
+    (with the ZMQ watch of `orphans.md`). Needs a go in `rigup/`. Seen on 2026-11-23 with a SIGKILL of a
+    subprocess camera node: the next call fails with a plain `RuntimeError("not connected")`, so the failure reads
+    "RuntimeError: not connected" and the station cannot tell a lost node from any other error.
+  - **A stale `acquisition.json` is never repaired.** When the last file write fails, the database says `completed`
+    and the file says `running`. A pass at station start could rewrite it.
+  - **Failures do not name their camera** (`loc` is empty; RPC errors carry only text).
+  - **Staged S3:** shards that were not uploaded stay in the scratch folder, which the record never names.
+  - **After a crash, `ended_at` is the restart time,** not when the run stopped.
 - **The simulated `z-step.yaml` cannot acquire with its own writer settings** on a 16 GB laptop (Acquisition and
   cameras › Memory per camera). With `batch_frames: 2` and `max_level: 1` it completes.
 

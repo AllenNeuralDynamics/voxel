@@ -7,11 +7,11 @@
   import { createAreaTask, createPositionTask, NumericModel, type PlannedVolume, planningFov } from '$lib/core/model';
   import { planOverlap, prefs } from '$lib/core/prefs';
   import { formatSpatialDistance, formatSpatialValue } from '$lib/core/spatial-units';
+  import { watchTheme } from '$lib/features/stage/marks.svelte';
   import { ContextMenu } from '@voxel/kit';
   import { reportFailure } from '@voxel/kit/failures';
   import { displayName } from '@voxel/kit/format';
   import { Brush, Crosshair, Focus, Fullscreen, Plus, Square } from '@voxel/kit/icons';
-  import { watchTheme } from '@voxel/kit/style';
 
   import Fov from './Fov.svelte';
   import type { Bounds, Point, Viewport } from './geometry';

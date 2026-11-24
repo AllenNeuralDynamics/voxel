@@ -5,7 +5,7 @@ import { tv } from 'tailwind-variants';
  * fill and an outline, `soft` only the fill, `plain` neither.
  */
 export const box = tv({
-  base: 'rounded ring-1 ring-inset',
+  base: 'rounded-sm ring-1 ring-inset',
   variants: {
     variant: {
       filled: 'bg-element-bg ring-control-line',

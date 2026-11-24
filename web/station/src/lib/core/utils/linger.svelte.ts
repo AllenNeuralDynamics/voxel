@@ -7,8 +7,11 @@ export class Linger<T> {
   #current = $state<T | null>(null);
 
   constructor(source: () => T | null, ms: number) {
+    // Only a new value runs the effect again: a change inside `source` that gives the same value must not restart
+    // the timer.
+    const now = $derived(source());
     $effect(() => {
-      const value = source();
+      const value = now;
       if (value !== null) {
         this.#current = value;
         return;

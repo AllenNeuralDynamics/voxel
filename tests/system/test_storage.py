@@ -4,7 +4,7 @@ from cloudpathlib import S3Path
 from ome_zarr_writer import DirectS3, Local, StagedS3
 from vxlib.s3 import S3Store
 
-from vxl.storage import LocalLocation, LocationRole, LocationStatus, ObjectLocation, RemoteTarget, StorageSpec
+from vxl.storage import LocalLocation, LocationRole, ObjectLocation, RemoteTarget, StorageSpec
 from vxl.system import Remote, System
 
 
@@ -68,7 +68,6 @@ def test_describe_local_dataset_location(monkeypatch, tmp_path) -> None:
 
     assert location == LocalLocation(
         role=LocationRole.DESTINATION,
-        status=LocationStatus.WRITING,
         host="camera-1",
         path=str(target),
     )
@@ -87,7 +86,6 @@ def test_describe_staged_object_dataset_location_uses_destination(monkeypatch, t
 
     assert location == ObjectLocation(
         role=LocationRole.DESTINATION,
-        status=LocationStatus.WRITING,
         host="camera-1",
         store="vast",
         bucket="buffer",

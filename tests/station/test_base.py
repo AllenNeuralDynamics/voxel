@@ -189,7 +189,7 @@ async def test_the_view_names_the_operation_that_runs_and_the_alerts_stay_as_the
 
     await instrument.restore_from_profile("camera", ["exposure_time_ms"])
 
-    assert seen[0] == ("restore from the profile", 1)
+    assert seen[0] == ("restoring camera from profile", 1)
     assert seen[-1] == (None, 0)
     assert {alerts for operation, alerts in seen if operation is not None} == {1}  # as they were, until it ends
 
@@ -295,7 +295,7 @@ async def test_a_device_action_is_refused_while_an_activity_that_cannot_restart_
     async with scheduler.run("start a calibration", requires=()):
         await scheduler.start(ActivityInfo(kind="calibration"), {"laser_488"}, stop=_nothing)
 
-    with pytest.raises(ActivityBusyError, match="Unable to execute a device command while calibration is running"):
+    with pytest.raises(ActivityBusyError, match="Running laser_488 on is not possible while calibration is running"):
         await instrument.execute_device_command("laser_488", "on")
 
 
@@ -516,7 +516,7 @@ async def test_an_activity_that_holds_the_state_refuses_an_edit(instrument: _Ben
     async with scheduler.run("start a capture", requires=()):
         await scheduler.start(ActivityInfo(kind="capture"), {instrument._store}, stop=_nothing)
 
-    with pytest.raises(ActivityBusyError, match="Unable to update task metadata while capture is running"):
+    with pytest.raises(ActivityBusyError, match="Update task metadata is not possible while capture is running"):
         await instrument._update_task_metadata("brain", {"notes": "left hemisphere"})
 
 

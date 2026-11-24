@@ -7,10 +7,12 @@ from typing import Any
 
 import pytest
 from ome_zarr_writer import ScaleLevel
+from rigup.device.handle import PropView
 from vxl_drivers.metadata import ExaspimMetadata
 from vxl_instruments.spim.instrument import AcquisitionInfo, Microscope
 from vxl_instruments.spim.task import SPIMTask
 
+from vxl.devices.camera import handle as camera_handle
 from vxl.devices.camera.area import AreaCameraController
 from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Acquisition, Records
@@ -96,7 +98,8 @@ async def test_a_step_scan_takes_every_frame_and_records_a_completed_visit(stepp
     assert [visit.image_status("camera") for visit in stored.visits] == ["completed"]
     location = stored.visits[0].images()["camera"].locations[0]
     assert "000000/gfp/gfp/camera" in str(location.model_dump())  # visit, profile, channel, camera
-    assert location.status == "available"
+    assert stored.visits[0].location_status("camera") == "available"
+    assert stored.visits[0].images()["camera"].closed_at is not None
     assert stepping.view.value.power_mode == "full"
     position = (await stepping.stage_position())["z"]
     assert position == pytest.approx(stored.visits[0].images()["camera"].frames_total, abs=0.5)
@@ -113,8 +116,83 @@ async def test_an_image_whose_close_fails_is_failed_at_its_location(
     await _finish(stepping)
 
     stored = await stepping._records.acquisitions.get(acquisition_id)
-    assert stored.visits[0].status == "failed"
-    assert [where.status for where in stored.visits[0].images()["camera"].locations] == ["failed"]
+    visit = stored.visits[0]
+    assert visit.status == "failed"
+    assert "the disk of camera is full" in visit.failures[0].msg
+    assert (visit.image_status("camera"), visit.location_status("camera")) == ("completed", "failed")
+
+
+async def test_a_stop_while_the_images_close_lets_them_close_and_records_them_available(
+    stepping: Microscope, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    close = AreaCameraController._close_image
+    closing = asyncio.Event()
+
+    async def slow(controller: AreaCameraController) -> None:
+        closing.set()
+        await asyncio.sleep(1.0)
+        await close(controller)
+
+    monkeypatch.setattr(AreaCameraController, "_close_image", slow)
+    acquisition_id = await stepping.start_acquisition(_STORAGE, "ana")
+    async with asyncio.timeout(20):
+        await closing.wait()
+    await stepping.stop_acquisition()
+
+    stored = await stepping._records.acquisitions.get(acquisition_id)
+    visit = stored.visits[0]
+    assert (stored.status, visit.status) == ("cancelled", "cancelled")
+    assert (visit.image_status("camera"), visit.location_status("camera")) == ("completed", "available")
+
+
+async def test_a_scan_that_fails_keeps_its_frame_count_and_its_closed_image(
+    stepping: Microscope, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wait = Microscope._wait_for_batches
+    batches: list[int] = []
+
+    async def fails_after_the_first(microscope: Microscope, cameras: Any, numbers: Any) -> None:
+        await wait(microscope, cameras, numbers)
+        batches.append(1)
+        raise RuntimeError("the stage faulted")
+
+    monkeypatch.setattr(Microscope, "_wait_for_batches", fails_after_the_first)
+    acquisition_id = await stepping.start_acquisition(_STORAGE, "ana")
+    await _finish(stepping)
+
+    stored = await stepping._records.acquisitions.get(acquisition_id)
+    visit = stored.visits[0]
+    assert [failure.msg for failure in visit.failures] == ["RuntimeError: the stage faulted"]
+    assert visit.images()["camera"].frames_collected == 4  # the first batch
+    assert (visit.image_status("camera"), visit.location_status("camera")) == ("partial", "available")
+
+
+async def test_a_camera_that_stops_answering_while_its_image_closes_fails_the_image_and_does_not_hang(
+    stepping: Microscope, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gone = asyncio.Event()
+    read = PropView.get
+
+    async def hangs(_controller: AreaCameraController) -> None:
+        gone.set()
+        await asyncio.sleep(3600)
+
+    async def get(view: PropView[Any]) -> Any:
+        if gone.is_set() and view.name == "capture":
+            raise ConnectionError("transport closed")
+        return await read(view)
+
+    monkeypatch.setattr(AreaCameraController, "_close_image", hangs)
+    monkeypatch.setattr(PropView, "get", get)
+    monkeypatch.setattr(camera_handle, "_RECHECK_S", 0.05)
+    acquisition_id = await stepping.start_acquisition(_STORAGE, "ana")
+    await _finish(stepping)
+
+    stored = await stepping._records.acquisitions.get(acquisition_id)
+    visit = stored.visits[0]
+    assert visit.status == "failed"
+    assert "camera stopped answering" in visit.failures[0].msg
+    assert visit.location_status("camera") == "failed"
 
 
 async def test_a_sweep_takes_every_frame_on_the_stage_pulses(sweeping: Microscope) -> None:
@@ -177,7 +255,7 @@ async def test_progress_reaches_the_record_while_a_visit_runs(config_data: dict[
     def seen(acquisition: Acquisition) -> None:
         visit = acquisition.visits[0]
         if visit.result is None:
-            written.append(visit.images()["camera"].frames_written)
+            written.append(visit.images()["camera"].frames_collected)
 
     unsubscribe = microscope._records.acquisitions.subscribe(seen)
     try:

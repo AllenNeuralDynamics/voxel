@@ -22,8 +22,9 @@ The record is in `acquisition.py`, the database and files in `store.py`, and `Re
 - **Context managers set each start and end.** `async with records.record(acquisition) as run`, then
   `async with run.visit(index) as visit`. A normal exit completes; a cancel cancels; any other error fails, and goes
   on up. Visits that never started are skipped. The loop never names a status.
-- **Facts only are stored:** times, results, failures, `frames_written` and locations. Each status is worked out from
-  them, so a wrong mix cannot be stored. `acquisition.json` adds the statuses for readers.
+- **Facts only are stored:** times, results, failures, `frames_collected`, `dropped`, locations and `closed_at`. Each
+  status is worked out from them, so a wrong mix cannot be stored. `acquisition.json` adds the statuses for readers:
+  the acquisition's, each visit's, each image's (frames collected) and each location's (the file).
 - **The store keeps snapshots,** newest revision wins (`UPDATE ... WHERE revision < ?`), then writes the file and
   notifies subscribers.
 - **Rules** (each tested):
@@ -32,8 +33,14 @@ The record is in `acquisition.py`, the database and files in `store.py`, and `Re
     A record left open is marked interrupted at the next start (`AcquisitionStore.interrupt_open`).
   - A normal exit with missing frames fails the visit (`acquisition.frames_missing`).
   - The run cannot be used after its block ends.
-  - `visit.images_opened(locations)` comes after the visit starts: a stage move can fail before any image opens.
-  - Progress (`visit.frames(camera, written)`) is saved at most every second, without a file write.
+  - `visit.image_opened(camera, location)` comes after the visit starts, as each camera opens its image: a stage
+    move can fail before any image opens, and no image on storage is missing from the record.
+  - Progress (`visit.frames(camera, collected)`) is saved at most every second, without a file write.
+  - `visit.image_closed(camera)` sets `closed_at` once the writer closed the image with every collected frame
+    written. The location status follows (`Visit.location_status`): `available` once closed, `writing` while the
+    visit runs, `failed` once the visit ended without a close (a failed close, a camera that stopped answering, a
+    crash). No code names a location status.
+  - A visit still open when the station stopped ends `interrupted`, as its acquisition does.
   - The log window opens and closes with the acquisition.
 
 ## The record
@@ -48,8 +55,10 @@ Acquisition
         ├── task, profile, times, result, failures
         └── channels.<channel>.<camera>: Image
             ├── format, transform           # pixel index -> stage µm; axis 0 counts the frames
-            ├── locations
-            └── frames_written
+            ├── locations                   # where it is written; status worked out
+            ├── frames_collected            # taken into the writer's memory
+            ├── dropped
+            └── closed_at                   # the close wrote every collected frame
 ```
 
 - "Acquisition" everywhere: the operation (`start_acquisition`), the activity (`acquisition`), the record
@@ -66,10 +75,10 @@ Agreed and built on 2026-11-20 (`Image.dropped`, the `gaps` status, `frames_drop
 `Visit` and `Acquisition`, which wait for a reader. A sweep may drop whole batches when the writer is full (`writer.md`).
 
 - `Image.dropped: list[FrameRange]`, empty by default.
-- `Visit.missing()` counts only frames neither written nor dropped. So a sweep with drops completes, and a step scan
+- `Visit.missing()` counts only frames neither collected nor dropped. So a sweep with drops completes, and a step scan
   that lost frames still fails.
 - New image status `gaps`: every frame is accounted for, but some were dropped. `completed` stays for "every frame
-  written".
+  collected".
 - `VisitRecording.frames_dropped(camera, ranges)`: the loop reports the drops before the visit ends.
 - No new result or state for "completed with drops": a result says how a visit ended, and the drops are facts on
   the images. When a reader needs it (a screen, `acquisition.json` readers), add `frames_dropped` sums on `Visit`

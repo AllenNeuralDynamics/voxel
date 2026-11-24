@@ -2,9 +2,9 @@
   import { watch } from 'runed';
 
   import type { Stage } from '$lib/core/model';
+  import { watchTheme } from '$lib/features/stage/marks.svelte';
   import { cn } from '@voxel/kit/cn';
   import { reportFailure } from '@voxel/kit/failures';
-  import { watchTheme } from '@voxel/kit/style';
 
   import { type Axis3, Camera3D } from './camera3d';
 

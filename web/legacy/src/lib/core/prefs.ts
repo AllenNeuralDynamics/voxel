@@ -1,4 +1,4 @@
-import { pref } from '@voxel/kit/pref';
+import { PrefGroup } from '@voxel/kit/pref';
 
 export type SpatialUnit = 'mm' | 'um';
 export type ViewerMode = 'fov' | 'stage';
@@ -48,49 +48,51 @@ export function planOverlap(value: PlanDefaults['overlap'] | number | undefined)
  * (`preview/session.svelte.ts`), and pane sizes (`utils/pane.svelte.ts`).
  * Keep conversion/formatting logic and hardware state outside this module.
  */
+const ui = new PrefGroup('ui');
+
 export const prefs = {
-  spatialUnit: pref<SpatialUnit>('ui:spatial-unit', 'mm'),
+  spatialUnit: ui.pref<SpatialUnit>('spatial-unit', 'mm'),
 
   viewer: {
-    mode: pref<ViewerMode>('ui:viewer:mode', 'fov'),
-    channelsVisible: pref('ui:viewer:channels-visible', true),
-    navigatorVisible: pref('ui:viewer:navigator-visible', false)
+    mode: ui.pref<ViewerMode>('viewer:mode', 'fov'),
+    channelsVisible: ui.pref('viewer:channels-visible', true),
+    navigatorVisible: ui.pref('viewer:navigator-visible', false)
   },
 
   stage: {
-    liveVisible: pref('ui:stage:live-visible', true),
-    routingRegionsVisible: pref('ui:stage:routing-regions-visible', true),
-    pathVisible: pref('ui:stage:path-visible', true),
+    liveVisible: ui.pref('stage:live-visible', true),
+    routingRegionsVisible: ui.pref('stage:routing-regions-visible', true),
+    pathVisible: ui.pref('stage:path-visible', true),
     /** Visibility of each routing dimension's regions, by dimension id. */
-    routingVisible: pref<Record<string, boolean>>('ui:stage:routing-visible', {}),
+    routingVisible: ui.pref<Record<string, boolean>>('stage:routing-visible', {}),
     /** Visibility of each task on the map, by task id. */
-    taskVisible: pref<Record<string, boolean>>('ui:stage:task-visible', {}),
+    taskVisible: ui.pref<Record<string, boolean>>('stage:task-visible', {}),
     /** Picked colors of each task, by task id. */
-    taskColors: pref<Record<string, Partial<Record<'x' | 'y', string>>>>('ui:stage:task-colors', {})
+    taskColors: ui.pref<Record<string, Partial<Record<'x' | 'y', string>>>>('stage:task-colors', {})
   },
 
   plan: {
-    defaults: pref<Record<string, PlanDefaults>>('ui:plan:defaults', {})
+    defaults: ui.pref<Record<string, PlanDefaults>>('plan:defaults', {})
   },
 
   logs: {
-    minLevel: pref<LogLevel>('ui:logs:min-level', 'info'),
-    wrap: pref('ui:logs:wrap', false)
+    minLevel: ui.pref<LogLevel>('logs:min-level', 'info'),
+    wrap: ui.pref('logs:wrap', false)
   },
 
   centerPanel: {
-    tab: pref<CenterPanelTab>('ui:center-panel:tab', 'logs'),
+    tab: ui.pref<CenterPanelTab>('center-panel:tab', 'logs'),
     /** The time span of the Frames tab, in ms. */
-    framesSpan: pref<number>('ui:center-panel:frames-span', 10_000)
+    framesSpan: ui.pref<number>('center-panel:frames-span', 10_000)
   },
 
-  channelCards: pref<ChannelCardRows>('ui:channel-cards', { plots: false, filters: true }),
+  channelCards: ui.pref<ChannelCardRows>('channel-cards', { plots: false, filters: true }),
 
   devices: {
-    groupBy: pref<DeviceGrouping>('ui:devices:group-by', 'node')
+    groupBy: ui.pref<DeviceGrouping>('devices:group-by', 'node')
   },
 
   presets: {
-    view: pref<StateView>('ui:presets:view', 'changes')
+    view: ui.pref<StateView>('presets:view', 'changes')
   }
 } as const;

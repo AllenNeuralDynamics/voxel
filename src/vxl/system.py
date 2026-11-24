@@ -33,7 +33,7 @@ from vxlib.s3 import S3Store
 from vxlib.schema import FrozenModel
 
 from vxl._utils.files import load_yaml
-from vxl.storage import ImageLocation, LocalLocation, LocationRole, LocationStatus, ObjectLocation, StorageSpec
+from vxl.storage import ImageLocation, LocalLocation, LocationRole, ObjectLocation, StorageSpec
 
 log = logging.getLogger(__name__)
 
@@ -378,7 +378,6 @@ class System(BaseSettings):
                 raise TypeError(f"local storage resolved to a non-local target: {target}")
             return LocalLocation(
                 role=LocationRole.DESTINATION,
-                status=LocationStatus.WRITING,
                 host=self.hostname(),
                 path=str(target),
             )
@@ -387,7 +386,6 @@ class System(BaseSettings):
             raise TypeError(f"object storage resolved to a non-object target: {target}")
         return ObjectLocation(
             role=LocationRole.DESTINATION,
-            status=LocationStatus.WRITING,
             host=self.hostname(),
             store=spec.remote.store,
             bucket=target.bucket,

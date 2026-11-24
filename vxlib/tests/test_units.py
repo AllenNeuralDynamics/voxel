@@ -39,6 +39,12 @@ def test_plain_quantity_takes_any_unit_without_conversion() -> None:
     assert (float(length), length.unit) == (120.0, "µm")
 
 
+@pytest.mark.parametrize("value", ["12", "1.5", "3e2", "1 2"])
+def test_plain_quantity_rejects_a_number_with_no_unit(value: str) -> None:
+    with pytest.raises(ValueError, match="number and a unit"):
+        Quantity(value)
+
+
 def test_of_builds_a_value_from_a_number() -> None:
     assert str(Voltage.of(0.0, "V")) == "0.0 V"
     with pytest.raises(ValueError, match="not a Voltage unit"):

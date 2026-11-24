@@ -1,7 +1,6 @@
 import { tick } from 'svelte';
 
-import { pref } from '../utils/pref';
-import { legibleFor } from './colors';
+import { PrefGroup } from '../utils/pref.svelte';
 
 const registry = [
   {
@@ -51,8 +50,6 @@ export type ThemeId = (typeof registry)[number]['id'];
 export type ThemeEntry = (typeof registry)[number];
 
 export type Mode = 'light' | 'dark' | 'auto';
-export type MarkKey = 'stage' | 'x' | 'y' | 'z';
-export type MarkColors = Partial<Record<MarkKey, string>>;
 /** The size is the root font size in px, at the browser default of 16 px. The label is not shown yet: the settings
  * panel is too narrow for 4 words. */
 export const DENSITIES = [
@@ -82,22 +79,13 @@ const DEFAULTS: ThemePrefs = {
 };
 const MEDIA = '(prefers-color-scheme: dark)';
 
-function markStyle(): HTMLStyleElement {
-  const existing = document.getElementById('voxel-marks');
-  if (existing instanceof HTMLStyleElement) return existing;
-  const element = document.createElement('style');
-  element.id = 'voxel-marks';
-  document.head.append(element);
-  return element;
-}
+/** The saved appearance of the app: the mode, the themes and the density. */
+export const appearancePrefs = new PrefGroup('appearance');
 
 class ThemeManager {
   readonly list: readonly ThemeEntry[] = registry;
 
-  readonly prefs = pref<ThemePrefs>('theme', DEFAULTS);
-
-  /** Colors the user picked for stage marks and axes. A picked color wins over the theme. */
-  readonly marks = pref<MarkColors>('theme-marks', {});
+  readonly prefs = appearancePrefs.pref<ThemePrefs>('theme', DEFAULTS);
 
   systemDark = $state(typeof window !== 'undefined' && window.matchMedia(MEDIA).matches);
 
@@ -130,27 +118,6 @@ class ThemeManager {
         }
       });
 
-      // Picked mark colors sit on the body, so the root keeps the theme colors to show beside them.
-      // They live in their own style element, because a sheet or dialog puts back the body's own style when it closes.
-      $effect(() => {
-        const marks = this.marks.get();
-        const mode = this.resolvedMode;
-        const hex = (value: string | undefined) => (value && /^#[\da-f]{6}$/i.test(value) ? value : undefined);
-        const rules: string[] = [];
-        const stage = hex(marks.stage);
-        if (stage) rules.push(`--stage-mark: ${stage};`);
-        for (const axis of ['x', 'y', 'z'] as const) {
-          const picked = hex(marks[axis]);
-          if (!picked) continue;
-          const color = legibleFor(picked, mode);
-          rules.push(
-            `--axis-${axis}: ${color};`,
-            `--axis-${axis}-tint: color-mix(in oklab, ${color} 18%, transparent);`
-          );
-        }
-        markStyle().textContent = rules.length > 0 ? `body { ${rules.join(' ')} }` : '';
-      });
-
       // A percent, so a larger browser font size still scales it
       $effect(() => {
         document.documentElement.style.fontSize = `${(this.prefs.get().density / 16) * 100}%`;
@@ -173,21 +140,6 @@ class ThemeManager {
   setDensity(density: Density) {
     this.prefs.set({ ...this.prefs.get(), density });
   }
-
-  setMark(key: MarkKey, color: string) {
-    const hex = /^#[\da-f]{3}$/i.test(color) ? color.replace(/[\da-f]/gi, (c) => c + c) : color;
-    this.marks.set({ ...this.marks.get(), [key]: hex });
-  }
-
-  resetMark(key: MarkKey) {
-    const marks = { ...this.marks.get() };
-    delete marks[key];
-    this.marks.set(marks);
-  }
-
-  resetMarks() {
-    this.marks.set({});
-  }
 }
 
 export const themes = new ThemeManager();
@@ -197,7 +149,6 @@ export function watchTheme(callback: () => void): void {
   $effect(() => {
     void themes.resolvedMode;
     void themes.active;
-    void themes.marks.get();
     let cancelled = false;
     void tick().then(() => {
       if (!cancelled) callback();

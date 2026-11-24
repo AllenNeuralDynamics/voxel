@@ -39,6 +39,11 @@ Why the writer worker and the tracker stay: a pool worker waits on its call queu
 both ends of its pipe, so the worker never sees end of file. The tracker waits for end of file on a pipe that the
 worker also holds.
 
+**Seen on a real run** (2026-11-23, `z-step-4-nodes.yaml`, a SIGKILL of the `camera_2` node during a scan): the
+node's 4 writer workers and its resource tracker kept running with parent 1 after the station closed. They also
+kept the station's stdout and stderr open, so a shell pipe that read the station's output did not end until they
+were stopped by hand.
+
 **`ways.py`**: 4 ways for a child to notice that its parent died, after a SIGKILL of the parent:
 
 | Way | Noticed after | Systems |

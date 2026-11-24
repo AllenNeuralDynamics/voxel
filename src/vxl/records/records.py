@@ -10,7 +10,7 @@ import asyncio
 import datetime
 import logging
 import time
-from collections.abc import AsyncGenerator, Awaitable, Callable, Collection, Mapping, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
@@ -18,10 +18,10 @@ from uuid import UUID
 from vxlib.imaging.writer import FrameRange
 from vxlib.issues import Failure
 
-from vxl.storage import ImageLocation, LocationStatus
+from vxl.storage import ImageLocation
 
 from ._database import Database
-from .acquisition import Acquisition, AcquisitionResult, Image, Visit, VisitResult
+from .acquisition import Acquisition, AcquisitionResult, Visit, VisitResult
 from .errors import CaptureError
 from .logs import LogEntry, LogJournal
 from .store import AcquisitionStore, RootResolver
@@ -66,38 +66,31 @@ class VisitRecording:
     def __init__(self, run: "Recording", index: int) -> None:
         self._run, self._index = run, index
 
-    async def images_opened(self, locations: Mapping[str, ImageLocation]) -> None:
-        """Save where each camera writes its image. The cameras open their stacks after the visit starts."""
+    async def image_opened(self, camera: str, location: ImageLocation) -> None:
+        """Save where ``camera`` writes its image, as soon as it opens it, so no image on storage is missing from the
+        record."""
 
         def change(visit: Visit) -> Mapping[str, object]:
-            images = visit.images()
-            opened = {
-                camera: images[camera].model_copy(update={"locations": [where]}) for camera, where in locations.items()
-            }
-            return {"channels": visit.with_images(opened).channels}
+            image = visit.images()[camera].model_copy(update={"locations": [location]})
+            return {"channels": visit.with_images({camera: image}).channels}
 
         await self._run.change_visit(self._index, change)
 
-    async def images_closed(self, closed: Collection[str]) -> None:
-        """Save how each opened image ended at its location: available for each camera in ``closed``, whose image
-        closed with every frame it collected written, and failed for every other camera."""
+    async def image_closed(self, camera: str) -> None:
+        """Save that ``camera``'s writer closed its image with every frame it collected written to its locations."""
 
         def change(visit: Visit) -> Mapping[str, object]:
-            ended: dict[str, Image] = {}
-            for camera, image in visit.images().items():
-                status = LocationStatus.AVAILABLE if camera in closed else LocationStatus.FAILED
-                locations = [where.model_copy(update={"status": status}) for where in image.locations]
-                ended[camera] = image.model_copy(update={"locations": locations})
-            return {"channels": visit.with_images(ended).channels}
+            image = visit.images()[camera].model_copy(update={"closed_at": _now()})
+            return {"channels": visit.with_images({camera: image}).channels}
 
         await self._run.change_visit(self._index, change)
 
-    async def frames(self, camera: str, written: int) -> None:
-        """Note how many frames ``camera`` wrote. It is saved at most every ``PROGRESS_INTERVAL_S``, without a file
-        write; the visit's end saves the last value."""
+    async def frames(self, camera: str, collected: int) -> None:
+        """Note how many frames ``camera``'s writer collected. It is saved at most every ``PROGRESS_INTERVAL_S``,
+        without a file write; the visit's end saves the last value."""
 
         def change(visit: Visit) -> Mapping[str, object]:
-            image = visit.images()[camera].model_copy(update={"frames_written": written})
+            image = visit.images()[camera].model_copy(update={"frames_collected": collected})
             return {"channels": visit.with_images({camera: image}).channels}
 
         await self._run.change_visit(self._index, change, save=self._run.progress_due(), write_file=False)

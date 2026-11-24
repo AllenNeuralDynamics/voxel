@@ -17,15 +17,16 @@ from vxlib.issues import Failure
 from vxlib.schema import FrozenModel
 from vxlib.vector import Transform
 
-from vxl.storage import ImageLocation, StorageSpec
+from vxl.storage import ImageLocation, LocationStatus, StorageSpec
 
 SCHEMA = "voxel.acquisition/1"
 """The name and major version of the public form. A change that breaks a reader gets a new major version."""
 
 type Name = Annotated[str, Field(min_length=1)]
 
-type VisitResult = Literal["completed", "failed", "cancelled", "skipped"]
-"""How a visit ended. ``skipped``: the acquisition ended before it started."""
+type VisitResult = Literal["completed", "failed", "cancelled", "interrupted", "skipped"]
+"""How a visit ended. ``interrupted``: the station stopped while it ran. ``skipped``: the acquisition ended before it
+started."""
 
 type AcquisitionResult = Literal["completed", "failed", "cancelled", "interrupted"]
 """How an acquisition ended. ``interrupted``: the station stopped while it ran."""
@@ -50,15 +51,17 @@ class VisitStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
     SKIPPED = "skipped"
 
 
 class ImageStatus(StrEnum):
-    """How complete an image is. ``partial``: some of its frames were written before its visit ended. ``gaps``: every
-    frame was written or dropped, and some were dropped."""
+    """How many of an image's frames the camera collected. ``partial``: some, before its visit ended. ``gaps``: every
+    frame was collected or dropped, and some were dropped. Whether the frames reached storage is the status of the
+    image's location (:meth:`Visit.location_status`)."""
 
     PENDING = "pending"
-    WRITING = "writing"
+    COLLECTING = "collecting"
     COMPLETED = "completed"
     GAPS = "gaps"
     PARTIAL = "partial"
@@ -74,13 +77,16 @@ class ImageFormat(StrEnum):
 
 class Image(FrozenModel):
     """1 camera's image of 1 visit. ``transform`` gives its shape and where each pixel sits, in specimen µm; its first
-    axis counts the frames. ``dropped`` holds the frames the writer dropped because every buffer was busy."""
+    axis counts the frames. ``frames_collected`` counts the frames the writer took into memory, and ``dropped`` holds
+    the frames it dropped because every buffer was busy. ``closed_at`` is when the writer closed the image with every
+    frame it collected written to each location; it stays empty when the close failed or never ran."""
 
     format: ImageFormat = ImageFormat.OME_ZARR
     transform: Transform
     locations: list[ImageLocation] = Field(default_factory=list)
-    frames_written: int = Field(default=0, ge=0)
+    frames_collected: int = Field(default=0, ge=0)
     dropped: list[FrameRange] = Field(default_factory=list)
+    closed_at: AwareDatetime | None = None
 
     @property
     def frames_total(self) -> int:
@@ -127,27 +133,35 @@ class Visit(FrozenModel):
     def progress(self) -> tuple[int, int]:
         """The frames done and the frames planned, for the camera that is furthest behind."""
         images = self.images().values()
-        return min(image.frames_written for image in images), max(image.frames_total for image in images)
+        return min(image.frames_collected for image in images), max(image.frames_total for image in images)
 
     def image_status(self, camera: str) -> ImageStatus:
-        """How complete the image of ``camera`` is, from its frames and the visit's result."""
+        """How many frames the camera collected for its image, from its frames and the visit's result."""
         image = self.images()[camera]
-        if image.frames_written == image.frames_total:
+        if image.frames_collected == image.frames_total:
             return ImageStatus.COMPLETED
-        if image.frames_written + image.frames_dropped == image.frames_total:
+        if image.frames_collected + image.frames_dropped == image.frames_total:
             return ImageStatus.GAPS
         if self.result is None:
-            return ImageStatus.WRITING if image.locations else ImageStatus.PENDING
+            return ImageStatus.COLLECTING if image.locations else ImageStatus.PENDING
         if self.result == "skipped":
             return ImageStatus.SKIPPED
-        return ImageStatus.PARTIAL if image.frames_written else ImageStatus.FAILED
+        return ImageStatus.PARTIAL if image.frames_collected else ImageStatus.FAILED
+
+    def location_status(self, camera: str) -> LocationStatus:
+        """Whether the image of ``camera`` is complete at its locations: available once its writer closed it, still
+        writing while the visit runs, and failed once the visit ended without a close."""
+        image = self.images()[camera]
+        if image.closed_at is not None:
+            return LocationStatus.AVAILABLE
+        return LocationStatus.WRITING if self.result is None else LocationStatus.FAILED
 
     def missing(self) -> dict[str, int]:
-        """Each camera that neither wrote nor dropped all the frames planned, with how many it misses."""
+        """Each camera that neither collected nor dropped all the frames planned, with how many it misses."""
         return {
             camera: missing
             for camera, image in self.images().items()
-            if (missing := image.frames_total - image.frames_written - image.frames_dropped) > 0
+            if (missing := image.frames_total - image.frames_collected - image.frames_dropped) > 0
         }
 
 
@@ -198,8 +212,10 @@ class Acquisition(FrozenModel):
 
     def ended(self, result: AcquisitionResult, at: datetime.datetime, failures: Sequence[Failure] = ()) -> Self:
         """The next revision, ended with ``result`` at ``at``. A visit that never started is skipped; a visit still
-        open ends cancelled with a cancelled acquisition, and failed otherwise."""
-        still_open: VisitResult = "cancelled" if result == "cancelled" else "failed"
+        open ends cancelled with a cancelled acquisition, interrupted with an interrupted one, and failed otherwise."""
+        still_open: VisitResult = (
+            "cancelled" if result == "cancelled" else "interrupted" if result == "interrupted" else "failed"
+        )
         visits = [
             visit.model_copy(update={"result": "skipped"})
             if visit.started_at is None
@@ -219,4 +235,6 @@ class Acquisition(FrozenModel):
             for cameras in out["channels"].values():
                 for camera, image in cameras.items():
                     image["status"] = visit.image_status(camera).value
+                    for where in image["locations"]:
+                        where["status"] = visit.location_status(camera).value
         return data

@@ -12,10 +12,11 @@ do there. How the acquisition drives the cameras is in `acquisition.md`.
 - **The camera grabs in counted runs.** `begin_batch(n)` (`src/vxl/devices/camera/area.py`) waits for a free slot,
   arms the camera for `n` frames, and stops it after them. Frames that come between runs are lost. The acquisition's
   chunk loop is built around this (`acquisition.md`).
-- **An image is opened with its `Transform`.** `AreaCameraHandle.image(storage, subpath, transform, settings)` opens
-  it for a block and closes it after, also on an error.
-- **Progress:** the camera's `progress` stream gives `WriterProgress` (`collected`, `flushed`, `total`). `flushed`
-  feeds the record's `frames_written`.
+- **An image is opened with its `Transform`.** `AreaCameraHandle.open_image(...)` opens it;
+  `AreaCameraHandle.close_image()` closes it and waits until every frame is written. A cancel lets the close end
+  first, and the wait ends when the camera stops answering (its status is read again every 5 s).
+- **Progress:** the camera's `progress` stream gives `WriterProgress` (`collected`, `flushed`, `total`). `collected`
+  feeds the record's `frames_collected`; a close that succeeds means every collected frame is in storage.
 - **Dropped frames:** the drivers report them (`StreamInfo.dropped_frames`); nothing reads them yet.
 
 ## When the writer is full

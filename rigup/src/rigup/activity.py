@@ -84,7 +84,7 @@ class ActivityScheduler:
 
     @property
     def operation(self) -> Readable[str | None]:
-        """The name of the operation that runs now, or ``None``. An operation inside another keeps the outer name."""
+        """What the operation that runs now is doing, or ``None``. An operation inside another keeps the outer name."""
         return self._name
 
     @property
@@ -94,8 +94,9 @@ class ActivityScheduler:
 
     @asynccontextmanager
     async def run(self, name: str, requires: Collection[Resource], *, restart: bool = True) -> AsyncGenerator[None]:
-        """Run one operation in this block, after the operation before it has finished. Every activity that requires
-        one of ``requires`` is restarted around the block, or left running when ``restart`` is false. Raises
+        """Run one operation in this block, after the operation before it has finished. ``name`` says what it is doing,
+        for a person: a phrase that starts with a verb in ``-ing``, such as ``starting preview``. Every activity that
+        requires one of ``requires`` is restarted around the block, or left running when ``restart`` is false. Raises
         :class:`ActivityBusyError` if one of them cannot restart. A nested operation does not wait."""
         if self._operation in _operations.get():
             async with self._cleared(name, requires, restart=restart):
@@ -162,7 +163,9 @@ class ActivityScheduler:
         for activity, (_, restarter) in self._running.items():
             if activity.requires & required:
                 if restarter is None:
-                    raise ActivityBusyError(f"Unable to {name} while {activity.info.kind} is running")
+                    raise ActivityBusyError(
+                        f"{name[:1].upper()}{name[1:]} is not possible while {activity.info.kind} is running"
+                    )
                 if restart:
                     restarts.append(restarter)
         async with AsyncExitStack() as stack:

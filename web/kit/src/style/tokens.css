@@ -62,13 +62,6 @@
   --color-series-2: var(--series-2);
   --color-series-3: var(--series-3);
   --color-series-4: var(--series-4);
-  --color-axis-x: var(--axis-x);
-  --color-axis-y: var(--axis-y);
-  --color-axis-z: var(--axis-z);
-  --color-axis-x-tint: var(--axis-x-tint);
-  --color-axis-y-tint: var(--axis-y-tint);
-  --color-axis-z-tint: var(--axis-z-tint);
-  --color-stage-mark: var(--stage-mark);
 
   --shadow-floating: var(--floating-shadow);
 

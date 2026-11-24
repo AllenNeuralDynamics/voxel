@@ -383,7 +383,7 @@ async def test_selecting_a_profile_restarts_what_holds_it_and_waits_for_a_captur
     assert seen == ["stop", "start"]
 
     async with _activity(opened, "capture", {"camera"}):
-        with pytest.raises(ActivityBusyError, match="Unable to select a profile while capture is running"):
+        with pytest.raises(ActivityBusyError, match="Selecting profile gfp is not possible while capture is running"):
             await opened.select_profile("gfp")
 
 

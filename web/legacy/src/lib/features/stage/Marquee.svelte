@@ -6,7 +6,7 @@
   import type Konva from 'konva';
   import { Group, Line, Rect } from 'svelte-konva';
 
-  import { watchTheme } from '@voxel/kit/style';
+  import { watchTheme } from '$lib/features/stage/marks.svelte';
 
   import { getStageContext } from './context';
   import { type Bounds, screenRect, screenTransform } from './geometry';

@@ -108,6 +108,7 @@
   </Breadcrumb.Item>
 {/snippet}
 
+<!-- An action in the bar is as tall as the profile selector, with text of the same size. -->
 {#snippet inBar(action: Action)}
   {#if 'bar' in action}
     {@render action.bar()}
@@ -122,7 +123,9 @@
     />
   {:else}
     <Button
-      variant={action.danger ? 'danger' : action.primary ? 'default' : 'outline'}
+      variant={action.danger ? 'danger' : action.primary ? 'default' : 'secondary'}
+      size="md"
+      class="text-base"
       disabled={action.disabled}
       onclick={action.onclick}
     >
@@ -193,7 +196,7 @@
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
-          <Button {...props} variant="ghost" size="icon-sm" class="shrink-0 text-fg-muted" aria-label="More actions">
+          <Button {...props} variant="ghost" size="icon" class="shrink-0 text-fg-muted" aria-label="More actions">
             <Ellipsis class="size-4" />
           </Button>
         {/snippet}
@@ -216,7 +219,8 @@
       onclick={() => closed && selection.askToOpen(closed)}>{station.status === 'opening' ? 'Opening…' : 'Open'}</Button
     >
   {/if}
-  {#if end}<div class="flex shrink-0 items-center gap-2">{@render end()}</div>{/if}
+  <!-- No box of its own: when `end` draws nothing, the row has no empty part with a gap before it. -->
+  {#if end}<div class="contents">{@render end()}</div>{/if}
 {/snippet}
 
 <div class="flex h-full min-w-0 flex-1 items-center">

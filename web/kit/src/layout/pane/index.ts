@@ -3,4 +3,4 @@ export { Pane, PaneGroup } from 'paneforge';
 export { default as AutoSplit, type SplitPane } from './AutoSplit.svelte';
 export { default as PaneDivider } from './PaneDivider.svelte';
 export { default as SplitView } from './SplitView.svelte';
-export { createPaneSize, type PaneSize, type PaneSizeBounds } from './pane-size.svelte';
+export { createPaneSize, layoutPrefs, type PaneSize, type PaneSizeBounds } from './pane-size.svelte';

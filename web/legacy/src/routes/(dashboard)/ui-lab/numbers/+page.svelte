@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte';
 
   import { type EditContext, NumericModel } from '$lib/core/model';
-  import { NumberBox, NumberInput, NumberSlider, Slider, SpinBox } from '@voxel/kit';
+  import { NumberBox, NumberInput, NumberSlider, Ruler, Slider, SpinBox } from '@voxel/kit';
 
   import { lab } from '../lab';
   import LabHeader from '../LabHeader.svelte';
@@ -47,7 +47,23 @@
     () => new NumericModel(1.234, { min: 0, max: 5, step: 0.001, home: 1, onPatch: count('precision') })
   );
 
+  // A focus position that a simulated device moves to: its reading follows the target at 40 µm a second.
+  const RULER_TICKS = ['sparse', 'medium', 'dense'] as const;
+  let focus = $state(1250);
+  let focusReading = $state(1250);
+  let focusSends = $state(0);
+  const focusMotor = setInterval(() => {
+    const left = focus - focusReading;
+    focusReading = Math.abs(left) < 2 ? focus : focusReading + Math.sign(left) * 2;
+  }, 50);
+
+  function setFocus(value: number): void {
+    focus = value;
+    focusSends++;
+  }
+
   onDestroy(() => {
+    clearInterval(focusMotor);
     for (const model of [shared, position, scrubbed, ...precise]) model.dispose();
   });
 
@@ -290,6 +306,70 @@
         <NumberSlider model={shared} prefix="Level" suffix="%" />
         <Slider model={shared} aria-label="Shared level" />
         <span class="text-sm text-fg-muted tabular-nums">{commits} {commits === 1 ? 'commit' : 'commits'}</span>
+      </div>
+    </section>
+
+    <section class="{lab.section} col-span-2">
+      <div class="flex items-baseline justify-between px-1">
+        <h2 class="text-sm text-fg-muted">Ruler</h2>
+        <span class="text-sm text-fg-muted tabular-nums">{focusSends} {focusSends === 1 ? 'send' : 'sends'}</span>
+      </div>
+      <div class="frame-raised px-3 py-1">
+        <table class={lab.table}>
+          <thead class={lab.thead}>
+            <tr>
+              <th class="{lab.th} w-32">Ticks</th>
+              <th class={lab.th}>Ruler</th>
+            </tr>
+          </thead>
+          <tbody class={lab.tbody}>
+            {#each RULER_TICKS as ticks (ticks)}
+              <tr>
+                <td class="{lab.td} text-fg-muted">{ticks}</td>
+                <td class={lab.td}>
+                  <Ruler
+                    aria-label="Focus, {ticks} ticks"
+                    {ticks}
+                    value={focus}
+                    onChange={setFocus}
+                    reading={focusReading}
+                    min={0}
+                    max={2000}
+                    step={1}
+                  />
+                </td>
+              </tr>
+            {/each}
+            <tr>
+              <td class="{lab.td} text-fg-muted">Slider</td>
+              <td class={lab.td}>
+                <NumberSlider
+                  value={focus}
+                  onChange={setFocus}
+                  min={0}
+                  max={2000}
+                  step={1}
+                  prefix="Focus"
+                  suffix="µm"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td class="{lab.td} text-fg-muted">Disabled</td>
+              <td class={lab.td}>
+                <Ruler
+                  aria-label="Focus, disabled"
+                  value={focus}
+                  onChange={setFocus}
+                  min={0}
+                  max={2000}
+                  step={1}
+                  disabled
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 

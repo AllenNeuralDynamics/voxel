@@ -3,7 +3,7 @@
 
   const checkboxStyles = tv({
     base: [
-      'flex items-center justify-center rounded border',
+      'flex items-center justify-center rounded-sm border',
       'border-control-line bg-element-bg',
       'transition-colors',
       'disabled:cursor-not-allowed disabled:opacity-50',

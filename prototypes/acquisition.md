@@ -45,7 +45,7 @@ class AcquisitionInfo(ActivityInfo):
 
 - The loop calls `activity.update(...)`; `view.activities` carries it. `InstrumentView` gets no acquisition fields.
 - A stop request sets `stopping` at once, as the legacy loop set `STOPPING` (`_legacy/instrument/core.py:771-774`).
-- Frame counts are in the record (`frames_written` and `dropped` per image), not on the activity.
+- Frame counts are in the record (`frames_collected` and `dropped` per image), not on the activity.
 - Time left is measured, not planned: frames still to write ÷ the frame rate so far. There is no estimate before
   Start.
 - The record reaches screens through `AcquisitionStore.subscribe`, the log through `LogJournal.subscribe` (see
@@ -108,18 +108,20 @@ Left as they are, on purpose:
       the stage-following devices for where the stage was before the move (`base.py:507`); the planner already
       worked out the right ones for this stop.
    3. Open 1 image per camera, at `<visit>/<profile>/<channel>/<camera>` under the storage, with
-      `async with camera.image(..., when_full=...)` (an `AsyncExitStack` for several
-      cameras), then `visit.images_opened(locations)`.
+      `camera.open_image(..., when_full=...)`, and save each location at once with
+      `visit.image_opened(camera, location)`.
    4. Reset the live streams after `_apply_profile`, as `_begin_preview` does.
    5. Run the batch loop (below). Turn the lights on with `hal.lights_on(sources)` after the cameras are armed for
       the first batch and before the generators start, as the legacy loop did (`core.py:1653-1655`). A laser whose
       light has no path to the sample fails the visit (the preview only warns).
    6. Each camera's `progress` stream is subscribed while its image is open; each change goes to
-      `visit.frames(camera, collected)`, which the records save at most once a second. Report
-      `visit.frames_dropped(camera, ranges)` before the visit ends.
-   7. Clean up in a `finally` inside the image blocks, so the images close after: lights off, generators stopped,
-      the axis halted. Every step runs even when one fails, and the errors are raised together; reuse the step
-      runner of `_stop_preview_devices`. A cleanup error never hides the error that ended the visit.
+      `visit.frames(camera, collected)`, which the records save at most once a second.
+   7. Clean up in nested `finally` blocks, on every path: stop the scan's devices (lights off, generators stopped,
+      the axis halted, each camera's batch ended); save each camera's final `collected` count and dropped frames
+      while its image is still open (a writer resets both at the close); then close every opened image together
+      and save `visit.image_closed(camera)` for each close that succeeded. The closes are shielded: a stop lets
+      them end first. While an error ends the visit, a cleanup failure is logged (`_after_scan`), so it never hides
+      that error.
 4. After the last visit, or on a stop or an error: release every camera's writer. 1 failure does not stop the others,
    and failures are only logged: the record has already ended.
 5. The active profile stays as the last visit's profile.

@@ -13,7 +13,7 @@
     "./models": "./src/controls/models.svelte.ts",
     "./multiselect": "./src/layout/multiselect/multiselect.svelte.ts",
     "./pane": "./src/layout/pane/index.ts",
-    "./pref": "./src/utils/pref.ts",
+    "./pref": "./src/utils/pref.svelte.ts",
     "./sortable": "./src/layout/sortable/index.ts",
     "./style": "./src/style/index.ts",
     "./style.css": "./src/style/index.css",

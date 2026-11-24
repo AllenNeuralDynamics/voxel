@@ -25,6 +25,7 @@ export { numberDisplay, type NumberProps, type RangeProps, type SliderProps } fr
 export { default as NumberBox } from './controls/numeric/NumberBox.svelte';
 export { default as NumberInput } from './controls/numeric/NumberInput.svelte';
 export { default as NumberSlider } from './controls/numeric/NumberSlider.svelte';
+export { default as Ruler } from './controls/numeric/Ruler.svelte';
 export { default as Slider } from './controls/numeric/Slider.svelte';
 export { default as SpinBox } from './controls/numeric/SpinBox.svelte';
 export { PaneDivider } from './layout/pane';

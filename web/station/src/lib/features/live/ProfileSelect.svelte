@@ -20,7 +20,7 @@
     aria-label="Profile"
     value={instrument.activeProfile}
     options={instrument.profileIds}
-    formatLabel={(id) => instrument.profile<{ label?: string | null }>(id)?.label || displayName(id)}
+    formatLabel={(id) => instrument.profile(id)?.label || displayName(id)}
     onChange={(id) => instrument.selectProfile(id)}
   />
 {/if}

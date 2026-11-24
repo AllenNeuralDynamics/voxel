@@ -1,8 +1,8 @@
 """Camera device handle with typed methods."""
 
 import asyncio
-from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Callable
+from contextlib import suppress
 from pathlib import PurePosixPath
 
 from ome_zarr_writer import WriterSettings
@@ -21,6 +21,9 @@ from vxl.storage import ImageLocation, StorageSpec, StorageStatus
 _IMAGE_LOCATION_ADAPTER = TypeAdapter(ImageLocation)
 _REMOTE_STORES_ADAPTER = TypeAdapter(dict[str, str])
 _FRAME_RANGES_ADAPTER = TypeAdapter(list[FrameRange])
+
+_RECHECK_S = 5.0
+"""How often a wait for the camera reads its status again: a camera that no longer answers ends the wait."""
 
 
 class CameraHandle[D: Camera](DeviceHandle[D]):
@@ -114,32 +117,21 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         )
         return _IMAGE_LOCATION_ADAPTER.validate_python(result)
 
-    async def close_image(self) -> int:
-        """Start writing what is left of the image and closing it, and give back the close's number in
-        :attr:`capture`."""
-        return await self.call("close_image")
-
-    @asynccontextmanager
-    async def image(
-        self,
-        storage: StorageSpec,
-        subpath: PurePosixPath,
-        transform: Transform,
-        settings: WriterSettings,
-        when_full: WhenFull = "wait",
-    ) -> AsyncGenerator[ImageLocation]:
-        """Open 1 image for the block, and give its location. Leaving the block closes the image and waits until
-        every frame is written, also after an error."""
-        location = await self.open_image(
-            storage=storage, subpath=subpath, transform=transform, settings=settings, when_full=when_full
-        )
+    async def close_image(self) -> None:
+        """Write what is left of the open image, close it, and wait until it is closed. A cancel lets the close end
+        first, so a stop never leaves an image half closed with nobody waiting for it. Raise when the close failed or
+        the camera stopped answering."""
+        closing = asyncio.ensure_future(self._close_image())
         try:
-            yield location
-        finally:
-            closing = await self.close_image()
-            await self._wait_for(
-                lambda s: s.batch == closing and (s.state is CaptureState.CLOSED or s.error is not None)
-            )
+            await asyncio.shield(closing)
+        except asyncio.CancelledError:
+            with suppress(Exception):
+                await closing
+            raise
+
+    async def _close_image(self) -> None:
+        number = await self.call("close_image")
+        await self._wait_for(lambda s: s.batch == number and (s.state is CaptureState.CLOSED or s.error is not None))
 
     async def wait_for_batch(self, batch: int) -> None:
         """Wait until batch ``batch`` of :meth:`begin_batch` is done. Raise when it failed."""
@@ -150,8 +142,9 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
         await self._wait_for(lambda status: status.state is not CaptureState.COLLECTING, raise_on_error=False)
 
     async def _wait_for(self, reached: Callable[[CaptureStatus], bool], *, raise_on_error: bool = True) -> None:
-        """Wait until :attr:`capture` is ``reached``, read now and then followed as the camera streams it. Raise when
-        the status reached carries an error, unless not ``raise_on_error``."""
+        """Wait until :attr:`capture` is ``reached``, followed as the camera streams it and read again every
+        ``_RECHECK_S``. The read again ends the wait when the camera's process is gone, and catches a change the
+        stream did not bring. Raise when the status reached carries an error, unless not ``raise_on_error``."""
         found = asyncio.get_running_loop().create_future()
 
         def check(status: CaptureStatus) -> None:
@@ -160,8 +153,13 @@ class AreaCameraHandle(CameraHandle[AreaCamera]):
 
         teardown = self.capture.subscribe(check)
         try:
-            check(await self.capture.get())
-            status: CaptureStatus = await found
+            while not found.done():
+                try:
+                    check(await self.capture.get())
+                except (ConnectionError, TimeoutError) as error:
+                    raise RuntimeError(f"{self.id} stopped answering: {error!r}") from error
+                await asyncio.wait({found}, timeout=_RECHECK_S)
+            status: CaptureStatus = found.result()
         finally:
             teardown()
         if raise_on_error and status.error is not None:

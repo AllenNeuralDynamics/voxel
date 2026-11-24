@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import pytest
 import rigup.build as build_module
@@ -13,13 +13,11 @@ if TYPE_CHECKING:
     from decimal import Decimal
 
 
-class Filter(Part, frozen=True):
-    kind: Literal["filter"] = "filter"
+class Filter(Part, frozen=True, kind="filter"):
     band: tuple[float, float]
 
 
-class Cube(Part, frozen=True):
-    kind: Literal["cube"] = "cube"
+class Cube(Part, frozen=True, kind="cube"):
     excitation: Filter
     emission: Filter
 

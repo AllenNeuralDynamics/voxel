@@ -21,18 +21,18 @@ class _Bench:
         self.preview: Activity | None = None
 
     async def set_props(self, device_id: str) -> None:
-        async with self.scheduler.run("set properties", requires={device_id}):
+        async with self.scheduler.run("setting properties", requires={device_id}):
             self.log.append(f"set {device_id}")
 
     async def apply_profile(self, *, fail: bool = False) -> None:
-        async with self.scheduler.run("apply a profile", requires={Word.PROFILE}):
+        async with self.scheduler.run("applying a profile", requires={Word.PROFILE}):
             await self.set_props("laser")
             if fail:
                 raise RuntimeError("bad profile")
             self.log.append("profile applied")
 
     async def start_preview(self) -> None:
-        async with self.scheduler.run("start the preview", requires=()):
+        async with self.scheduler.run("starting the preview", requires=()):
             self.preview = await self.scheduler.start(
                 ActivityInfo(kind="preview"), {Word.PROFILE}, stop=self._stop, restart=self._restart
             )
@@ -151,7 +151,7 @@ async def test_2_activities_never_require_the_same_resource(bench: _Bench) -> No
 async def test_an_activity_that_cannot_restart_refuses_an_operation(bench: _Bench) -> None:
     await bench.start("capture", {"camera", "laser", Word.PROFILE, Word.STATE})
 
-    with pytest.raises(ActivityBusyError, match="Unable to set properties while capture is running"):
+    with pytest.raises(ActivityBusyError, match="Setting properties is not possible while capture is running"):
         await bench.set_props("camera")
     assert bench.log == []
 
@@ -207,10 +207,10 @@ async def test_a_scheduler_with_no_covers_keeps_each_resource_apart() -> None:
     scheduler = ActivityScheduler()
     await scheduler.start(ActivityInfo(kind="capture"), {"camera"}, stop=_nothing)
 
-    async with scheduler.run("move the stage", requires={"x_axis"}):
+    async with scheduler.run("moving the stage", requires={"x_axis"}):
         pass
-    with pytest.raises(ActivityBusyError, match="Unable to set a region while capture is running"):
-        async with scheduler.run("set a region", requires={"camera"}):
+    with pytest.raises(ActivityBusyError, match="Setting a region is not possible while capture is running"):
+        async with scheduler.run("setting a region", requires={"camera"}):
             pass
 
 
@@ -220,7 +220,7 @@ async def test_stop_all_stops_and_ends_every_activity_even_when_one_fails(bench:
     async def fail() -> None:
         raise RuntimeError("stuck")
 
-    async with bench.scheduler.run("start a capture", requires=()):
+    async with bench.scheduler.run("starting a capture", requires=()):
         await bench.scheduler.start(ActivityInfo(kind="capture"), {"camera"}, stop=fail)
 
     with pytest.raises(ExceptionGroup, match="Not every activity stopped cleanly"):
@@ -238,6 +238,6 @@ async def test_an_operation_that_does_not_restart_leaves_a_restartable_activity_
     assert "preview off" not in bench.log
 
     await bench.start("capture", {"camera"})
-    with pytest.raises(ActivityBusyError, match="Unable to set a region while capture is running"):
-        async with bench.scheduler.run("set a region", requires={"camera"}, restart=False):
+    with pytest.raises(ActivityBusyError, match="Setting a region is not possible while capture is running"):
+        async with bench.scheduler.run("setting a region", requires={"camera"}, restart=False):
             pass

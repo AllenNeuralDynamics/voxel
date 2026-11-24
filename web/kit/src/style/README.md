@@ -18,20 +18,20 @@ In the tables below, "every layer" means the 5 solid layers: `--canvas`, `--pane
 
 ## Files
 
-| File                                                        | Contents                                                                                              |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `index.css`                                                 | The 1 entry an app imports, after `tailwindcss`. It imports the fonts and the files below             |
-| `tokens.css`                                                | The fonts, control sizes, spacing, corners, and the Tailwind classes that read the colors             |
-| `global.css`                                                | The page colors, the thin scrollbars, and the open and close animations                               |
-| `themes/default.css`                                        | The Default theme, under `:root` (light) and `.dark`, and the 5 shared data tokens                    |
-| `themes/<id>.light.css`, `<id>.dark.css`                    | A theme, under `[data-theme='<id>']` and `[data-theme='<id>'].dark`                                   |
-| `surfaces.css`                                              | The derived tokens, the frames and the notes                                                          |
-| `theme.svelte.ts`                                           | The theme list, the saved mode, theme, density and mark color choices, and the code that applies them |
-| `pickers/AppearanceMenu.svelte`                             | The quick appearance settings, in a menu                                                              |
-| `pickers/ModeSwitch.svelte`                                 | The light, dark and auto switch, as an icon RadioBar                                                  |
-| `pickers/ThemePicker.svelte`, `pickers/MarkSettings.svelte` | The full appearance settings, for a settings page                                                     |
-| `colors.ts`                                                 | Color helpers, such as the color of a wavelength, and the logo colors                                 |
-| `index.ts`                                                  | The code exports of this folder (`@voxel/kit/style`)                                                  |
+| File                                     | Contents                                                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `index.css`                              | The 1 entry an app imports, after `tailwindcss`. It imports the fonts and the files below |
+| `tokens.css`                             | The fonts, control sizes, spacing, corners, and the Tailwind classes that read the colors |
+| `global.css`                             | The page colors, the thin scrollbars, and the open and close animations                   |
+| `themes/default.css`                     | The Default theme, under `:root` (light) and `.dark`, and the 5 shared data tokens        |
+| `themes/<id>.light.css`, `<id>.dark.css` | A theme, under `[data-theme='<id>']` and `[data-theme='<id>'].dark`                       |
+| `surfaces.css`                           | The derived tokens, the frames and the notes                                              |
+| `theme.svelte.ts`                        | The theme list, the saved mode, theme and density choices, and the code that applies them |
+| `pickers/AppearanceMenu.svelte`          | The quick appearance settings, in a menu                                                  |
+| `pickers/ModeSwitch.svelte`              | The light, dark and auto switch, as an icon RadioBar                                      |
+| `pickers/ThemePicker.svelte`             | The full appearance settings, for a settings page                                         |
+| `colors.ts`                              | Color helpers, such as the color of a wavelength, and the logo colors                     |
+| `index.ts`                               | The code exports of this folder (`@voxel/kit/style`)                                      |
 
 ## Layers
 
@@ -177,18 +177,13 @@ Each family sets 6 tokens, where `X` is the family name:
 
 ## Data and marks
 
-| Token                                             | Use                                                                                        | Contrast             | Default                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------- | -------------------------------------------------- |
-| `--series-1` to `--series-4`                      | Groups on the stage map, plot lines and JSON values                                        | 4.5:1 on every layer |                                                    |
-| `--stage-mark`                                    | The stage position: the marker, the field-of-view boxes, the grid and the off-screen arrow |                      |                                                    |
-| `--axis-x`, `--axis-y`, `--axis-z`                | The X, Y and Z axes                                                                        |                      | `--danger-fg`, `--success-fg`, `--accent-fg`       |
-| `--axis-x-tint`, `--axis-y-tint`, `--axis-z-tint` | Behind an axis label that is on                                                            |                      | `--danger-tint`, `--success-tint`, `--accent-tint` |
+| Token                        | Use                                                 | Contrast             | Default |
+| ---------------------------- | --------------------------------------------------- | -------------------- | ------- |
+| `--series-1` to `--series-4` | Groups on the stage map, plot lines and JSON values | 4.5:1 on every layer |         |
 
-- `themes/default.css` sets the series colors and `--stage-mark` for all themes. A theme can set them to change them.
-- `--stage-mark` is the same in light and dark mode. Routing does not use it.
-- The axes default to danger, success and accent, so X, Y and Z are red, green and blue, as in 3D tools.
-- A user can pick the stage mark and the axis colors in the appearance settings. A pick wins over the theme, and the app
-  makes a picked axis color lighter or darker for each mode.
+- `themes/default.css` sets the series colors for all themes. A theme can set them to change them.
+- An app sets its own mark colors, such as the axes and the stage markers of the station, in its own CSS, from the
+  colors here.
 - Data colors can share a hue with a family, because they show only in plots, maps and the axes.
 - Plot lines in the sync view do not use tokens. Lasers and cameras take their hue from the wavelength. Filters, the
   stage and waveforms use a fixed set for each mode.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import type { InstrumentFolder } from '$lib/core/model/station.svelte';
+  import type { InstrumentFolder } from '$lib/core/station.svelte';
   import { Button, DropdownMenu } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { reportFailure } from '@voxel/kit/failures';

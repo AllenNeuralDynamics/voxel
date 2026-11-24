@@ -13,7 +13,11 @@ from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema, core_schema
 
 _NUMBER = r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?"
-_TEXT = re.compile(rf"\s*({_NUMBER})\s*(\S+)\s*")
+_UNIT = r"[^\s\d.+-]\S*"
+"""A unit: text with no space, which does not start as a number does."""
+_NO_UNIT = rf"(?!\s*{_NUMBER}\s*$)"
+"""Text that is only a number has no unit: ``12`` and ``3e2`` are no values, though their ends could pass as units."""
+_TEXT = re.compile(rf"{_NO_UNIT}\s*({_NUMBER})\s*({_UNIT})\s*")
 
 
 class Quantity(float):
@@ -68,8 +72,8 @@ class Quantity(float):
 
     @classmethod
     def __get_pydantic_json_schema__(cls, _schema: CoreSchema, _handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        units = "|".join(re.escape(unit) for unit in cls.UNITS) if cls.UNITS else r"\S+"
-        return {"type": "string", "pattern": rf"^\s*{_NUMBER}\s*({units})\s*$"}
+        units = "|".join(re.escape(unit) for unit in cls.UNITS) if cls.UNITS else _UNIT
+        return {"type": "string", "pattern": rf"^{_NO_UNIT}\s*{_NUMBER}\s*({units})\s*$"}
 
 
 class Time(Quantity):

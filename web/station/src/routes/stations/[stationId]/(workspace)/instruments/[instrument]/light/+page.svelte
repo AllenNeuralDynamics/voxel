@@ -4,4 +4,4 @@
   useAppBar(() => ({ crumbs: [{ label: 'Light' }] }));
 </script>
 
-<h1 class="px-4 py-3 text-xl">Light</h1>
+<h1 class="px-inset py-3 text-xl">Light</h1>

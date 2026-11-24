@@ -1,7 +1,10 @@
 import type { PaneAPI } from 'paneforge';
 import { ElementSize } from 'runed';
 
-import { pref } from '../../utils/pref';
+import { PrefGroup } from '../../utils/pref.svelte';
+
+/** The saved layout of the app: the extent of each pane, whether it is collapsed, and the order of split views. */
+export const layoutPrefs = new PrefGroup('layout');
 
 let rootPx = $state(16);
 
@@ -74,12 +77,24 @@ export function createPaneSize(containerEl: () => HTMLElement | null, bounds: Pa
     return ext > 0 ? ((rem * rootPx) / ext) * 100 : fallback;
   };
 
-  const store = bounds.persist ? pref<SavedPane>(`ui:pane:${bounds.persist}`, {}) : undefined;
+  const store = bounds.persist ? layoutPrefs.pref<SavedPane>(`pane:${bounds.persist}`, {}) : undefined;
   // A plain copy, not reactive: if a save during a drag changed `defaultSize`, paneforge would lay the group out
   // again in the middle of the drag.
   let saved: SavedPane = store?.get() ?? {};
   let toggling = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Counts the saved values that came from outside: a reset, or a drag in another window. `defaultSize` reads it, so
+  // paneforge lays the group out again from the new value.
+  let outside = $state(0);
+  if (store) {
+    $effect(() => {
+      const now = store.get();
+      if (JSON.stringify(now) === JSON.stringify(saved)) return;
+      clearTimeout(timer);
+      saved = now;
+      outside++;
+    });
+  }
 
   const collapsed = () => pct(bounds.collapsed ?? 0, bounds.fallback?.collapsed ?? 0);
   const open = () => {
@@ -117,7 +132,10 @@ export function createPaneSize(containerEl: () => HTMLElement | null, bounds: Pa
   if (bounds.default !== undefined) {
     Object.defineProperty(result, 'defaultSize', {
       enumerable: true,
-      get: () => (saved.collapsed && bounds.collapsed !== undefined ? collapsed() : open())
+      get: () => {
+        void outside;
+        return saved.collapsed && bounds.collapsed !== undefined ? collapsed() : open();
+      }
     });
   }
   if (store) {

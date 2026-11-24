@@ -170,7 +170,7 @@
           ontoggle={(event) => expanded.set(key, event.currentTarget.open)}
         >
           <summary
-            class={cn(rowStyle, 'cursor-pointer list-none rounded select-none [&::-webkit-details-marker]:hidden')}
+            class={cn(rowStyle, 'cursor-pointer list-none rounded-sm select-none [&::-webkit-details-marker]:hidden')}
           >
             <span class="flex min-w-0 items-start gap-0.5">
               <svg

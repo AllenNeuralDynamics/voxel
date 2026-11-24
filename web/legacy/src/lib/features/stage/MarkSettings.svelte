@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { Button, ColorPicker } from '../..';
-  import { RotateCcw } from '../../icons';
-  import { toHex } from '../colors';
-  import { type MarkKey, themes, watchTheme } from '../theme.svelte';
+  import { Button, ColorPicker } from '@voxel/kit';
+  import { toHex } from '@voxel/kit/colors';
+  import { RotateCcw } from '@voxel/kit/icons';
+
+  import { type MarkKey, marks, watchTheme } from './marks.svelte';
 
   const rows: { key: MarkKey; label: string; token: string; presets: string[] }[] = [
     {
@@ -17,7 +18,7 @@
   ];
 
   let defaults = $state<Record<MarkKey, string>>({ stage: '#e254d4', x: '#cc0000', y: '#007a00', z: '#0063b5' });
-  const picked = $derived(themes.marks.get());
+  const picked = $derived(marks.picked.get());
 
   // Picked colors sit on the body, so the root still holds the theme colors.
   watchTheme(() => {
@@ -35,7 +36,7 @@
       <ColorPicker
         value={picked[row.key] ?? defaults[row.key]}
         presetColors={[...new Set([defaults[row.key], ...row.presets])]}
-        onChange={(color) => themes.setMark(row.key, color)}
+        onChange={(color) => marks.setMark(row.key, color)}
         label="{row.label} color"
       />
       {#if picked[row.key]}
@@ -45,7 +46,7 @@
           class="-ml-1 justify-self-start"
           title="Use the theme color"
           aria-label="Reset custom {row.label} color"
-          onclick={() => themes.resetMark(row.key)}
+          onclick={() => marks.resetMark(row.key)}
         >
           Custom<RotateCcw class="size-3" />
         </Button>

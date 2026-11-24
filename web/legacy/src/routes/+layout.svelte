@@ -2,6 +2,8 @@
   import './layout.css';
   // Applies the saved theme before any page renders.
   import '@voxel/kit/style';
+  // Applies the saved mark colors.
+  import '$lib/features/stage/marks.svelte';
 
   import { onMount } from 'svelte';
 

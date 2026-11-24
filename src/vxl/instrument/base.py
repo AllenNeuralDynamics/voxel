@@ -189,7 +189,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     async def open(self) -> None:
         """Open the devices, check them, and set them to the active profile. Raise :class:`StartupError` with every
         problem found, such as a saved position that names a slot that its device does not have."""
-        async with self._scheduler.run("open the instrument", requires=()):
+        async with self._scheduler.run("opening instrument", requires=()):
             await self._hal.open()
             await self._discover_remote_stores()
             if errors := (await self._open_problems()).errors():
@@ -212,7 +212,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     async def close(self) -> None:
         """End every activity, then turn off every laser and close the devices."""
-        async with self._scheduler.run("close the instrument", requires=()):
+        async with self._scheduler.run("closing instrument", requires=()):
             try:
                 await self._scheduler.stop_all()
             finally:
@@ -246,7 +246,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """Write properties of a device. Save each value that the device accepted into the active profile, as the
         device reports it, when the device is on the profile's light paths and the property is on its autosave list.
         A save cannot be undone. It waits for the command before it, and touches only the saved state."""
-        async with self._scheduler.run("set device properties", requires={self._store}):
+        async with self._scheduler.run(f"setting {device_id} {', '.join(properties)}", requires={self._store}):
             results = await self._hal.device(device_id).props.set(**properties)
             active = self._active_profile.value
             profile = self._store.value.profiles[active]
@@ -273,7 +273,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         info = (await handle.interface()).operations.get(command)
         if info is not None and info.intent in ("query", "failsafe"):
             return await handle.execute(command, *args, **dict(kwargs or {}))
-        async with self._scheduler.run("execute a device command", requires={device_id}, restart=False):
+        async with self._scheduler.run(f"running {device_id} {command}", requires={device_id}, restart=False):
             return await handle.execute(command, *args, **dict(kwargs or {}))
 
     @action(on="stage", verb="move")
@@ -291,7 +291,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         moves: dict[SpecimenAxis, float] = {
             axis: value for axis, value in zip(stage.axes(), (x, y, z), strict=True) if value is not None
         }
-        async with self._scheduler.run("move the stage", requires={stage.device(axis) for axis in moves}):
+        where = ", ".join(f"{axis} {value:g} µm" for axis, value in moves.items())
+        async with self._scheduler.run(f"moving stage to {where}", requires={stage.device(axis) for axis in moves}):
             for axis, value in moves.items():
                 limits = await self._hal.stage[axis].get_limits()
                 if not limits.low <= value <= limits.high:
@@ -312,14 +313,14 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     async def select_profile(self, profile_id: ProfileId) -> None:
         """Set the devices to a profile, and make it the active one. When a step fails, the active profile stays as it
         was."""
-        async with self._scheduler.run("select a profile", requires=self._profile_requires(profile_id)):
+        async with self._scheduler.run(f"selecting profile {profile_id}", requires=self._profile_requires(profile_id)):
             await self._apply_profile(profile_id)
 
     @action(on="profiles", verb="apply")
     async def apply_profile(self) -> None:
         """Set the devices to the active profile again, such as after an undo changed it."""
         profile_id = self._active_profile.value
-        async with self._scheduler.run("apply the profile", requires=self._profile_requires(profile_id)):
+        async with self._scheduler.run(f"applying profile {profile_id}", requires=self._profile_requires(profile_id)):
             await self._apply_profile(profile_id)
 
     @action(on="devices", key="device_id", verb="save_to_profile")
@@ -357,7 +358,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         axis to the profile's position. It cannot be undone. Raise :class:`NotFoundError` when the profile has no
         value for a property."""
         handle = self._hal.device(device_id)
-        async with self._scheduler.run("restore from the profile", requires={device_id}):
+        async with self._scheduler.run(f"restoring {device_id} from profile", requires={device_id}):
             profile = self._store.value.profiles[self._active_profile.value]
             wanted = {**profile.props.get(device_id, {})}
             if device_id in profile.positions:
@@ -377,7 +378,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         laser and modulator, as the timelines now say. The profile's checks run first, so a timeline that does not fit
         is refused before the generator changes. A save cannot be undone."""
         async with self._scheduler.run(
-            "set a generator timeline", requires={generator, self._store, self._active_profile}
+            f"setting {generator} timeline", requires={generator, self._store, self._active_profile}
         ):
             await self._load_timeline(generator, timeline)
 
@@ -387,7 +388,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         knob does, and give back the value applied. ``value`` is in the field's fixed unit, and is fitted as
         :func:`~vxl.instrument.samples.tune` says. The timeline is then loaded and saved as
         :meth:`set_generator_timeline` does. A save cannot be undone."""
-        async with self._scheduler.run("set a tuning knob", requires={generator, self._store, self._active_profile}):
+        async with self._scheduler.run(
+            f"setting {generator} {wire} {field} to {value:g}", requires={generator, self._store, self._active_profile}
+        ):
             volts = await self._hal.signal_generator(generator).get_voltage_range()
             timeline = self._store.value.profiles[self._active_profile.value].timelines.get(generator)
             if timeline is None:
@@ -495,7 +498,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     @action(on="lights", verb="set_power_mode")
     async def set_power_mode(self, mode: PowerMode) -> None:
         """Use the full or the dim powers. A running preview changes at once."""
-        async with self._scheduler.run("set the power mode", requires={self._power_mode}):
+        async with self._scheduler.run(f"setting power mode to {mode}", requires={self._power_mode}):
             await self._apply_powers(self._store.value.profiles[self._active_profile.value], mode)
             await self._power_mode.set(mode)
 
@@ -503,14 +506,14 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     async def lights_off(self) -> None:
         """Make every light dark: no light reaches the sample, and a laser whose light something after it stops stays
         on. A running preview goes dark and keeps running."""
-        async with self._scheduler.run("turn the lights off", requires=()):
+        async with self._scheduler.run("turning lights off", requires=()):
             await self._hal.lights_off()
 
     @failsafe(on="lasers", verb="off")
     async def lasers_off(self) -> None:
         """Turn off every laser and modulator, and close every shutter. A running preview goes dark and keeps
         running."""
-        async with self._scheduler.run("turn the lasers off", requires=()):
+        async with self._scheduler.run("turning lasers off", requires=()):
             await self._hal.lasers_off()
 
     # === Saved state ===
@@ -536,19 +539,19 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     @action(on="defaults", verb="save")
     async def save_as_default_state(self, fields: Sequence[str] | None = None) -> None:
         """Save the given fields of the state as the default state, or each field that can be a default."""
-        async with self._scheduler.run("save the default state", requires={self._store}):
+        async with self._scheduler.run("saving default state", requires={self._store}):
             await self._store.save_as_default_state(fields)
 
     @action(on="history", verb="undo")
     async def undo(self) -> None:
         """Undo the last edit of the state. No device changes."""
-        async with self._scheduler.run("undo", requires={self._store}):
+        async with self._scheduler.run("undoing", requires={self._store}):
             await self._history.undo()
 
     @action(on="history", verb="redo")
     async def redo(self) -> None:
         """Do again the last edit that was undone. No device changes."""
-        async with self._scheduler.run("redo", requires={self._store}):
+        async with self._scheduler.run("redoing", requires={self._store}):
             await self._history.redo()
 
     # === For a kind of instrument: to use/extends ===
@@ -846,7 +849,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     # === Helpers of this class ===
 
     async def _edit_power(self, mode: PowerMode, device: DeviceId, value: float) -> None:
-        async with self._scheduler.run("set a power", requires={self._store}):
+        async with self._scheduler.run(f"setting {device} {mode} power to {value:g}", requires={self._store}):
             hal = self._hal
             ranges = await hal.light_power_ranges()
             if device not in ranges:

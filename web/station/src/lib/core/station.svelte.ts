@@ -3,8 +3,14 @@ import { untrack } from 'svelte';
 
 import { Client, type ClientOptions, type Unsub } from './client.svelte';
 import { Instrument } from './instrument.svelte';
+import { SpimInstrument } from './spim.svelte';
 import type { Topics } from './topics.svelte';
-import type { LogEntry } from './types';
+import type { InstrumentConfig, LogEntry } from './types';
+
+/** The class of each kind of instrument that has one, by the `target` of its config. Another kind is an Instrument. */
+const KINDS: Record<string, new (client: Client, topics: Topics, base: string) => Instrument> = {
+  'vxl_instruments.spim.Microscope': SpimInstrument
+};
 
 /** How many log lines the station keeps for the window. */
 const LOG_KEPT = 500;
@@ -52,9 +58,11 @@ export class Station {
 
   /** The open instrument, or null. A new one for each session, so nothing of a closed session stays. */
   readonly #sessionId: string | undefined = $derived(this.session?.id);
+  readonly #target: string | undefined = $derived(this.topics.get<InstrumentConfig>('instrument.config')?.target);
   readonly instrument: Instrument | null = $derived.by(() => {
     if (!this.#sessionId) return null;
-    return new Instrument(this.#client, this.topics.scope('instrument'), `/stations/${this.#stationId}/instrument`);
+    const Kind = KINDS[this.#target ?? ''] ?? Instrument;
+    return new Kind(this.#client, this.topics.scope('instrument'), `/stations/${this.#stationId}/instrument`);
   });
 
   constructor(options: ClientOptions = {}) {
@@ -68,6 +76,12 @@ export class Station {
       const entry = this.topics.get<LogEntry>('log');
       if (entry) untrack(() => void this.#addLog(entry));
     });
+  }
+
+  /** The open instrument when it is of the class `type`, such as SpimInstrument, or null. */
+  instrumentOf<T extends Instrument>(type: new (...args: never[]) => T): T | null {
+    const instrument = this.instrument;
+    return instrument instanceof type ? instrument : null;
   }
 
   get client(): Client {

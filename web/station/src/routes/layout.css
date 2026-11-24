@@ -9,15 +9,43 @@
   --app-bar-height: 3.25rem;
   --status-bar-height: 2.4rem;
   --rail-width: 4.4rem;
+  /* How far a pane's content sits in from its left and right edges. */
+  --inset: 1.15rem;
   /* The live image is always dark, in both themes. */
   --image-bg: #060606;
+
+  /* The colors of the axes, the stage markers and the stage regions. Each one starts from a color of the theme, and
+  the person can pick another in the settings. X, Y and Z are red, green and blue, as in 3D tools. */
+  --axis-x: var(--danger-fg);
+  --axis-y: var(--success-fg);
+  --axis-z: var(--accent-fg);
+  --axis-x-tint: var(--danger-tint);
+  --axis-y-tint: var(--success-tint);
+  --axis-z-tint: var(--accent-tint);
+  --stage-markers: var(--fg);
+  --stage-region-1: var(--series-1);
+  --stage-region-2: var(--series-2);
+  --stage-region-3: var(--series-3);
+  --stage-region-4: var(--series-4);
 }
 
 @theme inline {
   --spacing-app-bar: var(--app-bar-height);
   --spacing-status-bar: var(--status-bar-height);
   --spacing-rail: var(--rail-width);
+  --spacing-inset: var(--inset);
   --color-image: var(--image-bg);
+  --color-axis-x: var(--axis-x);
+  --color-axis-y: var(--axis-y);
+  --color-axis-z: var(--axis-z);
+  --color-axis-x-tint: var(--axis-x-tint);
+  --color-axis-y-tint: var(--axis-y-tint);
+  --color-axis-z-tint: var(--axis-z-tint);
+  --color-stage-markers: var(--stage-markers);
+  --color-stage-region-1: var(--stage-region-1);
+  --color-stage-region-2: var(--stage-region-2);
+  --color-stage-region-3: var(--stage-region-3);
+  --color-stage-region-4: var(--stage-region-4);
 }
 
 /* One part of the top bar. Each pane has its own part, and the parts line up as 1 bar. */

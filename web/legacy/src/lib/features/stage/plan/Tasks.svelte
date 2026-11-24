@@ -6,9 +6,9 @@
 
   import { type Instrument, type PlannedVolume, type Point2D } from '$lib/core/model';
   import { prefs } from '$lib/core/prefs';
+  import { watchTheme } from '$lib/features/stage/marks.svelte';
   import { hexWithAlpha, toHex } from '@voxel/kit/colors';
   import { reportFailure } from '@voxel/kit/failures';
-  import { watchTheme } from '@voxel/kit/style';
 
   import { getStageContext } from '../context';
   import { type Bounds, intersect, worldTransform } from '../geometry';

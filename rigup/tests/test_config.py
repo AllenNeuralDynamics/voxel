@@ -4,6 +4,7 @@ from rigup.build import BuildConfig, dependencies
 from rigup.config import NodeConfig, RigConfig
 from rigup.device import OperationRequest
 from rigup.node._protocol import BuildDevicesRequest
+from rigup_fakes import MockPart
 
 from rigup import Part
 
@@ -93,11 +94,26 @@ def test_a_part_without_a_target_is_a_plain_part() -> None:
     assert (type(glass), glass.id, glass.kind) == (Part, "glass", "filter")
 
 
-@pytest.mark.parametrize("raw", [NESTED, MAIN], ids=["targeted", "plain"])
-def test_a_part_is_written_back_as_its_fields(raw: dict[str, object]) -> None:
-    dumped = RigConfig.model_validate(raw).model_dump(mode="json")
+def test_a_plain_part_is_written_back_as_its_fields() -> None:
+    dumped = RigConfig.model_validate(MAIN).model_dump(mode="json")
 
-    assert dumped["parts"] == raw["parts"]
+    assert dumped["parts"] == MAIN["parts"]
+
+
+def test_a_part_of_a_class_is_written_with_the_kind_of_its_class() -> None:
+    dumped = RigConfig.model_validate(NESTED).model_dump(mode="json")
+
+    assert dumped["parts"] == {"glass": {**NESTED["parts"]["glass"], "kind": "mock_part"}}
+    assert RigConfig.model_validate(dumped).parts == RigConfig.model_validate(NESTED).parts
+
+
+def test_a_part_class_gives_its_kind_to_its_subclasses_and_refuses_another() -> None:
+    class Tinted(MockPart, frozen=True):
+        pass
+
+    assert Tinted(id="glass").kind == "mock_part"
+    with pytest.raises(ValidationError, match="a MockPart is a 'mock_part', not a 'filter'"):
+        MockPart.model_validate({"id": "glass", "kind": "filter"})
 
 
 def test_each_bad_part_is_a_problem_at_its_field() -> None:

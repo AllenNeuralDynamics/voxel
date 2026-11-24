@@ -10,6 +10,15 @@
   --pane-footer-height: calc(var(--ui-lg) + 4 * var(--ui-step));
   --app-bar-height: calc(var(--ui-lg) + 5 * var(--ui-step));
   --rail-width: 5rem;
+
+  /* The colors of the stage marks and the axes. X, Y and Z are red, green and blue, as in 3D tools. */
+  --stage-mark: var(--fg);
+  --axis-x: var(--danger-fg);
+  --axis-y: var(--success-fg);
+  --axis-z: var(--accent-fg);
+  --axis-x-tint: var(--danger-tint);
+  --axis-y-tint: var(--success-tint);
+  --axis-z-tint: var(--accent-tint);
 }
 
 @theme inline {
@@ -17,6 +26,13 @@
   --spacing-pane-footer: var(--pane-footer-height);
   --spacing-app-bar: var(--app-bar-height);
   --spacing-rail: var(--rail-width);
+  --color-axis-x: var(--axis-x);
+  --color-axis-y: var(--axis-y);
+  --color-axis-z: var(--axis-z);
+  --color-axis-x-tint: var(--axis-x-tint);
+  --color-axis-y-tint: var(--axis-y-tint);
+  --color-axis-z-tint: var(--axis-z-tint);
+  --color-stage-mark: var(--stage-mark);
 }
 
 .nss {

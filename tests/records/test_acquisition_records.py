@@ -20,16 +20,14 @@ from vxl.records import (
     Visit,
     VisitRecording,
 )
-from vxl.storage import LocalLocation, LocationRole, LocationStatus, StorageSpec
+from vxl.storage import LocalLocation, LocationRole, StorageSpec
 
 _TRANSFORM = Transform(
     Vec3D(z=0.0, y=0.0, x=0.0),
     (Vec3D(z=2.0, y=0.0, x=0.0), Vec3D(z=0.0, y=0.5, x=0.0), Vec3D(z=0.0, y=0.0, x=0.5)),
     (10, 64, 64),
 )
-_LOCATION = LocalLocation(
-    role=LocationRole.DESTINATION, status=LocationStatus.WRITING, host="rig", path="/data/runs/1/camera.ome.zarr"
-)
+_LOCATION = LocalLocation(role=LocationRole.DESTINATION, host="rig", path="/data/runs/1/camera.ome.zarr")
 
 
 def _acquisition(visits: int = 1) -> Acquisition:
@@ -47,7 +45,7 @@ def _acquisition(visits: int = 1) -> Acquisition:
 
 
 async def _capture(visit: VisitRecording, frames: int) -> None:
-    await visit.images_opened({"camera": _LOCATION})
+    await visit.image_opened("camera", _LOCATION)
     await visit.frames("camera", frames)
 
 
@@ -167,20 +165,43 @@ async def test_the_run_cannot_change_after_its_block(records: Records) -> None:
             pass
 
 
-async def test_an_image_that_closed_is_available_at_its_location_and_one_that_did_not_failed(records: Records) -> None:
+async def test_an_image_is_writing_until_it_closes_and_failed_when_its_visit_ends_without_a_close(
+    records: Records, tmp_path: Path
+) -> None:
     acquisition = _acquisition(visits=2)
     async with records.record(acquisition) as run:
         async with run.visit(0) as visit:
             await _capture(visit, 10)
-            await visit.images_closed(["camera"])
+            before = run.value.visits[0].location_status("camera")
+            await visit.image_closed("camera")
         async with run.visit(1) as visit:
             await _capture(visit, 10)
-            await visit.images_closed([])
 
     stored = await records.acquisitions.get(acquisition.id)
-    locations = [visit.images()["camera"].locations for visit in stored.visits]
-    assert [[where.status for where in found] for found in locations] == [["available"], ["failed"]]
-    assert locations[0][0] == _LOCATION.model_copy(update={"status": LocationStatus.AVAILABLE})  # only the status
+    assert before == "writing"
+    assert [visit.location_status("camera") for visit in stored.visits] == ["available", "failed"]
+    assert [visit.image_status("camera") for visit in stored.visits] == ["completed", "completed"]
+    written = json.loads(_file(tmp_path))
+    statuses = [[where["status"] for where in v["channels"]["gfp"]["camera"]["locations"]] for v in written["visits"]]
+    assert statuses == [["available"], ["failed"]]
+
+
+async def test_after_a_crash_the_open_visit_is_interrupted_and_its_image_is_not_known_to_be_complete(
+    records: Records,
+) -> None:
+    acquisition = _acquisition(visits=2)
+    run = records.record(acquisition)
+    recording = await run.__aenter__()  # the station dies inside the visit: no block ever ends
+    open_visit = recording.visit(0)  # kept, so it is not closed when it is collected
+    visit = await open_visit.__aenter__()
+    await _capture(visit, 6)
+
+    assert await records.acquisitions.interrupt_open() == [acquisition.id]
+
+    stored = await records.acquisitions.get(acquisition.id)
+    assert [v.status for v in stored.visits] == ["interrupted", "skipped"]
+    ended = stored.visits[0]
+    assert (ended.image_status("camera"), ended.location_status("camera")) == ("partial", "failed")
 
 
 async def test_progress_is_saved_without_a_file_write_and_an_older_snapshot_is_ignored(
@@ -190,7 +211,7 @@ async def test_progress_is_saved_without_a_file_write_and_an_older_snapshot_is_i
     seen: list[int] = []
     records.acquisitions.subscribe(lambda value: seen.append(value.revision))
     async with records.record(acquisition) as run, run.visit(0) as visit:
-        await visit.images_opened({"camera": _LOCATION})
+        await visit.image_opened("camera", _LOCATION)
         file_revision = json.loads(_file(tmp_path))["revision"]
         await visit.frames("camera", 5)
         assert json.loads(_file(tmp_path))["revision"] == file_revision  # saved, but no file write

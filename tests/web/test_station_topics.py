@@ -106,7 +106,7 @@ async def test_a_saved_acquisition_publishes_only_the_fields_and_visits_that_cha
         instrument_state={},
         visits=visits,
     )
-    written = Image(transform=_TRANSFORM, frames_written=1)
+    written = Image(transform=_TRANSFORM, frames_collected=1)
     progress = [visits[0], visits[1].model_copy(update={"channels": {"main": {"camera": written}}})]
 
     with publisher.connect() as connection:

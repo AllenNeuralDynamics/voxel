@@ -1,7 +1,7 @@
 """The parts whose facts vxl reads: a filter and an objective. A rig file names them by their class, such as
 ``target: vxl.parts.Filter``."""
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import AfterValidator, Field
 from vxlib.units import Wavelength
@@ -25,15 +25,13 @@ does."""
 Magnification = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 
-class Filter(Part, frozen=True):
+class Filter(Part, frozen=True, kind="filter"):
     """A part that lets 1 band of wavelengths through."""
 
-    kind: Literal["filter"] = "filter"
     band: PassBand
 
 
-class Objective(Part, frozen=True):
+class Objective(Part, frozen=True, kind="objective"):
     """A part that magnifies. 1 objective can stand for the objective and its tube lens together."""
 
-    kind: Literal["objective"] = "objective"
     magnification: Magnification

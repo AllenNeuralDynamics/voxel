@@ -14,7 +14,7 @@ import { clampTopLeft } from '$lib/core/utils/vec';
 import { emissionToPreviewColor, isValidHex } from '@voxel/kit/colors';
 import { displayName } from '@voxel/kit/format';
 import { NumericModel } from '@voxel/kit/models';
-import { pref } from '@voxel/kit/pref';
+import { PrefGroup } from '@voxel/kit/pref';
 
 import { FRAME_HISTORY_MS } from './arrivals';
 import type { DecodedLiveFrame, LiveLayer, LiveSourceHeader, StagePosition } from './protocol';
@@ -148,6 +148,8 @@ export interface LiveFrameMetadata extends LiveSourceHeader {
   fov: readonly [number, number] | null;
 }
 
+const PREVIEW_PREFS = new PrefGroup('preview');
+
 export class PreviewChannel {
   name: string | undefined = $state<string | undefined>(undefined);
   config = $state<ChannelConfig | undefined>(undefined);
@@ -214,7 +216,7 @@ export class PreviewSession {
   readonly #instrumentBase: string;
   readonly #renderer: LiveGpuRenderer;
   readonly #stream: LiveStream;
-  readonly #preferenceStore = pref<StoredPreviewPreferences>('preview:channels', {});
+  readonly #preferenceStore = PREVIEW_PREFS.pref<StoredPreviewPreferences>('channels', {});
   #displayAspect = 1;
   #fov = $state.raw<[number, number] | null>(null);
   #unsubscribers: Array<() => void> = [];

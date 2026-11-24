@@ -2,9 +2,10 @@ import asyncio
 import contextvars
 import datetime
 import logging
+import sys
 import uuid
-from collections.abc import AsyncGenerator, Mapping, Sequence
-from contextlib import AsyncExitStack, asynccontextmanager
+from collections.abc import AsyncGenerator, Awaitable, Mapping, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import partial
 from pathlib import PurePosixPath
@@ -19,7 +20,7 @@ from vxlib.reactivity import Cell, Readable
 
 from vxl.devices.axes.continuous.base import Pulses, Sweep
 from vxl.devices.base import DeviceId
-from vxl.devices.camera import AreaROI, CaptureState
+from vxl.devices.camera import AreaROI
 from vxl.devices.camera.handle import AreaCameraHandle
 from vxl.devices.signals.generator.base import InputEdges, OwnClock
 from vxl.instrument.base import Instrument, InstrumentView
@@ -28,7 +29,7 @@ from vxl.instrument.state import ProfileId, TaskId
 from vxl.instrument.store import ABSENT
 from vxl.records import Acquisition, Image, Records, Visit, VisitRecording
 from vxl.station.errors import RejectedError
-from vxl.storage import ImageLocation, StorageSpec
+from vxl.storage import StorageSpec
 from vxl.system import System
 
 from .config import SPIMConfig, SPIMProfile, TriggerChain
@@ -112,14 +113,14 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     @action(on="preview", verb="start")
     async def start_preview(self) -> None:
         """Start a preview of the active profile's chosen channels. Do nothing when a preview runs."""
-        async with self._scheduler.run("start a preview", requires=()):
+        async with self._scheduler.run("starting preview", requires=()):
             if self._preview is None:
                 await self._begin_preview()
 
     @failsafe(on="preview", verb="stop")
     async def stop_preview(self) -> None:
         """Stop the preview. Do nothing when none runs."""
-        async with self._scheduler.run("stop the preview", requires=()):
+        async with self._scheduler.run("stopping preview", requires=()):
             await self._end_preview()
 
     @action(on="acquisition", verb="start")
@@ -127,7 +128,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         """Acquire the whole plan in the background into ``storage``, and give back the new acquisition's id once its
         record exists. Each task must have its required metadata. The preview stops first, and every camera of the plan
         must be able to write ``storage``. While it runs, it holds every device and the state."""
-        async with self._scheduler.run("start an acquisition", requires=()):
+        async with self._scheduler.run("starting acquisition", requires=()):
             if self._acquisition is not None:
                 raise RejectedError("An acquisition is already running")
             state = self._store.value
@@ -204,7 +205,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
     async def set_preview_channels(self, channels: list[DeviceId]) -> None:
         """Choose the channels, by camera, that a preview of the active profile shows. A running preview restarts
         with them when they differ."""
-        async with self._scheduler.run("set the preview channels", requires=()):
+        async with self._scheduler.run(f"setting preview channels to {', '.join(channels)}", requires=()):
             profile_id = self._active_profile.value
             known = self._store.value.profiles[profile_id].lights()
             if not channels:
@@ -225,7 +226,7 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         """Set a camera's region, or its full frame when ``region`` is ``None``, and give back the region the camera
         applied after snapping it to its grid. When the camera is a channel of the active profile, save that region
         as its ``fov`` there, or drop its ``fov`` for the full frame. A save cannot be undone."""
-        async with self._scheduler.run("set a camera region", requires={camera, self._store}):
+        async with self._scheduler.run(f"setting {camera} region", requires={camera, self._store}):
             handle = self._hal.area_camera(camera)
             applied = await (handle.reset_roi() if region is None else handle.update_roi(region))
             active = self._active_profile.value
@@ -411,8 +412,9 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                 logger.warning("The writer of %s was not released: %r", camera, result)
 
     async def _visit(self, index: int, volume: Volume, storage: StorageSpec, visit: VisitRecording) -> None:
-        """Run 1 visit: set the devices to its profile and its stop, open 1 image on each camera, scan, and stop the
-        scan's devices before the images close. A cleanup failure never hides the error that ended the scan."""
+        """Run 1 visit: set the devices to its profile and its stop, open 1 image on each camera, scan, stop the scan's
+        devices, save each camera's final counts, and close the images. Each cleanup step runs on every path, and its
+        failure never hides the error that ended the visit."""
         hal, scan = self._hal, self._config.scan
         profile = self._store.value.profiles[volume.profile]
         cameras = {camera: hal.area_camera(camera) for camera in volume.transforms}
@@ -424,16 +426,22 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         settings = self._store.value.writer
         when_full = "drop" if scan.motion == "sweep" else "wait"
         channel_of = {camera: channel for channel, of in profile.channels.items() for camera in of}
-        locations: dict[str, ImageLocation] = {}
+        opened: dict[DeviceId, AreaCameraHandle] = {}
         try:
-            async with AsyncExitStack() as images:
+            async with AsyncExitStack() as watching:
                 for camera, handle in cameras.items():
                     folder = PurePosixPath(f"{index:06d}", volume.profile, channel_of[camera], camera)
-                    image = handle.image(storage, folder, volume.transforms[camera], settings, when_full)
-                    locations[camera] = await images.enter_async_context(image)
+                    location = await handle.open_image(
+                        storage=storage,
+                        subpath=folder,
+                        transform=volume.transforms[camera],
+                        settings=settings,
+                        when_full=when_full,
+                    )
+                    opened[camera] = handle
+                    await visit.image_opened(camera, location)
                     # The camera streams its progress to the record, which saves it at most once a second.
-                    images.callback(handle.progress.subscribe(partial(self._frames_collected, visit, camera)))
-                await visit.images_opened(locations)
+                    watching.callback(handle.progress.subscribe(partial(self._frames_collected, visit, camera)))
                 await self._reset_live(tuple(cameras))
                 try:
                     if scan.motion == "sweep":
@@ -442,30 +450,57 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
                         await self._software_scan(volume, profile, cameras)
                     else:
                         await self._step_scan(volume, profile, cameras)
-                except BaseException:
+                finally:
                     try:
-                        await self._stop_scan_devices(profile, cameras)
-                    except BaseException:
-                        logger.exception("The scan's devices did not stop cleanly after the visit failed")
-                    raise
-                await self._stop_scan_devices(profile, cameras)
-                for camera, handle in cameras.items():
-                    await visit.frames(camera, (await handle.progress.get()).collected)
-                    if dropped := await handle.dropped():
-                        await visit.frames_dropped(camera, dropped)
+                        await self._after_scan(self._stop_scan_devices(profile, cameras), "stopping the scan")
+                    finally:
+                        await self._after_scan(self._save_counts(visit, opened), "saving the frame counts")
         finally:
-            if locations:
-                # A camera reports CLOSED only once its image closed with no error; opening an image resets it.
-                states = await asyncio.gather(*(cameras[c].capture.get() for c in locations), return_exceptions=True)
-                closed = [
-                    camera
-                    for camera, state in zip(locations, states, strict=True)
-                    if not isinstance(state, BaseException) and state.state is CaptureState.CLOSED
-                ]
-                try:
-                    await visit.images_closed(closed)
-                except Exception:
-                    logger.exception("The image locations of visit %d could not be saved", index)
+            await self._after_scan(self._close_images(visit, opened), "closing the images")
+
+    @staticmethod
+    async def _after_scan(step: Awaitable[None], what: str) -> None:
+        """Run 1 cleanup step of a visit. While an error ends the visit, a failure of the step is logged, so it never
+        hides that error; otherwise the failure goes on up."""
+        ending = sys.exception()
+        try:
+            await step
+        except Exception:
+            if ending is None:
+                raise
+            logger.exception("%s failed too, after the visit failed", what.capitalize())
+
+    @staticmethod
+    async def _save_counts(visit: VisitRecording, cameras: Cameras) -> None:
+        """Save each camera's final count of collected frames and the frames its writer dropped. Read them while the
+        images are still open: a writer resets both when its image closes."""
+
+        async def save(camera: DeviceId, handle: AreaCameraHandle) -> None:
+            await visit.frames(camera, (await handle.progress.get()).collected)
+            if dropped := await handle.dropped():
+                await visit.frames_dropped(camera, dropped)
+
+        await gather_all(*(save(camera, handle) for camera, handle in cameras.items()), message="frame counts")
+
+    @staticmethod
+    async def _close_images(visit: VisitRecording, cameras: Cameras) -> None:
+        """Close the image of each of ``cameras`` together, and save each close that succeeded. A cancel lets every
+        close and its save end first, so a stop never records a good image as failed. Raise every failed close
+        together."""
+
+        async def close(camera: DeviceId, handle: AreaCameraHandle) -> None:
+            await handle.close_image()
+            await visit.image_closed(camera)
+
+        closing = asyncio.ensure_future(
+            gather_all(*(close(camera, handle) for camera, handle in cameras.items()), message="images")
+        )
+        try:
+            await asyncio.shield(closing)
+        except asyncio.CancelledError:
+            with suppress(Exception):
+                await closing
+            raise
 
     @staticmethod
     async def _frames_collected(visit: VisitRecording, camera: DeviceId, progress: WriterProgress) -> None:

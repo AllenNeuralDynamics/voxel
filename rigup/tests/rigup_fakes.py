@@ -5,7 +5,6 @@ import logging
 import threading
 import time
 from enum import StrEnum
-from typing import Literal
 
 from rigup.component import Part, RigComponent
 from rigup.device import Device
@@ -17,8 +16,7 @@ class MockState(StrEnum):
     ACTIVE = "active"
 
 
-class MockPart(Part, frozen=True):
-    kind: Literal["mock_part"] = "mock_part"
+class MockPart(Part, frozen=True, kind="mock_part"):
     value: float = 0.0
 
 

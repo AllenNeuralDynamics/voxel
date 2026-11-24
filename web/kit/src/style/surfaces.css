@@ -6,15 +6,6 @@
 :root {
   --control-line: var(--line-muted);
   --control-line-hover: var(--line);
-
-  /* X, Y and Z are red, green and blue, as in 3D tools, so they start from danger, success and accent. */
-
-  --axis-x: var(--danger-fg);
-  --axis-y: var(--success-fg);
-  --axis-z: var(--accent-fg);
-  --axis-x-tint: var(--danger-tint);
-  --axis-y-tint: var(--success-tint);
-  --axis-z-tint: var(--accent-tint);
 }
 
 /* Each frame sets the corners, edge and background of 1 box, so a part with a frame adds none of its own: no padding

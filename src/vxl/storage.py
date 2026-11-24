@@ -52,13 +52,12 @@ class LocationRole(StrEnum):
 
 
 class LocationStatus(StrEnum):
-    """Whether an image is at a location."""
+    """Whether an image is complete at a location: still being written, closed with every frame it collected
+    written, or not known to be complete because its writer never closed it."""
 
-    PENDING = "pending"
     WRITING = "writing"
     AVAILABLE = "available"
     FAILED = "failed"
-    EVICTED = "evicted"
 
 
 class LocalLocation(FrozenModel):
@@ -66,7 +65,6 @@ class LocalLocation(FrozenModel):
 
     kind: Literal["local"] = "local"
     role: LocationRole
-    status: LocationStatus
     host: str = Field(min_length=1)
     path: str = Field(min_length=1)
 
@@ -76,7 +74,6 @@ class ObjectLocation(FrozenModel):
 
     kind: Literal["object"] = "object"
     role: LocationRole
-    status: LocationStatus
     host: str = Field(min_length=1)
     store: str = Field(min_length=1)
     bucket: str = Field(min_length=1)

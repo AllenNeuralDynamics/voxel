@@ -12,7 +12,7 @@
   export const sectionVariants = tv({
     slots: {
       root: 'flex min-w-0 shrink-0 flex-col',
-      header: 'flex min-w-0 gap-2 px-2.5',
+      header: 'flex min-w-0 gap-2 px-0',
       heading: 'min-w-0 flex-1 truncate',
       body: 'flex min-w-0 flex-col gap-2'
     },

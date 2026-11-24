@@ -12,7 +12,7 @@
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95'
       ],
       option:
-        'flex cursor-default items-center gap-2 rounded py-1 outline-none select-none data-highlighted:bg-element-hover',
+        'flex cursor-default items-center gap-2 rounded-sm py-1 outline-none select-none data-highlighted:bg-element-hover',
       icon: 'shrink-0',
       check: 'flex shrink-0 items-center justify-center'
     },

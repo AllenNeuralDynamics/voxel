@@ -1,9 +1,9 @@
 <script lang="ts">
   import { prefs } from '$lib/core/prefs';
   import { getSpatialUnit, SPATIAL_UNITS } from '$lib/core/spatial-units';
+  import MarkSettings from '$lib/features/stage/MarkSettings.svelte';
   import PageHeader from '$lib/shell/PageHeader.svelte';
   import { RadioBar, Section } from '@voxel/kit';
-  import { MarkSettings } from '@voxel/kit/style';
   import { ThemePicker } from '@voxel/kit/style';
 </script>
 
