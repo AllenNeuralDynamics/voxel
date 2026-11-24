@@ -3,13 +3,12 @@ import logging
 import logging.config
 import os
 import time
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import version
 from pathlib import Path
 
 from ficus.database.filesys import FileSysStore  # type: ignore
 from ficus.services.configs import get_config  # type: ignore
 from one_liner.server import RouterServer  # type: ignore
-
 from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import SeqSweepSystemConfig

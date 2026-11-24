@@ -2,14 +2,14 @@ import asyncio
 import inspect
 
 import pytest
-from vxl.hal.errors import HALStartupError
-
 from seqsweep.devices.scan_controller.handle import ScanControllerHandle
 from seqsweep.devices.scan_controller.simulated import SimulatedScanController
 from seqsweep.hal import HAL, SeqSweepHardwareTopology
 from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import OpticsConfig, SeqSweepInstrumentConfig, SeqSweepInstrumentDefaults
+
+from vxl.hal.errors import HALStartupError
 
 ACS_TARGET = "seqsweep.devices.scan_controller.simulated.SimulatedScanController"
 ACS_INIT = {"move_velocity_mm_s": 50, "motion_timeout_s": 60}
@@ -68,7 +68,7 @@ def test_hal_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.Monke
 
 def test_hal_open_skips_role_check_for_unavailable_device():
     hal = HAL(_topology())
-    assert hal._compatibility_violations({"acs"}) == []  # noqa: SLF001
+    assert hal._compatibility_violations({"acs"}) == []
 
 
 def test_seqsweep_open_succeeds_with_simulated_scan_controller():
@@ -108,4 +108,4 @@ def test_rpc_open_failure_stops_the_loop_thread(monkeypatch: pytest.MonkeyPatch)
     rpc = SeqSweepRpc(SeqSweep(_config(_topology())))
     with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
         rpc.open()
-    assert not rpc._loop.running  # noqa: SLF001
+    assert not rpc._loop.running

@@ -10,7 +10,6 @@ from typing import Any
 import yaml
 from one_liner.client import RouterClient  # type: ignore
 
-
 STEP_MM = 1.0
 STAGE_TEST_START_MM = (155.0, 155.0)  # inside limits_mm, where move_rel is allowed
 CHECK_X_MM = 151.875  # middle of the scan range 125..178.75

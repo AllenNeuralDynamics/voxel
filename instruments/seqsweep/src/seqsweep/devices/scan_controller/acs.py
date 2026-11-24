@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import Field, model_validator
+from vxlib.schema import FrozenModel
+
 from rigup import describe
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
-from vxlib.schema import FrozenModel
 
 from .base import AxisStatus, ScanController, StageStatus, XYPosition
 
@@ -89,7 +90,7 @@ class AcsController(ScanController):
         import numpy as np
 
         if not hasattr(np, "chararray"):  # the vendor wheel (UploadBuffer, GetErrorString) still uses the numpy 1 name
-            np.chararray = np.char.chararray  # type: ignore[attr-defined]
+            np.char.chararray = np.char.chararray  # type: ignore[attr-defined]
         try:
             import SPiiPlusPython as sp  # type: ignore[import-not-found]
         except ImportError as e:
@@ -190,7 +191,7 @@ class AcsController(ScanController):
         for name, value in parameters.items():
             self._write(name, value)
 
-    def _write(self, name: str, value: float | int) -> None:
+    def _write(self, name: str, value: float) -> None:
         """Write a global variable of the scan pass or home program."""
         write = self._sp.WriteInteger if isinstance(value, int) else self._sp.WriteReal
         with self._lock:
@@ -297,7 +298,7 @@ class AcsController(ScanController):
             "scan_decel": self._config.scan_decel,
             "limit_min_mm": low,
             "limit_max_mm": high,
-            "scan_axis": self._axis_index(derived.scan_axis),}
+            "scan_axis": self._axis_index(derived.scan_axis)}
         for name, value in parameters.items():
             self._write(name, value)
         self._pass = (config, derived)

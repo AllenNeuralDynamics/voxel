@@ -1,7 +1,5 @@
 from enum import StrEnum
-from typing import Literal
-
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, model_validator
 from vxlib.schema import FrozenModel

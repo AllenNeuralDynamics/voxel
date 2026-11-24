@@ -4,11 +4,10 @@ import asyncio
 import logging
 from collections.abc import Mapping
 
-from vxl.hal.errors import HALStartupError, Violation
-
 from rigup import DeviceHandle, DeviceInterface, Rig
-from seqsweep.devices.scan_controller.handle import ScanControllerHandle
 from seqsweep.devices.base import SeqSweepDeviceType
+from seqsweep.devices.scan_controller.handle import ScanControllerHandle
+from vxl.hal.errors import HALStartupError, Violation
 
 from .topology import SeqSweepHardwareTopology
 

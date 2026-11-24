@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from pydantic import BaseModel
+
 from rigup import Device, describe
 from seqsweep.devices.base import SeqSweepDeviceType
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig

@@ -4,9 +4,9 @@ import asyncio
 import time
 
 from pydantic import TypeAdapter
-from rigup import DeviceHandle
 from rigup.device.handle import Adapter, DeviceProperty
 
+from rigup import DeviceHandle
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 from .base import ScanController, StageStatus, XYPosition
