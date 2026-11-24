@@ -110,7 +110,7 @@ class AcsController(ScanController):
         import numpy as np  # noqa: PLC0415 (lazy: the vendor wheel is optional)
 
         if not hasattr(np, "chararray"):  # the vendor wheel (UploadBuffer, GetErrorString) still uses the numpy 1 name
-            np.char.chararray = np.char.chararray  # type: ignore[attr-defined]
+            np.chararray = np.char.chararray  # type: ignore[attr-defined]  # noqa: NPY201 (restores the removed name)
         try:
             import SPiiPlusPython as sp  # type: ignore[import-not-found]  # noqa: N813, PLC0415
         except ImportError as e:
