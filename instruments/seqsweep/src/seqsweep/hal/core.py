@@ -22,7 +22,7 @@ class HAL:
         self._topology = topology
         self._rig = Rig(topology, name)
 
-        self.scan_controllers: dict[str, ScanControllerHandle] = {}  # TODO Add ACS Handle
+        self.scan_controllers: dict[str, ScanControllerHandle] = {}
         self._device_interfaces: dict[str, DeviceInterface] = {}
 
     @property

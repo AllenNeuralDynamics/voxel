@@ -73,12 +73,12 @@ class SeqSweep:
     async def stage_move_to(self, x_mm: float, y_mm: float) -> None:
         """Move the stage to an absolute (X, Y) position in mm; returns once the move has started."""
         self._check_stage_free()
-        await self._hal.scan_controller.move_to(x_mm, y_mm)
+        await self._hal.scan_controller.move_abs(x_mm, y_mm)
 
     async def stage_move_by(self, dx_mm: float, dy_mm: float) -> None:
         """Move the stage by a relative (X, Y) step in mm; returns once the move has started."""
         self._check_stage_free()
-        await self._hal.scan_controller.move_by(dx_mm, dy_mm)
+        await self._hal.scan_controller.move_rel(dx_mm, dy_mm)
 
     async def stage_go_home(self) -> None:
         """Move the stage to its configured origin; returns once the move has started."""
@@ -87,7 +87,7 @@ class SeqSweep:
 
     async def stage_wait_motion_end(self) -> None:
         """Block until both axes have settled."""
-        await self._hal.scan_controller.await_motion_end()
+        await self._hal.scan_controller.await_movement()
 
     async def stage_status(self) -> dict[str, dict[str, float | bool | int]]:
         """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""
@@ -172,7 +172,7 @@ class SeqSweep:
             await scan_controller.configure(pass_config, derived)
             self.log.info("Homing before the scan")
             await scan_controller.go_home()
-            await scan_controller.await_motion_end()
+            await scan_controller.await_movement()
             for chamber in job.chambers:
                 for strip in range(job.num_strips):
                     direction = strip_direction(job.traversal, strip)
@@ -186,13 +186,13 @@ class SeqSweep:
                     else:
                         start_mm = pass_config.scan_start_mm - pass_config.scan_margin_mm
                     x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
-                    await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
-                    await scan_controller.await_motion_end()
+                    await scan_controller.move_abs(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
+                    await scan_controller.await_movement()
                     self.log.info(
                         "Moved to X=%.3f mm, Y=%.3f mm (chamber %d, strip %d/%d)", x_mm, y_mm, chamber, strip + 1, job.num_strips
                     )
                     await scan_controller.run(direction)
-                    await scan_controller.await_motion_end()
+                    await scan_controller.await_movement()
             self._status = "finished"
         except asyncio.CancelledError:
             await scan_controller.abort()

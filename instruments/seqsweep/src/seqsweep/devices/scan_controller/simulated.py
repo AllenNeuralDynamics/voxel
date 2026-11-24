@@ -32,13 +32,13 @@ class SimulatedScanController(ScanController):
     def is_running(self) -> bool:
         return False  # run() blocks for the whole simulated pass, so nothing runs in the background
 
-    def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
+    def move_abs(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
         if velocity_mm_s is not None and velocity_mm_s <= 0:
             raise ValueError("velocity_mm_s must be positive")
         self._x_mm, self._y_mm = x_mm, y_mm
 
-    def move_by(self, dx_mm: float, dy_mm: float) -> None:
-        self.move_to(self._x_mm + dx_mm, self._y_mm + dy_mm)
+    def move_rel(self, dx_mm: float, dy_mm: float) -> None:
+        self.move_abs(self._x_mm + dx_mm, self._y_mm + dy_mm)
 
     def go_home(self) -> None:
         self._x_mm, self._y_mm = self._home_mm

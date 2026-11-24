@@ -32,19 +32,19 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         """Start one strip pass in the given direction without blocking."""
         await self.call("run", direction)
 
-    async def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
+    async def move_abs(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
         """Start a move to an absolute (X, Y) position in mm; ``velocity_mm_s`` None uses the configured speed."""
-        await self.call("move_to", x_mm, y_mm, velocity_mm_s)
+        await self.call("move_abs", x_mm, y_mm, velocity_mm_s)
 
-    async def move_by(self, dx_mm: float, dy_mm: float) -> None:
+    async def move_rel(self, dx_mm: float, dy_mm: float) -> None:
         """Start a move by a relative (X, Y) step in mm."""
-        await self.call("move_by", dx_mm, dy_mm)
+        await self.call("move_rel", dx_mm, dy_mm)
 
     async def go_home(self) -> None:
         """Start the move to the home position."""
         await self.call("go_home")
 
-    async def await_motion_end(self, timeout_s: float | None = None) -> None:
+    async def await_movement(self, timeout_s: float | None = None) -> None:
         """Wait, without blocking the loop, until passes and moves have ended; raise on timeout or an axis fault.
 
         ``timeout_s`` None: use the controller's ``motion_timeout_s``.

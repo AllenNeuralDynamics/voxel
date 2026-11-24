@@ -59,12 +59,12 @@ class ScanController(Device, ABC):
 
     @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
     @abstractmethod
-    def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
+    def move_abs(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
         """Start the positioning move; ``velocity_mm_s`` None uses the current axis velocity."""
 
     @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")
     @abstractmethod
-    def move_by(self, dx_mm: float, dy_mm: float) -> None:
+    def move_rel(self, dx_mm: float, dy_mm: float) -> None:
         """Start the relative move."""
 
     @describe(label="Go Home", desc="Move to the home position; returns once the move has started")

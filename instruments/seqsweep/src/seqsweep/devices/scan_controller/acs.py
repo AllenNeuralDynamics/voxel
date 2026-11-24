@@ -243,7 +243,7 @@ class AcsController(ScanController):
     # -- motion -----------------------------------------------------------------------------------------------
 
     @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
-    def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
+    def move_abs(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
         """Start the move; ``velocity_mm_s`` None keeps the current axis velocity (the positioning speed between passes)."""
         if velocity_mm_s is not None and velocity_mm_s <= 0:
             raise ValueError("velocity_mm_s must be positive")
@@ -257,10 +257,10 @@ class AcsController(ScanController):
             self._sp.ToPointM(self._hc, 0, [axis_x, axis_y, -1], [x_mm, y_mm], self._sp.SYNCHRONOUS, True)
 
     @describe(label="Move By", desc="Move by a relative (X, Y) step in mm; returns once the move has started")
-    def move_by(self, dx_mm: float, dy_mm: float) -> None:
+    def move_rel(self, dx_mm: float, dy_mm: float) -> None:
         # Target from the feedback position, so the limit check sees the real destination.
         position = self.position_mm
-        self.move_to(position["x"] + dx_mm, position["y"] + dy_mm)
+        self.move_abs(position["x"] + dx_mm, position["y"] + dy_mm)
 
     @describe(label="Go Home", desc="Start the home buffer to home_mm (not limited by limits_mm); returns once it has started")
     def go_home(self) -> None:
