@@ -12,7 +12,7 @@ from one_liner.client import RouterClient  # type: ignore
 
 
 STEP_MM = 1.0
-STAGE_TEST_START_MM = (155.0, 155.0)  # inside limits_mm, where move_by is allowed
+STAGE_TEST_START_MM = (155.0, 155.0)  # inside limits_mm, where move_rel is allowed
 CHECK_X_MM = 151.875  # middle of the scan range 125..178.75
 CHAMBER_Y_MM = (109.75, 155.0, 200.25)  # chambers_step_mm of chambers 3, 2, 1
 POLL_S = 2.0
@@ -38,34 +38,34 @@ def test_stage(client: RouterClient) -> None:
     """Exercise the stage API: go home, move by, move to; ends at home."""
     print("\n--- Stage test: go home ---")
     stage_call(client, "stage_go_home")
-    stage_call(client, "stage_wait_motion_end")
+    stage_call(client, "stage_await_movement")
     print_position(client, "at home")
 
-    # Home (0, 0) is outside limits_mm, so move_by from there would be rejected: step inside the limits first
+    # Home (0, 0) is outside limits_mm, so move_rel from there would be rejected: step inside the limits first
     print(f"\n--- Stage test: move into the limits, to {STAGE_TEST_START_MM} ---")
-    stage_call(client, "stage_move_to", x_mm=STAGE_TEST_START_MM[0], y_mm=STAGE_TEST_START_MM[1])
-    stage_call(client, "stage_wait_motion_end")
+    stage_call(client, "stage_move_abs", x_mm=STAGE_TEST_START_MM[0], y_mm=STAGE_TEST_START_MM[1])
+    stage_call(client, "stage_await_movement")
     print_position(client, "start")
 
     print(f"\n--- Stage test: move by +{STEP_MM} mm in X and Y ---")
-    stage_call(client, "stage_move_by", dx_mm=STEP_MM, dy_mm=STEP_MM)
-    stage_call(client, "stage_wait_motion_end")
-    print_position(client, "after move_by")
+    stage_call(client, "stage_move_rel", dx_mm=STEP_MM, dy_mm=STEP_MM)
+    stage_call(client, "stage_await_movement")
+    print_position(client, "after move_rel")
 
     print("\n--- Stage test: move to (absolute) one step back ---")
     status = stage_call(client, "stage_status")
     stage_call(
         client,
-        "stage_move_to",
+        "stage_move_abs",
         x_mm=status["x"]["position_mm"] - STEP_MM,
         y_mm=status["y"]["position_mm"] - STEP_MM,
     )
-    stage_call(client, "stage_wait_motion_end")
-    print_position(client, "after move_to")
+    stage_call(client, "stage_await_movement")
+    print_position(client, "after move_abs")
 
     print("\n--- Stage test: go home ---")
     stage_call(client, "stage_go_home")
-    stage_call(client, "stage_wait_motion_end")
+    stage_call(client, "stage_await_movement")
     print_position(client, "at home")
 
 
@@ -73,19 +73,19 @@ def test_stage2(client: RouterClient) -> None:
     """Visit each chamber's Y position at mid scan X and wait for Enter, to see which bar is under the objective."""
     print("\n--- Stage test 2: chamber Y positions ---")
     stage_call(client, "stage_go_home")
-    stage_call(client, "stage_wait_motion_end")
+    stage_call(client, "stage_await_movement")
     print_position(client, "at home")
 
     for y_mm in CHAMBER_Y_MM:
         print(f"\n--- Stage test 2: X={CHECK_X_MM} mm, Y={y_mm} mm ---")
-        stage_call(client, "stage_move_to", x_mm=CHECK_X_MM, y_mm=y_mm)
-        stage_call(client, "stage_wait_motion_end")
+        stage_call(client, "stage_move_abs", x_mm=CHECK_X_MM, y_mm=y_mm)
+        stage_call(client, "stage_await_movement")
         print_position(client, "arrived")
         input("  Look at which bar is under the objective, then press Enter to continue...")
 
     print("\n--- Stage test 2: go home ---")
     stage_call(client, "stage_go_home")
-    stage_call(client, "stage_wait_motion_end")
+    stage_call(client, "stage_await_movement")
     print_position(client, "at home")
 
 
@@ -131,7 +131,7 @@ def main() -> None:
 
     print("\n--- Go home after the run ---")
     stage_call(client, "stage_go_home")
-    stage_call(client, "stage_wait_motion_end")
+    stage_call(client, "stage_await_movement")
     print_position(client, "at home")
 
 if __name__ == "__main__":

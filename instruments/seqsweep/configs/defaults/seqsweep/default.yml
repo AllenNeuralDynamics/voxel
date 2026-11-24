@@ -21,18 +21,18 @@ router_server_api:
     seqsweep_check_job_status:
       obj_name: "seqsweep"
       attr_name: "check_job_status"
-    seqsweep_stage_move_to:
+    seqsweep_stage_move_abs:
       obj_name: "seqsweep"
-      attr_name: "stage_move_to"
-    seqsweep_stage_move_by:
+      attr_name: "stage_move_abs"
+    seqsweep_stage_move_rel:
       obj_name: "seqsweep"
-      attr_name: "stage_move_by"
+      attr_name: "stage_move_rel"
     seqsweep_stage_go_home:
       obj_name: "seqsweep"
       attr_name: "stage_go_home"
-    seqsweep_stage_wait_motion_end:
+    seqsweep_stage_await_movement:
       obj_name: "seqsweep"
-      attr_name: "stage_wait_motion_end"
+      attr_name: "stage_await_movement"
     seqsweep_stage_status:
       obj_name: "seqsweep"
       attr_name: "stage_status"

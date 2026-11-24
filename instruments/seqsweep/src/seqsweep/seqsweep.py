@@ -70,12 +70,12 @@ class SeqSweep:
         if self._scan_task is not None and not self._scan_task.done():
             raise RuntimeError("a scan is running; the stage cannot be moved by hand")
 
-    async def stage_move_to(self, x_mm: float, y_mm: float) -> None:
+    async def stage_move_abs(self, x_mm: float, y_mm: float) -> None:
         """Move the stage to an absolute (X, Y) position in mm; returns once the move has started."""
         self._check_stage_free()
         await self._hal.scan_controller.move_abs(x_mm, y_mm)
 
-    async def stage_move_by(self, dx_mm: float, dy_mm: float) -> None:
+    async def stage_move_rel(self, dx_mm: float, dy_mm: float) -> None:
         """Move the stage by a relative (X, Y) step in mm; returns once the move has started."""
         self._check_stage_free()
         await self._hal.scan_controller.move_rel(dx_mm, dy_mm)
@@ -85,7 +85,7 @@ class SeqSweep:
         self._check_stage_free()
         await self._hal.scan_controller.go_home()
 
-    async def stage_wait_motion_end(self) -> None:
+    async def stage_await_movement(self) -> None:
         """Block until both axes have settled."""
         await self._hal.scan_controller.await_movement()
 
