@@ -52,3 +52,6 @@ logging:
             - console
             - file
             - web_handler
+        # rigup logs an empty DEBUG line for every device command; hide them, keep INFO and above
+        'acs.DeviceController':
+            level: INFO
