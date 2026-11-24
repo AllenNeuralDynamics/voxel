@@ -60,7 +60,7 @@ def test_hal_scan_controller_requires_open():
 
 def test_hal_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(SimulatedScanController, "__DEVICE_TYPE__", "camera")
-    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller") as exc_info:
+    with pytest.raises(HALStartupError, match=r"hal\.scan_controller\.not_scan_controller") as exc_info:
         asyncio.run(HAL(_topology()).open())
     (violation,) = exc_info.value.violations
     assert violation.loc == ("hal", "scan_controller")
@@ -85,7 +85,7 @@ def test_seqsweep_open_succeeds_with_simulated_scan_controller():
 
 def test_seqsweep_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(SimulatedScanController, "__DEVICE_TYPE__", "camera")
-    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
+    with pytest.raises(HALStartupError, match=r"hal\.scan_controller\.not_scan_controller"):
         asyncio.run(SeqSweep(_config(_topology())).open())
 
 
@@ -106,6 +106,6 @@ def test_rpc_serves_sync_methods_with_the_core_signature():
 def test_rpc_open_failure_stops_the_loop_thread(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(SimulatedScanController, "__DEVICE_TYPE__", "camera")
     rpc = SeqSweepRpc(SeqSweep(_config(_topology())))
-    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
+    with pytest.raises(HALStartupError, match=r"hal\.scan_controller\.not_scan_controller"):
         rpc.open()
     assert not rpc._loop.running
