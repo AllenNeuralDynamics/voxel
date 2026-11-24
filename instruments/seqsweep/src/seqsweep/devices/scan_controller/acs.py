@@ -229,16 +229,6 @@ class AcsController(ScanController):
             moving = any(sp.GetMotorState(self._hc, axis, sp.SYNCHRONOUS, True) & MST_MOVE for axis in self._axes)
         return program_running or moving
 
-    @property
-    @describe(label="Strip position", desc="Strip-axis feedback position in mm; None until a pass is configured", stream=True)
-    def strip_pos_mm(self) -> float | None:
-        if self._pass is None:
-            return None
-        scan_axis = self._pass[1].scan_axis
-        axis = self._axis_index("y" if scan_axis == "x" else "x")
-        with self._lock:
-            return self._sp.GetFPosition(self._hc, axis, self._sp.SYNCHRONOUS, True)
-
     @describe(label="Read Status", desc="Per-axis position, motor state and faults")
     def read_status(self) -> dict[str, dict[str, float | bool | int]]:
         """Status of the X and Y axes: ``{'x': {...}, 'y': {...}}``."""
@@ -277,16 +267,6 @@ class AcsController(ScanController):
         return output
 
     # -- motion -----------------------------------------------------------------------------------------------
-
-    @describe(label="Set Motion", desc="Speed (mm/s), acceleration and deceleration for later moves")
-    def set_motion(self, velocity_mm_s: float, accel: float, decel: float) -> None:
-        if min(velocity_mm_s, accel, decel) <= 0:
-            raise ValueError("velocity, accel and decel must be positive")
-        with self._lock:
-            for axis in self._axes:
-                self._sp.SetVelocity(self._hc, axis, velocity_mm_s, self._sp.SYNCHRONOUS, True)
-                self._sp.SetAcceleration(self._hc, axis, accel, self._sp.SYNCHRONOUS, True)
-                self._sp.SetDeceleration(self._hc, axis, decel, self._sp.SYNCHRONOUS, True)
 
     @describe(label="Move To", desc="Move to an absolute (X, Y) position in mm; returns once the move has started")
     def move_to(self, x_mm: float, y_mm: float, velocity_mm_s: float | None = None) -> None:
