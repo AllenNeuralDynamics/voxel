@@ -6,8 +6,6 @@ from seqsweep.hal import HAL
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanJob, ScanPassConfig, ScanTraversal, strip_direction
 from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
 
-RUN_POLL_S = 0.05
-
 
 class SeqSweep:
     """Runs scan jobs on the SeqSweep rig in the background.
@@ -89,7 +87,7 @@ class SeqSweep:
 
     async def stage_wait_motion_end(self) -> None:
         """Block until both axes have settled."""
-        await self._hal.scan_controller.wait_motion_end()
+        await self._hal.scan_controller.await_motion_end()
 
     async def stage_status(self) -> dict[str, dict[str, float | bool | int]]:
         """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""
@@ -174,6 +172,7 @@ class SeqSweep:
             await scan_controller.configure(pass_config, derived)
             self.log.info("Homing before the scan")
             await scan_controller.go_home()
+            await scan_controller.await_motion_end()
             for chamber in job.chambers:
                 for strip in range(job.num_strips):
                     direction = strip_direction(job.traversal, strip)
@@ -188,13 +187,12 @@ class SeqSweep:
                         start_mm = pass_config.scan_start_mm - pass_config.scan_margin_mm
                     x_mm, y_mm = (start_mm, step_mm) if scan_axis_is_x else (step_mm, start_mm)
                     await scan_controller.move_to(x_mm, y_mm, velocity_mm_s=move_velocity_mm_s)
-                    await scan_controller.wait_motion_end()
+                    await scan_controller.await_motion_end()
                     self.log.info(
                         "Moved to X=%.3f mm, Y=%.3f mm (chamber %d, strip %d/%d)", x_mm, y_mm, chamber, strip + 1, job.num_strips
                     )
                     await scan_controller.run(direction)
-                    while await scan_controller.is_running.get():
-                        await asyncio.sleep(RUN_POLL_S)
+                    await scan_controller.await_motion_end()
             self._status = "finished"
         except asyncio.CancelledError:
             await scan_controller.abort()

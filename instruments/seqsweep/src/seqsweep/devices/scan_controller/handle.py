@@ -1,5 +1,8 @@
 """Typed scan-controller handle backed by the shared device-property cache."""
 
+import asyncio
+import time
+
 from rigup.device.handle import Adapter, DeviceProperty
 
 from rigup import DeviceHandle
@@ -7,6 +10,8 @@ from rigup import DeviceHandle
 from seqsweep.job_model import DerivedScan, ScanDirection, ScanPassConfig
 
 from .base import ScanController
+
+_POLL_INTERVAL_S = 0.05
 
 
 class ScanControllerHandle(DeviceHandle[ScanController]):
@@ -16,6 +21,7 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         super().__init__(adapter)
         self.is_running: DeviceProperty[bool] = self.props.property("is_running", bool)
         self.move_velocity_mm_s: DeviceProperty[float] = self.props.property("move_velocity_mm_s", lambda value: float(value))
+        self.motion_timeout_s: DeviceProperty[float] = self.props.property("motion_timeout_s", lambda value: float(value))
 
     async def configure(self, config: ScanPassConfig, derived: DerivedScan) -> None:
         """Load the pass geometry and gating."""
@@ -37,9 +43,20 @@ class ScanControllerHandle(DeviceHandle[ScanController]):
         """Start a move to the configured origin."""
         await self.call("go_home")
 
-    async def wait_motion_end(self) -> None:
-        """Block until both axes have settled."""
-        await self.call("wait_motion_end")
+    async def await_motion_end(self, timeout_s: float | None = None) -> None:
+        """Wait, without blocking the loop, until passes and moves have ended; raise on timeout or an axis fault.
+
+        ``timeout_s`` None: use the controller's ``motion_timeout_s``.
+        """
+        timeout_s = await self.motion_timeout_s.get() if timeout_s is None else timeout_s
+        deadline = time.monotonic() + timeout_s
+        while await self.is_running.get():
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"Motion did not end within {timeout_s:g} s")
+            await asyncio.sleep(_POLL_INTERVAL_S)
+        for axis, state in (await self.read_status()).items():  # a faulted axis stops, so check once the wait ends
+            if state["fault"] or state["motor_error"]:
+                raise RuntimeError(f"Axis {axis} fault {state['fault']}, motor error {state['motor_error']}")
 
     async def read_status(self) -> dict[str, dict[str, float | bool | int]]:
         """Per-axis position, motor state and faults: ``{'x': {...}, 'y': {...}}``."""

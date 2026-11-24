@@ -19,10 +19,11 @@ class SimulatedScanController(ScanController):
         uid: str,
         *,
         move_velocity_mm_s: float,
+        motion_timeout_s: float = 60.0,
         time_scale: float = 1.0,
         home_mm: tuple[float, float] = (0.0, 0.0),
     ) -> None:
-        super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s)
+        super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s, motion_timeout_s=motion_timeout_s)
         self._time_scale = time_scale
         self._home_mm = home_mm
         self._x_mm, self._y_mm = home_mm
@@ -41,9 +42,6 @@ class SimulatedScanController(ScanController):
 
     def go_home(self) -> None:
         self._x_mm, self._y_mm = self._home_mm
-
-    def wait_motion_end(self) -> None:
-        pass  # moves are instant
 
     def read_status(self) -> dict[str, dict[str, float | bool | int]]:
         return {

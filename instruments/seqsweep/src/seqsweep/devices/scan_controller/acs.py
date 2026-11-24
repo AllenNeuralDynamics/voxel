@@ -52,7 +52,6 @@ class AcsControllerConfig(FrozenModel):
     line_pulse_width_ms: float = Field(gt=0, description="Width of each line trigger pulse")
     scan_accel: float = Field(gt=0, description="Acceleration of the scan axis")
     scan_decel: float = Field(gt=0, description="Deceleration of the scan axis")
-    motion_timeout_s: float = Field(gt=0, description="Give up waiting for a motor to enable or a move to end after this long")
     home_mm: tuple[float, float] = Field(description="Home position (X, Y); reached by the home buffer, so it may lie outside limits_mm")
     limits_mm: dict[Literal["x", "y"], tuple[float, float]] = Field(description="Reachable range per axis")
 
@@ -79,10 +78,9 @@ def _split_output(output: str) -> tuple[int, int]:
 class AcsController(ScanController):
     """The real ACS scan controller; the keyword arguments after ``move_velocity_mm_s`` are the ``AcsControllerConfig`` fields."""
 
-    def __init__(self, uid: str, *, move_velocity_mm_s: float, **config: object) -> None:
-        super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s)
+    def __init__(self, uid: str, *, move_velocity_mm_s: float, motion_timeout_s: float, **config: object) -> None:
+        super().__init__(uid, move_velocity_mm_s=move_velocity_mm_s, motion_timeout_s=motion_timeout_s)
         self._config = AcsControllerConfig.model_validate(config)
-        self._motion_timeout_ms = int(self._config.motion_timeout_s * 1000)
         self._lock = threading.RLock()  # one vendor handle: serialize calls and multi-call sequences
         self._sp = self._import_library()
         self._hc = -1
@@ -146,7 +144,7 @@ class AcsController(ScanController):
         with self._lock:
             for axis in self._axes:
                 self._sp.Enable(self._hc, axis, self._sp.SYNCHRONOUS, True)
-                self._sp.WaitMotorEnabled(self._hc, axis, 1, self._motion_timeout_ms, True)
+                self._sp.WaitMotorEnabled(self._hc, axis, 1, int(self._motion_timeout_s * 1000), True)
                 self._sp.SetVelocity(self._hc, axis, self._move_velocity_mm_s, self._sp.SYNCHRONOUS, True)
                 self._sp.SetAcceleration(self._hc, axis, self._config.scan_accel, self._sp.SYNCHRONOUS, True)
                 self._sp.SetDeceleration(self._hc, axis, self._config.scan_decel, self._sp.SYNCHRONOUS, True)
@@ -220,11 +218,16 @@ class AcsController(ScanController):
         return {"x": x, "y": y}
 
     @property
-    @describe(label="Running", desc="Whether a pass is in progress", stream=True)
+    @describe(label="Running", desc="Whether a pass, the home move or any axis motion is in progress", stream=True)
     def is_running(self) -> bool:
-        with self._lock:
-            program_running = bool(self._sp.GetProgramState(self._hc, self._config.scan_buffer, self._sp.SYNCHRONOUS, True) & PST_RUN)
-        return program_running or any(state["moving"] for state in self.read_status().values())
+        sp = self._sp
+        with self._lock:  # short: a few vendor reads, so abort() is never kept waiting
+            program_running = any(
+                sp.GetProgramState(self._hc, buffer, sp.SYNCHRONOUS, True) & PST_RUN
+                for buffer in (self._config.scan_buffer, self._config.home_buffer)
+            )
+            moving = any(sp.GetMotorState(self._hc, axis, sp.SYNCHRONOUS, True) & MST_MOVE for axis in self._axes)
+        return program_running or moving
 
     @property
     @describe(label="Strip position", desc="Strip-axis feedback position in mm; None until a pass is configured", stream=True)
@@ -305,19 +308,10 @@ class AcsController(ScanController):
         position = self.position_mm
         self.move_to(position["x"] + dx_mm, position["y"] + dy_mm)
 
-    @describe(label="Go Home", desc="Run the home buffer to home_mm (not limited by limits_mm); returns when it has finished")
+    @describe(label="Go Home", desc="Start the home buffer to home_mm (not limited by limits_mm); returns once it has started")
     def go_home(self) -> None:
         with self._lock:
             self._sp.RunBuffer(self._hc, self._config.home_buffer, None, self._sp.SYNCHRONOUS, True)
-            self._sp.WaitProgramEnd(self._hc, self._config.home_buffer, self._motion_timeout_ms, True)
-
-    @describe(label="Wait Motion End", desc="Block until both axes have settled")
-    def wait_motion_end(self, timeout_ms: int | None = None) -> None:
-        """``timeout_ms`` None: use ``motion_timeout_s`` from the config."""
-        timeout_ms = self._motion_timeout_ms if timeout_ms is None else timeout_ms
-        with self._lock:
-            for axis in self._axes:
-                self._sp.WaitMotionEnd(self._hc, axis, timeout_ms, True)
 
     @describe(label="Abort", desc="Stop the pass and close every gate; safe when idle")
     def abort(self) -> None:

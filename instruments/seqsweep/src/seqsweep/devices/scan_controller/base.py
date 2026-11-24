@@ -23,12 +23,13 @@ class ScanController(Device, ABC):
 
     __DEVICE_TYPE__: ClassVar[str] = SeqSweepDeviceType.SCAN_CONTROLLER
 
-    def __init__(self, uid: str, *, move_velocity_mm_s: float) -> None:
+    def __init__(self, uid: str, *, move_velocity_mm_s: float, motion_timeout_s: float) -> None:
         super().__init__(uid=uid)
-        if move_velocity_mm_s <= 0:
-            raise ValueError("move_velocity_mm_s must be positive")
+        if move_velocity_mm_s <= 0 or motion_timeout_s <= 0:
+            raise ValueError("move_velocity_mm_s and motion_timeout_s must be positive")
         self.log = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self._move_velocity_mm_s = move_velocity_mm_s
+        self._motion_timeout_s = motion_timeout_s
 
     @property
     @describe(label="Move speed", desc="Speed of positioning moves in mm/s, not the scan speed")
@@ -36,10 +37,15 @@ class ScanController(Device, ABC):
         return self._move_velocity_mm_s
 
     @property
+    @describe(label="Motion timeout", desc="Give up waiting for a move to end after this many seconds")
+    def motion_timeout_s(self) -> float:
+        return self._motion_timeout_s
+
+    @property
     @abstractmethod
-    @describe(label="Running", desc="Whether a pass is in progress", stream=True)
+    @describe(label="Running", desc="Whether a pass, the home move or any axis motion is in progress", stream=True)
     def is_running(self) -> bool:
-        """Whether a pass (or a move) is in progress."""
+        """True while a pass or the home program runs, or an axis moves."""
 
     @describe(label="Configure Scan", desc="Load pass geometry and gating")
     @abstractmethod
@@ -61,15 +67,10 @@ class ScanController(Device, ABC):
     def move_by(self, dx_mm: float, dy_mm: float) -> None:
         """Start the relative move."""
 
-    @describe(label="Go Home", desc="Move to the home position")
+    @describe(label="Go Home", desc="Move to the home position; returns once the move has started")
     @abstractmethod
     def go_home(self) -> None:
-        """Move to the home position."""
-
-    @describe(label="Wait Motion End", desc="Block until both axes have settled")
-    @abstractmethod
-    def wait_motion_end(self) -> None:
-        """Block until motion stops."""
+        """Start the move to the home position."""
 
     @describe(label="Read Status", desc="Per-axis position, motor state and faults")
     @abstractmethod
