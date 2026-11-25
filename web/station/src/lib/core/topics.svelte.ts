@@ -28,11 +28,11 @@ export class Topics {
   }
 
   /**
-   * The next name part of each topic under `prefix`, in order of arrival: `names('devices')` gives the device ids. It
-   * changes only when a topic is added or removed.
+   * The next name part of each topic under `prefix`, in order of arrival: `names('devices')` gives the device ids.
+   * With no prefix, the first name part of each topic. It changes only when a topic is added or removed.
    */
-  names(prefix: string): string[] {
-    const start = `${this.#prefix}${prefix}.`;
+  names(prefix = ''): string[] {
+    const start = prefix ? `${this.#prefix}${prefix}.` : this.#prefix;
     const found = new Set<string>();
     for (const key of this.#cells.keys()) {
       if (key.startsWith(start)) found.add(key.slice(start.length).split('.', 1)[0]);

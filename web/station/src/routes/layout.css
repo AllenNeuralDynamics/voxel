@@ -58,6 +58,25 @@
   @apply h-status-bar flex shrink-0 items-center border-t border-line-muted bg-shell;
 }
 
+/* The part of a page that scrolls. It is a placed box, so an absolutely placed part inside it with no placed ancestor
+ * of its own, such as `sr-only` text, is placed from it and scrolls with it. */
+@utility page-body {
+  @apply px-inset relative overflow-y-auto pb-5;
+}
+
+/* The app is a frame as large as the window, and only its panes scroll. The body is as tall as the window, it is the
+ * placed box of every part that has no other, and it cuts what reaches past it. So a part that is placed too far out
+ * is cut, the page never becomes taller than the window, and nothing can scroll the frame out of view. */
+html {
+  overflow: clip;
+}
+
+body {
+  position: relative;
+  height: 100dvh;
+  overflow: clip;
+}
+
 /* What acts on the station while the app is not connected to it: nothing there takes input, and its controls fade. */
 [inert] :is(button, input, select, textarea, [role='slider']) {
   opacity: 0.5;

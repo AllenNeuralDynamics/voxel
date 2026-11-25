@@ -6,9 +6,8 @@
 
   interface Props {
     /**
-     * `list` is for a narrow panel: each theme is picked from a list that opens, and the densities show as numbers.
-     * `tiles` is for a page with room: every theme shows as a card, the densities show as words, and a faint line
-     * parts the rows.
+     * `list` is for a narrow panel: each theme is picked from a list that opens. `tiles` is for a page with room:
+     * every theme shows as a card, and a faint line parts the rows.
      */
     themes?: 'list' | 'tiles';
   }
@@ -17,7 +16,7 @@
 
   const modes: Mode[] = ['light', 'dark', 'auto'];
 
-  // The sizes show as numbers for now. 4 word labels do not fit this panel.
+  // The sizes show as numbers. 4 word labels do not fit a narrow panel or a narrow page.
   const densities = DENSITIES.map((level) => level.size);
 
   const lightThemes = themes.list.filter((t) => t.swatches.light).map((t) => t.id);
@@ -122,7 +121,6 @@ the same columns. -->
       <RadioBar
         value={prefs.density}
         options={densities}
-        display={(size) => DENSITIES.find((level) => level.size === size)?.label ?? String(size)}
         onChange={(density) => themes.setDensity(density)}
         variant="soft"
         size="md"

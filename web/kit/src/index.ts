@@ -20,6 +20,8 @@ export { default as RadioBar } from './controls/choices/RadioBar.svelte';
 export { default as Select } from './controls/choices/Select.svelte';
 export { default as Field } from './controls/Field.svelte';
 export { default as JsonView } from './display/JsonView.svelte';
+export { default as ObjectView, type ObjectMark } from './display/ObjectView.svelte';
+export { ObjectDiff } from './utils/object-diff';
 export { default as Label } from './controls/Label.svelte';
 export { numberDisplay, type NumberProps, type RangeProps, type SliderProps } from './controls/numeric/number.svelte';
 export { default as NumberBox } from './controls/numeric/NumberBox.svelte';

@@ -7,8 +7,8 @@
   import LasersOff from '$lib/features/live/LasersOff.svelte';
   import LiveControls from '$lib/features/live/LiveControls.svelte';
   import PowerPane from '$lib/features/live/PowerPane.svelte';
-  import ProfileSelect from '$lib/features/live/ProfileSelect.svelte';
   import StreamPane from '$lib/features/live/StreamPane.svelte';
+  import ProfileSelect from '$lib/features/profiles/ProfileSelect.svelte';
   import { cn } from '@voxel/kit/cn';
   import { wavelengthToColor } from '@voxel/kit/colors';
   import { AutoSplit, createPaneSize, Pane, PaneDivider, PaneGroup, SplitView } from '@voxel/kit/pane';

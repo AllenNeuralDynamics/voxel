@@ -1,6 +1,7 @@
 """The saved state of 1 running instrument: ``state.json``, and its defaults in ``default.yaml``."""
 
 import asyncio
+import shutil
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -45,7 +46,11 @@ type StateChange = Change[dict[KeyPath, Any]]
 
 class InstrumentStore[S: InstrumentState](Subscribable[S]):
     """The saved state of 1 running instrument. Each change is checked against ``rig.yaml``, saved in
-    ``state.json``, and sent to the subscribers. Only the instrument holds it."""
+    ``state.json``, and sent to the subscribers. Only the instrument holds it. Before ``default.yaml`` changes, the
+    file is copied into ``backups``, with the date and time in its name; the folder keeps the newest
+    ``DEFAULT_BACKUPS`` copies."""
+
+    DEFAULT_BACKUPS = 5
 
     def __init__(self, home: Path, config: InstrumentConfig, default: S, state: S) -> None:
         super().__init__()
@@ -113,31 +118,66 @@ class InstrumentStore[S: InstrumentState](Subscribable[S]):
             saved = self._value.model_dump()
             return Change(before=before, after={path: self._find(saved, path)[2] for path in values})
 
-    async def save_as_default_state(self, include: Collection[str] | None = None) -> None:
-        """Save the given fields of the state as the instrument's defaults, in ``default.yaml``. With no fields
-        given, save each field that can be a default."""
-        fields = self._default_fields(include, "save as default")
+    async def save_as_default_state(self, paths: Collection[KeyPath] | None = None) -> None:
+        """Save the value of the state at each key path as the instrument's default there, in ``default.yaml``. With
+        no paths given, save each field that can be a default. A key that the state does not have leaves the
+        defaults. Raise :class:`RejectedError` when the defaults would have a problem; then nothing is saved."""
+        paths = self._default_paths(paths, "save as default")
         async with self._lock:
-            default = self._default.value.model_copy(update={field: getattr(self._value, field) for field in fields})
+            data, state = self._default.value.model_dump(), self._value.model_dump()
+            for path in paths:
+                parent, key, _ = self._find(data, path)
+                value = self._find(state, path)[2]
+                if isinstance(value, Absent):
+                    parent.pop(key, None)
+                else:
+                    parent[key] = value
+            try:
+                default = self._default.value.model_validate(data)
+            except ValidationError as exc:
+                problems = Problems.from_validation(exc)
+                raise RejectedError(f"Cannot save as default: {problems}", problems) from exc
+            if default == self._default.value:
+                return
             if found := default.problems(self._config).errors():
                 raise RejectedError(f"Cannot save as default: {found}", found)
-            data = default.model_dump(mode="json", exclude_none=True, include=set(default.default_fields()))
-            await asyncio.to_thread(update_yaml, self._home / "default.yaml", data)
+            saved = default.model_dump(mode="json", exclude_none=True, include=set(default.default_fields()))
+            await asyncio.to_thread(self._write_default, saved)
             await self._default.set(default)
 
-    def default_values(self, include: Collection[str] | None = None) -> dict[KeyPath, Any]:
-        """The value of the given fields in the default state, or of each field that can be a default, as
-        :meth:`update` takes them."""
+    def default_values(self, paths: Collection[KeyPath] | None = None) -> dict[KeyPath, Any]:
+        """The value of the default state at each key path, or of each field that can be a default, as
+        :meth:`update` takes them: :data:`ABSENT` for a key that the defaults do not have."""
         default = self._default.value.model_dump()
-        return {(field,): default[field] for field in sorted(self._default_fields(include, "restore"))}
+        return {path: self._find(default, path)[2] for path in self._default_paths(paths, "restore")}
 
-    def _default_fields(self, include: Collection[str] | None, action: str) -> frozenset[str]:
+    def _default_paths(self, paths: Collection[KeyPath] | None, action: str) -> list[KeyPath]:
+        """``paths``, or 1 path for each field that can be a default. Raise :class:`RejectedError` for a path that
+        starts at no such field."""
         allowed = self._value.default_fields()
-        if include is None:
-            return allowed
-        if unknown := set(include) - allowed:
-            raise RejectedError(f"Cannot {action}: {sorted(unknown)} cannot be a default")
-        return frozenset(include)
+        if paths is None:
+            return [(field,) for field in sorted(allowed)]
+        found = [tuple(path) for path in paths]
+        if unknown := sorted({str(path[0]) if path else "" for path in found if not path or path[0] not in allowed}):
+            raise RejectedError(f"Cannot {action}: {unknown} cannot be a default")
+        return found
+
+    def _write_default(self, data: Mapping[str, Any]) -> None:
+        """Copy ``default.yaml`` into ``backups``, drop the oldest copies past ``DEFAULT_BACKUPS``, then write
+        ``data`` into the file."""
+        current = self._home / "default.yaml"
+        if current.is_file():
+            backups = self._home / "backups"
+            backups.mkdir(exist_ok=True)
+            shutil.copy2(current, backups / self._backup_name())
+            for old in sorted(backups.glob("default-*.yaml"))[: -self.DEFAULT_BACKUPS]:
+                old.unlink()
+        update_yaml(current, data)
+
+    def _backup_name(self) -> str:
+        """The name of a copy of ``default.yaml`` made now: the local date and time, with no character that a file
+        name cannot have."""
+        return f"default-{datetime.now().astimezone():%Y-%m-%dT%H-%M-%S}.yaml"
 
     @staticmethod
     def _find(data: Any, path: KeyPath) -> tuple[Any, str | int, Any]:

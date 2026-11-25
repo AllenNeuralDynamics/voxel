@@ -9,10 +9,11 @@ type Icon = Component<SvelteHTMLElements['svg']>;
  */
 export type Crumb = { label: string } | { label: string; href: string } | { label: string; items: CrumbItem[] };
 
-/** 1 sibling in a crumb's menu. */
+/** 1 sibling in a crumb's menu. `trailing` is drawn at the end of its row, before the mark of the open sibling. */
 export interface CrumbItem {
   label: string;
   href: string;
+  trailing?: Snippet;
 }
 
 /**
@@ -56,8 +57,8 @@ export type Action = ButtonAction | ChoiceAction | CustomAction;
 
 /**
  * What a page shows in the app bar: its path, a status, and its actions. Actions are in their order in the bar. When
- * the bar is short they fold into a menu: the status first, then buttons, then choices, then the middle crumbs. A
- * primary action never folds.
+ * the bar is short they fold into a menu: the status first, then buttons, then choices, then the middle crumbs, and
+ * a primary action last.
  */
 export interface AppBarContent {
   crumbs: Crumb[];

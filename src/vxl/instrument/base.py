@@ -527,20 +527,22 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             await edit.record({("metadata_cls",): form, ("plan",): self._fit_plan(form)})
 
     @action(on="defaults", verb="restore")
-    async def restore_default_state(self, fields: Sequence[str] | None = None) -> None:
-        """Set the given fields of the state back to the default state, or each field that can be a default. With a
-        restored metadata form, each task keeps the metadata that fits it."""
+    async def restore_default_state(self, paths: Sequence[KeyPath] | None = None) -> None:
+        """Set the state at each key path back to the default state, or each field that can be a default. A path
+        names a field, or a part of it, such as ``("profiles", "gfp")``. A key that the defaults do not have leaves
+        the state. With a restored metadata form, each task keeps the metadata that fits it."""
         async with self._state_edit("Restore the default state") as edit:
-            values = self._store.default_values(fields)
+            values = self._store.default_values(paths)
             if ("metadata_cls",) in values:
                 values["plan",] = self._fit_plan(values["metadata_cls",])
             await edit.record(values)
 
     @action(on="defaults", verb="save")
-    async def save_as_default_state(self, fields: Sequence[str] | None = None) -> None:
-        """Save the given fields of the state as the default state, or each field that can be a default."""
+    async def save_as_default_state(self, paths: Sequence[KeyPath] | None = None) -> None:
+        """Save the state at each key path as the default state, or each field that can be a default. A path names a
+        field, or a part of it, such as ``("profiles", "gfp")``. The file is backed up first."""
         async with self._scheduler.run("saving default state", requires={self._store}):
-            await self._store.save_as_default_state(fields)
+            await self._store.save_as_default_state(paths)
 
     @action(on="history", verb="undo")
     async def undo(self) -> None:

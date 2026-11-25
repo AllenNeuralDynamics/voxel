@@ -106,7 +106,7 @@ async def test_the_store_keeps_the_plan_out_of_the_defaults(tmp_path: Path) -> N
     assert store.default_state.value.profiles["gfp"].label == "GFP"
     assert set(load_yaml(store.home / "default.yaml")) <= InstrumentState.default_fields()
     with pytest.raises(RejectedError, match="plan"):
-        await store.save_as_default_state(["plan"])
+        await store.save_as_default_state([("plan",)])
 
     await store.update({("profiles", "gfp", "label"): "green"})
     await store.update(store.default_values())
@@ -118,6 +118,78 @@ async def test_the_store_keeps_the_plan_out_of_the_defaults(tmp_path: Path) -> N
     again = InstrumentFolder.read(store.home)
     assert again.ok
     assert (again.default, again.state) == (store.default_state.value, store.value)
+
+
+async def test_the_store_saves_and_restores_defaults_at_key_paths(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    gfp = store.value.profiles["gfp"].model_dump()
+    await store.update({("profiles", "rfp"): gfp | {"positions": {"fw": "RFP"}}, ("profiles", "gfp", "label"): "GFP"})
+
+    # 1 profile is saved, and the other change is not.
+    await store.save_as_default_state([("profiles", "rfp")])
+    assert set(store.default_state.value.profiles) == {"gfp", "rfp"}
+    assert store.default_state.value.profiles["gfp"].label != "GFP"
+    assert set(load_yaml(store.home / "default.yaml")["profiles"]) == {"gfp", "rfp"}
+
+    # 1 value is restored, and the other profile stays.
+    await store.update({("profiles", "rfp", "label"): "red"})
+    await store.update(store.default_values([("profiles", "gfp", "label")]))
+    assert (store.value.profiles["gfp"].label, store.value.profiles["rfp"].label) == (gfp["label"], "red")
+
+    # A profile that the defaults do not have leaves the state, and one that the state does not have leaves them.
+    await store.update({("profiles", "cfp"): gfp})
+    assert store.default_values([("profiles", "cfp")]) == {("profiles", "cfp"): ABSENT}
+    await store.update(store.default_values([("profiles", "cfp")]))
+    assert set(store.value.profiles) == {"gfp", "rfp"}
+    await store.update({("profiles", "rfp"): ABSENT})
+    await store.save_as_default_state([("profiles", "rfp")])
+    assert set(store.default_state.value.profiles) == {"gfp"}
+
+
+async def test_the_store_refuses_defaults_that_do_not_fit(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    before = (store.home / "default.yaml").read_text()
+
+    for paths in ([("plan", 0)], [()], [("nothing",)]):
+        with pytest.raises(RejectedError, match="cannot be a default"):
+            await store.save_as_default_state(paths)
+        with pytest.raises(RejectedError, match="cannot be a default"):
+            store.default_values(paths)
+    with pytest.raises(RejectedError, match="Nothing at"):
+        await store.save_as_default_state([("profiles", "rfp", "label")])
+
+    # The only profile cannot leave the state while a task images with it.
+    await store.update({("plan",): [Task(id="brain", profiles=["gfp"])]})
+    await store.save_as_default_state([("profiles",)])
+    with pytest.raises(RejectedError):
+        await store.update({("profiles", "gfp"): ABSENT})
+    assert set(store.value.profiles) == {"gfp"}
+    assert (store.home / "default.yaml").read_text() == before
+    assert not (store.home / "backups").exists()
+
+
+async def test_the_store_keeps_the_newest_copies_of_the_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    monkeypatch.setattr(InstrumentStore, "DEFAULT_BACKUPS", 2)
+    backups = store.home / "backups"
+    first = (store.home / "default.yaml").read_text()
+
+    await store.save_as_default_state()
+    assert not backups.exists()
+
+    for label in ("a", "b", "c"):
+        await store.update({("profiles", "gfp", "label"): label})
+        # A copy is named by the second, so each save here writes its copy under its own name.
+        monkeypatch.setattr(
+            store, "_backup_name", lambda label=label: f"default-2026-01-01T00-00-0{'abc'.index(label)}.yaml"
+        )
+        await store.save_as_default_state([("profiles", "gfp", "label")])
+    kept = sorted(path.name for path in backups.iterdir())
+    assert kept == ["default-2026-01-01T00-00-01.yaml", "default-2026-01-01T00-00-02.yaml"]
+    assert first not in {(backups / name).read_text() for name in kept}
+    assert load_yaml(backups / kept[-1])["profiles"]["gfp"]["label"] == "b"
 
 
 async def test_the_store_sets_and_removes_values_at_key_paths(tmp_path: Path) -> None:

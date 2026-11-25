@@ -5,6 +5,7 @@
     provideChannelPrefs,
     provideColormaps,
     provideInstrumentSelection,
+    provideShownProfile,
     provideStationContext
   } from '$lib/context.svelte';
 
@@ -16,6 +17,7 @@
   const station = provideStationContext();
   provideInstrumentSelection(station, () => params);
   provideChannelPrefs(station, provideColormaps());
+  provideShownProfile(station);
   onMount(() => station.initialize(params.stationId));
   onDestroy(() => station.dispose());
 </script>

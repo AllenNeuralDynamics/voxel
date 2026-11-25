@@ -1,4 +1,5 @@
 /** Shapes that the station's feed and routes send. */
+import type { Timeline, TuningField } from './signals';
 
 export type StreamTier = 'fast' | 'normal' | 'slow';
 
@@ -251,21 +252,97 @@ export interface TuningKnob {
   label: string;
   generator: string;
   wire: string;
-  field: string;
+  field: TuningField;
+}
+
+/** 1 command for a device: the operation `attr` with its arguments, by place and by name. */
+export interface OperationRequest {
+  attr: string;
+  args: unknown[];
+  kwargs: Record<string, unknown>;
 }
 
 /**
  * What is on at the same moment. `channels` names each channel, with its cameras and the light each uses. `positions`
  * gives the position of each device that the profile sets, `power` the power of each laser and modulator, `props` the
- * device properties, and `tuning_knobs` the numbers of its timelines that a person tunes. A kind of instrument adds
- * its own fields.
+ * device properties, `setup` the commands that each device gets when the profile starts, `timelines` what each signal
+ * generator plays, and `tuning_knobs` the numbers of its timelines that a person tunes. A kind of instrument adds its
+ * own fields.
  */
 export interface Profile {
   channels: Record<string, Record<string, string>>;
   positions: Record<string, number | string>;
   power: Record<string, Power>;
   props: Record<string, Record<string, unknown>>;
+  setup: Record<string, OperationRequest[]>;
+  timelines: Record<string, Timeline>;
   tuning_knobs: TuningKnob[];
   desc: string;
   label: string | null;
 }
+
+/** A device follows the stage: along `axis`, it takes the positions in `order`, and changes at each point of `at`, in
+ * µm; within `margin` of a point, it keeps the position it has. */
+export interface StageFollowRule {
+  axis: SpecimenAxis;
+  order: string[];
+  at: number[];
+  margin: number;
+}
+
+/** 1 entry in the plan: the profiles to image, and the metadata of the specimen. A kind of instrument adds its own
+ * fields. */
+export interface Task {
+  id: string;
+  profiles: string[];
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * What the operator edits: the saved state, and the default state, which has the same form. `positions` gives the
+ * position of each device that the instrument sets, the same for every profile: 1 position, or the rule by which the
+ * device follows the stage. `plan` is the tasks to run, and `metadata_cls` names the form of the metadata of each task.
+ * A kind of instrument adds its own fields.
+ */
+export interface InstrumentState {
+  metadata_cls: string;
+  profiles: Record<string, Profile>;
+  positions: Record<string, number | string | StageFollowRule>;
+  plan: Task[];
+}
+
+/** What the next undo and the next redo take back or do again, by the name of the edit; null when there is none. */
+export interface HistoryState {
+  undo_label: string | null;
+  redo_label: string | null;
+}
+
+/** The fields of a profile that an update may change, each one optional. A kind of instrument adds its own fields. */
+export interface ProfileFields {
+  label?: string | null;
+  desc?: string;
+  tuning_knobs?: TuningKnob[];
+}
+
+/** The region of an area camera's sensor that is read out, in sensor pixels. */
+export interface AreaROI {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The size of a camera's sensor, and of 1 pixel on it. */
+export interface CameraSensor {
+  pixel_um: { x: number; y: number };
+  size_px: { x: number; y: number };
+}
+
+/** The sizes that a region can have: the widths in `h` and the heights in `v`. An offset has the same step. */
+export interface ROIGrid {
+  h: { min: number; max: number; step: number };
+  v: { min: number; max: number; step: number };
+}
+
+/** The keys that lead to a value of the state, such as `['profiles', 'gfp']`. A path of 1 key is a whole field. */
+export type KeyPath = (string | number)[];

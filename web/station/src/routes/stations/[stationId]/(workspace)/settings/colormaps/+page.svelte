@@ -154,7 +154,7 @@ place in the group, the reset of a default colormap that changed, and, in no gro
   {/if}
 {/snippet}
 
-<div class="px-inset h-full overflow-y-auto pt-3 pb-4">
+<div class="h-full page-body pt-3">
   <Section heading="Colormaps" class="max-w-240">
     <Sortable.Root
       items={colormaps.groups}

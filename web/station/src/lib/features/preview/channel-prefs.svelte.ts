@@ -49,7 +49,7 @@ export class ChannelPrefs {
   autoColor(profileId: string, channel: string, camera: string): string {
     const instrument = this.#station.instrument;
     const band = instrument?.passBand(profileId, camera);
-    const light = instrument?.profile(profileId)?.channels[channel]?.[camera];
+    const light = instrument?.state.profile(profileId)?.channels[channel]?.[camera];
     const laser = light === undefined ? undefined : instrument?.device(light, Laser);
     return emissionToPreviewColor(band ? ChannelPrefs.#middle(band) : laser?.wavelength) ?? '#ffffff';
   }

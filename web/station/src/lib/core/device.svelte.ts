@@ -1,7 +1,16 @@
 /** The devices of the open instrument: any device, and typed classes for the kinds that the pages read by name. */
 import type { Client } from './client.svelte';
 import type { Topics } from './topics.svelte';
-import type { ControlMode, DeviceInterface, PropResults, PropValue, StreamInfo } from './types';
+import type {
+  AreaROI,
+  CameraSensor,
+  ControlMode,
+  DeviceInterface,
+  PropResults,
+  PropValue,
+  ROIGrid,
+  StreamInfo
+} from './types';
 
 /**
  * A device of the open instrument: its interface and its properties, read from the feed topics
@@ -183,5 +192,19 @@ export class AreaCamera extends Device {
   /** How its stream runs, or undefined while it sends no frames. */
   get streamInfo(): StreamInfo | undefined {
     return this.value<StreamInfo>('stream_info');
+  }
+
+  get sensor(): CameraSensor | undefined {
+    return this.value<CameraSensor>('sensor');
+  }
+
+  /** The region that it reads out now. */
+  get roi(): AreaROI | undefined {
+    return this.value<AreaROI>('roi');
+  }
+
+  /** The sizes that its region can have now. */
+  get roiGrid(): ROIGrid | undefined {
+    return this.value<ROIGrid>('roi_grid');
   }
 }

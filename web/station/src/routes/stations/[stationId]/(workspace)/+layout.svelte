@@ -5,17 +5,19 @@
   import { page } from '$app/state';
   import { getInstrumentSelection, getVoxelStation, provideAppBar } from '$lib/context.svelte';
   import type { ConnectionState } from '$lib/core/client.svelte';
+  import { SpimInstrument } from '$lib/core/spim.svelte';
   import { Linger } from '$lib/core/utils/linger.svelte';
   import ActivityButton from '$lib/features/live/ActivityButton.svelte';
   import LasersOff from '$lib/features/live/LasersOff.svelte';
   import { LiveDock } from '$lib/features/live/live-dock.svelte';
   import LiveProfile from '$lib/features/live/LiveProfile.svelte';
-  import ProfileSelect from '$lib/features/live/ProfileSelect.svelte';
+  import ProfileSelect from '$lib/features/profiles/ProfileSelect.svelte';
   import AppBar from '$lib/shell/AppBar.svelte';
   import { LAYOUT } from '$lib/shell/layout';
   import LogoMenu from '$lib/shell/LogoMenu.svelte';
   import * as Rail from '$lib/shell/rail';
   import StationMenu from '$lib/shell/StationMenu.svelte';
+  import { Button, Dialog, DropdownMenu } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { displayName } from '@voxel/kit/format';
   import {
@@ -30,7 +32,9 @@
     Play,
     Radio,
     RadioOff,
+    Redo,
     Route,
+    Undo,
     Video,
     X
   } from '@voxel/kit/icons';
@@ -160,6 +164,52 @@
   const logTime = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour12: false });
 </script>
 
+{#snippet historyBar()}
+  <!-- Undo and redo of the saved state, in 1 box. A run locks the state, so they wait for it. -->
+  {@const history = station.instrument?.history ?? { undo_label: null, redo_label: null }}
+  {@const running = station.instrumentOf(SpimInstrument)?.acquisition !== undefined}
+  <div
+    class="flex h-ui-md shrink-0 items-stretch overflow-hidden rounded-sm border border-control-line bg-element-bg"
+    role="group"
+    aria-label="Undo and redo"
+  >
+    <button
+      type="button"
+      class="grid w-[2.75rem] cursor-pointer place-items-center text-fg-muted hover:bg-element-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+      title={history.undo_label ? `Undo: ${history.undo_label}` : 'Nothing to undo'}
+      aria-label="Undo"
+      disabled={running || !history.undo_label}
+      onclick={() => station.instrument?.undo()}
+    >
+      <Undo class="size-4" aria-hidden="true" />
+    </button>
+    <button
+      type="button"
+      class="grid w-[2.75rem] cursor-pointer place-items-center text-fg-muted hover:bg-element-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+      title={history.redo_label ? `Redo: ${history.redo_label}` : 'Nothing to redo'}
+      aria-label="Redo"
+      disabled={running || !history.redo_label}
+      onclick={() => station.instrument?.redo()}
+    >
+      <Redo class="size-4" aria-hidden="true" />
+    </button>
+  </div>
+{/snippet}
+
+<!-- Undo and redo as rows of a menu, each with the name of its edit. -->
+{#snippet historyMenu()}
+  {@const history = station.instrument?.history}
+  {@const running = station.instrumentOf(SpimInstrument)?.acquisition !== undefined}
+  <DropdownMenu.Item disabled={running || !history?.undo_label} onclick={() => station.instrument?.undo()}>
+    <Undo class="size-4" aria-hidden="true" />
+    <span class="min-w-0 flex-1 truncate">{history?.undo_label ? `Undo: ${history.undo_label}` : 'Undo'}</span>
+  </DropdownMenu.Item>
+  <DropdownMenu.Item disabled={running || !history?.redo_label} onclick={() => station.instrument?.redo()}>
+    <Redo class="size-4" aria-hidden="true" />
+    <span class="min-w-0 flex-1 truncate">{history?.redo_label ? `Redo: ${history.redo_label}` : 'Redo'}</span>
+  </DropdownMenu.Item>
+{/snippet}
+
 <!-- Below its minimum width (the rail, the page's and the docked live profile's LAYOUT minimums), the window scrolls
 sideways, so every pane keeps its minimum. -->
 <div class="h-screen w-screen overflow-x-auto overflow-y-hidden">
@@ -198,9 +248,14 @@ sideways, so every pane keeps its minimum. -->
       </button>
     </div>
     <PaneGroup direction="horizontal" bind:ref={frameRef} class="h-full min-w-0 flex-1 bg-shell text-fg">
-      <Pane {...pagePane} id="page" order={1} class="grid min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]">
+      <Pane
+        {...pagePane}
+        id="page"
+        order={1}
+        class="grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto]"
+      >
         <div class="px-inset app-bar min-w-0">
-          <AppBar bar={appBar}>
+          <AppBar bar={appBar} history={station.instrument ? { bar: historyBar, menu: historyMenu } : undefined}>
             {#snippet start()}<StationMenu {selection} />{/snippet}
             {#snippet end()}
               <!-- The live profile's own controls, while it is in another window. -->
@@ -374,3 +429,27 @@ sideways, so every pane keeps its minimum. -->
     </ol>
   </section>
 {/snippet}
+
+<!-- The question before a switch: the open instrument closes, then the other one opens. It stays while the switch
+runs, and a failure shows in it. -->
+<Dialog.Root bind:open={() => selection.pending !== null, (open) => !open && !selection.closing && selection.cancel()}>
+  <Dialog.Content size="sm" showCloseButton={false}>
+    <Dialog.Header>
+      <Dialog.Title>Switch instrument</Dialog.Title>
+    </Dialog.Header>
+    <!-- What closes, then what opens, each with its label. -->
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 rounded-md bg-tint px-3 py-2.5">
+      <dt class="text-sm text-fg-muted">Close</dt>
+      <dd class="truncate font-medium">{displayName(selection.leaving ?? '')}</dd>
+      <dt class="text-sm text-fg-muted">Open</dt>
+      <dd class="truncate font-medium">{displayName(selection.pending ?? '')}</dd>
+    </dl>
+    {#if selection.failure}
+      <p class="rounded-sm bg-danger-tint px-3 py-2 text-sm text-danger-fg" role="alert">{selection.failure}</p>
+    {/if}
+    <Dialog.Footer>
+      <Button variant="secondary" disabled={selection.closing} onclick={() => selection.cancel()}>Cancel</Button>
+      <Button variant="danger" onclick={() => selection.switch()}>Switch</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

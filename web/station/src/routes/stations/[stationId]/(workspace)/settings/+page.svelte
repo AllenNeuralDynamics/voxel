@@ -176,9 +176,9 @@ control, then its reset; the controls of all rows end on 1 edge. On a narrow pag
   </div>
 {/snippet}
 
-<div class="px-inset @container h-full overflow-y-auto pb-4">
+<div class="@container h-full page-body">
   <!-- A wide page has no section name above the first box, so it gets more room at the top. -->
-  <div class="flex flex-col gap-6 pt-3 @3xl:pt-5">
+  <div class="flex flex-col gap-5 pt-3 @3xl:pt-5">
     {@render band('Appearance', appearance)}
     {@render band('General', general)}
     {@render band('View colors', viewColors)}

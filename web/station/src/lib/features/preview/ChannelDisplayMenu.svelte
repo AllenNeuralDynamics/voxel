@@ -9,7 +9,7 @@
 
   /**
    * How the image shows 1 channel on 1 camera, in a menu that opens from the channel's dot. The dot has the channel's
-   * color. The menu chooses the colormap: 1 from the groups that are shown, as rows of colors and name in 3 columns, found by a search of the names too, a hex color, or
+   * color. The menu chooses the colormap: 1 from the groups that are shown, as rows of colors and name in 3 columns, found by a search of the names of all colormaps too, a hex color, or
    * auto, which is the color of the light that reaches the camera. `label` names the channel for screen readers.
    */
   interface Props {
@@ -38,7 +38,8 @@
   const found = $derived.by(() => {
     const query = search.trim().toLowerCase();
     if (!query) return null;
-    const ids = new Set(colormaps.shownGroups.flatMap((group) => group.ids));
+    // Every colormap, also of a hidden group or of no group, in the order of the groups.
+    const ids = new Set([...colormaps.groups.flatMap((group) => group.ids), ...colormaps.all.map((each) => each.id)]);
     return [...ids].filter((id) => colormaps.name(id).toLowerCase().includes(query));
   });
 

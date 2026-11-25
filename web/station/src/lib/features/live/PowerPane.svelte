@@ -16,7 +16,7 @@
    */
   const station = getVoxelStation();
   const instrument = $derived(station.instrument);
-  const profile = $derived(instrument?.activeProfile ? instrument.profile(instrument.activeProfile) : undefined);
+  const profile = $derived(instrument?.activeProfile ? instrument.state.profile(instrument.activeProfile) : undefined);
   const inProfile = $derived(
     new Set(Object.values(profile?.channels ?? {}).flatMap((byCamera) => Object.values(byCamera)))
   );

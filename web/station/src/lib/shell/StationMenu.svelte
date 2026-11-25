@@ -71,17 +71,13 @@
     {:else}
       <DropdownMenu.Item disabled>No instruments</DropdownMenu.Item>
     {/each}
-    {#if !changing && (openName || selected)}
+    <!-- The open instrument closes from here, after a question in the menu. While an acquisition runs it does not,
+    and the item says why. -->
+    {#if !changing && openName}
       <DropdownMenu.Separator />
       {#if selection.asking}
         <div class="grid gap-2 rounded-sm bg-tint p-2">
-          <p class="text-sm">
-            {#if selection.pending}
-              Close {displayName(openName ?? '')} and open {displayName(selection.pending)}?
-            {:else}
-              Close {displayName(openName ?? '')}?
-            {/if}
-          </p>
+          <p class="text-sm">Close {displayName(openName)}?</p>
           <div class="flex justify-end gap-1">
             <Button size="sm" variant="ghost" disabled={selection.closing} onclick={() => selection.cancel()}
               >Cancel</Button
@@ -91,23 +87,22 @@
               variant="danger"
               disabled={selection.closing}
               onclick={async () => {
-                await selection.confirm();
+                await selection.close();
                 open = false;
-              }}>{selection.pending ? 'Switch' : 'Close'}</Button
+              }}>Close</Button
             >
           </div>
         </div>
       {:else}
-        {#if selected && selected !== openName}
-          <DropdownMenu.Item closeOnSelect={!openName} onclick={() => selection.askToOpen(selected)}>
-            Open {displayName(selected)}
-          </DropdownMenu.Item>
-        {/if}
-        {#if openName}
-          <DropdownMenu.Item variant="destructive" closeOnSelect={false} onclick={() => selection.askToClose()}>
-            Close {displayName(openName)}
-          </DropdownMenu.Item>
-        {/if}
+        <DropdownMenu.Item
+          variant="destructive"
+          closeOnSelect={false}
+          disabled={selection.running}
+          onclick={() => selection.askToClose()}
+        >
+          <span class="min-w-0 flex-1 truncate">Close {displayName(openName)}</span>
+          {#if selection.running}<span class="shrink-0 text-sm">Stop the run first</span>{/if}
+        </DropdownMenu.Item>
       {/if}
     {/if}
   </DropdownMenu.Content>

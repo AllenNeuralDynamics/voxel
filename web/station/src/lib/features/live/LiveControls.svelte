@@ -19,7 +19,7 @@
   const instrument = $derived(station.instrument);
   const spim = $derived(station.instrumentOf(SpimInstrument));
   const profileId = $derived(instrument?.activeProfile);
-  const profile = $derived(instrument && profileId ? instrument.profile(profileId) : undefined);
+  const profile = $derived(instrument && profileId ? instrument.state.profile(profileId) : undefined);
   const layout = $derived(
     instrument && profile
       ? new LiveControlsLayout(

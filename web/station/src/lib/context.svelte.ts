@@ -7,6 +7,7 @@ import { createContext } from 'svelte';
 import { Station } from '$lib/core/station.svelte';
 import { ChannelPrefs } from '$lib/features/preview/channel-prefs.svelte';
 import { Colormaps } from '$lib/features/preview/colormaps.svelte';
+import { ShownProfile } from '$lib/features/profiles/shown-profile.svelte';
 import { Marks } from '$lib/features/stage/marks.svelte';
 import { AppBar, type AppBarContent } from '$lib/shell/app-bar.svelte';
 import { InstrumentSelection } from '$lib/shell/selection.svelte';
@@ -17,8 +18,9 @@ const [getAppBar, setAppBar] = createContext<AppBar>();
 const [getChannelPrefs, setChannelPrefs] = createContext<ChannelPrefs>();
 const [getColormaps, setColormaps] = createContext<Colormaps>();
 const [getMarks, setMarks] = createContext<Marks>();
+const [getShownProfile, setShownProfile] = createContext<ShownProfile>();
 
-export { getChannelPrefs, getColormaps, getInstrumentSelection, getMarks, getVoxelStation };
+export { getChannelPrefs, getColormaps, getInstrumentSelection, getMarks, getShownProfile, getVoxelStation };
 
 /** Creates the station and provides it to descendants. The caller starts it with `initialize()`. */
 export function provideStationContext(): Station {
@@ -46,6 +48,11 @@ export function provideColormaps(): Colormaps {
 /** Creates the channel preferences of `station`'s open instrument and provides them to descendants. */
 export function provideChannelPrefs(station: Station, colormaps: Colormaps): ChannelPrefs {
   return setChannelPrefs(new ChannelPrefs(station, colormaps));
+}
+
+/** Creates the profile on show of `station`'s open instrument and provides it to descendants. */
+export function provideShownProfile(station: Station): ShownProfile {
+  return setShownProfile(new ShownProfile(station));
 }
 
 /** Creates the app bar and provides it to descendants. */

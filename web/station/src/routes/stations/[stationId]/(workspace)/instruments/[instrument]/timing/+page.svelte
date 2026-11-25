@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { useAppBar } from '$lib/context.svelte';
-
-  useAppBar(() => ({ crumbs: [{ label: 'Timing' }] }));
+  import ProfileBar from '$lib/features/profiles/ProfileBar.svelte';
 </script>
 
-<h1 class="px-inset py-3 text-xl">Timing</h1>
+<!-- The Timing address goes to the active profile, else the first one, once the instrument is known. -->
+<ProfileBar place="timing" label="Timing" />

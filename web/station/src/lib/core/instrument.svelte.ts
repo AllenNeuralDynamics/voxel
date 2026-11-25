@@ -5,25 +5,30 @@ import { TaskChain } from '$lib/core/utils/task-chain.svelte';
 import type { Client } from './client.svelte';
 import { Device, Laser, Modulator, Shutter } from './device.svelte';
 import { LightPaths } from './light-paths';
+import type { Timeline, TuningField } from './signals';
+import { State } from './state.svelte';
 import type { Topics } from './topics.svelte';
 import type {
   ActivityInfo,
   Alert,
   Filter,
+  HistoryState,
   HttpInstrumentInterface,
   InstrumentConfig,
+  InstrumentState,
+  KeyPath,
   Objective,
   Part,
   PassBand,
   PowerMode,
-  Profile
+  ProfileFields
 } from './types';
 
 /**
  * The open instrument of 1 session: its state and devices, read from the feed topics `instrument.*`, and the steps that
  * change it, sent to `<station>/instrument`. An edit of the instrument's state goes through `edits`, in order; a step
  * that drives the hardware, such as turning the lasers off, is sent at once. It holds what every kind of instrument
- * has; a kind with more, such as SpimInstrument, extends it, and names the config `C` and the profile `P` of its kind.
+ * has; a kind with more, such as SpimInstrument, extends it, and names the config `C` and the state `S` of its kind.
  */
 /** 1 laser's light on its way to the sample: the laser, the modulators and shutters that only its light passes, and
  * whether the light reaches the sample now. */
@@ -34,7 +39,7 @@ export interface Beam {
   blockedBy: Modulator | Shutter | undefined;
 }
 
-export class Instrument<C extends InstrumentConfig = InstrumentConfig, P extends Profile = Profile> {
+export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends InstrumentState = InstrumentState> {
   readonly edits = new TaskChain();
   readonly #client: Client;
   readonly #topics: Topics;
@@ -44,9 +49,16 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, P extends
   /** What a client can ask this instrument and how it reaches each operation, or undefined until it loads. */
   interface = $state.raw<HttpInstrumentInterface | undefined>(undefined);
 
+  /** The saved state: the profiles, the positions that the instrument sets, the plan. */
+  readonly state: State<S>;
+  /** The default state, in the same form as `state`. */
+  readonly defaultState: State<S>;
+
   constructor(client: Client, topics: Topics, base: string) {
     this.#client = client;
     this.#topics = topics;
+    this.state = new State<S>(topics.scope('state'));
+    this.defaultState = new State<S>(topics.scope('default_state'));
     this.#base = base;
     // The interface stays the same while the session is open, so 1 load is enough.
     void this.#client.get<HttpInstrumentInterface>(`${base}/interface`).then((loaded) => (this.interface = loaded));
@@ -109,7 +121,7 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, P extends
    * when no filter is on the way.
    */
   passBand(profileId: string, camera: string): PassBand | undefined {
-    const positions = this.profile(profileId)?.positions ?? {};
+    const positions = this.state.profile(profileId)?.positions ?? {};
     const ways = this.lightPaths.to(camera);
     const way =
       ways.find((path) => Object.entries(path.positions).every(([router, label]) => positions[router] === label)) ??
@@ -170,14 +182,9 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, P extends
     return this.activities.find((activity) => activity.kind === kind) as T | undefined;
   }
 
-  /** The ids of the saved profiles. */
-  get profileIds(): string[] {
-    return this.#topics.names('state.profiles');
-  }
-
-  /** The profile `id`, or undefined. */
-  profile(id: string): P | undefined {
-    return this.#topics.get<P>(`state.profiles.${id}`);
+  /** The undo history of the saved state: what the next undo and the next redo are. Not the past runs. */
+  get history(): HistoryState {
+    return this.#topics.get<HistoryState>('history') ?? { undo_label: null, redo_label: null };
   }
 
   /**
@@ -247,6 +254,46 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, P extends
 
   selectProfile(id: string): Promise<void> {
     return this.edits.run(() => this.call('select_profile', { profile_id: id }));
+  }
+
+  /** Changes `fields` of the profile `id`, as 1 edit. */
+  updateProfile(id: string, fields: ProfileFields): Promise<void> {
+    return this.edits.run(() => this.call('update_profile', { profile_id: id, ...fields }));
+  }
+
+  /**
+   * Loads `timeline` into the signal generator `generator`, and saves it into the active profile. The instrument
+   * refuses a timeline that does not fit, before the generator changes. An undo does not take it back.
+   */
+  setGeneratorTimeline(generator: string, timeline: Timeline): Promise<void> {
+    return this.edits.run(() => this.call('set_generator_timeline', { generator, timeline }));
+  }
+
+  /**
+   * Sets 1 number of the signal on `wire` in the active profile's timeline of `generator`, as a tuning knob does,
+   * and gives the value that the instrument took. `value` is in the fixed unit of `field`. An undo does not take it
+   * back.
+   */
+  setTuningKnob(generator: string, wire: string, field: TuningField, value: number): Promise<number> {
+    return this.edits.run(() => this.call<number>('set_tuning_knob', { generator, wire, field, value }));
+  }
+
+  /**
+   * Sets the state at each path back to the default state, as 1 edit. A key that the defaults do not have leaves the
+   * state. With no paths, every field that can be a default goes back. The instrument refuses all of it when the
+   * state would have a problem.
+   */
+  restoreDefaultState(paths?: KeyPath[]): Promise<void> {
+    return this.edits.run(() => this.call('restore_default_state', paths ? { paths } : {}));
+  }
+
+  /**
+   * Saves the state at each path as the default state. A key that the state does not have leaves the defaults. With
+   * no paths, every field that can be a default is saved. The instrument refuses all of it when the defaults would
+   * have a problem. An undo does not take it back.
+   */
+  saveAsDefaultState(paths?: KeyPath[]): Promise<void> {
+    return this.edits.run(() => this.call('save_as_default_state', paths ? { paths } : {}));
   }
 
   undo(): Promise<void> {

@@ -4,22 +4,28 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { getInstrumentSelection, getVoxelStation } from '$lib/context.svelte';
-  import type { Action, AppBar, Crumb } from '$lib/shell/app-bar.svelte';
+  import type { Action, AppBar, Crumb, CrumbItem } from '$lib/shell/app-bar.svelte';
   import { Breadcrumb, Button, DropdownMenu, RadioBar } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { Check, Ellipsis } from '@voxel/kit/icons';
 
   /**
-   * The page's app bar: `start` (the station menu), then the page's crumbs, its status and its actions. When they do
-   * not fit, parts fold in steps: 1 the status shows only its icon, 2 buttons and custom actions go into a menu, 3 so
-   * do choices, 4 the crumbs between `start` and the last fold into a menu. A primary action, and a custom action
-   * without a menu, never fold. The last crumb truncates when even step 4 does not fit. At the end, while the
-   * instrument on show is not the open one, a button opens it; it asks first while another one is open. Then `end`,
+   * The page's app bar: `start` (the station menu), then the page's crumbs, its status, its actions and `history`
+   * (undo and redo). When they do not fit, parts fold in steps: 1 the status shows only its icon, 2 `history` goes
+   * into a menu, 3 so do buttons and custom actions, 4 so do choices, 5 the crumbs between `start` and the last fold
+   * into a menu, 6 a primary action goes into the menu. A custom action without a menu never folds. The last crumb
+   * truncates when even step 6 does not fit. At the end, while the
+   * instrument on show is not the open one, a button opens it; while another one is open, the window asks first. Then `end`,
    * such as the profile while the live profile is in another window. Neither folds.
    */
-  let { bar, start, end }: { bar: AppBar; start: Snippet; end?: Snippet } = $props();
+  let {
+    bar,
+    start,
+    history,
+    end
+  }: { bar: AppBar; start: Snippet; history?: { bar: Snippet; menu: Snippet }; end?: Snippet } = $props();
 
-  const STEPS = [0, 1, 2, 3, 4];
+  const STEPS = [0, 1, 2, 3, 4, 5, 6];
 
   const crumbs = $derived(bar.content.crumbs);
   const status = $derived(bar.content.status ?? null);
@@ -39,12 +45,25 @@
   const step = $derived(STEPS.find((at) => (widths[at] ?? Infinity) <= room) ?? STEPS.length - 1);
 
   function folds(action: Action, at: number): boolean {
-    if (action.primary) return false;
-    if ('options' in action) return at >= 3;
-    if ('bar' in action) return action.menu !== undefined && at >= 2;
-    return at >= 2;
+    if ('bar' in action && action.menu === undefined) return false;
+    if (action.primary) return at >= 6;
+    return at >= ('options' in action ? 4 : 3);
   }
 </script>
+
+<!-- A sibling in a crumb's menu, as a row of the station menu: its name, what the page adds, then a check on the open
+one, which also has a fill. -->
+{#snippet siblingRow(sibling: CrumbItem)}
+  {@const open = sibling.href === page.url.pathname}
+  <DropdownMenu.Item
+    class={cn(open && 'bg-element-selected data-highlighted:bg-element-selected')}
+    onclick={() => goto(sibling.href)}
+  >
+    <span class="min-w-0 flex-1 truncate">{sibling.label}</span>
+    {@render sibling.trailing?.()}
+    {#if open}<Check class="size-4 shrink-0" aria-hidden="true" />{/if}
+  </DropdownMenu.Item>
+{/snippet}
 
 {#snippet crumb(item: Crumb, index: number)}
   <Breadcrumb.Separator>/</Breadcrumb.Separator>
@@ -58,10 +77,7 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" sideOffset={6} class="min-w-56">
           {#each item.items as sibling (sibling.href)}
-            <DropdownMenu.Item onclick={() => goto(sibling.href)}>
-              <span class="flex-1 truncate">{sibling.label}</span>
-              {#if sibling.href === page.url.pathname}<Check class="size-4 shrink-0" aria-hidden="true" />{/if}
-            </DropdownMenu.Item>
+            {@render siblingRow(sibling)}
           {/each}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -90,10 +106,7 @@
               <DropdownMenu.SubTrigger>{level.label}</DropdownMenu.SubTrigger>
               <DropdownMenu.SubContent class="min-w-48">
                 {#each level.items as sibling (sibling.href)}
-                  <DropdownMenu.Item onclick={() => goto(sibling.href)}>
-                    <span class="flex-1 truncate">{sibling.label}</span>
-                    {#if sibling.href === page.url.pathname}<Check class="size-4 shrink-0" aria-hidden="true" />{/if}
-                  </DropdownMenu.Item>
+                  {@render siblingRow(sibling)}
                 {/each}
               </DropdownMenu.SubContent>
             </DropdownMenu.Sub>
@@ -167,7 +180,7 @@
   {@const folded = actions.filter((action) => folds(action, at))}
   <Breadcrumb.Root class={cn('flex min-w-0', !live && 'shrink-0')}>
     <Breadcrumb.List class="gap-0 text-base">
-      {#if at >= 4 && crumbs.length > 1}
+      {#if at >= 5 && crumbs.length > 1}
         {@render hiddenCrumbs(crumbs.slice(0, -1))}
         {@render crumb(crumbs[crumbs.length - 1], crumbs.length - 1)}
       {:else}
@@ -192,11 +205,12 @@
   {#each shown as action, index (index)}
     <div class="flex shrink-0 items-center">{@render inBar(action)}</div>
   {/each}
-  {#if folded.length > 0}
+  {#if history && at < 2}{@render history.bar()}{/if}
+  {#if folded.length > 0 || (history && at >= 2)}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
-          <Button {...props} variant="ghost" size="icon" class="shrink-0 text-fg-muted" aria-label="More actions">
+          <Button {...props} variant="secondary" size="icon" class="shrink-0" aria-label="More actions">
             <Ellipsis class="size-4" />
           </Button>
         {/snippet}
@@ -208,14 +222,20 @@
           {/if}
           {@render inMenu(action)}
         {/each}
+        {#if history && at >= 2}
+          {#if folded.length > 0}<DropdownMenu.Separator />{/if}
+          {@render history.menu()}
+        {/if}
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   {/if}
   {#if closed}
+    <!-- While an acquisition runs, another instrument does not open, and the bar says why. -->
+    {#if selection.running}<span class="shrink-0 text-sm whitespace-nowrap text-fg-muted">Stop the run first</span>{/if}
     <Button
       size="sm"
       class="shrink-0"
-      disabled={station.status === 'opening'}
+      disabled={station.status === 'opening' || selection.running}
       onclick={() => closed && selection.askToOpen(closed)}>{station.status === 'opening' ? 'Opening…' : 'Open'}</Button
     >
   {/if}

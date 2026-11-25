@@ -1,6 +1,14 @@
 /** A SPIM microscope: what it has on top of every instrument. */
 import { Instrument } from './instrument.svelte';
-import type { ActivityInfo, InstrumentConfig, Profile, SpecimenAxis } from './types';
+import type {
+  ActivityInfo,
+  AreaROI,
+  InstrumentConfig,
+  InstrumentState,
+  Profile,
+  ProfileFields,
+  SpecimenAxis
+} from './types';
 
 /** A running acquisition: the visit that runs, of how many, and whether it is stopping. */
 export interface AcquisitionInfo extends ActivityInfo {
@@ -32,14 +40,31 @@ export interface SpimConfig extends InstrumentConfig {
  * that a camera reads out; a camera that it leaves out reads its whole sensor. */
 export interface SpimProfile extends Profile {
   spacing: number;
-  fov: Record<string, { x: number; y: number; w: number; h: number }>;
+  fov: Record<string, AreaROI>;
+}
+
+/** The state of a SPIM microscope. `task` is the settings that a new task starts with, and `writer` how the images
+ * are written. */
+export interface SpimState extends InstrumentState {
+  profiles: Record<string, SpimProfile>;
+  task: Record<string, unknown>;
+  writer: Record<string, unknown>;
+}
+
+/** The fields of a SPIM profile that an update may change. */
+export interface SpimProfileFields extends ProfileFields {
+  spacing?: number;
 }
 
 /**
  * The open instrument when it is a SPIM microscope: its preview, on top of what every instrument has. A preview shows
  * the live image of some channels of the active profile, named by their cameras.
  */
-export class SpimInstrument extends Instrument<SpimConfig, SpimProfile> {
+export class SpimInstrument extends Instrument<SpimConfig, SpimState> {
+  override updateProfile(id: string, fields: SpimProfileFields): Promise<void> {
+    return super.updateProfile(id, fields);
+  }
+
   /** The cameras whose channels a preview of the active profile shows, whether or not a preview runs. */
   get previewChannels(): string[] {
     return this.view<string[]>('preview_channels') ?? [];
@@ -58,6 +83,14 @@ export class SpimInstrument extends Instrument<SpimConfig, SpimProfile> {
   /** Chooses the channels, by camera, that a preview of the active profile shows. A running preview restarts. */
   setPreviewChannels(cameras: string[]): Promise<void> {
     return this.call('set_preview_channels', { channels: cameras });
+  }
+
+  /**
+   * Sets the region of `camera`, or its whole sensor with null, and gives the region that the camera took. When the
+   * camera is a channel of the active profile, the profile keeps the region. An undo does not take it back.
+   */
+  setCameraRegion(camera: string, region: AreaROI | null): Promise<AreaROI> {
+    return this.edits.run(() => this.call<AreaROI>('set_camera_region', { camera, region }));
   }
 
   /** Starts a preview of the chosen channels. Does nothing when a preview runs. */
