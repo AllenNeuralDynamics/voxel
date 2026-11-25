@@ -148,6 +148,8 @@ default:
             laser_488:      &laser {kind: on}
             galvo_sheet:    &galvo {kind: wave, shape: triangle, cycles: 20, center: 0 V, amplitude: 1.2 V}
       spacing: 0.5                                # µm between frames along the scan axis. X speed = 0.5 µm ÷ 10 ms × 0.95 = 47.5 µm/s
+      tuning_knobs:                               # numbers of the timelines to tune in the Live panel
+        - {label: Sweep size, generator: ao_main, wire: galvo_sheet, field: amplitude}
 
     cy5:                                          # real profiles differ in focus, timing and signal size. Here they share values only because this is an example
       label: Cy5
@@ -165,6 +167,8 @@ default:
             laser_638:      *laser
             galvo_sheet:    *galvo
       spacing: 0.5
+      tuning_knobs:
+        - {label: Sweep size, generator: ao_main, wire: galvo_sheet, field: amplitude}
 
   writer:
     max_level: 3

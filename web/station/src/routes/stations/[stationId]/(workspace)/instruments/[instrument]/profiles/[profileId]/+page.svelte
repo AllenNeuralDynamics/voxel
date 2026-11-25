@@ -29,9 +29,6 @@
   const NM = { from: 400, to: 750, open: 100 };
   const ticks = [400, 450, 500, 550, 600, 650, 700, 750];
 
-  const TABLE =
-    'w-full border-collapse text-sm tabular-nums [&_td]:border-t [&_td]:border-line-faint [&_td]:py-1.5 [&_th]:pt-2 [&_th]:pb-1 [&_th]:text-left [&_th]:font-normal [&_th]:whitespace-nowrap [&_th]:text-fg-muted';
-
   // Same side room as an inline box, so the text does not shift.
   const READ = 'px-1.5';
 
@@ -245,7 +242,7 @@
 
     <Section heading="Spectrum">
       <div
-        class="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 rounded-md bg-tint px-3 pt-2 pb-2.5 text-sm"
+        class="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 frame-tinted px-3 pt-2 pb-2.5 text-sm"
       >
         <span></span>
         <div class="relative h-4 text-xs text-fg-faint" aria-hidden="true">
@@ -349,8 +346,8 @@
 
     {#if powerRows.length > 0}
       <Section heading="Power">
-        <div class="rounded-md bg-tint">
-          <table class={[TABLE, '[&_td]:px-3 [&_td]:align-top [&_th]:px-3']}>
+        <div class="frame-tinted">
+          <table class="table-lined">
             <thead>
               <tr><th>Light</th><th>Full</th><th>Dim</th></tr>
             </thead>
@@ -370,8 +367,8 @@
 
     {#if positionRows.length > 0}
       <Section heading="Positions">
-        <div class="rounded-md bg-tint">
-          <table class={[TABLE, '[&_td]:px-3 [&_td]:align-top [&_th]:px-3']}>
+        <div class="frame-tinted">
+          <table class="table-lined">
             <thead>
               <tr><th>Device</th><th>Position</th></tr>
             </thead>
@@ -400,8 +397,8 @@
 
     {#if settingRows.length > 0}
       <Section heading="Settings">
-        <div class="rounded-md bg-tint">
-          <table class={[TABLE, '[&_td]:px-3 [&_td]:align-top [&_th]:px-3']}>
+        <div class="frame-tinted">
+          <table class="table-lined">
             <thead>
               <tr><th>Device</th><th>Setting</th><th>Value</th></tr>
             </thead>
@@ -421,7 +418,7 @@
 
     {#if spim && regionRows.length > 0}
       <Section heading="Sensor ROI">
-        <div class="rounded-md bg-tint">
+        <div class="frame-tinted">
           <!-- Matches the first column of the tables above so columns line up. -->
           <div
             class="grid grid-cols-[minmax(5rem,max-content)_minmax(max-content,1fr)] gap-x-[1.8rem] text-sm tabular-nums"
@@ -527,8 +524,8 @@
 
     <Section heading="Timing">
       {#if Object.keys(profile.timelines ?? {}).length > 0}
-        <div class="rounded-md bg-tint">
-          <table class={[TABLE, '[&_td]:px-3 [&_td]:align-top [&_th]:px-3']}>
+        <div class="frame-tinted">
+          <table class="table-lined">
             <thead>
               <tr><th>Generator</th><th>Sample rate</th><th>Duration</th><th>Wires</th></tr>
             </thead>
@@ -545,14 +542,14 @@
           </table>
         </div>
       {:else}
-        <p class="rounded-md bg-tint px-3 py-2 text-sm text-fg-muted">No timeline</p>
+        <p class="frame-tinted px-3 py-2 text-sm text-fg-muted">No timeline</p>
       {/if}
     </Section>
 
     {#if Object.keys(profile.setup ?? {}).length > 0}
       <Section heading="Setup">
-        <div class="rounded-md bg-tint">
-          <table class={[TABLE, '[&_td]:px-3 [&_td]:align-top [&_th]:px-3']}>
+        <div class="frame-tinted">
+          <table class="table-lined">
             <thead>
               <tr><th>Device</th><th>Commands when the profile starts</th></tr>
             </thead>
@@ -572,7 +569,7 @@
     <!-- The Run page does not show 1 task yet. -->
     <Section heading="Tasks">
       {#if tasks.length > 0}
-        <div class="flex flex-wrap gap-x-5 gap-y-1.5 rounded-md bg-tint px-3 py-2 text-sm">
+        <div class="flex flex-wrap gap-x-5 gap-y-1.5 frame-tinted px-3 py-2 text-sm">
           {#each tasks as task (task.id)}
             <a class="font-medium hover:underline" href="{selection.href(name, 'run')}#{encodeURIComponent(task.id)}">
               {displayName(task.id)}
@@ -580,7 +577,7 @@
           {/each}
         </div>
       {:else}
-        <p class="rounded-md bg-tint px-3 py-2 text-sm text-fg-muted">No task</p>
+        <p class="frame-tinted px-3 py-2 text-sm text-fg-muted">No task</p>
       {/if}
     </Section>
   {/if}

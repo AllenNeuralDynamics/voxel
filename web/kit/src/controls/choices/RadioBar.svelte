@@ -43,7 +43,7 @@
 
 <script lang="ts" generics="T extends string | number">
   import { RadioGroup, type RadioGroupRootProps } from 'bits-ui';
-  import type { Component } from 'svelte';
+  import type { Component, Snippet } from 'svelte';
   import type { SvelteHTMLElements } from 'svelte/elements';
 
   import { cn } from '../../utils/cn';
@@ -74,6 +74,10 @@
       size?: 'xs' | 'sm' | 'md' | 'lg';
       /** `vertical` stacks the options in a column. Each option keeps the height it has in a row. */
       orientation?: 'horizontal' | 'vertical';
+      /** Small marks after an option's text, as the Select has. */
+      trailing?: Snippet<[T]>;
+      /** An option drawn in the accent color. */
+      accented?: T | null;
       class?: string;
     };
 
@@ -87,6 +91,8 @@
     variant = 'filled',
     size = 'sm',
     orientation = 'horizontal',
+    trailing,
+    accented = null,
     class: className,
     ...attributes
   }: Props = $props();
@@ -116,8 +122,12 @@
   {#each control.options as option (option)}
     {@const shown = display(option)}
     {#if typeof shown === 'string'}
-      <RadioGroup.Item value={optionKey(option)} class={styles.option()}>
+      <RadioGroup.Item
+        value={optionKey(option)}
+        class={styles.option({ class: option === accented && 'text-accent-fg enabled:hover:text-accent-fg' })}
+      >
         <span class="truncate">{shown}</span>
+        {#if trailing}{@render trailing(option)}{/if}
       </RadioGroup.Item>
     {:else}
       {@const Icon = shown}

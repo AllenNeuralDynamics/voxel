@@ -30,7 +30,7 @@
       </div>
       {#each cameras as camera (camera.id)}
         {@const stream = camera.streamInfo}
-        <div role="row" class="col-span-4 grid grid-cols-subgrid rounded-md bg-tint py-1.5 pl-2.5">
+        <div role="row" class="col-span-4 grid grid-cols-subgrid frame-tinted py-1.5 pl-2.5">
           <span role="rowheader" class="truncate" title={displayName(camera.id)}
             ><a {...deviceLink(camera.id)} class="hover:underline">{displayName(camera.id)}</a></span
           >

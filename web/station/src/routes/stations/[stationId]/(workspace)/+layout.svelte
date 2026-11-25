@@ -21,6 +21,7 @@
   import { cn } from '@voxel/kit/cn';
   import { displayName } from '@voxel/kit/format';
   import {
+    Cable,
     Activity,
     ChartNoAxesColumn,
     Cpu,
@@ -63,9 +64,10 @@
     return [
       { href: selection.href(name, 'run'), label: 'Run', icon: Play },
       { href: selection.href(name, 'history'), label: 'History', icon: History },
-      { href: selection.href(name, 'light'), label: 'Light', icon: Route },
-      { href: selection.href(name, 'timing'), label: 'Timing', icon: Activity },
       { href: selection.href(name, 'profiles'), label: 'Profiles', icon: ChartNoAxesColumn },
+      { href: selection.href(name, 'timing'), label: 'Timing', icon: Activity },
+      { href: selection.href(name, 'light'), label: 'Light', icon: Route },
+      { href: selection.href(name, 'wires'), label: 'Wires', icon: Cable },
       { href: selection.href(name, 'devices'), label: 'Devices', icon: Cpu },
       { href: selection.href(name, 'config'), label: 'Config', icon: FileCog }
     ];
@@ -319,6 +321,7 @@
                     <section class="flex h-full min-h-0 flex-col" aria-label="Issues">
                       <ul class="min-h-0 flex-1 overflow-y-auto p-2">
                         {#each alerts as alert (`${alert.code}:${alert.loc.join('.')}`)}
+                          {@const place = selection.placeOf(alert.loc)}
                           <li
                             class="grid grid-cols-[0.5rem_minmax(0,1fr)] items-start gap-2 rounded-sm px-2 py-1 text-sm hover:bg-tint"
                           >
@@ -332,7 +335,14 @@
                             ></span>
                             <span class="min-w-0">
                               {alert.msg}
-                              {#if alert.loc.length > 0}<span class="text-fg-faint"> · {alert.loc.join('.')}</span>{/if}
+                              {#if place}
+                                ·
+                                <a
+                                  class="text-fg-muted hover:text-fg hover:underline"
+                                  href={place.href}
+                                  title={alert.loc.join('.')}>{place.label}</a
+                                >
+                              {/if}
                             </span>
                           </li>
                         {/each}
@@ -437,7 +447,7 @@
     <Dialog.Header>
       <Dialog.Title>Switch instrument</Dialog.Title>
     </Dialog.Header>
-    <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 rounded-md bg-tint px-3 py-2.5">
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 frame-tinted px-3 py-2.5">
       <dt class="text-sm text-fg-muted">Close</dt>
       <dd class="truncate font-medium">{displayName(selection.leaving ?? '')}</dd>
       <dt class="text-sm text-fg-muted">Open</dt>

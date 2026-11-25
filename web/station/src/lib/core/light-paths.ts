@@ -5,6 +5,13 @@ export interface LightPath {
   positions: Record<string, string>;
 }
 
+export interface LightPathPlace {
+  side: 'excitation' | 'detection';
+  serves: string[];
+  /** A router's positions, each with the nodes it sends light to. */
+  ways: [label: string, targets: string[]][];
+}
+
 export interface Served {
   side: 'excitation' | 'detection';
   ends: string[];
@@ -60,6 +67,10 @@ export class LightPaths {
         this.#served.set(node, served);
       }
     }
+  }
+
+  get all(): LightPath[] {
+    return this.#paths;
   }
 
   from(source: string): LightPath[] {

@@ -1,8 +1,14 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+
   import { getVoxelStation } from '$lib/context.svelte';
+  import { Dimmable, DiscreteAxis, LinearAxis } from '$lib/core/device.svelte';
   import { SpimSession } from '$lib/core/spim.svelte';
+  import type { Power, TuningKnobView } from '$lib/core/types';
+  import { Quantity } from '$lib/core/utils/quantity';
+  import { LightMap } from '$lib/features/devices/light-map';
   import ChannelDisplayMenu from '$lib/features/preview/ChannelDisplayMenu.svelte';
-  import { Button, Checkbox, RadioBar } from '@voxel/kit';
+  import { Button, Checkbox, Choice, RadioBar, Ruler, Slider } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { displayName } from '@voxel/kit/format';
 
@@ -41,9 +47,54 @@
     [
       { key: 'channels', heading: 'Channels', devices: [] as string[] },
       { key: 'excitation', heading: 'Excitation path', devices: layout?.excitation ?? [] },
-      { key: 'detection', heading: 'Detection path', devices: layout?.detection ?? [] }
-    ].filter((group) => group.key === 'channels' || group.devices.length > 0)
+      { key: 'detection', heading: 'Detection path', devices: layout?.detection ?? [] },
+      { key: 'tuning', heading: 'Tuning', devices: [] as string[] }
+    ].filter(
+      (group) =>
+        group.key === 'channels' || group.devices.length > 0 || (group.key === 'tuning' && session?.tuning.length)
+    )
   );
+
+  // The devices the light reaches now: on a way of the profile's channels that the routers' positions now allow.
+  const reached = $derived.by(() => {
+    if (!session || !instrument || !profile) return new Set<string>();
+    const at = (router: string): string | undefined => {
+      const device = session.device(router);
+      return device instanceof DiscreteAxis ? device.position : undefined;
+    };
+    const ways = LightMap.channels(instrument.lightPaths.all, profile).flatMap((channel) => channel.paths);
+    const open = ways.filter((way) => Object.entries(way.positions).every(([router, label]) => at(router) === label));
+    return new Set(open.flatMap((way) => way.nodes));
+  });
+
+  /** The profile's power for the mode now, at the router's position when it keeps 1 for each, as a number. */
+  function powerOf(power: Power): number | undefined {
+    const pick = session?.powerMode === 'dim' && power.dim !== null ? power.dim : power.full;
+    const router = power.router ? session?.device(power.router) : undefined;
+    const text =
+      typeof pick === 'string'
+        ? pick
+        : router instanceof DiscreteAxis && router.position
+          ? pick[router.position]
+          : undefined;
+    return text === undefined ? undefined : Quantity.parse(text)?.number;
+  }
+
+  /** The device's own pins that a generator's wire drives, such as `ttl_in`. */
+  const driven = (id: string): string =>
+    (instrument?.wires.into(id) ?? [])
+      .flatMap((wire) => wire.to.filter((port) => port.device === id).map((port) => port.pin))
+      .join(', ');
+
+  const MODES = { analog: 'Analog in', digital: 'Digital in', mixed: 'Analog and digital in' } as const;
+
+  /** The band of the filter at `label`, such as `425–475 nm`. */
+  function bandOf(label: string | undefined): string {
+    const band = label ? instrument?.filters[label]?.band : undefined;
+    if (!band) return '';
+    const [low, high] = band.map((end) => (end ? Quantity.parse(end)?.number : undefined));
+    return `${low ?? ''}–${high ?? ''} nm`;
+  }
 
   /** A preview needs at least 1 channel, so the last ones stay on. */
   function choose(some: string[], on: boolean): void {
@@ -88,11 +139,146 @@
   {/if}
 {/snippet}
 
+<!-- The frame of every device row: its name, then the control and the reading of its kind. -->
+{#snippet row(id: string, control: Snippet, reading: Snippet, label?: Snippet, faint = !reached.has(id))}
+  <div
+    class={cn(
+      'grid h-ui-sm grid-cols-[clamp(8rem,30%,12rem)_minmax(0,1fr)_6.5rem] items-center gap-2 px-2.5 text-sm not-last:mb-1',
+      faint && 'opacity-50'
+    )}
+  >
+    {#if label}
+      {@render label()}
+    {:else}
+      <a {...deviceLink(id)} class="truncate text-fg-muted hover:text-fg hover:underline">{displayName(id)}</a>
+    {/if}
+    <span class="flex min-w-0 items-center">{@render control()}</span>
+    <span class="truncate text-right text-fg-muted tabular-nums">{@render reading()}</span>
+  </div>
+{/snippet}
+
+{#snippet lightRow(id: string, light: Dimmable)}
+  {@const signal = light.controlMode && light.controlMode !== 'software' ? light.controlMode : null}
+  {@const power = profile?.power[id]}
+  {@const value = power ? powerOf(power) : undefined}
+  {#snippet control()}
+    {#if signal}
+      <span class="truncate text-fg-muted">{MODES[signal]}</span>
+    {:else if value !== undefined && light.powerRange}
+      <Slider
+        aria-label="{displayName(id)} power"
+        {value}
+        min={light.powerRange[0]}
+        max={light.powerRange[1]}
+        step={light.prop<number>('power')?.step ?? 0.1}
+        disabled={locked}
+        class="w-full"
+        onChange={(next) =>
+          session?.powerMode === 'dim' ? session.setDimPower(id, next) : session?.setPower(id, next)}
+      />
+    {:else}
+      <span class="text-fg-faint">Not set</span>
+    {/if}
+  {/snippet}
+  {#snippet reading()}
+    {#if signal}
+      <span title={driven(id)}>{driven(id)}</span>
+    {:else if light.power !== undefined}
+      {light.power} {light.powerUnit}
+    {/if}
+  {/snippet}
+  {@render row(id, control, reading)}
+{/snippet}
+
+{#snippet axisRow(id: string, axis: LinearAxis)}
+  {#snippet control()}
+    {#if axis.limits && axis.position !== undefined}
+      <Ruler
+        aria-label="{displayName(id)} position"
+        value={axis.position}
+        reading={axis.position}
+        min={axis.limits[0]}
+        max={axis.limits[1]}
+        step={axis.prop<number>('position')?.step ?? 1}
+        disabled={locked}
+        class="w-full"
+        onChange={(next) => axis.moveTo(next)}
+      />
+    {/if}
+  {/snippet}
+  {#snippet reading()}
+    {#if axis.position !== undefined}{axis.position} {axis.positionUnit}{/if}
+  {/snippet}
+  {@render row(id, control, reading)}
+{/snippet}
+
+{#snippet slotsRow(id: string, slots: DiscreteAxis)}
+  {@const rule = instrument?.state.value.positions?.[id]}
+  {#snippet control()}
+    {#if slots.labels.length > 0}
+      {@const expected = session?.expectedPosition(id)}
+      <Choice
+        aria-label="{displayName(id)} position"
+        value={slots.position}
+        expected={typeof expected === 'string' ? expected : null}
+        options={slots.labels}
+        disabled={locked}
+        class="w-full"
+        onChange={(label) => slots.moveTo(label)}
+      />
+    {/if}
+  {/snippet}
+  {#snippet reading()}
+    {#if rule && typeof rule === 'object'}Follows {rule.axis.toUpperCase()}{:else}{bandOf(slots.position)}{/if}
+  {/snippet}
+  {@render row(id, control, reading)}
+{/snippet}
+
+{#snippet plainRow(id: string)}
+  {#snippet nothing()}{/snippet}
+  {@render row(id, nothing, nothing)}
+{/snippet}
+
+<!-- 1 number of a timeline, named by the knob; it links to the generator that plays it. -->
+{#snippet knobRow(knob: TuningKnobView)}
+  {#snippet label()}
+    <a {...deviceLink(knob.generator)} class="truncate text-fg-muted hover:text-fg hover:underline">{knob.label}</a>
+  {/snippet}
+  {#snippet control()}
+    {#if knob.value !== null && knob.bounds}
+      <Ruler
+        aria-label={knob.label}
+        value={knob.value}
+        min={Math.min(...knob.bounds)}
+        max={Math.max(...knob.bounds)}
+        step={knob.step ?? undefined}
+        disabled={locked}
+        class="w-full"
+        onChange={(next) => session?.setTuningKnob(knob.generator, knob.wire, knob.field, next)}
+      />
+    {:else}
+      <span class="truncate text-fg-faint" title={knob.problem ?? undefined}>Not available</span>
+    {/if}
+  {/snippet}
+  {#snippet reading()}
+    {#if knob.value !== null}{knob.value} {knob.unit}{/if}
+  {/snippet}
+  {@render row(knob.generator, control, reading, label, false)}
+{/snippet}
+
+<!-- The only place that picks a device's kind. -->
 {#snippet rows(devices: string[])}
-  {#each devices as device (device)}
-    <div class="flex h-ui-sm items-center px-2.5 text-sm text-fg-muted">
-      <a {...deviceLink(device)} class="truncate hover:text-fg hover:underline">{displayName(device)}</a>
-    </div>
+  {#each devices as id (id)}
+    {@const device = session?.device(id)}
+    {#if device instanceof Dimmable}
+      {@render lightRow(id, device)}
+    {:else if device instanceof LinearAxis}
+      {@render axisRow(id, device)}
+    {:else if device instanceof DiscreteAxis}
+      {@render slotsRow(id, device)}
+    {:else}
+      {@render plainRow(id)}
+    {/if}
   {/each}
 {/snippet}
 
@@ -164,6 +350,12 @@
             {#each layout.channels as channel (channel.name)}
               {@render channelSection(channel)}
             {/each}
+          {:else if group.key === 'tuning'}
+            <div class="flex flex-col frame-raised">
+              {#each session.tuning as knob (`${knob.generator}/${knob.wire}/${knob.field}`)}
+                {@render knobRow(knob)}
+              {/each}
+            </div>
           {:else}
             <div class="flex flex-col frame-raised">{@render rows(group.devices)}</div>
           {/if}

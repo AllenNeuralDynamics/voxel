@@ -5,6 +5,8 @@
   const SEND_AFTER_MS = 400;
   /** The part of the way that the drawn ruler moves toward its target in each frame. */
   const EASE = 0.25;
+  /** The space above and below the needle and the end caps, in px. */
+  const MARGIN = 5;
 </script>
 
 <script lang="ts">
@@ -132,7 +134,7 @@
     context.globalAlpha = 1;
     for (const limit of [low, high]) {
       const x = at(limit);
-      if (x >= 0 && x <= width) context.fillRect(Math.round(x) - 1, mid - height * 0.4, 2, height * 0.8);
+      if (x >= 0 && x <= width) context.fillRect(Math.round(x) - 1, MARGIN, 2, height - 2 * MARGIN);
     }
 
     // The needle: fixed at the center, with round ends.
@@ -140,8 +142,8 @@
     context.lineWidth = 2;
     context.lineCap = 'round';
     context.beginPath();
-    context.moveTo(middle, 2);
-    context.lineTo(middle, height - 2);
+    context.moveTo(middle, MARGIN);
+    context.lineTo(middle, height - MARGIN);
     context.stroke();
 
     if (drag || center !== target || !(fill === shown || Number.isNaN(shown))) redraw();

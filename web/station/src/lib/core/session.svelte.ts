@@ -2,7 +2,7 @@ import { TaskChain } from '$lib/core/utils/task-chain.svelte';
 import { ObjectDiff } from '@voxel/kit/object-diff';
 
 import type { Client } from './client.svelte';
-import { Device, Laser, Modulator, Shutter } from './device.svelte';
+import { Device, DiscreteAxis, Laser, LinearAxis, Modulator, Shutter } from './device.svelte';
 import type { Instrument } from './instrument.svelte';
 import type { Timeline, TuningField } from './signals';
 import type { Topics } from './topics.svelte';
@@ -13,6 +13,8 @@ import type {
   HttpInstrumentInterface,
   KeyPath,
   PowerMode,
+  StageFollowRule,
+  TuningKnobView,
   ProfileFields
 } from './types';
 
@@ -101,6 +103,10 @@ export class InstrumentSession<I extends Instrument = Instrument> {
 
   get alerts(): Alert[] {
     return this.#topics.get<Alert[]>('alerts') ?? [];
+  }
+
+  get tuning(): TuningKnobView[] {
+    return this.#topics.get<TuningKnobView[]>('tuning') ?? [];
   }
 
   get activities(): ActivityInfo[] {
@@ -218,6 +224,33 @@ export class InstrumentSession<I extends Instrument = Instrument> {
   }
 
   /** Properties by name, plus the position under `position`. Empty when the profile sets nothing on the device. */
+  /**
+   * The position the instrument puts the device `id` at now: the active profile's, else the one for every profile, or
+   * the pick of its stage rule at the stage's position. Undefined when the instrument places it nowhere.
+   */
+  expectedPosition(id: string): string | number | undefined {
+    const profile = this.activeProfile ? this.instrument.state.profile(this.activeProfile) : undefined;
+    if (profile && id in profile.positions) return profile.positions[id];
+    const rule = this.instrument.state.value.positions?.[id];
+    if (rule === undefined || typeof rule !== 'object') return rule;
+    const stage = this.device(this.instrument.config?.stage[rule.axis]?.device ?? '');
+    if (!(stage instanceof LinearAxis) || stage.position === undefined) return undefined;
+    const now = this.device(id);
+    return InstrumentSession.#follow(rule, stage.position, now instanceof DiscreteAxis ? now.position : undefined);
+  }
+
+  /** As the backend's `StageFollowRule.position`: next to `previous`, it stays until the margin is passed. */
+  static #follow(rule: StageFollowRule, coordinate: number, previous: string | undefined): string {
+    let index = rule.at.filter((point) => point <= coordinate).length;
+    const before = previous === undefined ? -1 : rule.order.indexOf(previous);
+    if (before >= 0 && Math.abs(index - before) === 1) {
+      const point = rule.at[Math.min(index, before)];
+      const stays = index > before ? coordinate < point + rule.margin : coordinate >= point - rule.margin;
+      if (stays) index = before;
+    }
+    return rule.order[index];
+  }
+
   saved(id: string): Record<string, unknown> {
     const profile = this.activeProfile ? this.instrument.state.profile(this.activeProfile) : undefined;
     const kept: Record<string, unknown> = { ...profile?.props[id] };
@@ -277,6 +310,16 @@ export class InstrumentSession<I extends Instrument = Instrument> {
   }
 
   /** A running preview changes at once. */
+  /** Sets the full power of a laser or a modulator in the active profile, in the device's own unit, as 1 edit. */
+  setPower(device: string, value: number): Promise<void> {
+    return this.edits.run(() => this.call('set_power', { device, value }));
+  }
+
+  /** Sets the dim power, as `setPower` does. */
+  setDimPower(device: string, value: number): Promise<void> {
+    return this.edits.run(() => this.call('set_dim_power', { device, value }));
+  }
+
   setPowerMode(mode: PowerMode): Promise<void> {
     return this.call('set_power_mode', { mode });
   }

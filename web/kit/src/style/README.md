@@ -100,6 +100,11 @@ which the content sets. There is no neutral note: use `frame-tinted`.
 | `note-warning` | `--warning-tint` | 1px `--warning-muted` ring |
 | `note-danger`  | `--danger-tint`  | 1px `--danger-muted` ring  |
 
+## Tables
+
+`table-lined` draws a table with a faint line between rows and under a header row: muted header cells, `text-sm`
+with tabular numbers. Put it in `frame-tinted` to set it apart.
+
 ## Adding a frame or a note
 
 - Add one only when 2 or more places need it and no frame fits.

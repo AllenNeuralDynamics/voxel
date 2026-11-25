@@ -16,6 +16,7 @@ export { Spinner } from './shadcn/spinner';
 export * as Tooltip from './shadcn/tooltip';
 export { default as CollapsibleSection } from './layout/CollapsibleSection.svelte';
 export { default as ColorPicker } from './controls/ColorPicker.svelte';
+export { default as Choice } from './controls/choices/Choice.svelte';
 export { default as RadioBar } from './controls/choices/RadioBar.svelte';
 export { default as Select } from './controls/choices/Select.svelte';
 export { default as Field } from './controls/Field.svelte';

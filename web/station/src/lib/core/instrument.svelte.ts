@@ -1,10 +1,11 @@
 import { Quantity } from '$lib/core/utils/quantity';
 import { ObjectDiff } from '@voxel/kit/object-diff';
 
-import { LightPaths } from './light-paths';
+import { type LightPathPlace, LightPaths } from './light-paths';
 import { State } from './state.svelte';
 import type { Topics } from './topics.svelte';
 import type { DeviceConfig, Filter, InstrumentConfig, InstrumentState, Objective, Part, PassBand } from './types';
+import { Wires } from './wires';
 
 /**
  * An instrument as its files describe it, open or not: config, saved state and default state. Devices and commands
@@ -44,12 +45,27 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends
     );
     return Object.fromEntries([...own, ...remote]);
   });
+  /** Where the node `name` is on the light paths, with the ways a router sends light; undefined on no path. */
+  lightPathOf(name: string): LightPathPlace | undefined {
+    const served = this.lightPaths.serves(name);
+    if (!served) return undefined;
+    const node = this.config?.optics[name];
+    const to = node && 'to' in node ? node.to : undefined;
+    const ways = to && typeof to === 'object' && !Array.isArray(to) ? to : {};
+    return {
+      side: served.side,
+      serves: served.ends,
+      ways: Object.entries(ways).map(([label, way]) => [label, typeof way === 'string' ? [way] : way])
+    };
+  }
 
   readonly filters: Record<string, Filter> = $derived.by(() => this.#partsOf<Filter>('filter'));
 
   readonly objectives: Record<string, Objective> = $derived.by(() => this.#partsOf<Objective>('objective'));
 
   readonly lightPaths: LightPaths = $derived.by(() => new LightPaths(this.config?.optics ?? {}));
+
+  readonly wires: Wires = $derived.by(() => new Wires(this.config?.wiring ?? {}));
 
   /**
    * The band every filter between the specimen and `camera` passes under the profile's positions. When the filters

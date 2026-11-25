@@ -28,26 +28,45 @@
   const shared = $derived(session?.sharedGates ?? []);
   const { deviceLink }: { deviceLink: DeviceLink } = $props();
   const uid = $props.id();
-  const block = 'col-span-3 grid grid-cols-subgrid rounded-md bg-tint px-2.5 py-1';
+  const block = 'col-span-3 grid grid-cols-subgrid frame-tinted px-2.5 py-1';
 </script>
 
-{#snippet power(device: Beam['source'] | Modulator | Shutter)}
-  <span role="cell" class="py-0.5 text-right">
-    {device instanceof Shutter || device.power === undefined ? '–' : `${device.power} ${device.powerUnit}`}
-  </span>
+{#snippet powerCell(text: string)}
+  <span role="cell" class="py-0.5 text-right">{text}</span>
 {/snippet}
 
-{#snippet gateRow(gate: Modulator | Shutter, nested: boolean)}
-  {@const passes = gate instanceof Shutter ? gate.isOpen : gate.isOn}
+<!-- The frame of a row for a modulator or a shutter: its name, whether it passes light, and its power. -->
+{#snippet gateFrame(gate: Modulator | Shutter, nested: boolean, passes: boolean, state: string, power: string)}
   <div role="row" class="col-span-3 grid grid-cols-subgrid">
     <span role="rowheader" class={cn('truncate py-0.5 text-fg-muted', nested && 'pl-4.5')} title={displayName(gate.id)}
       ><a {...deviceLink(gate.id)} class="hover:text-fg hover:underline">{displayName(gate.id)}</a></span
     >
-    <span role="cell" class={cn('py-0.5', !passes && 'text-fg-muted')}>
-      {gate instanceof Shutter ? (passes ? 'Open' : 'Closed') : passes ? 'On' : 'Off'}
-    </span>
-    {@render power(gate)}
+    <span role="cell" class={cn('py-0.5', !passes && 'text-fg-muted')}>{state}</span>
+    {@render powerCell(power)}
   </div>
+{/snippet}
+
+{#snippet modulatorRow(modulator: Modulator, nested: boolean)}
+  {@render gateFrame(
+    modulator,
+    nested,
+    modulator.isOn,
+    modulator.isOn ? 'On' : 'Off',
+    modulator.power === undefined ? '–' : `${modulator.power} ${modulator.powerUnit}`
+  )}
+{/snippet}
+
+{#snippet shutterRow(shutter: Shutter, nested: boolean)}
+  {@render gateFrame(shutter, nested, shutter.isOpen, shutter.isOpen ? 'Open' : 'Closed', '–')}
+{/snippet}
+
+<!-- The only place that picks a gate's kind. -->
+{#snippet gateRow(gate: Modulator | Shutter, nested: boolean)}
+  {#if gate instanceof Shutter}
+    {@render shutterRow(gate, nested)}
+  {:else}
+    {@render modulatorRow(gate, nested)}
+  {/if}
 {/snippet}
 
 {#snippet beamRows(beam: Beam)}
@@ -79,7 +98,7 @@
           On
         {/if}
       </span>
-      {@render power(beam.source)}
+      {@render powerCell(beam.source.power === undefined ? '–' : `${beam.source.power} ${beam.source.powerUnit}`)}
     </div>
     {#each beam.own as gate (gate.id)}
       {@render gateRow(gate, true)}

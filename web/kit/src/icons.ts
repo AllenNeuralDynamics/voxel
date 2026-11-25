@@ -11,6 +11,7 @@ export { default as Boxes } from '~icons/lucide/boxes';
 export { default as Brush } from '~icons/lucide/brush';
 export { default as Bug } from '~icons/lucide/bug';
 export { default as ChartArea } from '~icons/lucide/chart-area';
+export { default as Cable } from '~icons/lucide/cable';
 export { default as ChartSpline } from '~icons/lucide/chart-spline';
 export { default as ChartNoAxesColumn } from '~icons/lucide/chart-no-axes-column';
 export { default as Check } from '~icons/lucide/check';

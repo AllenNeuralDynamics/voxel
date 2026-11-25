@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type Snippet, untrack } from 'svelte';
 
-  import { getVoxelStation } from '$lib/context.svelte';
+  import { getChannelPrefs, getVoxelStation } from '$lib/context.svelte';
   import { AreaCamera } from '$lib/core/device.svelte';
   import ActivityButton from '$lib/features/live/ActivityButton.svelte';
   import LasersOff from '$lib/features/live/LasersOff.svelte';
@@ -12,6 +12,7 @@
   import ProfileSelect from '$lib/features/profiles/ProfileSelect.svelte';
   import { cn } from '@voxel/kit/cn';
   import { wavelengthToColor } from '@voxel/kit/colors';
+  import { displayName } from '@voxel/kit/format';
   import { AutoSplit, createPaneSize, Pane, PaneDivider, PaneGroup, SplitView } from '@voxel/kit/pane';
 
   /** The live image and controls, shown in the workspace side pane or the Live window. */
@@ -53,11 +54,25 @@
 
   const station = getVoxelStation();
   const session = $derived(station.session);
-  const streams = $derived(
-    (session?.devicesOf(AreaCamera) ?? []).flatMap((camera) => (camera.streamInfo ? [camera.streamInfo] : []))
-  );
-  const slowest = $derived(streams.toSorted((a, b) => a.frame_rate_fps - b.frame_rate_fps).at(0));
-  const dropped = $derived(streams.reduce((sum, stream) => sum + stream.dropped_frames, 0));
+  const prefs = getChannelPrefs();
+  // Each camera of the active profile, in its display color, with its stream while it streams.
+  const cameras = $derived.by(() => {
+    const profileId = session?.activeProfile;
+    const profile = profileId ? session?.instrument.state.profile(profileId) : undefined;
+    if (!profileId || !profile) return [];
+    return Object.entries(profile.channels).flatMap(([channel, byCamera]) =>
+      Object.keys(byCamera).map((id) => {
+        const device = session?.device(id);
+        return {
+          id,
+          color: prefs.color(profileId, channel, id),
+          stream: device instanceof AreaCamera ? device.streamInfo : undefined
+        };
+      })
+    );
+  });
+  const streaming = $derived(cameras.filter((camera) => camera.stream).length);
+  const dropping = $derived(cameras.filter((camera) => (camera.stream?.dropped_frames ?? 0) > 0).length);
   const lit = $derived((session?.beams ?? []).filter((beam) => beam.source.isOn));
 
   function toggleStreamPanel(): void {
@@ -100,8 +115,8 @@
       <AutoSplit
         persist="live-dock"
         panes={{
-          stream: { horizontal: { min: 24 }, vertical: { min: 5 } },
-          power: { horizontal: { min: 18, default: 22, max: 32 }, vertical: { min: 5, default: 8 } }
+          stream: { horizontal: { min: 28 }, vertical: { min: 5 } },
+          power: { horizontal: { min: 18, default: 30, max: 40 }, vertical: { min: 5, default: 8 } }
         }}
       >
         {#snippet stream()}<StreamPane {deviceLink} />{/snippet}
@@ -121,9 +136,34 @@
         onclick={toggleStreamPanel}
       >
         <span class="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap tabular-nums">
-          {#if slowest}
-            <span>{slowest.frame_rate_fps.toFixed(1)} fps</span>
-            {#if dropped > 0}<span class="text-warning-fg">{dropped} dropped</span>{/if}
+          {#each cameras as camera (camera.id)}
+            {@const dropped = camera.stream?.dropped_frames ?? 0}
+            <!-- Filled: it streams. Ring: idle. The warning color: it drops frames. -->
+            <span
+              class="size-2 rounded-[1px] border"
+              style:border-color={dropped > 0 ? 'var(--warning-fg)' : camera.color}
+              style:background-color={camera.stream
+                ? dropped > 0
+                  ? 'var(--warning-fg)'
+                  : camera.color
+                : 'transparent'}
+              title={camera.stream
+                ? `${displayName(camera.id)}: ${camera.stream.frame_rate_fps.toFixed(1)} fps, ${dropped} dropped`
+                : `${displayName(camera.id)}: idle`}
+              role="img"
+              aria-label={camera.stream
+                ? `${displayName(camera.id)}: ${camera.stream.frame_rate_fps.toFixed(1)} fps, ${dropped} dropped`
+                : `${displayName(camera.id)}: idle`}
+            ></span>
+          {/each}
+          {#if cameras.length > 0}
+            {#if dropping > 0}
+              <span class="text-warning-fg">{dropping} dropping</span>
+            {:else}
+              <span class={cn(streaming === 0 && 'text-fg-faint')}
+                >{streaming === 0 ? 'Idle' : `${streaming} streaming`}</span
+              >
+            {/if}
           {/if}
         </span>
         <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">

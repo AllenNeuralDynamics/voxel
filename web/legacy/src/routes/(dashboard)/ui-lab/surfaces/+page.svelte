@@ -191,6 +191,31 @@
   </section>
 
   <section class={lab.section}>
+    <h2 class={lab.heading}>Tables</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="frame-tinted">
+        <table class="table-lined">
+          <thead>
+            <tr><th>Device</th><th>Full</th><th>Dim</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Laser 488</td><td>50 mW</td><td>5 mW</td></tr>
+            <tr><td>Laser 561</td><td>40 mW</td><td>4 mW</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="frame-tinted">
+        <table class="table-lined">
+          <tbody>
+            <tr><td>Driver</td><td>SimulatedCamera</td></tr>
+            <tr><td>Runs on</td><td>The station</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class={lab.section}>
     <h2 class={lab.heading}>Modals</h2>
     <div class="grid grid-cols-2 gap-4">
       {@render modal('Save preset', 'frame-dialog top-1/2 left-1/2 w-72 -translate-x-1/2 -translate-y-1/2')}

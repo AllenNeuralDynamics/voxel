@@ -58,6 +58,8 @@
       side?: 'top' | 'bottom';
       /** Small marks at the right of an option, in the list and in the box. */
       trailing?: Snippet<[T]>;
+      /** An option drawn in the accent color in the list. */
+      accented?: T | null;
       class?: string;
     };
 
@@ -75,6 +77,7 @@
     variant = 'filled',
     side = 'bottom',
     trailing,
+    accented = null,
     class: className,
     ...attributes
   }: Props = $props();
@@ -129,7 +132,11 @@
     <Select.Content {side} sideOffset={4} align="start" class={styles.list()}>
       <Select.Viewport class="max-h-(--bits-select-content-available-height) overflow-y-auto">
         {#each control.options as option (option)}
-          <Select.Item value={optionKey(option)} label={formatLabel(option)} class={styles.option()}>
+          <Select.Item
+            value={optionKey(option)}
+            label={formatLabel(option)}
+            class={styles.option({ class: option === accented && 'text-accent-fg' })}
+          >
             <span class="min-w-0 flex-1 truncate">{formatLabel(option)}</span>
             {#if trailing}
               <span class="flex shrink-0 items-center">{@render trailing(option)}</span>

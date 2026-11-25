@@ -189,3 +189,20 @@ async def test_knobs_are_edited_as_profile_fields_and_undone(opened: BasicInstru
     assert opened.view.value.state.profiles["gfp"].tuning_knobs == [knob]
     await opened.undo()
     assert opened.view.value.state.profiles["gfp"].tuning_knobs == []
+
+
+async def test_the_view_gives_each_knob_its_number_or_why_it_turns_none(opened: BasicInstrument) -> None:
+    knobs = [
+        TuningKnob(label="Sweep", generator="ao_main", wire="galvo", field="amplitude"),
+        TuningKnob(label="Laser", generator="ao_main", wire="laser", field="center"),
+    ]
+    await opened.update_profile("gfp", tuning_knobs=knobs)
+
+    sweep, laser = opened.view.value.tuning
+    assert (sweep.label, sweep.unit, sweep.problem) == ("Sweep", "V", None)
+    assert sweep.value is not None and sweep.bounds is not None and sweep.step is not None
+    assert sweep.bounds.low <= sweep.value <= sweep.bounds.high
+    assert laser.value is None and laser.problem is not None and "has no 'center'" in laser.problem
+
+    await opened.set_tuning_knob("ao_main", "galvo", "amplitude", 0.4)
+    assert opened.view.value.tuning[0].value == pytest.approx(0.4)

@@ -239,6 +239,15 @@ export interface TuningKnob {
   field: TuningField;
 }
 
+/** A tuning knob of the active profile, with its number now; or `problem`, why it turns none. */
+export interface TuningKnobView extends TuningKnob {
+  value: number | null;
+  unit: string | null;
+  bounds: Span | null;
+  step: number | null;
+  problem: string | null;
+}
+
 export interface OperationRequest {
   attr: string;
   args: unknown[];

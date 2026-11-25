@@ -23,7 +23,7 @@ from vxlib.issues import Alert, Issue, KeyPath, Problems
 from vxlib.reactivity import Cell, Computed, Derived, Emitter, Readable, Subscribable
 from vxlib.schema import FrozenModel
 from vxlib.units import Quantity
-from vxlib.vector import StagePosition
+from vxlib.vector import Span, StagePosition
 
 from vxl.devices.axes.continuous.base import ContinuousAxisHandle
 from vxl.devices.axes.discrete.base import DiscreteAxisState
@@ -35,7 +35,7 @@ from vxl.instrument.geometry import camera_frame
 from vxl.instrument.hal import HAL, DeviceView
 from vxl.instrument.interface import InstrumentInterface, check_operations
 from vxl.instrument.live import Box, LiveRelay, LiveView, Plane, planes_of
-from vxl.instrument.samples import render, tune
+from vxl.instrument.samples import render, tune, tuning
 from vxl.instrument.signals import Timeline, TuningField
 from vxl.instrument.state import (
     InstrumentState,
@@ -69,6 +69,21 @@ _OPEN_EDIT: ContextVar["Instrument.StateEdit | None"] = ContextVar("open_edit", 
 """The state edit that the current command is inside, which an edit opened in it joins."""
 
 
+class TuningKnobView(FrozenModel):
+    """1 tuning knob of the active profile as a screen sees it: the knob, then its value, unit, bounds and step, or
+    ``problem``, why it turns no number now."""
+
+    label: str
+    generator: DeviceId
+    wire: WireName
+    field: TuningField
+    value: float | None = None
+    unit: str | None = None
+    bounds: Span | None = None
+    step: float | None = None
+    problem: str | None = None
+
+
 class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     """The open instrument as a screen sees it: its ``rig.yaml``, its saved state and default state, the next edit to
     undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, the object
@@ -89,6 +104,7 @@ class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     metadata_schema: dict[str, Any]
     operation: str | None
     alerts: tuple[Alert, ...]
+    tuning: tuple[TuningKnobView, ...]
 
 
 class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = InstrumentView[C, S]]:
@@ -148,6 +164,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         self._planes: Computed[tuple[Plane, ...]] | None = None
         self._boxes: dict[DeviceId, Box | None] = {}
         self._alerts: Computed[tuple[Alert, ...]] | None = None
+        self._tuning: Computed[tuple[TuningKnobView, ...]] | None = None
         self._view: Computed[V] | None = None
 
     @property
@@ -376,7 +393,8 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if names and set(names) == props.keys():
                 values["profiles", active, "props", device_id] = ABSENT
             else:
-                values.update({("profiles", active, "props", device_id, name): ABSENT for name in names})
+                for name in names:
+                    values["profiles", active, "props", device_id, name] = ABSENT
             if values:
                 await edit.record(values)
 
@@ -592,6 +610,9 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         if self._alerts is None:
             triggers = (self._store, self._active_profile, self._hal.device_views, self._scheduler.operation)
             self._alerts = Computed[tuple[Alert, ...]](*triggers, initial=(), fn=self._work_out_alerts)
+        if self._tuning is None:
+            triggers = (self._store, self._active_profile, self._hal.device_views)
+            self._tuning = Computed[tuple[TuningKnobView, ...]](*triggers, fn=self._work_out_tuning)
         return {
             "state": self._store,
             "default_state": self._store.default_state,
@@ -605,7 +626,40 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             "metadata_schema": self._metadata_schema,
             "operation": self._scheduler.operation,
             "alerts": self._alerts,
+            "tuning": self._tuning,
         }
+
+    def _work_out_tuning(self) -> tuple[TuningKnobView, ...]:
+        """Each tuning knob of the active profile, with its number as :func:`~vxl.instrument.samples.tuning` gives
+        it. The volts a generator can put out are the ``voltage_range`` it last reported."""
+        profile = self._store.value.profiles[self._active_profile.value]
+        views = self._hal.device_views.value
+        knobs: list[TuningKnobView] = []
+        for knob in profile.tuning_knobs:
+            view = TuningKnobView(label=knob.label, generator=knob.generator, wire=knob.wire, field=knob.field)
+            timeline = profile.timelines.get(knob.generator)
+            reported = views[knob.generator].props.get("voltage_range") if knob.generator in views else None
+            if timeline is None:
+                knobs.append(view.model_copy(update={"problem": f"The profile has no timeline for '{knob.generator}'"}))
+                continue
+            if reported is None or reported.value is None:
+                problem = f"'{knob.generator}' has not reported its voltage range"
+                knobs.append(view.model_copy(update={"problem": problem}))
+                continue
+            try:
+                found = tuning(
+                    timeline,
+                    self._config.wiring.outputs(knob.generator),
+                    wire=knob.wire,
+                    field=knob.field,
+                    volts=Span(*reported.value),
+                )
+            except (ValueError, TypeError) as error:
+                knobs.append(view.model_copy(update={"problem": str(error)}))
+                continue
+            update = {"value": found.value, "unit": found.unit, "bounds": found.bounds, "step": found.step}
+            knobs.append(view.model_copy(update=update))
+        return tuple(knobs)
 
     def _live_issues(self) -> list[Issue]:
         """What is wrong with the running instrument now: a warning for each property and each position that the

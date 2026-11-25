@@ -4,6 +4,7 @@ import type { Instrument } from '$lib/core/instrument.svelte';
 import type { InstrumentSession } from '$lib/core/session.svelte';
 import type { Station } from '$lib/core/station.svelte';
 import { reportFailure } from '@voxel/kit/failures';
+import { displayName } from '@voxel/kit/format';
 
 /**
  * The instrument the window shows, selected by URL. Selecting only changes what pages show; the station's open
@@ -56,6 +57,28 @@ export class InstrumentSelection {
 
   href(name: string, place: string): string {
     return `/stations/${this.#params().stationId}/instruments/${encodeURIComponent(name)}/${place}`;
+  }
+
+  /**
+   * The page where the item at `loc` in the open instrument's data is set, named for people: a device, a profile or
+   * its timing, the tasks, or a file in Config. Null for a place no page shows.
+   */
+  placeOf(loc: (string | number)[]): { label: string; href: string } | null {
+    const instrument = this.#station.session?.instrument;
+    if (!instrument) return null;
+    const [area, id, field] = loc.map(String);
+    const go = (label: string, place: string) => ({ label, href: this.href(instrument.name, place) });
+    const profile = (one: string): string => instrument.state.profile(one)?.label || displayName(one);
+    if (area === 'devices' && id) return go(displayName(id), `devices/${encodeURIComponent(id)}`);
+    if (area === 'profiles' && id && field === 'timelines') {
+      return go(`${profile(id)}, Timing`, `timing/${encodeURIComponent(id)}`);
+    }
+    if (area === 'profiles' && id) return go(profile(id), `profiles/${encodeURIComponent(id)}`);
+    if (area === 'tasks') return go('Tasks', 'run');
+    if (area === 'rig') return go('Rig config', 'config');
+    if (area === 'default') return go('Default state', 'config/default');
+    if (area === 'state') return go('Current state', 'config/state');
+    return null;
   }
 
   blocked(name: string): boolean {

@@ -13,7 +13,8 @@
     "format": "vp fmt",
     "lint": "vp run lint:fmt && vp run lint:code",
     "lint:fmt": "vp fmt --check",
-    "lint:code": "vp lint"
+    "lint:code": "vp lint",
+    "test": "node --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@voxel/kit": "workspace:*"

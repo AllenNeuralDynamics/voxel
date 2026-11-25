@@ -1,6 +1,6 @@
 <script lang="ts">
   import { BoolModel, EnumeratedModel } from '$lib/core/model';
-  import { Button, Checkbox, RadioBar, Select, Switch } from '@voxel/kit';
+  import { Button, Checkbox, Choice, RadioBar, Select, Switch } from '@voxel/kit';
   import { Monitor, Moon, Sun } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
@@ -81,6 +81,20 @@
           </tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <section class={lab.section}>
+    <h2 class={lab.heading}>Choice</h2>
+    <div class="flex flex-col gap-3 frame-raised p-4">
+      {#each ['28rem', '16rem', '9rem'] as width (width)}
+        <div class="flex items-center gap-3">
+          <span class="w-14 text-sm text-fg-muted">{width}</span>
+          <div style:width>
+            <Choice model={power} formatLabel={(mw) => `${mw} mW`} aria-label="Power, {width}" />
+          </div>
+        </div>
+      {/each}
     </div>
   </section>
 

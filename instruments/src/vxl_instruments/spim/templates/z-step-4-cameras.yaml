@@ -298,6 +298,11 @@ default:
             galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
             z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
       spacing: 1.0
+      tuning_knobs:                               # numbers of the timelines to tune in the Live panel
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: cam_1_trigger, field: start}
 
     round_2:
       label: Round 2
@@ -335,6 +340,11 @@ default:
             galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
             z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
       spacing: 1.0
+      tuning_knobs:
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: cam_1_trigger, field: start}
 
     round_3:
       label: Round 3
@@ -362,6 +372,11 @@ default:
             galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
             z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
       spacing: 1.0
+      tuning_knobs:
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: cam_1_trigger, field: start}
 
     split_488:
       label: GFP split
@@ -387,6 +402,11 @@ default:
             galvo_negative: {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
             z_step:         {kind: on, end: {timeline: start, offset: 5.44 ms}}
       spacing: 1.0
+      tuning_knobs:
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: cam_2_trigger, field: start}
 
   writer:
     max_level: 3

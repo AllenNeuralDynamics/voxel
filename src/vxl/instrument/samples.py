@@ -350,6 +350,41 @@ def tune(
     return timeline.model_copy(update={"signals": signals}), applied
 
 
+@dataclass(frozen=True)
+class Tuning:
+    """1 number of a signal as a tuning knob turns it: its value now and its unit, and the bounds and step that
+    :func:`tune` keeps it to. ``step`` is ``None`` for bounds with no end."""
+
+    value: float
+    unit: str
+    bounds: Span
+    step: float | None
+
+
+def tuning(
+    timeline: Timeline, wires: Mapping[WireName, WireConfig], *, wire: WireName, field: TuningField, volts: Span
+) -> Tuning:
+    """The number ``field`` of the signal on ``wire``, in the unit :func:`tune` takes it in. Raise ``ValueError`` as
+    :func:`tune` does."""
+    bounds, step = _tuning_bounds(timeline, wires, wire, field, volts)
+    signal, config = timeline.signals[wire], wires[wire]
+    old = getattr(signal, field)
+    match field:
+        case "start" | "end":
+            value, unit = float(old.offset) * 1e3, "ms"
+        case "delay":
+            value, unit = float(old) * 1e3, "ms"
+        case "phase":
+            value, unit = math.degrees(float(old)), "°"
+        case "offset":
+            value, unit = float(old), "V"
+        case "cycles" | "split" | "scale":
+            value, unit = float(old), ""
+        case _:
+            value, unit = float(old.number), config.unit if isinstance(config, AnalogWire) else old.unit
+    return Tuning(value=_tidy(value), unit=unit, bounds=bounds, step=step)
+
+
 def _tuning_bounds(
     timeline: Timeline, wires: Mapping[WireName, WireConfig], wire: WireName, field: TuningField, volts: Span
 ) -> tuple[Span, float | None]:
@@ -446,4 +481,4 @@ def _round_step(length: float) -> float | None:
     return 10.0 ** math.floor(math.log10(length / 1000))
 
 
-__all__ = ["Rendered", "WireSamples", "render", "tune"]
+__all__ = ["Rendered", "Tuning", "WireSamples", "render", "tune", "tuning"]

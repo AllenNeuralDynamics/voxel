@@ -55,6 +55,24 @@
   @apply rounded-lg ring-1 ring-line-muted;
 }
 
+/* A table with a faint line between rows and under a header row. Put it in a tinted frame to set it apart. */
+@utility table-lined {
+  @apply w-full border-collapse text-sm tabular-nums;
+
+  & th {
+    @apply px-3 pt-2 pb-1 text-left font-normal whitespace-nowrap text-fg-muted;
+  }
+
+  & td {
+    @apply px-3 py-1.5 align-top;
+  }
+
+  & tr + tr > td,
+  & thead + tbody > tr:first-child > td {
+    @apply border-t border-line-faint;
+  }
+}
+
 /* A well in the canvas color, for logs, lists and code. */
 @utility frame-sunken {
   @apply rounded-sm bg-canvas ring-1 ring-line-faint;

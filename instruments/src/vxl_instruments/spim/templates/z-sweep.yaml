@@ -195,6 +195,11 @@ default:
             galvo_positive: &galvo {kind: wave, shape: triangle, center: 0.005 V, amplitude: 0.005 V}
             galvo_negative: *galvo
       spacing: 1.0                                # µm between frames along the scan axis
+      tuning_knobs:                               # numbers of the timelines to tune in the Live panel
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: camera_trigger, field: start}
 
     rfp:                                          # real profiles differ in focus, timing and signal size. Here they share values only because this is an example
       label: RFP
@@ -215,6 +220,11 @@ default:
             galvo_positive: *galvo
             galvo_negative: *galvo
       spacing: 1.0
+      tuning_knobs:
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: camera_trigger, field: start}
 
     cy5:
       label: Cy5
@@ -235,6 +245,11 @@ default:
             galvo_positive: *galvo
             galvo_negative: *galvo
       spacing: 1.0
+      tuning_knobs:
+        - {label: "Sheet focus, left", generator: ao_main, wire: lens_left, field: center}
+        - {label: "Sheet focus, right", generator: ao_main, wire: lens_right, field: value}
+        - {label: Sweep size, generator: ao_main, wire: galvo_positive, field: amplitude}
+        - {label: Camera delay, generator: ao_main, wire: camera_trigger, field: start}
 
   writer:
     max_level: 3
