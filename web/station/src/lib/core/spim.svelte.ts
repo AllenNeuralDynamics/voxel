@@ -1,5 +1,6 @@
 /** A SPIM microscope: what it has on top of every instrument. */
 import { Instrument } from './instrument.svelte';
+import { InstrumentSession } from './session.svelte';
 import type {
   ActivityInfo,
   AreaROI,
@@ -56,11 +57,15 @@ export interface SpimProfileFields extends ProfileFields {
   spacing?: number;
 }
 
+/** A SPIM microscope, open or closed: an instrument with the config and the state of a SPIM. It adds nothing to
+ * read; it is a class so that code can ask if an instrument is a SPIM. */
+export class SpimInstrument extends Instrument<SpimConfig, SpimState> {}
+
 /**
- * The open instrument when it is a SPIM microscope: its preview, on top of what every instrument has. A preview shows
- * the live image of some channels of the active profile, named by their cameras.
+ * The session of a SPIM microscope that runs: its preview and its acquisition, on top of what every session has. A
+ * preview shows the live image of some channels of the active profile, named by their cameras.
  */
-export class SpimInstrument extends Instrument<SpimConfig, SpimState> {
+export class SpimSession extends InstrumentSession<SpimInstrument> {
   override updateProfile(id: string, fields: SpimProfileFields): Promise<void> {
     return super.updateProfile(id, fields);
   }

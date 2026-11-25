@@ -35,7 +35,7 @@
   const selection = getInstrumentSelection();
   // The instrument on show, while it is not the open one.
   const closed = $derived(
-    selection.selected && selection.selected !== station.session?.instrument_name ? selection.selected : null
+    selection.selected && selection.selected !== station.session?.instrument.name ? selection.selected : null
   );
 
   // The width that is left after `start`, and the width the row takes at each step, measured on hidden copies. So a
@@ -229,7 +229,13 @@ one, which also has a fill. -->
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   {/if}
-  {#if closed}
+  {#if closed && selection.blocked(closed)}
+    <!-- An instrument that cannot open has no Open button. The count of its problems goes to them, in Config. -->
+    <a class="shrink-0 text-sm whitespace-nowrap text-danger-fg hover:underline" href={selection.problemsHref(closed)}>
+      {selection.problems(closed)}
+      {selection.problems(closed) === 1 ? 'problem' : 'problems'}
+    </a>
+  {:else if closed}
     <!-- While an acquisition runs, another instrument does not open, and the bar says why. -->
     {#if selection.running}<span class="shrink-0 text-sm whitespace-nowrap text-fg-muted">Stop the run first</span>{/if}
     <Button

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import { SpimInstrument } from '$lib/core/spim.svelte';
+  import { SpimSession } from '$lib/core/spim.svelte';
   import ChannelDisplayMenu from '$lib/features/preview/ChannelDisplayMenu.svelte';
   import { Button, Checkbox, RadioBar } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
@@ -16,16 +16,17 @@
    */
   const uid = $props.id();
   const station = getVoxelStation();
-  const instrument = $derived(station.instrument);
-  const spim = $derived(station.instrumentOf(SpimInstrument));
-  const profileId = $derived(instrument?.activeProfile);
+  const session = $derived(station.session);
+  const instrument = $derived(session?.instrument);
+  const spim = $derived(station.sessionOf(SpimSession));
+  const profileId = $derived(session?.activeProfile);
   const profile = $derived(instrument && profileId ? instrument.state.profile(profileId) : undefined);
   const layout = $derived(
-    instrument && profile
+    session && instrument && profile
       ? new LiveControlsLayout(
           profile.channels,
           instrument.lightPaths,
-          new Set(instrument.devices.map((device) => device.id))
+          new Set(session.devices.map((device) => device.id))
         )
       : undefined
   );
@@ -136,7 +137,7 @@
   background reaches into both gutters, so it also hides the shadow of a card that scrolls under it. The space above
   the first row is outside the scroll area, so nothing scrolls through it. -->
   <div class="px-inset mt-2 flex min-h-0 flex-col overflow-y-auto">
-    {#if layout && instrument}
+    {#if layout && session}
       {#each groups as group, index (group.key)}
         <div
           class="-mx-inset px-inset sticky z-10 flex h-ui-sm shrink-0 items-center gap-2 bg-pane"
@@ -159,8 +160,8 @@
               size="xs"
               options={['dim', 'full']}
               display={displayName}
-              value={instrument.powerMode}
-              onChange={(mode) => instrument.setPowerMode(mode)}
+              value={session.powerMode}
+              onChange={(mode) => session.setPowerMode(mode)}
             />
           {/if}
         </div>

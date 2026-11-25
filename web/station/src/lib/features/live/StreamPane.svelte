@@ -5,7 +5,7 @@
 
   /** How each camera's stream runs: its frame rate, the frames it dropped, and its data rate. */
   const station = getVoxelStation();
-  const cameras = $derived(station.instrument?.devicesOf(AreaCamera) ?? []);
+  const cameras = $derived(station.session?.devicesOf(AreaCamera) ?? []);
   // The last column is wider by the inset of a block's text: its name ends on the blocks' edge, and its values are
   // inset from that.
   const columns = 'grid grid-cols-[minmax(0,1fr)_5rem_4.5rem_6.125rem]';

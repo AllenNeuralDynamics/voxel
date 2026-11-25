@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import { getInstrumentSelection, getVoxelStation, provideAppBar } from '$lib/context.svelte';
   import type { ConnectionState } from '$lib/core/client.svelte';
-  import { SpimInstrument } from '$lib/core/spim.svelte';
+  import { SpimSession } from '$lib/core/spim.svelte';
   import { Linger } from '$lib/core/utils/linger.svelte';
   import ActivityButton from '$lib/features/live/ActivityButton.svelte';
   import LasersOff from '$lib/features/live/LasersOff.svelte';
@@ -47,6 +47,12 @@
   const station = getVoxelStation();
   const selection = getInstrumentSelection();
   const appBar = provideAppBar();
+  // The instrument on show when it cannot open, on a page that is not Config; else null.
+  const cannotOpen = $derived(
+    params.instrument && selection.blocked(params.instrument) && !page.route.id?.includes('/[instrument]/config')
+      ? params.instrument
+      : null
+  );
   const live = new LiveDock(() => params.stationId);
   onDestroy(() => live.dispose());
 
@@ -68,10 +74,10 @@
 
   // The pages that work only on the open instrument. Showing another instrument, they are inert.
   const livePlaces = ['run', 'light', 'timing', 'devices'];
-  const openName = $derived(station.session?.instrument_name ?? null);
+  const openName = $derived(station.session?.instrument.name ?? null);
   const notOpen = $derived(
     params.instrument !== undefined &&
-      params.instrument !== station.session?.instrument_name &&
+      params.instrument !== station.session?.instrument.name &&
       livePlaces.includes(page.route.id?.split('/').at(-1) ?? '')
   );
 
@@ -152,10 +158,10 @@
     if (diagnosticsFull) toggleDiagnosticsFull();
   });
 
-  const alerts = $derived(station.instrument?.alerts ?? []);
+  const alerts = $derived(station.session?.alerts ?? []);
   const worstAlertLevel = $derived(alerts.some((alert) => alert.level === 'error') ? 'error' : 'warning');
   // Held 1 s after it ends, so a quick operation does not flash in the bar.
-  const runningOperation = new Linger(() => station.instrument?.operation ?? null, 1000);
+  const runningOperation = new Linger(() => station.session?.operation ?? null, 1000);
   // The bar's line skips debug lines, which would flicker past while they are on.
   const newestLogLine = $derived(station.log.findLast((line) => line.level >= 20) ?? null);
   // A log message's color by its level: debug faint, info plain, warning amber, error red.
@@ -166,8 +172,8 @@
 
 {#snippet historyBar()}
   <!-- Undo and redo of the saved state, in 1 box. A run locks the state, so they wait for it. -->
-  {@const history = station.instrument?.history ?? { undo_label: null, redo_label: null }}
-  {@const running = station.instrumentOf(SpimInstrument)?.acquisition !== undefined}
+  {@const history = station.session?.history ?? { undo_label: null, redo_label: null }}
+  {@const running = station.sessionOf(SpimSession)?.acquisition !== undefined}
   <div
     class="flex h-ui-md shrink-0 items-stretch overflow-hidden rounded-sm border border-control-line bg-element-bg"
     role="group"
@@ -179,7 +185,7 @@
       title={history.undo_label ? `Undo: ${history.undo_label}` : 'Nothing to undo'}
       aria-label="Undo"
       disabled={running || !history.undo_label}
-      onclick={() => station.instrument?.undo()}
+      onclick={() => station.session?.undo()}
     >
       <Undo class="size-4" aria-hidden="true" />
     </button>
@@ -189,7 +195,7 @@
       title={history.redo_label ? `Redo: ${history.redo_label}` : 'Nothing to redo'}
       aria-label="Redo"
       disabled={running || !history.redo_label}
-      onclick={() => station.instrument?.redo()}
+      onclick={() => station.session?.redo()}
     >
       <Redo class="size-4" aria-hidden="true" />
     </button>
@@ -198,13 +204,13 @@
 
 <!-- Undo and redo as rows of a menu, each with the name of its edit. -->
 {#snippet historyMenu()}
-  {@const history = station.instrument?.history}
-  {@const running = station.instrumentOf(SpimInstrument)?.acquisition !== undefined}
-  <DropdownMenu.Item disabled={running || !history?.undo_label} onclick={() => station.instrument?.undo()}>
+  {@const history = station.session?.history}
+  {@const running = station.sessionOf(SpimSession)?.acquisition !== undefined}
+  <DropdownMenu.Item disabled={running || !history?.undo_label} onclick={() => station.session?.undo()}>
     <Undo class="size-4" aria-hidden="true" />
     <span class="min-w-0 flex-1 truncate">{history?.undo_label ? `Undo: ${history.undo_label}` : 'Undo'}</span>
   </DropdownMenu.Item>
-  <DropdownMenu.Item disabled={running || !history?.redo_label} onclick={() => station.instrument?.redo()}>
+  <DropdownMenu.Item disabled={running || !history?.redo_label} onclick={() => station.session?.redo()}>
     <Redo class="size-4" aria-hidden="true" />
     <span class="min-w-0 flex-1 truncate">{history?.redo_label ? `Redo: ${history.redo_label}` : 'Redo'}</span>
   </DropdownMenu.Item>
@@ -255,7 +261,7 @@ sideways, so every pane keeps its minimum. -->
         class="grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto]"
       >
         <div class="px-inset app-bar min-w-0">
-          <AppBar bar={appBar} history={station.instrument ? { bar: historyBar, menu: historyMenu } : undefined}>
+          <AppBar bar={appBar} history={station.session ? { bar: historyBar, menu: historyMenu } : undefined}>
             {#snippet start()}<StationMenu {selection} />{/snippet}
             {#snippet end()}
               <!-- The live profile's own controls, while it is in another window. -->
@@ -269,6 +275,16 @@ sideways, so every pane keeps its minimum. -->
         <PaneGroup direction="vertical" bind:ref={pageColumnEl} class="min-h-0">
           <Pane bind:this={pageRef} {...pageSize} collapsible class="min-h-0">
             <main class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-pane" inert={!connected || notOpen}>
+              <!-- An instrument that cannot open has nothing to show but its files, in Config. -->
+              {#if cannotOpen}
+                <p class="px-inset shrink-0 pt-3 text-sm text-fg-muted">
+                  Cannot open.
+                  <a class="text-danger-fg hover:underline" href={selection.problemsHref(cannotOpen)}>
+                    {selection.problems(cannotOpen)}
+                    {selection.problems(cannotOpen) === 1 ? 'problem' : 'problems'}
+                  </a>
+                </p>
+              {/if}
               {@render children()}
             </main>
           </Pane>
@@ -371,7 +387,7 @@ sideways, so every pane keeps its minimum. -->
                   <span class="truncate text-fg-faint">{newestLogLine.message}</span>
                 {/if}
               </span>
-              {#if station.instrument}
+              {#if station.session}
                 <span
                   class={cn(
                     'shrink-0',

@@ -47,10 +47,11 @@ export class ChannelPrefs {
    * the camera; with no filter on the way, the color of the channel's laser; else white.
    */
   autoColor(profileId: string, channel: string, camera: string): string {
-    const instrument = this.#station.instrument;
+    const session = this.#station.session;
+    const instrument = session?.instrument;
     const band = instrument?.passBand(profileId, camera);
     const light = instrument?.state.profile(profileId)?.channels[channel]?.[camera];
-    const laser = light === undefined ? undefined : instrument?.device(light, Laser);
+    const laser = light === undefined ? undefined : session?.device(light, Laser);
     return emissionToPreviewColor(band ? ChannelPrefs.#middle(band) : laser?.wavelength) ?? '#ffffff';
   }
 
@@ -62,6 +63,6 @@ export class ChannelPrefs {
   }
 
   #key(profileId: string, channel: string, camera: string): string {
-    return JSON.stringify([this.#station.session?.instrument_name ?? '', profileId, channel, camera]);
+    return JSON.stringify([this.#station.session?.instrument.name ?? '', profileId, channel, camera]);
   }
 }

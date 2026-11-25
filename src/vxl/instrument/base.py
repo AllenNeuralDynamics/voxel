@@ -124,13 +124,13 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
     def __init__(self, folder: "InstrumentFolder[C, S]", *, records: Records, system: System) -> None:
         """Construct the instrument of ``folder`` without opening hardware. Raise :class:`StartupError` when the
         folder has a problem, and :class:`TypeError` when another class runs it."""
-        config, default = folder.config, folder.default
+        config, default = folder.rig.model, folder.default.model
         if folder.problems or config is None or default is None:
             raise StartupError(folder.problems)
         if folder.kind is not None and not isinstance(self, folder.kind):
             raise TypeError(f"{folder.home} is run by {folder.kind.__name__}, not by {type(self).__name__}")
         self._config = config
-        self._store = InstrumentStore(folder.home, config, default, folder.state or default)
+        self._store = InstrumentStore(folder.home, config, default, folder.state.model or default)
         self._records = records
         self._system = system
         self._hal = HAL(config)

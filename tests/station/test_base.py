@@ -11,7 +11,7 @@ from vxlib.issues import Problems
 from vxl.instrument.base import Instrument
 from vxl.instrument.basic import BasicInstrument
 from vxl.instrument.config import InstrumentConfig
-from vxl.instrument.folder import InstrumentFolder
+from vxl.instrument.folder import FolderFile, InstrumentFolder
 from vxl.instrument.hal import DeviceView
 from vxl.instrument.state import InstrumentState, ProfileFields, Task
 from vxl.instrument.store import Merge
@@ -83,7 +83,14 @@ def _folder(
     tmp_path: Path, rig: dict[str, Any], kind: type[_Bench] | None = None
 ) -> InstrumentFolder[InstrumentConfig, _State]:
     """A folder as :meth:`InstrumentFolder.read` gives it, with no files on disk."""
-    return InstrumentFolder(tmp_path, kind, bench(rig), _State.model_validate(_DEFAULT), None, Problems())
+    return InstrumentFolder(
+        tmp_path,
+        kind,
+        FolderFile(data=rig, model=bench(rig)),
+        FolderFile(data=_DEFAULT, model=_State.model_validate(_DEFAULT)),
+        FolderFile(data=None),
+        Problems(),
+    )
 
 
 def _instrument(tmp_path: Path, rig: dict[str, Any]) -> _Bench:
@@ -337,7 +344,7 @@ def test_read_finds_the_kind_and_reads_the_files(tmp_path: Path) -> None:
 
     assert folder.ok, folder.problems
     assert folder.kind is _Bench
-    assert isinstance(folder.default, _State)
+    assert isinstance(folder.default.model, _State)
     assert InstrumentFolder.read(folder.home) == folder
 
 
@@ -577,7 +584,14 @@ _BASIC_RIG: dict[str, Any] = {
 def _basic(tmp_path: Path) -> BasicInstrument:
     """A basic instrument on the bench rig with an objective, with the base state and its rules, not opened."""
     state = InstrumentState.model_validate(_DEFAULT)
-    folder = InstrumentFolder(tmp_path, BasicInstrument, bench(_BASIC_RIG), state, None, Problems())
+    folder = InstrumentFolder(
+        tmp_path,
+        BasicInstrument,
+        FolderFile(data=_BASIC_RIG, model=bench(_BASIC_RIG)),
+        FolderFile(data=None, model=state),
+        FolderFile(data=None),
+        Problems(),
+    )
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
     system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
     return BasicInstrument(folder, records=records, system=system)

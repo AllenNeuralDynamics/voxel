@@ -40,6 +40,20 @@ async def service(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> AsyncItera
         yield running
 
 
+async def test_an_instrument_is_inspected_over_http_with_the_content_of_its_files(service: StationService) -> None:
+    async with asyncio.timeout(20):
+        listed = await call(service.url, "GET", "/instruments")
+        found = await call(service.url, "GET", "/instruments/bench:inspect")
+        missing = await call(service.url, "GET", "/instruments/nothing:inspect")
+
+    assert listed[2] == {"bench": {"problems": []}}
+    assert (found[0], found[2]["problems"]) == (200, [])
+    assert found[2]["files"]["rig"]["data"]["name"] == "bench"
+    assert set(found[2]["files"]["rig"]) == {"data", "model"}
+    assert found[2]["files"]["state"] == {"data": None, "model": None}
+    assert missing[0] == 404
+
+
 async def test_a_session_opens_and_a_device_changes_over_http_and_the_feed_shows_both(service: StationService) -> None:
     prefix = f"stations.{service.station.config.id}"
     reader = FeedClient(service.url.replace("http", "ws", 1))
@@ -55,7 +69,7 @@ async def test_a_session_opens_and_a_device_changes_over_http_and_the_feed_shows
 
     assert before.topics[f"{prefix}.status"] == "idle"
     assert listed[0] == 200
-    assert listed[2]["bench"]["ok"]
+    assert listed[2]["bench"]["problems"] == []
     assert opened[0] == 200
     assert opened[2]["instrument_name"] == "bench"
     assert opened[1]["vxl-feed-cursor"].startswith('"')

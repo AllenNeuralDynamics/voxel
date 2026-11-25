@@ -1,11 +1,15 @@
 <script lang="ts" module>
   import type { Snippet } from 'svelte';
 
-  /** Something that a page puts on 1 row of an `ObjectView`: `content`, at the row that `path` leads to. A path is
-   * the keys from the top, with the place of an item in a list as a number. */
+  /**
+   * Something that a page puts on 1 row of an `ObjectView`: `content`, at the row that `path` leads to. A path is
+   * the keys from the top, with the place of an item in a list as a number. `content` gets `data`, which is what
+   * the page wants to show there, such as a message.
+   */
   export interface ObjectMark {
     path: (string | number)[];
-    content: Snippet;
+    content: Snippet<[data: unknown]>;
+    data?: unknown;
   }
 </script>
 
@@ -275,7 +279,7 @@ a line at its left edge, and one that hides a mark has a line at its right edge.
         </span>
         {#if line.marks}
           {#each inlineAt.get(at) ?? [] as mark, index (index)}
-            <span class="shrink-0 pr-3 font-sans">{@render mark.content()}</span>
+            <span class="shrink-0 pr-3 font-sans">{@render mark.content(mark.data)}</span>
           {/each}
         {/if}
       </div>
@@ -284,7 +288,7 @@ a line at its left edge, and one that hides a mark has a line at its right edge.
           <div class="flex min-w-0">
             <span class={GUTTER}></span>
             <div class="min-w-0 flex-1 pr-4 font-sans" style:padding-left="{line.depth * 2}ch">
-              {@render mark.content()}
+              {@render mark.content(mark.data)}
             </div>
           </div>
         {/each}

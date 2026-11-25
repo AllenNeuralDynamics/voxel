@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { getInstrumentSelection, getShownProfile, getVoxelStation, useAppBar } from '$lib/context.svelte';
-  import { SpimInstrument } from '$lib/core/spim.svelte';
+  import { SpimSession } from '$lib/core/spim.svelte';
   import { Button, DropdownMenu } from '@voxel/kit';
   import { displayName } from '@voxel/kit/format';
   import { Check } from '@voxel/kit/icons';
@@ -22,10 +22,11 @@
   const name = $derived(page.params.instrument ?? '');
   const profileId = $derived(page.params.profileId);
   // The model is of the open instrument, which may not be the one that the address names.
-  const instrument = $derived(station.session?.instrument_name === name ? station.instrument : undefined);
-  const active = $derived(profileId !== undefined && instrument?.activeProfile === profileId);
+  const instrument = $derived(selection.instrument);
+  const session = $derived(selection.session);
+  const active = $derived(profileId !== undefined && session?.activeProfile === profileId);
   // A run uses its own profiles, so no other one is made active while it is on.
-  const running = $derived(station.instrumentOf(SpimInstrument)?.acquisition !== undefined);
+  const running = $derived(station.sessionOf(SpimSession)?.acquisition !== undefined);
 
   function href(id: string): string {
     return selection.href(name, `${place}/${encodeURIComponent(id)}`);
@@ -36,7 +37,7 @@
   }
 
   function activateProfile(): void {
-    if (profileId !== undefined) void instrument?.selectProfile(profileId);
+    if (profileId !== undefined) void session?.selectProfile(profileId);
   }
 
   useAppBar(() => {
@@ -49,11 +50,11 @@
           items: (instrument?.state.profileIds ?? []).map((id) => ({
             label: profileLabel(id),
             href: href(id),
-            trailing: id === instrument?.activeProfile ? activeMark : undefined
+            trailing: id === session?.activeProfile ? activeMark : undefined
           }))
         }
       ],
-      actions: instrument?.state.profile(profileId) ? [{ bar: activate, menu: activateItem }] : []
+      actions: session && instrument?.state.profile(profileId) ? [{ bar: activate, menu: activateItem }] : []
     };
   });
 
@@ -65,7 +66,7 @@
   $effect(() => {
     if (!instrument) return;
     const ids = instrument.state.profileIds;
-    const id = shown.id !== undefined && ids.includes(shown.id) ? shown.id : (instrument.activeProfile ?? ids[0]);
+    const id = shown.id !== undefined && ids.includes(shown.id) ? shown.id : (session?.activeProfile ?? ids[0]);
     if (id !== undefined && id !== profileId) void goto(href(id), { replaceState: true });
   });
 </script>

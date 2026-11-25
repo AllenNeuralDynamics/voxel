@@ -8,7 +8,7 @@
 
   $effect(() => {
     if (!station.info) return;
-    const name = station.session?.instrument_name ?? Object.keys(station.instruments).sort()[0];
+    const name = station.session?.instrument.name ?? Object.keys(station.instruments).sort()[0];
     if (name) void goto(selection.href(name, 'run'), { replaceState: true });
   });
 </script>

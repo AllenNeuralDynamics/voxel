@@ -11,6 +11,7 @@
     "./format": "./src/utils/format.ts",
     "./icons": "./src/icons.ts",
     "./models": "./src/controls/models.svelte.ts",
+    "./object-diff": "./src/utils/object-diff.ts",
     "./multiselect": "./src/layout/multiselect/multiselect.svelte.ts",
     "./pane": "./src/layout/pane/index.ts",
     "./pref": "./src/utils/pref.svelte.ts",

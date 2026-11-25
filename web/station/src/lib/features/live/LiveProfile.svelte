@@ -55,13 +55,13 @@
 
   // The bar's summaries: the slowest camera stream with all dropped frames, and the lights that are on.
   const station = getVoxelStation();
-  const instrument = $derived(station.instrument);
+  const session = $derived(station.session);
   const streams = $derived(
-    (instrument?.devicesOf(AreaCamera) ?? []).flatMap((camera) => (camera.streamInfo ? [camera.streamInfo] : []))
+    (session?.devicesOf(AreaCamera) ?? []).flatMap((camera) => (camera.streamInfo ? [camera.streamInfo] : []))
   );
   const slowest = $derived(streams.toSorted((a, b) => a.frame_rate_fps - b.frame_rate_fps).at(0));
   const dropped = $derived(streams.reduce((sum, stream) => sum + stream.dropped_frames, 0));
-  const lit = $derived((instrument?.beams ?? []).filter((beam) => beam.source.isOn));
+  const lit = $derived((session?.beams ?? []).filter((beam) => beam.source.isOn));
 
   function toggleStreamPanel(): void {
     if (streamRef) streamPanel.toggle(streamRef);
@@ -142,7 +142,7 @@
               aria-hidden="true"
             ></span>
           {/each}
-          {#if instrument}
+          {#if session}
             <span class={cn(lit.length === 0 && 'text-fg-faint')}
               >{lit.length === 0 ? 'All off' : `${lit.filter((beam) => beam.reaches).length} on`}</span
             >

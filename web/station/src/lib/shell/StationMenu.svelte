@@ -1,6 +1,5 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import type { InstrumentFolder } from '$lib/core/station.svelte';
   import { Button, DropdownMenu } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { reportFailure } from '@voxel/kit/failures';
@@ -17,16 +16,12 @@
   let names = $state<HTMLElement | null>(null);
   let open = $state(false);
 
-  const openName = $derived(station.session?.instrument_name ?? null);
+  const openName = $derived(station.session?.instrument.name ?? null);
   const selected = $derived(selection.selected);
   const changing = $derived(station.status === 'opening' || station.status === 'closing');
   const instruments = $derived(
     Object.entries(station.instruments).sort(([left], [right]) => left.localeCompare(right))
   );
-
-  function issue(folder: InstrumentFolder): string | null {
-    return folder.problems.length > 0 ? folder.problems.map((problem) => problem.msg).join('\n') : null;
-  }
 </script>
 
 <DropdownMenu.Root
@@ -52,18 +47,25 @@
   <DropdownMenu.Content customAnchor={names} side="bottom" align="start" sideOffset={6} class="w-72">
     {#each instruments as [name, folder] (name)}
       {@const open = name === openName}
-      {@const problems = issue(folder)}
+      {@const problems = folder.problems.length}
       <DropdownMenu.Item
-        disabled={!folder.ok}
         class={cn(name === selected && 'bg-element-selected data-highlighted:bg-element-selected')}
-        aria-label={`${displayName(name)}${open ? ', open' : ''}${problems ? ', configuration issues' : ''}`}
+        aria-label={`${displayName(name)}${open ? ', open' : ''}${problems ? `, ${problems} ${problems === 1 ? 'problem' : 'problems'}` : ''}`}
         onclick={() => selection.select(name)}
       >
         <span class="min-w-0 flex-1 truncate">{displayName(name)}</span>
         {#if open}<span class="shrink-0 text-sm text-fg-muted">Open</span>{/if}
+        <!-- The count is text, and its color says if the instrument can still open. Config has the messages. -->
         {#if problems}
-          <span class="shrink-0" role="img" aria-label="Configuration issues" title={problems}>
-            <TriangleAlert class="size-3.5 text-warning-fg" aria-hidden="true" />
+          <span
+            class={cn(
+              'flex shrink-0 items-center gap-1 text-sm',
+              selection.blocked(name) ? 'text-danger-fg' : 'text-warning-fg'
+            )}
+          >
+            <TriangleAlert class="size-3.5" aria-hidden="true" />
+            {problems}
+            {problems === 1 ? 'problem' : 'problems'}
           </span>
         {/if}
         {#if name === selected}<Check class="size-4 shrink-0" aria-hidden="true" />{/if}

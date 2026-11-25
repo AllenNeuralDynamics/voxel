@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
-  import { SpimInstrument } from '$lib/core/spim.svelte';
+  import { SpimSession } from '$lib/core/spim.svelte';
   import { Button, Dialog } from '@voxel/kit';
 
   /**
@@ -10,7 +10,7 @@
    * the text changes.
    */
   const station = getVoxelStation();
-  const spim = $derived(station.instrumentOf(SpimInstrument));
+  const spim = $derived(station.sessionOf(SpimSession));
   const acquisition = $derived(spim?.acquisition);
   let asking = $state(false);
 

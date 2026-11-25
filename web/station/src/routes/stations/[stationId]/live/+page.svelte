@@ -24,7 +24,7 @@
     if (!workspace.connected) location.replace(home);
   });
 
-  const open = $derived(station.session?.instrument_name ?? null);
+  const open = $derived(station.session?.instrument.name ?? null);
   const connected = $derived(station.client.state === 'connected');
 </script>
 

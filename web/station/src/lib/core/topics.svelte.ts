@@ -17,6 +17,11 @@ export class Topics {
     this.#prefix = prefix;
   }
 
+  /** A store that holds `values`, each under its name. Nothing writes to it after. */
+  static of(values: Record<string, unknown>): Topics {
+    return new Topics(new SvelteMap(Object.entries(values)));
+  }
+
   /** The value of the topic `name`, or undefined. */
   get<T>(name: string): T | undefined {
     return this.#cells.get(this.#prefix + name) as T | undefined;

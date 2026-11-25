@@ -2,7 +2,7 @@
   import { page } from '$app/state';
   import { getInstrumentSelection, getVoxelStation } from '$lib/context.svelte';
   import { AreaCamera, Laser } from '$lib/core/device.svelte';
-  import { SpimInstrument } from '$lib/core/spim.svelte';
+  import { SpimInstrument, SpimSession } from '$lib/core/spim.svelte';
   import ProfileBar from '$lib/features/profiles/ProfileBar.svelte';
   import { Button, NumberBox, ObjectDiff, Section, TextArea, TextBox } from '@voxel/kit';
   import { emissionToPreviewColor, wavelengthToColor } from '@voxel/kit/colors';
@@ -23,14 +23,19 @@
   const name = $derived(page.params.instrument ?? '');
   const profileId = $derived(page.params.profileId ?? '');
   // The model is of the open instrument, which may not be the one that the address names.
-  const instrument = $derived(station.session?.instrument_name === name ? station.instrument : undefined);
-  const active = $derived(instrument?.activeProfile === profileId);
+  const instrument = $derived(selection.instrument);
+  const session = $derived(selection.session);
+  const spimSession = $derived(session instanceof SpimSession ? session : undefined);
+  const active = $derived(session?.activeProfile === profileId);
   // What only a SPIM microscope has: the spacing of a profile, and the run.
   const spim = $derived(instrument instanceof SpimInstrument ? instrument : undefined);
   const profile = $derived(instrument?.state.profile(profileId));
   const spacing = $derived(spim?.state.profile(profileId)?.spacing);
   // A run uses its own profiles, so no other one is made active while it is on.
-  const running = $derived(spim?.acquisition !== undefined);
+  const running = $derived(spimSession?.acquisition !== undefined);
+  // A value that cannot change now shows as text, at the place of its control: the instrument does not run, or a run
+  // is on.
+  const locked = $derived(!session || running);
 
   // The spectrum shows 400 to 750 nm. A band that is open at 1 end is drawn 100 nm wide.
   const NM = { from: 400, to: 750, open: 100 };
@@ -39,6 +44,9 @@
   // A table of what the profile sets: quiet column names, and a faint line above each row.
   const TABLE =
     'w-full border-collapse text-sm tabular-nums [&_td]:border-t [&_td]:border-line-faint [&_td]:py-1.5 [&_th]:pt-2 [&_th]:pb-1 [&_th]:text-left [&_th]:font-normal [&_th]:whitespace-nowrap [&_th]:text-fg-muted';
+
+  // A value as text where an inline box would be: the same room at its sides, so the text does not move.
+  const READ = 'px-1.5';
 
   // A row of the Sensor ROI section: it takes the columns of the section, and the line of a row goes from edge to
   // edge.
@@ -63,7 +71,7 @@
         const to = high ?? (low === null ? null : low + NM.open);
         // The color of the band's middle, or of 20 nm inside its 1 end: the color that the channel's dot has.
         const middle = low !== null && high !== null ? (low + high) / 2 : low !== null ? low + 20 : (high ?? 0) - 20;
-        const laser = instrument.device(light, Laser)?.wavelength;
+        const laser = session?.device(light, Laser)?.wavelength;
         return {
           key: `${channel}/${camera}`,
           channel,
@@ -163,22 +171,25 @@
     )
   );
 
-  // 1 row for each camera of the profile that has an area sensor: its sensor, the region that the profile keeps or
-  // the whole sensor, and the steps that the camera takes.
+  // 1 row for each camera of the profile: the region that the profile keeps or the whole sensor, and, while the
+  // instrument runs, its sensor and the steps that the camera takes.
   const regionRows = $derived.by(() => {
     const kept = spim?.state.profile(profileId)?.fov;
     if (!spim || !profile || !kept) return [];
     const cameras = [...new Set(Object.values(profile.channels).flatMap((cameras) => Object.keys(cameras)))];
-    return cameras.flatMap((id) => {
-      const camera = spim.device(id, AreaCamera);
-      const size = camera?.sensor?.size_px;
-      if (!camera || !size) return [];
-      const region = kept[id] ?? { x: 0, y: 0, w: size.x, h: size.y };
-      const grid = camera.roiGrid;
+    return cameras.map((id) => {
+      // The size of the sensor and the steps of a region come from the camera, so only while the instrument runs.
+      const camera = session?.device(id, AreaCamera);
+      const size = camera?.sensor?.size_px ?? null;
+      const region = kept[id] ?? (size ? { x: 0, y: 0, w: size.x, h: size.y } : null);
+      const grid = camera?.roiGrid;
       // Where the region starts when it is in the middle of the sensor, on the camera's steps.
       const middle = (room: number, step = 1): number => Math.floor(Math.max(0, room) / 2 / step) * step;
-      const centered = { x: middle(size.x - region.w, grid?.h.step), y: middle(size.y - region.h, grid?.v.step) };
-      return [{ id, size, region, centered, whole: kept[id] === undefined, grid }];
+      const centered =
+        size && region
+          ? { x: middle(size.x - region.w, grid?.h.step), y: middle(size.y - region.h, grid?.v.step) }
+          : null;
+      return { id, size, region, centered, whole: kept[id] === undefined, grid };
     });
   });
 
@@ -217,32 +228,43 @@
     <div class="flex flex-col gap-1">
       <div class="flex items-center gap-4">
         <h1 class="flex min-w-0 flex-1 text-lg font-medium">
-          <TextBox
-            size="inline"
-            class="w-full"
-            value={profile.label ?? ''}
-            placeholder={displayName(profileId)}
-            aria-label="Label"
-            onChange={(text) => instrument.updateProfile(profileId, { label: text.trim() || null })}
-          />
+          {#if locked}
+            <span class={READ}>{profile.label || displayName(profileId)}</span>
+          {:else}
+            <TextBox
+              size="inline"
+              class="w-full"
+              value={profile.label ?? ''}
+              placeholder={displayName(profileId)}
+              aria-label="Label"
+              onChange={(text) => session?.updateProfile(profileId, { label: text.trim() || null })}
+            />
+          {/if}
         </h1>
         <!-- How the profile differs from its default, as a faint link to the Config page. Nothing when it is the
         same. -->
         {#if changed !== 0}
-          <a class="shrink-0 text-sm text-fg-muted hover:text-fg hover:underline" href={selection.href(name, 'config')}>
+          <a
+            class="shrink-0 text-sm text-fg-muted hover:text-fg hover:underline"
+            href={selection.href(name, 'config/changes')}
+          >
             {changed === null ? 'Not in defaults' : `${changed} ${changed === 1 ? 'change' : 'changes'} from default`}
           </a>
         {/if}
       </div>
       <div class="text-sm text-fg-muted">
-        <TextArea
-          size="inline"
-          class="w-full"
-          value={profile.desc}
-          placeholder="Description"
-          aria-label="Description"
-          onChange={(text) => instrument.updateProfile(profileId, { desc: text })}
-        />
+        {#if locked}
+          {#if profile.desc}<p class={[READ, 'whitespace-pre-wrap']}>{profile.desc}</p>{/if}
+        {:else}
+          <TextArea
+            size="inline"
+            class="w-full"
+            value={profile.desc}
+            placeholder="Description"
+            aria-label="Description"
+            onChange={(text) => session?.updateProfile(profileId, { desc: text })}
+          />
+        {/if}
       </div>
     </div>
 
@@ -335,14 +357,20 @@
           <!-- At the end of the row: what the instrument gives is at the left, and what the profile sets at the right. -->
           <span class="ml-auto flex items-center gap-2">
             <span class="text-sm text-fg-muted">Spacing</span>
-            <NumberBox
-              class="w-24"
-              suffix="µm"
-              value={spacing}
-              min={0}
-              aria-label="Spacing"
-              onChange={(value) => spim.updateProfile(profileId, { spacing: value })}
-            />
+            {#if locked}
+              <span class="flex h-ui-sm w-24 items-center justify-end gap-1 px-1.5 text-base tabular-nums">
+                {spacing}<span class="text-fg-muted">µm</span>
+              </span>
+            {:else}
+              <NumberBox
+                class="w-24"
+                suffix="µm"
+                value={spacing}
+                min={0}
+                aria-label="Spacing"
+                onChange={(value) => spimSession?.updateProfile(profileId, { spacing: value })}
+              />
+            {/if}
           </span>
         </div>
       </Section>
@@ -443,68 +471,87 @@
               </div>
             </div>
             {#each regionRows as row (row.id)}
-              {@const locked = !active || running}
+              {@const fixed = locked || !active || !spimSession}
               <div class={[ROI_ROW, 'border-t border-line-faint py-1.5']} role="row">
                 <div class="truncate font-medium" role="cell" title={displayName(row.id)}>{displayName(row.id)}</div>
                 <div class={ROI_REST}>
                   <div class="w-14" role="cell">
-                    <svg
-                      class="block h-auto w-full overflow-visible"
-                      viewBox="0 0 {row.size.x} {row.size.y}"
-                      style:aspect-ratio="{row.size.x}/{row.size.y}"
-                      aria-hidden="true"
-                    >
-                      <rect
-                        width={row.size.x}
-                        height={row.size.y}
-                        fill="var(--canvas)"
-                        stroke="var(--line-muted)"
-                        vector-effect="non-scaling-stroke"
-                      />
-                      <rect
-                        x={row.region.x}
-                        y={row.region.y}
-                        width={row.region.w}
-                        height={row.region.h}
-                        fill="color-mix(in oklab, var(--accent-fg) 25%, transparent)"
-                        stroke="var(--accent-fg)"
-                        stroke-width="1.5"
-                        vector-effect="non-scaling-stroke"
-                      />
-                    </svg>
+                    {#if row.size && row.region}
+                      <svg
+                        class="block h-auto w-full overflow-visible"
+                        viewBox="0 0 {row.size.x} {row.size.y}"
+                        style:aspect-ratio="{row.size.x}/{row.size.y}"
+                        aria-hidden="true"
+                      >
+                        <rect
+                          width={row.size.x}
+                          height={row.size.y}
+                          fill="var(--canvas)"
+                          stroke="var(--line-muted)"
+                          vector-effect="non-scaling-stroke"
+                        />
+                        <rect
+                          x={row.region.x}
+                          y={row.region.y}
+                          width={row.region.w}
+                          height={row.region.h}
+                          fill="color-mix(in oklab, var(--accent-fg) 25%, transparent)"
+                          stroke="var(--accent-fg)"
+                          stroke-width="1.5"
+                          vector-effect="non-scaling-stroke"
+                        />
+                      </svg>
+                    {/if}
                   </div>
                   <div class={ROI_REGION} role="cell">
-                    <div class="grid grid-cols-2 gap-1">
-                      {#each ['x', 'y', 'w', 'h'] as const as side (side)}
-                        {@const steps = side === 'x' || side === 'w' ? row.grid?.h : row.grid?.v}
-                        <NumberBox
-                          prefix={side.toUpperCase()}
-                          value={row.region[side]}
-                          min={side === 'x' || side === 'y' ? 0 : steps?.min}
-                          max={steps?.max}
-                          step={steps?.step}
-                          disabled={locked}
-                          aria-label="{side.toUpperCase()} of {displayName(row.id)}"
-                          onChange={(value) => spim.setCameraRegion(row.id, { ...row.region, [side]: value })}
-                        />
-                      {/each}
-                    </div>
+                    {#if !row.region}
+                      <!-- No region is kept, and no camera says how large its sensor is. -->
+                      <span class="px-1.5">Whole sensor</span>
+                    {:else}
+                      {@const region = row.region}
+                      <div class="grid grid-cols-2 gap-1">
+                        {#each ['x', 'y', 'w', 'h'] as const as side (side)}
+                          {@const steps = side === 'x' || side === 'w' ? row.grid?.h : row.grid?.v}
+                          {#if fixed}
+                            <!-- The number as text, in the place and the size of its box. -->
+                            <span class="flex h-ui-sm items-center justify-between gap-2 px-1.5 text-base">
+                              <span class="text-fg-muted">{side.toUpperCase()}</span>{region[side]}
+                            </span>
+                          {:else}
+                            <NumberBox
+                              prefix={side.toUpperCase()}
+                              value={region[side]}
+                              min={side === 'x' || side === 'y' ? 0 : steps?.min}
+                              max={steps?.max}
+                              step={steps?.step}
+                              aria-label="{side.toUpperCase()} of {displayName(row.id)}"
+                              onChange={(value) => spimSession?.setCameraRegion(row.id, { ...region, [side]: value })}
+                            />
+                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
                   </div>
-                  <div role="cell">
-                    <div class="flex w-16 flex-col items-stretch gap-1">
-                      <Button
-                        variant="secondary"
-                        disabled={locked || row.whole}
-                        title="Read the whole sensor"
-                        onclick={() => spim.setCameraRegion(row.id, null)}>Full</Button
-                      >
-                      <Button
-                        variant="secondary"
-                        disabled={locked || (row.region.x === row.centered.x && row.region.y === row.centered.y)}
-                        title="Put the region in the middle of the sensor"
-                        onclick={() => spim.setCameraRegion(row.id, { ...row.region, ...row.centered })}>Center</Button
-                      >
-                    </div>
+                  <!-- The column keeps its width with no buttons, so the other columns stay in place. -->
+                  <div class="w-16" role="cell">
+                    {#if !fixed && row.region && row.centered}
+                      {@const [region, centered] = [row.region, row.centered]}
+                      <div class="flex flex-col items-stretch gap-1">
+                        <Button
+                          variant="secondary"
+                          disabled={row.whole}
+                          title="Read the whole sensor"
+                          onclick={() => spimSession?.setCameraRegion(row.id, null)}>Full</Button
+                        >
+                        <Button
+                          variant="secondary"
+                          disabled={region.x === centered.x && region.y === centered.y}
+                          title="Put the region in the middle of the sensor"
+                          onclick={() => spimSession?.setCameraRegion(row.id, { ...region, ...centered })}
+                          >Center</Button
+                        >
+                      </div>
+                    {/if}
                   </div>
                 </div>
               </div>

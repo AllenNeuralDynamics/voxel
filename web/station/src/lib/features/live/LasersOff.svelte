@@ -14,6 +14,6 @@
   variant="danger"
   size="xs"
   class="shrink-0"
-  disabled={!station.instrument}
-  onclick={() => station.instrument?.lasersOff()}>Lasers off</Button
+  disabled={!station.session}
+  onclick={() => station.session?.lasersOff()}>Lasers off</Button
 >

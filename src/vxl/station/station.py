@@ -145,6 +145,14 @@ class Station:
             if directory.is_dir()
         }
 
+    def inspect(self, name: str) -> InstrumentFolder:
+        """Inspect 1 installed instrument without opening hardware. Raise :class:`NotFoundError` when no folder has
+        that name."""
+        home = self._instrument_home(name)
+        if not home.is_dir():
+            raise NotFoundError(f"No instrument '{name}' under {self.instruments_dir}")
+        return InstrumentFolder.read(home)
+
     async def create_instrument(self, name: str, template: Mapping[str, Any]) -> InstrumentFolder:
         """Create and inspect one installed instrument from a template: a ``rig`` and a ``default``."""
         async with self._lifecycle_lock:
@@ -200,7 +208,7 @@ class Station:
             await self._view.set(StationView(status=StationStatus.OPENING))
             instrument: AnyInstrument | None = None
             try:
-                folder = InstrumentFolder.read(instrument_home)
+                folder = self.inspect(instrument_name)
                 instrument = folder.instrument(records=self._records, system=self._config)
                 await instrument.open()
                 self._instrument = instrument

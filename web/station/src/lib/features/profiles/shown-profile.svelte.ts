@@ -16,7 +16,7 @@ export class ShownProfile {
   constructor(station: Station) {
     let active: string | undefined;
     $effect(() => {
-      const now = station.instrument?.activeProfile;
+      const now = station.session?.activeProfile;
       untrack(() => {
         if (now === active) return;
         if (this.id === undefined || this.id === active) this.id = now;

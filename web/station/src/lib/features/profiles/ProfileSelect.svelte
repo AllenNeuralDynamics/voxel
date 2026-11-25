@@ -9,18 +9,18 @@
    * in another window.
    */
   const station = getVoxelStation();
-  const instrument = $derived(station.instrument);
+  const session = $derived(station.session);
 </script>
 
-{#if instrument}
+{#if session}
   <Select
     size="md"
     class="w-56 max-w-full shrink"
     prefix="Profile"
     aria-label="Profile"
-    value={instrument.activeProfile}
-    options={instrument.state.profileIds}
-    formatLabel={(id) => instrument.state.profile(id)?.label || displayName(id)}
-    onChange={(id) => instrument.selectProfile(id)}
+    value={session.activeProfile}
+    options={session.instrument.state.profileIds}
+    formatLabel={(id) => session.instrument.state.profile(id)?.label || displayName(id)}
+    onChange={(id) => session.selectProfile(id)}
   />
 {/if}

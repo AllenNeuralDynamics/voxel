@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from rigup.activity import ActivityBusyError, ActivityInfo
 
 from vxl._utils.files import load_yaml
 from vxl.devices.signals.generator.base import OwnClock
 from vxl.instrument.basic import BasicInstrument
 from vxl.instrument.config import new_instrument_id
-from vxl.instrument.folder import InstrumentFolder
+from vxl.instrument.folder import InstrumentFolder, InstrumentInspection
 from vxl.instrument.samples import render
 from vxl.instrument.signals import Timeline
 from vxl.instrument.state import InstrumentState, StageFollowRule, Task
@@ -61,10 +61,65 @@ def test_a_template_makes_instruments_with_new_ids(tmp_path: Path) -> None:
     first, second = (InstrumentFolder.create(template(rig()), name, tmp_path) for name in ("left", "right"))
     assert first.ok
     assert second.ok
-    assert first.config is not None
-    assert second.config is not None
-    assert first.config.id != second.config.id
-    assert (first.config.name, first.config.model) == ("left", "bench.v1")
+    left, right = first.rig.model, second.rig.model
+    assert left is not None
+    assert right is not None
+    assert left.id != right.id
+    assert (left.name, left.model, first.name) == ("left", "bench.v1", "left")
+
+
+def test_a_folder_keeps_the_content_of_each_file(tmp_path: Path) -> None:
+    folder = InstrumentFolder.create(template(rig()), "left", tmp_path)
+    assert ((folder.rig.model is not None), (folder.default.model is not None), folder.ok) == (True, True, True)
+    assert folder.rig.data["name"] == "left"
+    assert set(folder.default.data) == {"profiles"}
+    # No state.json: no content and no problem, and the instrument starts from its defaults.
+    assert (folder.state.data, (folder.state.model is not None), list(folder.problems)) == (None, False, [])
+
+    short = TypeAdapter(InstrumentInspection).dump_python(folder.inspection(), mode="json")
+    assert short == {"problems": []}
+    full = TypeAdapter(InstrumentInspection).dump_python(folder.inspection(files=True), mode="json")
+    assert set(full["files"]) == {"rig", "default", "state"}
+    assert set(full["files"]["rig"]) == {"data", "model"}
+    assert full["files"]["state"] == {"data": None, "model": None}
+
+
+def test_a_folder_with_a_bad_file_keeps_the_others(tmp_path: Path) -> None:
+    home = InstrumentFolder.create(template(rig()), "left", tmp_path).home
+    good, good_default = (home / "rig.yaml").read_text(), (home / "default.yaml").read_text()
+
+    # A value that the rig's checks refuse: the rig has content and no model, and the default is read, not checked.
+    (home / "rig.yaml").write_text(good.replace("name: left", "name: " + "x" * 33))
+    folder = InstrumentFolder.read(home)
+    assert (folder.ok, (folder.rig.model is not None), folder.rig.data["name"]) == (False, False, "x" * 33)
+    assert {problem.loc[0] for problem in folder.problems} == {"rig"}
+    assert ((folder.default.model is not None), set(folder.default.data)) == (False, {"profiles"})
+
+    # A target that names no class.
+    (home / "rig.yaml").write_text(good.replace("target: ", "target: nothing.here."))
+    folder = InstrumentFolder.read(home)
+    assert (folder.kind, (folder.rig.model is not None), folder.problems.codes()) == (None, False, ["rig.target"])
+    assert folder.rig.data["name"] == "left"
+
+    # Text that is not YAML: no content, and the other files are still read.
+    (home / "rig.yaml").write_text("name: [left")
+    (home / "default.yaml").write_text("profiles: {gfp: [")
+    folder = InstrumentFolder.read(home)
+    assert (folder.rig.data, folder.default.data) == (None, None)
+    assert folder.problems.codes() == ["rig.load", "default.load"]
+
+    # A state that no longer fits the rig has content, and its own problems.
+    (home / "rig.yaml").write_text(good)
+    (home / "default.yaml").write_text(good_default)
+    (home / "state.json").write_text('{"profiles": {}, "nothing": 1}')
+    folder = InstrumentFolder.read(home)
+    assert ((folder.rig.model is not None), (folder.default.model is not None), (folder.state.model is not None)) == (
+        True,
+        True,
+        False,
+    )
+    assert folder.state.data == {"profiles": {}, "nothing": 1}
+    assert {problem.loc[0] for problem in folder.problems} == {"state"}
 
 
 def test_a_template_has_no_id(tmp_path: Path) -> None:
@@ -88,9 +143,10 @@ def test_a_default_has_no_plan(tmp_path: Path) -> None:
 
 def _store(tmp_path: Path) -> InstrumentStore:
     folder = InstrumentFolder.create(template(rig()), "left", tmp_path)
-    assert folder.config is not None
-    assert isinstance(folder.default, InstrumentState)
-    return InstrumentStore(folder.home, folder.config, folder.default, folder.default)
+    config, default = folder.rig.model, folder.default.model
+    assert config is not None
+    assert isinstance(default, InstrumentState)
+    return InstrumentStore(folder.home, config, default, default)
 
 
 async def test_the_store_keeps_the_plan_out_of_the_defaults(tmp_path: Path) -> None:
@@ -117,7 +173,7 @@ async def test_the_store_keeps_the_plan_out_of_the_defaults(tmp_path: Path) -> N
 
     again = InstrumentFolder.read(store.home)
     assert again.ok
-    assert (again.default, again.state) == (store.default_state.value, store.value)
+    assert (again.default.model, again.state.model) == (store.default_state.value, store.value)
 
 
 async def test_the_store_saves_and_restores_defaults_at_key_paths(tmp_path: Path) -> None:

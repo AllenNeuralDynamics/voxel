@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
   import { Modulator, Shutter } from '$lib/core/device.svelte';
-  import type { Beam } from '$lib/core/instrument.svelte';
+  import type { Beam } from '$lib/core/session.svelte';
   import { Button } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { wavelengthToColor } from '@voxel/kit/colors';
@@ -15,12 +15,14 @@
    * on when something after it stops its light.
    */
   const station = getVoxelStation();
-  const instrument = $derived(station.instrument);
-  const profile = $derived(instrument?.activeProfile ? instrument.state.profile(instrument.activeProfile) : undefined);
+  const session = $derived(station.session);
+  const profile = $derived(
+    session?.activeProfile ? session.instrument.state.profile(session.activeProfile) : undefined
+  );
   const inProfile = $derived(
     new Set(Object.values(profile?.channels ?? {}).flatMap((byCamera) => Object.values(byCamera)))
   );
-  const beams = $derived(instrument?.beams ?? []);
+  const beams = $derived(session?.beams ?? []);
   // The lasers that are on come first; each part keeps the order of the wavelengths.
   const shown = $derived(
     beams
@@ -28,7 +30,7 @@
       .toSorted((a, b) => Number(b.source.isOn) - Number(a.source.isOn))
   );
   const others = $derived(beams.filter((beam) => !shown.includes(beam)));
-  const shared = $derived(instrument?.sharedGates ?? []);
+  const shared = $derived(session?.sharedGates ?? []);
   const uid = $props.id();
   const block = 'col-span-3 grid grid-cols-subgrid rounded-md bg-tint px-2.5 py-1';
 </script>
@@ -91,9 +93,7 @@
 <section class="flex h-full min-h-0 flex-col" aria-label="Power">
   <div class="px-inset mt-1.5 mb-1 flex h-ui-md shrink-0 items-center gap-2">
     <h3 class="flex-1 text-sm font-medium text-fg-muted">Power</h3>
-    <Button variant="outline" size="xs" disabled={!instrument} onclick={() => instrument?.lightsOff()}
-      >Lights off</Button
-    >
+    <Button variant="outline" size="xs" disabled={!session} onclick={() => session?.lightsOff()}>Lights off</Button>
   </div>
   <div class="px-inset min-h-0 flex-1 overflow-y-auto pb-2">
     <!-- The blocks' edges are on the pane's inset; the text in them is inset from that. The column names are for screen readers only. Their row is placed in this box, so a closed panel cuts it off. -->

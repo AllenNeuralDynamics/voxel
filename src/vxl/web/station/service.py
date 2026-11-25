@@ -3,11 +3,12 @@
 from collections.abc import Awaitable, Callable
 from functools import partial
 from types import TracebackType
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from fastapi import Body, FastAPI, Request, Response
 from starlette.types import Receive, Scope, Send
 
+from vxl.instrument.folder import InstrumentInspection
 from vxl.records import Records
 from vxl.station.config import StationConfig
 from vxl.station.errors import BusyError
@@ -47,6 +48,7 @@ class StationService:
         ProblemDetails.install(app, InstrumentRouter.statuses)
         app.router.routes.extend(FeedSockets(self._publisher).routes(self._prefix))
         app.add_api_route(f"{self._prefix}/instruments", self._instruments, methods=["GET"])
+        app.add_api_route(f"{self._prefix}/instruments/{{name}}:inspect", self._inspect, methods=["GET"])
         app.add_api_route(f"{self._prefix}/session:open", self._open, methods=["POST"])
         app.add_api_route(f"{self._prefix}/session:close", self._close, methods=["POST"], status_code=204)
         app.mount(f"{self._prefix}/instrument", self._instrument)
@@ -83,13 +85,13 @@ class StationService:
             self._publisher.close()
             await self._listener.__aexit__(kind, error, trace)
 
-    async def _instruments(self) -> dict[str, dict[str, Any]]:
+    async def _instruments(self) -> dict[str, InstrumentInspection]:
         """Each installed instrument, with whether its folder is in order and the problems found in it."""
-        found = self.station.discover_instruments()
-        return {
-            name: {"ok": folder.ok, "problems": [problem.model_dump(mode="json") for problem in folder.problems]}
-            for name, folder in found.items()
-        }
+        return {name: folder.inspection() for name, folder in self.station.discover_instruments().items()}
+
+    async def _inspect(self, name: str) -> InstrumentInspection:
+        """1 installed instrument, as :meth:`_instruments` gives it, with the content of its 3 files as read."""
+        return self.station.inspect(name).inspection(files=True)
 
     async def _open(self, instrument: Annotated[str, Body(embed=True)]) -> SessionInfo:
         """Open an installed instrument as the station's session."""
