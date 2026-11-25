@@ -59,7 +59,7 @@ class SeqSweepInstrumentDefaults(FrozenModel):
     # TODO Maybe different type of key for chambers (e.g., str instead of int)
     chambers_step_mm: dict[int, float] = Field(
         default_factory=dict,
-        description="Lower edge of each chamber along the step axis (across the scan); strips step upward from it",
+        description="Start position of each chamber along the step axis (across the scan); strips step upward from it",
     )
     chamber_edge_margin_mm: float = Field(
         ...,
