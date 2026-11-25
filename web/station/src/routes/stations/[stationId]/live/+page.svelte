@@ -11,7 +11,6 @@
 
   import type { PageProps } from './$types';
 
-  // The Live window: the live profile on its own, opened by the workspace. Its links show their page in the workspace.
   let { params }: PageProps = $props();
 
   const station = getVoxelStation();
@@ -19,13 +18,14 @@
   const workspace = LiveDock.workspace();
   onDestroy(() => workspace.dispose());
 
-  // Only the workspace opens this window. A typed or bookmarked address goes to the workspace, docked.
+  // Only the workspace opens this window; a typed address goes to the workspace.
   onMount(() => {
     if (!workspace.connected) location.replace(home);
   });
 
   const open = $derived(station.session?.instrument.name ?? null);
   const connected = $derived(station.client.state === 'connected');
+  const openHome = $derived(`${home}/instruments/${encodeURIComponent(open ?? '')}`);
 </script>
 
 <svelte:head>
@@ -35,7 +35,11 @@
 {#if workspace.connected}
   <div class="h-screen w-screen overflow-x-auto overflow-y-hidden bg-shell text-fg">
     <div class="h-full" style:min-width="{LAYOUT.live.min}rem">
-      <LiveProfile {connected} dock={LAYOUT.dock}>
+      <LiveProfile
+        {connected}
+        dock={LAYOUT.dock}
+        deviceLink={(id) => workspace.link(`${openHome}/devices/${encodeURIComponent(id)}`)}
+      >
         {#snippet start()}
           <div class="app-bar w-rail shrink-0 justify-center border-r px-1.5">
             <LogoMenu
@@ -49,10 +53,7 @@
             <a {...workspace.link(home)} class="truncate px-1 text-fg-muted hover:text-fg">{station.name}</a>
             {#if open}
               <span class="text-fg-faint">/</span>
-              <a
-                {...workspace.link(`${home}/instruments/${encodeURIComponent(open)}/run`)}
-                class="truncate px-1 text-fg">{displayName(open)}</a
-              >
+              <a {...workspace.link(`${openHome}/run`)} class="truncate px-1 text-fg">{displayName(open)}</a>
             {/if}
             <span class="text-fg-faint">/</span>
             <span class="px-1 text-fg">Live</span>

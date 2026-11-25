@@ -29,7 +29,8 @@
     /** With a `baseline`: leaves out what is the same, and keeps each change and the keys it is under. A row stands
      * for what a list or a map leaves out, and shows it when pressed. */
     changesOnly?: boolean;
-    /** How many levels start open. A list or a map deeper than this starts folded. */
+    /** How many levels start open. A list or a map deeper than this starts folded. A long list or map shows its
+     * first 50 items, then a row with the count of the rest, which shows 500 more when pressed. */
     expandDepth?: number;
     /** Marks that each draw as a new row under their row, across the width. A row with one always shows, also with
      * `changesOnly`, and a folded row that hides one has a line at its right edge. */
@@ -76,11 +77,15 @@
         value: unknown;
         marks: boolean;
       }
-    | { kind: 'more'; path: string; depth: number; count: number };
+    | { kind: 'more'; path: string; depth: number; count: number; long: boolean };
 
   // What a person folded or opened, by path, and the lists and maps whose left-out rows a person asked for.
   const folds = new SvelteMap<string, boolean>();
   const shown = new SvelteSet<string>();
+  // A list or a map shows this many items at first, then a row with the count of the rest. The count that shows
+  // now, for each list or map that a person asked more of.
+  const FIRST = 50;
+  const limits = new SvelteMap<string, number>();
 
   const comparing = $derived(baseline !== undefined);
 
@@ -109,7 +114,13 @@
   ): void {
     const list = Array.isArray(now ?? was);
     let left = 0;
-    for (const key of ObjectDiff.keys(now, was)) {
+    const all = ObjectDiff.keys(now, was);
+    const limit = limits.get(path) ?? FIRST;
+    for (const [index, key] of all.entries()) {
+      if (index >= limit) {
+        out.push({ kind: 'more', path, depth, count: all.length - limit, long: true });
+        break;
+      }
       const [a, b] = [ObjectDiff.parts(now)?.[key], ObjectDiff.parts(was)?.[key]];
       const at = [...keys, key];
       if (changesOnly && comparing && side === 'same' && !shown.has(path) && ObjectDiff.same(a, b) && !holdsMark(at)) {
@@ -138,7 +149,7 @@
         node(a, b, next, at, depth, label, 'same', true, out);
       }
     }
-    if (left > 0) out.push({ kind: 'more', path, depth, count: left });
+    if (left > 0) out.push({ kind: 'more', path, depth, count: left, long: false });
   }
 
   /** The rows of 1 value with its key. With `side` `same`, `was` is what it is compared with. `marks` is whether the
@@ -222,7 +233,7 @@
 arrow that folds a list or a map, or the sign of a row that was removed or added. A folded row that hides a change has
 a line at its left edge, and one that hides a mark has a line at its right edge. -->
 <div class={cn('frame-raised py-2 font-mono text-sm/[1.7] tabular-nums', className)}>
-  {#each lines as line (`${line.kind}${line.path}`)}
+  {#each lines as line (`${line.kind}${line.kind === 'more' && line.long ? 'long' : ''}${line.path}`)}
     {#if line.kind === 'more'}
       <div class="flex min-w-0 items-center">
         <span class={GUTTER}></span>
@@ -230,7 +241,8 @@ a line at its left edge, and one that hides a mark has a line at its right edge.
           type="button"
           class="cursor-pointer rounded-sm px-1.5 text-fg-muted hover:bg-element-hover hover:text-fg"
           style:margin-left="{line.depth * 2}ch"
-          onclick={() => shown.add(line.path)}
+          onclick={() =>
+            line.long ? limits.set(line.path, (limits.get(line.path) ?? FIRST) + 10 * FIRST) : shown.add(line.path)}
         >
           ⋯ {line.count} more
         </button>

@@ -48,7 +48,7 @@ from vxl.instrument.state import (
     Task,
     TaskId,
 )
-from vxl.instrument.store import InstrumentStore, Merge, StateValues
+from vxl.instrument.store import ABSENT, InstrumentStore, Merge, StateValues
 from vxl.live import LiveSourceEmission, LiveViewport
 from vxl.metadata import ExperimentMetadata, MetadataCls, resolve_metadata_class
 from vxl.optics import AxisPosition, SpecimenAxis
@@ -349,6 +349,34 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if found:
                 props = {name: to_jsonable_python(value[0]) for name, value in found.items() if value is not None}
                 values["profiles", active, "props", device_id] = Merge(props)
+            if values:
+                await edit.record(values)
+
+    @action(on="devices", key="device_id", verb="remove_from_profile")
+    async def remove_from_profile(self, device_id: DeviceId, properties: Sequence[str]) -> None:
+        """Remove each named property of a device from the active profile, as 1 edit; ``position`` removes the
+        device from the profile's positions. No device changes. Raise :class:`NotFoundError` when the profile has no
+        value for a property, and :class:`RejectedError` for a property on the device's autosave list, which the next
+        write would save again."""
+        async with self._state_edit("Remove from profile") as edit:
+            self._hal.device(device_id)
+            active = self._active_profile.value
+            profile = self._store.value.profiles[active]
+            props = profile.props.get(device_id, {})
+            kept = {*props, *(["position"] if device_id in profile.positions else [])}
+            if missing := sorted(set(properties) - kept):
+                raise NotFoundError(f"The active profile has no {missing} for '{device_id}'")
+            autosave = self._config.autosave.get(device_id, [])
+            if saved := sorted(name for name in properties if autosave == "*" or name in autosave):
+                raise RejectedError(f"'{device_id}' saves {saved} into the profile on every write")
+            values: dict[KeyPath, Any] = {}
+            if "position" in properties:
+                values["profiles", active, "positions", device_id] = ABSENT
+            names = [name for name in properties if name != "position"]
+            if names and set(names) == props.keys():
+                values["profiles", active, "props", device_id] = ABSENT
+            else:
+                values.update({("profiles", active, "props", device_id, name): ABSENT for name in names})
             if values:
                 await edit.record(values)
 

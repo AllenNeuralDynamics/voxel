@@ -1,4 +1,3 @@
-/** The station: its connection and the topics of its state feed. */
 import { untrack } from 'svelte';
 
 import { Client, type ClientOptions, type Unsub } from './client.svelte';
@@ -8,19 +7,17 @@ import { SpimInstrument, SpimSession } from './spim.svelte';
 import { Topics } from './topics.svelte';
 import type { InstrumentConfig, LogEntry } from './types';
 
-/** The classes of a kind of instrument: the instrument itself, and its session while it runs. */
 interface Kind {
   instrument: new (name: string, topics: Topics) => Instrument;
   session: new (client: Client, topics: Topics, base: string, id: string, instrument: never) => InstrumentSession;
 }
 
-/** The classes of each kind of instrument that has its own, by the `target` of its config. */
+/** Keyed by the config's `target`. */
 const KINDS: Record<string, Kind> = {
   'vxl_instruments.spim.Microscope': { instrument: SpimInstrument, session: SpimSession }
 };
 const PLAIN: Kind = { instrument: Instrument, session: InstrumentSession };
 
-/** How many log lines the station keeps for the window. */
 const LOG_KEPT = 500;
 
 export type StationStatus = 'idle' | 'opening' | 'active' | 'closing' | 'faulted' | 'closed';
@@ -30,13 +27,11 @@ export interface StationInfo {
   name: string;
 }
 
-/** The open session as the feed names it: its id and the instrument's name. */
 export interface SessionInfo {
   id: string;
   instrument_name: string;
 }
 
-/** 1 thing wrong in an instrument's folder, at `loc` in its files. */
 export interface Problem {
   code: string;
   level: 'error' | 'warning';
@@ -45,24 +40,19 @@ export interface Problem {
   detail: string | null;
 }
 
-/** The files of an instrument's folder, by the first key of a problem's `loc`. */
+/** The first key of a problem's `loc`. */
 export type FolderFileName = 'rig' | 'default' | 'state';
 
 /**
- * 1 file of an instrument's folder: its content as read, and the same content as its model, with every value that
- * the file leaves out. `model` is null until the content passes its checks. A file with content, no model and no
- * problem of its own was not checked, because the rig has a problem. A file with no content and no problem is not on
- * disk.
+ * `model` is the content with defaults filled in, null until it passes its checks. Content with no model and no problem
+ * of its own was not checked because the rig has a problem. No content and no problem means the file is not on disk.
  */
 export interface FolderFile {
   data: unknown;
   model: unknown;
 }
 
-/**
- * An installed instrument's folder, read with no hardware: the problems found in it. The instrument can open when no
- * problem is an error. The full form has `files`, the content of its 3 files.
- */
+/** An instrument folder checked without hardware. It can open when no problem is an error. */
 export interface InstrumentInspection {
   problems: Problem[];
   files?: Record<FolderFileName, FolderFile>;
@@ -72,19 +62,17 @@ export class Station {
   readonly #client: Client;
   #stationId = $state('');
 
-  /** The installed instruments by name, as last loaded. */
   instruments = $state.raw<Record<string, InstrumentInspection>>({});
-  /** The full inspection of each instrument that a page asked for, by name, as last loaded. */
+  /** Full inspections that pages asked for. */
   inspections = $state.raw<Record<string, InstrumentInspection>>({});
-  /** The newest log lines, oldest first: up to 500, from the feed and, for lines it missed, the history. */
+  /** Oldest first, up to 500: from the feed, with gaps filled from the history. */
   log = $state.raw<LogEntry[]>([]);
   #unsubs: Unsub[] = [];
 
-  /** The station's topics, by their names without the prefix `stations.<id>.`, such as `status`. */
+  /** Names without the `stations.<id>.` prefix. */
   readonly topics: Topics = $derived.by(() => this.#client.topics.scope(`stations.${this.#stationId}`));
 
-  /** The session of the instrument that runs, or null. A new one for each session, so nothing of a closed session
-   * stays. */
+  /** A new session object per session, so nothing of a closed one stays. */
   readonly #info: SessionInfo | undefined = $derived(this.topics.get<SessionInfo>('session'));
   readonly #sessionId: string | undefined = $derived(this.#info?.id);
   readonly #sessionName: string | undefined = $derived(this.#info?.instrument_name);
@@ -113,16 +101,14 @@ export class Station {
     });
   }
 
-  /** The session when it is of the class `type`, such as SpimSession, or null. */
   sessionOf<T extends InstrumentSession>(type: new (...args: never[]) => T): T | null {
     const session = this.session;
     return session instanceof type ? session : null;
   }
 
   /**
-   * The instrument `name`: the one of the session when it runs, else one built from its inspection, which `inspect`
-   * loads. Null until the inspection is there, and for an instrument whose rig or default has a problem. An instrument
-   * with no saved state has the state of its defaults.
+   * The running session's instrument, else one built from the inspection that `inspect` loads. Null until then,
+   * and when the rig or default has a problem. Without a saved state it uses the defaults.
    */
   instrumentFor(name: string): Instrument | null {
     if (this.session?.instrument.name === name) return this.session.instrument;
@@ -144,7 +130,7 @@ export class Station {
     );
   }
 
-  /** A state as the feed names its topics: 1 for each field, and 1 for each profile. */
+  /** Splits a state into feed topics: 1 per field and 1 per profile. */
   static #split(prefix: string, state: Record<string, unknown>): Record<string, unknown> {
     const topics: Record<string, unknown> = {};
     for (const [field, value] of Object.entries(state)) {
@@ -162,7 +148,7 @@ export class Station {
     return this.#stationId;
   }
 
-  /** The station's id and name, or null until the feed sends them. */
+  /** Null until the feed sends it. */
   get info(): StationInfo | null {
     return this.topics.get<StationInfo>('station') ?? null;
   }
@@ -175,12 +161,10 @@ export class Station {
     return this.topics.get<StationStatus>('status');
   }
 
-  /** The station's last error, or null. */
   get error(): string | null {
     return this.topics.get<string>('error') ?? null;
   }
 
-  /** Read the state feed of the station `stationId`, and keep reading it until `dispose`. */
   initialize(stationId: string): void {
     this.#stationId = stationId;
     this.#unsubs.push(this.#client.onOpen(() => void this.loadInstruments()));
@@ -193,15 +177,13 @@ export class Station {
     this.#client.disconnect();
   }
 
-  /** Load the installed instruments again, such as after a folder changed. */
   async loadInstruments(): Promise<void> {
     this.instruments = await this.#client.get<Record<string, InstrumentInspection>>(
       `/stations/${this.#stationId}/instruments`
     );
   }
 
-  /** Read the folder of the instrument `name` again, with the content of its files, and keep it in `inspections`.
-   * It does nothing until the station is known. */
+  /** Reloads with file contents into `inspections`. No-op until the station is known. */
   async inspect(name: string): Promise<void> {
     if (!this.#stationId) return;
     const found = await this.#client.get<InstrumentInspection>(
@@ -210,7 +192,7 @@ export class Station {
     this.inspections = { ...this.inspections, [name]: found };
   }
 
-  /** Adds `entry` to the log. After a gap, such as at the start or after a reconnect, the missed lines come first. */
+  /** After a gap, such as at start or after a reconnect, the missed lines come first. */
   async #addLog(entry: LogEntry): Promise<void> {
     const last = this.log.at(-1)?.seq ?? 0;
     if (entry.seq <= last) return;
@@ -229,12 +211,10 @@ export class Station {
     this.log = [...bySeq.values()].sort((a, b) => a.seq - b.seq).slice(-LOG_KEPT);
   }
 
-  /** Open the instrument `name` as the station's session. */
   launch(name: string): Promise<SessionInfo> {
     return this.#client.post<SessionInfo>(`/stations/${this.#stationId}/session:open`, { instrument: name });
   }
 
-  /** Close the open session. */
   close(): Promise<void> {
     return this.#client.post(`/stations/${this.#stationId}/session:close`);
   }

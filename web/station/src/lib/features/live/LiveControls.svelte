@@ -7,13 +7,10 @@
   import { displayName } from '@voxel/kit/format';
 
   import { type ChannelSection, LiveControlsLayout } from './live-controls';
+  import type { DeviceLink } from './live-dock.svelte';
 
-  /**
-   * The controls of the open instrument's active profile: 1 section for each channel, with the devices that only it
-   * uses, then the devices that the channels share, before and after the specimen. A switch above the channels picks the dim or the full powers. On a SPIM microscope, a checkbox
-   * on each channel and camera chooses what a preview shows: a change is sent at once, or, while a preview runs,
-   * waits for Apply, because it restarts the preview.
-   */
+  /** Camera selection changes wait for Apply while a preview runs, because applying restarts it. */
+  const { deviceLink }: { deviceLink: DeviceLink } = $props();
   const uid = $props.id();
   const station = getVoxelStation();
   const session = $derived(station.session);
@@ -31,17 +28,15 @@
       : undefined
   );
 
-  // The cameras of the profile, in its order, and the ones a preview shows now.
   const cameras = $derived(layout?.channels.flatMap((channel) => channel.cameras) ?? []);
   const showing = $derived(spim?.previewChannels ?? []);
-  // A change that waits for Apply, with the profile it is for: it is dropped when another profile is selected.
+  // Dropped when another profile is selected.
   let waiting = $state<{ profile: string; cameras: string[] } | null>(null);
   const wanted = $derived(waiting && waiting.profile === profileId ? waiting.cameras : null);
   const chosen = $derived(wanted ?? showing);
   // A run uses all the channels.
   const locked = $derived(spim?.acquisition !== undefined);
 
-  // The groups of the panel, in order. A group of shared devices shows only when it has devices.
   const groups = $derived(
     [
       { key: 'channels', heading: 'Channels', devices: [] as string[] },
@@ -50,7 +45,7 @@
     ].filter((group) => group.key === 'channels' || group.devices.length > 0)
   );
 
-  /** Turns `some` cameras on or off. A preview shows at least 1 channel, so the last ones stay on. */
+  /** A preview needs at least 1 channel, so the last ones stay on. */
   function choose(some: string[], on: boolean): void {
     if (!spim || !profileId) return;
     const next = cameras.filter((camera) => (some.includes(camera) ? on : chosen.includes(camera)));
@@ -67,14 +62,12 @@
   }
 </script>
 
-<!-- A name whose checkbox has a change that waits: underlined when it turns on, struck through when it turns off. -->
 {#snippet name(text: string, some: string[])}
   {@const on = some.some((camera) => chosen.includes(camera))}
   {@const was = some.some((camera) => showing.includes(camera))}
   <span class={cn('truncate', !on && 'text-fg-muted', on !== was && (on ? 'underline' : 'line-through'))}>{text}</span>
 {/snippet}
 
-<!-- The color that the image shows the channel's camera in. A click on it opens the channel's display menu. -->
 {#snippet dot(channel: string, camera: string)}
   {#if profileId}
     <ChannelDisplayMenu {profileId} {channel} {camera} label="{displayName(channel)}, {displayName(camera)}" />
@@ -97,7 +90,9 @@
 
 {#snippet rows(devices: string[])}
   {#each devices as device (device)}
-    <div class="flex h-ui-sm items-center px-2.5 text-sm text-fg-muted">{displayName(device)}</div>
+    <div class="flex h-ui-sm items-center px-2.5 text-sm text-fg-muted">
+      <a {...deviceLink(device)} class="truncate hover:text-fg hover:underline">{displayName(device)}</a>
+    </div>
   {/each}
 {/snippet}
 
@@ -106,9 +101,6 @@
     <h3 class="flex h-ui-md min-w-0 items-center gap-2 px-2.5">
       {#if channel.cameras.length === 1}{@render dot(channel.name, channel.cameras[0])}{/if}
       <span class="flex min-w-0 font-medium">{@render name(displayName(channel.name), channel.cameras)}</span>
-      {#if channel.cameras.length === 1}
-        <span class="truncate text-sm text-fg-muted">{displayName(channel.cameras[0])}</span>
-      {/if}
       <span class="flex-1"></span>
       {@render check(displayName(channel.name), channel.cameras)}
     </h3>
@@ -131,11 +123,8 @@
     if (event.key === 'Escape' && wanted) waiting = null;
   }}
 >
-  <!-- Each group's heading stays in view: stacked at the top once its group is reached, and at the bottom before
-  that. A click on it scrolls to its group. -->
-  <!-- The cards' edges are on the pane's gutter, and so are the ends of each group's heading row. The row's
-  background reaches into both gutters, so it also hides the shadow of a card that scrolls under it. The space above
-  the first row is outside the scroll area, so nothing scrolls through it. -->
+  <!-- Heading backgrounds reach into the gutters to hide card shadows scrolling under them. The top gap sits
+  outside the scroll area so nothing scrolls through it. -->
   <div class="px-inset mt-2 flex min-h-0 flex-col overflow-y-auto">
     {#if layout && session}
       {#each groups as group, index (group.key)}
@@ -154,7 +143,6 @@
             >
           </h3>
           {#if group.key === 'channels'}
-            <!-- Which of each light's 2 powers is in use. -->
             <RadioBar
               aria-label="Power"
               size="xs"

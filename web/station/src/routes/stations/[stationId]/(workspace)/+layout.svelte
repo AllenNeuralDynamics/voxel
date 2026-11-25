@@ -47,7 +47,6 @@
   const station = getVoxelStation();
   const selection = getInstrumentSelection();
   const appBar = provideAppBar();
-  // The instrument on show when it cannot open, on a page that is not Config; else null.
   const cannotOpen = $derived(
     params.instrument && selection.blocked(params.instrument) && !page.route.id?.includes('/[instrument]/config')
       ? params.instrument
@@ -57,7 +56,7 @@
   onDestroy(() => live.dispose());
 
   const home = $derived(`/stations/${params.stationId}`);
-  // The instrument pages. Without a selected instrument they have no address yet, so the rail leaves them out.
+  // Without a selected instrument these pages have no address.
   const places = $derived.by(() => {
     const name = selection.selected;
     if (!name) return [];
@@ -72,8 +71,8 @@
     ];
   });
 
-  // The pages that work only on the open instrument. Showing another instrument, they are inert.
-  const livePlaces = ['run', 'light', 'timing', 'devices'];
+  // Inert while another instrument is shown.
+  const livePlaces = ['run'];
   const openName = $derived(station.session?.instrument.name ?? null);
   const notOpen = $derived(
     params.instrument !== undefined &&
@@ -82,8 +81,6 @@
   );
 
   let frameRef = $state<HTMLElement | null>(null);
-  // The page starts at most LAYOUT.page.startMax wide and the live profile takes the rest. A drag then sets the
-  // page's width; each keeps its LAYOUT minimum.
   const pagePane = createPaneSize(() => frameRef, {
     min: LAYOUT.page.min,
     get default() {
@@ -95,8 +92,7 @@
   });
   const livePane = createPaneSize(() => frameRef, { min: LAYOUT.live.min, fallback: { min: 30 } });
 
-  // The link to the station, in the rail's corner. While not connected, what acts on the station is inert; moving
-  // between pages, the bars and their panels still work.
+  // While disconnected, station actions are inert; navigation still works.
   const connections: Record<ConnectionState, { label: string; tone: string }> = {
     idle: { label: 'Not connected', tone: 'text-fg-muted' },
     connecting: { label: 'Connecting…', tone: 'animate-pulse text-warning-fg' },
@@ -108,15 +104,9 @@
   const connection = $derived(station.client.state);
   const connected = $derived(connection === 'connected');
 
-  // Diagnostics, under the page: the log, with the issues beside or under it while there are any. The bar below it
-  // shows what runs now (else the newest log line) and the number of issues, and a click on it opens or closes
-  // Diagnostics, which starts closed and opens at its saved height. It can fill the page; closing it, or going to
-  // another page, puts the page back.
   let pageColumnEl = $state<HTMLElement | null>(null);
   let pageRef = $state<Pane | undefined>(undefined);
   let diagnosticsRef = $state<Pane | undefined>(undefined);
-  // The page keeps at least half the column while the panel is dragged. A pull far past that collapses it, as
-  // filling the page does.
   const pageSize = createPaneSize(() => pageColumnEl, {
     collapsed: 0,
     get min() {
@@ -160,18 +150,17 @@
 
   const alerts = $derived(station.session?.alerts ?? []);
   const worstAlertLevel = $derived(alerts.some((alert) => alert.level === 'error') ? 'error' : 'warning');
-  // Held 1 s after it ends, so a quick operation does not flash in the bar.
+  // Held 1 s so a quick operation does not flash in the bar.
   const runningOperation = new Linger(() => station.session?.operation ?? null, 1000);
-  // The bar's line skips debug lines, which would flicker past while they are on.
+  // Skips debug lines, which would flicker past.
   const newestLogLine = $derived(station.log.findLast((line) => line.level >= 20) ?? null);
-  // A log message's color by its level: debug faint, info plain, warning amber, error red.
   const logLineColor = (level: number): string =>
     level >= 40 ? 'text-danger-fg' : level >= 30 ? 'text-warning-fg' : level >= 20 ? 'text-fg' : 'text-fg-faint';
   const logTime = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour12: false });
 </script>
 
 {#snippet historyBar()}
-  <!-- Undo and redo of the saved state, in 1 box. A run locks the state, so they wait for it. -->
+  <!-- A run locks the state, so undo and redo wait for it. -->
   {@const history = station.session?.history ?? { undo_label: null, redo_label: null }}
   {@const running = station.sessionOf(SpimSession)?.acquisition !== undefined}
   <div
@@ -202,7 +191,6 @@
   </div>
 {/snippet}
 
-<!-- Undo and redo as rows of a menu, each with the name of its edit. -->
 {#snippet historyMenu()}
   {@const history = station.session?.history}
   {@const running = station.sessionOf(SpimSession)?.acquisition !== undefined}
@@ -216,8 +204,7 @@
   </DropdownMenu.Item>
 {/snippet}
 
-<!-- Below its minimum width (the rail, the page's and the docked live profile's LAYOUT minimums), the window scrolls
-sideways, so every pane keeps its minimum. -->
+<!-- Below the panes' minimum widths, the window scrolls sideways. -->
 <div class="h-screen w-screen overflow-x-auto overflow-y-hidden">
   <div
     class="flex h-full overflow-hidden text-fg"
@@ -264,7 +251,6 @@ sideways, so every pane keeps its minimum. -->
           <AppBar bar={appBar} history={station.session ? { bar: historyBar, menu: historyMenu } : undefined}>
             {#snippet start()}<StationMenu {selection} />{/snippet}
             {#snippet end()}
-              <!-- The live profile's own controls, while it is in another window. -->
               {#if !live.docked}
                 <ProfileSelect />
                 <ActivityButton />
@@ -275,7 +261,6 @@ sideways, so every pane keeps its minimum. -->
         <PaneGroup direction="vertical" bind:ref={pageColumnEl} class="min-h-0">
           <Pane bind:this={pageRef} {...pageSize} collapsible class="min-h-0">
             <main class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-pane" inert={!connected || notOpen}>
-              <!-- An instrument that cannot open has nothing to show but its files, in Config. -->
               {#if cannotOpen}
                 <p class="px-inset shrink-0 pt-3 text-sm text-fg-muted">
                   Cannot open.
@@ -363,7 +348,6 @@ sideways, so every pane keeps its minimum. -->
           </Pane>
         </PaneGroup>
         <footer>
-          <!-- The whole bar opens and closes Diagnostics: what runs now, else the newest log line, then the issues. -->
           <div class="status-bar">
             <button
               type="button"
@@ -401,7 +385,6 @@ sideways, so every pane keeps its minimum. -->
                 </span>
               {/if}
             </button>
-            <!-- While the live profile is in another window, this window's Lasers off is here. -->
             {#if !live.docked}<span class="pr-inset flex h-full items-center pl-1"><LasersOff /></span>{/if}
           </div>
         </footer>
@@ -409,7 +392,11 @@ sideways, so every pane keeps its minimum. -->
       {#if live.docked}
         <PaneDivider />
         <Pane {...livePane} id="live" order={2} role="region" aria-label="Live profile" class="min-w-0">
-          <LiveProfile {connected} dock={LAYOUT.dock}>
+          <LiveProfile
+            {connected}
+            dock={LAYOUT.dock}
+            deviceLink={(id) => ({ href: selection.href(openName ?? '', `devices/${encodeURIComponent(id)}`) })}
+          >
             {#snippet start()}
               <h2 class="pl-inset flex min-w-0 items-center gap-1.5 font-medium whitespace-nowrap">
                 {#if openName && openName !== selection.selected}
@@ -432,10 +419,9 @@ sideways, so every pane keeps its minimum. -->
 
 {#snippet logLines()}
   <section class="flex h-full min-h-0 flex-col" aria-label="Log">
-    <!-- Reversed, so the newest line stays in view at the bottom while lines come in. -->
+    <!-- Reversed so the newest line stays in view. -->
     <ol class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto py-2 font-mono text-sm">
       {#each station.log.toReversed() as line (line.seq)}
-        <!-- As the status bar: the time, then the message; the logger last. -->
         <li class="px-inset grid grid-cols-[5rem_minmax(0,1fr)_auto] gap-3 hover:bg-tint">
           <time class="text-fg-faint" datetime={line.emitted_at}>{logTime(line.emitted_at)}</time>
           <span class={cn('truncate', logLineColor(line.level))} title={line.message}>{line.message}</span>
@@ -446,14 +432,11 @@ sideways, so every pane keeps its minimum. -->
   </section>
 {/snippet}
 
-<!-- The question before a switch: the open instrument closes, then the other one opens. It stays while the switch
-runs, and a failure shows in it. -->
 <Dialog.Root bind:open={() => selection.pending !== null, (open) => !open && !selection.closing && selection.cancel()}>
   <Dialog.Content size="sm" showCloseButton={false}>
     <Dialog.Header>
       <Dialog.Title>Switch instrument</Dialog.Title>
     </Dialog.Header>
-    <!-- What closes, then what opens, each with its label. -->
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 rounded-md bg-tint px-3 py-2.5">
       <dt class="text-sm text-fg-muted">Close</dt>
       <dd class="truncate font-medium">{displayName(selection.leaving ?? '')}</dd>

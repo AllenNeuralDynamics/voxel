@@ -1,26 +1,22 @@
-/** Station-scoped REST plus the station's state feed, a WebSocket of topics. */
 import { SvelteSet } from 'svelte/reactivity';
 
 import { Topics } from './topics.svelte';
 
-/**
- * `service-stopped`: the station's server answers, but its station service does not. `server-down`: the server does
- * not answer. Both keep retrying.
- */
+/** `service-stopped`: the server answers but its station service does not. Both failure states keep retrying. */
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'service-stopped' | 'server-down';
 export type Unsub = () => void;
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
-/** 1 message of the state feed: each topic that changed with its new value, `null` to remove it. */
+/** 1 feed message: changed topics with their new values; `null` removes a topic. */
 export interface StateMessage {
   cursor: { stream_id: string; seq: number };
   sent_at_unix_us: number;
-  /** Every topic is here, and the reader starts over from this message. */
+  /** Every topic is present; the reader starts over from this message. */
   full: boolean;
   topics: Record<string, unknown>;
 }
 
-/** 1 REST request, as the request log keeps it. `status` is 0 when the station did not answer. */
+/** `status` is 0 when the station did not answer. */
 export interface RequestRecord {
   method: HttpMethod;
   path: string;
@@ -43,7 +39,7 @@ const DEFAULT_OPTIONS: Required<ClientOptions> = {
   maxReconnectDelayMs: 5000
 };
 
-/** A failed REST request: a non-2xx response, with the problem's details as `detail`, or no answer (`status` 0). */
+/** A non-2xx response, with the problem details in `detail`, or no answer (`status` 0). */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -61,9 +57,8 @@ export class Client {
   state = $state<ConnectionState>('idle');
   reconnectAttempts = $state(0);
   isConnected = $derived(this.state === 'connected');
-  /** The last value of each topic of the feed. A full message after a reconnect replaces them all. */
+  /** A full message after a reconnect replaces all values. */
   readonly topics = new Topics();
-  /** The last REST requests, oldest first. */
   requests = $state.raw<RequestRecord[]>([]);
 
   #socket: WebSocket | null = null;
@@ -82,7 +77,7 @@ export class Client {
     this.#maxReconnectDelay = resolved.maxReconnectDelayMs;
   }
 
-  /** Open the state feed at `path`, such as `/api/stations/<id>/feed/state`, and keep it open until `disconnect`. */
+  /** `path` such as `/api/stations/<id>/feed/state`. */
   connect(path: string): void {
     this.#socketPath = path;
     this.#shouldReconnect = true;
@@ -113,7 +108,7 @@ export class Client {
     this.state = 'idle';
   }
 
-  /** Try again at once, with the wait between tries back at its start. */
+  /** Retries at once and resets the backoff. */
   retry(): void {
     this.reconnectAttempts = 0;
     this.#reconnectDelay = this.#initialReconnectDelay;
@@ -177,7 +172,7 @@ export class Client {
     return { status: response.status, value: (text ? JSON.parse(text) : undefined) as T };
   }
 
-  /** The server answers failures as problem details (RFC 9457): `title`, `detail`, and the refused arguments. */
+  /** Failures arrive as problem details (RFC 9457). */
   async #toError(response: Response, method: HttpMethod, path: string): Promise<ApiError> {
     let detail: unknown = `HTTP ${response.status}`;
     let message = detail as string;
@@ -192,8 +187,8 @@ export class Client {
   }
 
   /**
-   * The feed closed or did not open. The server's own `GET /api` tells the 2 failures apart: it answers while only the
-   * station service is down. The first try comes soon and shows as reconnecting; later tries wait longer.
+   * `GET /api` tells the 2 failures apart: it answers while only the station service is down. The first retry comes
+   * soon and shows as reconnecting; later ones back off.
    */
   async #scheduleReconnect(): Promise<void> {
     if (this.reconnectAttempts === 0) this.state = 'reconnecting';

@@ -4,11 +4,7 @@ import { appearancePrefs } from '@voxel/kit/style';
 
 export type SpatialUnit = 'mm' | 'um';
 
-/**
- * What this browser saves for the person, in groups. The kit owns the appearance and the layout groups; the others
- * are made here, and the feature that uses a group makes its values. `GROUPS` lists them all, each with the label that
- * a reset shows. `deletes` marks a group whose values have no default, so a reset of it deletes what the person made.
- */
+/** Per-browser preferences. The kit owns the appearance and layout groups. `deletes` marks a group with no defaults. */
 export class Prefs {
   static readonly general = new PrefGroup('general');
   static readonly viewColors = new PrefGroup('view-colors');
@@ -28,10 +24,8 @@ export class Prefs {
 
   static readonly SPATIAL_UNITS: SpatialUnit[] = ['mm', 'um'];
 
-  /** The unit that distances show in. */
   static readonly spatialUnit = Prefs.general.pref<SpatialUnit>('distance', 'mm');
 
-  /** `unit` as it is written on the page. */
   static spatialUnitLabel(unit: SpatialUnit): string {
     return unit === 'um' ? 'µm' : unit;
   }

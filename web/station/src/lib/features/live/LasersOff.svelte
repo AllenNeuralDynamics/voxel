@@ -2,11 +2,7 @@
   import { getVoxelStation } from '$lib/context.svelte';
   import { Button } from '@voxel/kit';
 
-  /**
-   * Turns off every laser and modulator of the open instrument, and closes every shutter. Each window shows it once,
-   * at its bottom right: on the live profile's bar, or on the Diagnostics bar while the live profile is in another
-   * window. Disabled while no instrument is open.
-   */
+  /** Turns off every laser and modulator and closes every shutter. */
   const station = getVoxelStation();
 </script>
 

@@ -1,18 +1,13 @@
-/**
- * Signals and timelines: what a signal generator plays on its wires. A quantity is text with its unit, such as
- * `25 ms` or `3.13 V`, as the feed sends it.
- */
+/** A quantity is text with its unit, such as `25 ms` or `3.13 V`. */
 
-/** The start or the end of a timeline, or of a signal's window. */
 export type EdgeName = 'start' | 'end';
 
-/** An edge placed from the start or the end of the timeline. */
 export interface TimelineEdge {
   timeline: EdgeName;
   offset: string;
 }
 
-/** An edge placed from an edge of another signal in the same timeline. */
+/** An edge placed relative to another signal in the same timeline. */
 export interface SignalEdge {
   signal: string;
   edge: EdgeName;
@@ -26,26 +21,23 @@ export interface Correction {
   rows: [wanted: string, sent: string][];
 }
 
-/** On from `start` to `end`. */
 export interface DigitalOn {
   kind: 'on';
   start: Edge;
   end: Edge;
 }
 
-/** Off for the whole timeline. */
 export interface DigitalOff {
   kind: 'off';
 }
 
-/** 1 value for the whole timeline. */
 export interface AnalogConstant {
   kind: 'constant';
   value: string;
   correction: Correction | null;
 }
 
-/** `active` from `start` to `end`, and `idle` outside. A dip has `active` below `idle`. */
+/** A dip has `active` below `idle`. */
 export interface AnalogPulse {
   kind: 'pulse';
   start: Edge;
@@ -55,7 +47,6 @@ export interface AnalogPulse {
   correction: Correction | null;
 }
 
-/** Equal steps from `first` to `last`, up or down. */
 export interface AnalogStaircase {
   kind: 'staircase';
   start: Edge;
@@ -66,7 +57,7 @@ export interface AnalogStaircase {
   correction: Correction | null;
 }
 
-/** Straight lines between `[time, value]` points. Time runs from `0 %` to `100 %` of the window. */
+/** Time runs from `0 %` to `100 %` of the window. */
 export interface AnalogPoints {
   kind: 'points';
   start: Edge;
@@ -75,7 +66,7 @@ export interface AnalogPoints {
   correction: Correction | null;
 }
 
-/** `cycles` periods of a shape around `center`. `split` is the part of each period spent rising; `1` is a sawtooth. */
+/** `split` is the rising part of each period; `1` is a sawtooth. */
 export interface AnalogWave {
   kind: 'wave';
   start: Edge;
@@ -98,7 +89,7 @@ export interface AnalogFollow {
   delay: string;
 }
 
-/** 1 signal for 1 wire. A digital wire takes `on` and `off`; an analog wire takes the other kinds. */
+/** A digital wire takes `on` and `off`; an analog wire the other kinds. */
 export type Signal =
   | DigitalOn
   | DigitalOff
@@ -109,7 +100,7 @@ export type Signal =
   | AnalogWave
   | AnalogFollow;
 
-/** A number of a signal that a tuning knob can turn. `start` and `end` are the offset of that edge. */
+/** `start` and `end` are the offset of that edge. */
 export type TuningField =
   | 'start'
   | 'end'
@@ -127,10 +118,7 @@ export type TuningField =
   | 'amplitude'
   | 'offset';
 
-/**
- * What 1 signal generator plays on each tick, with 1 signal for each wire it plays. A wire with no signal stays at
- * rest: off for a digital wire, and its park value for an analog wire.
- */
+/** A wire with no signal rests: off if digital, at its park value if analog. */
 export interface Timeline {
   sample_rate: string;
   duration: string;

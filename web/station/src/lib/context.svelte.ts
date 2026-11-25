@@ -1,7 +1,4 @@
-/**
- * Svelte contexts of the station window. Station-scoped contexts are provided once by the station layout. Each getter
- * throws if no ancestor provided it.
- */
+/** Svelte contexts of the station window. Each getter throws if no ancestor provided it. */
 import { createContext } from 'svelte';
 
 import { Station } from '$lib/core/station.svelte';
@@ -22,12 +19,11 @@ const [getShownProfile, setShownProfile] = createContext<ShownProfile>();
 
 export { getChannelPrefs, getColormaps, getInstrumentSelection, getMarks, getShownProfile, getVoxelStation };
 
-/** Creates the station and provides it to descendants. The caller starts it with `initialize()`. */
+/** The caller starts the station with `initialize()`. */
 export function provideStationContext(): Station {
   return setVoxelStation(new Station());
 }
 
-/** Creates the window's instrument selection over `station` and provides it to descendants. */
 export function provideInstrumentSelection(
   station: Station,
   params: () => { stationId: string; instrument?: string }
@@ -35,36 +31,30 @@ export function provideInstrumentSelection(
   return setInstrumentSelection(new InstrumentSelection(station, params));
 }
 
-/** Creates the picked mark colors of this browser, puts them on the page and provides them to descendants. */
 export function provideMarks(): Marks {
   return setMarks(new Marks());
 }
 
-/** Creates the colormaps of this browser and provides them to descendants. */
 export function provideColormaps(): Colormaps {
   return setColormaps(new Colormaps());
 }
 
-/** Creates the channel preferences of `station`'s open instrument and provides them to descendants. */
 export function provideChannelPrefs(station: Station, colormaps: Colormaps): ChannelPrefs {
   return setChannelPrefs(new ChannelPrefs(station, colormaps));
 }
 
-/** Creates the profile on show of `station`'s open instrument and provides it to descendants. */
 export function provideShownProfile(station: Station): ShownProfile {
   return setShownProfile(new ShownProfile(station));
 }
 
-/** Creates the app bar and provides it to descendants. */
 export function provideAppBar(): AppBar {
   return setAppBar(new AppBar());
 }
 
-/** Shows the page's path, status and actions in the app bar while the page is on show. `content` is read again when
- * what it reads changes. */
+/** Sets the app bar while the page is shown. `content` is reactive. */
 export function useAppBar(content: () => AppBarContent): void {
   const bar = getAppBar();
-  // The next page may set its content before this page leaves, so this page clears only its own.
+  // The next page may set its content before this one unmounts, so clear only our own.
   $effect(() => {
     const mine = content();
     bar.content = mine;

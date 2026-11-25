@@ -12,13 +12,6 @@
   import type { PrefGroup } from '@voxel/kit/pref';
   import { ThemePicker } from '@voxel/kit/style';
 
-  /**
-   * The settings of this browser, in sections. A section is a band across the page: its name, then a box of rows; a
-   * row is a label, then its control; a row of colors also has a reset while a color is the person's own. The app bar
-   * has the resets of the page:
-   * Reset layout, while a pane is moved, and Reset workspace, which asks which groups of saved things to reset and
-   * can be undone from the message that follows.
-   */
   useAppBar(() => ({
     crumbs: [{ label: 'Settings' }],
     // Reset layout comes before Reset workspace, so that one stays in its place when the other comes or goes.
@@ -34,18 +27,15 @@
   const AXES: MarkKey[] = ['x', 'y', 'z'];
   const colormaps = getColormaps();
   const REGIONS: MarkKey[] = ['region1', 'region2', 'region3', 'region4'];
-  // A row: its label, its control, then the place of its reset. Only a row of colors has one: the other controls
-  // show all their choices. The same form as the rows of the kit's theme picker.
   const ROW = 'grid min-h-ui-lg grid-cols-[7rem_minmax(0,1fr)_1rem] items-center gap-3 py-1.5';
   const WIDE = 'w-full max-w-[52rem]';
 
-  // The groups ticked in the Reset workspace dialog.
   let asking = $state(false);
   const picked = new SvelteSet<PrefGroup>();
   const ownColormaps = $derived(colormaps.all.filter((each) => each.own).length);
   const ownGroups = $derived(colormaps.groups.filter((group) => group.own).length);
 
-  /** Opens the dialog with every changed group ticked, but not one whose reset deletes what the person made. */
+  /** Ticks every changed group except those whose reset deletes user data. */
   function ask(): void {
     picked.clear();
     for (const { group, deletes } of Prefs.GROUPS) {
@@ -65,7 +55,6 @@
   }
 </script>
 
-<!-- The reset at the end of a row, while a value of the row is the person's own. -->
 {#snippet reset(changed: boolean, label: string, onclick: () => void)}
   {#if changed}
     <button
@@ -80,7 +69,6 @@
   {/if}
 {/snippet}
 
-<!-- A color as a square that opens its picker. `letter` names it in the row, as X does for an axis. -->
 {#snippet swatch(key: MarkKey, label: string, presets: string[] = [], letter = '')}
   {@const fromTheme = marks.themeColors[key] ?? '#000000'}
   {@const value = marks.picks[key] ?? fromTheme}
@@ -100,7 +88,6 @@
   </span>
 {/snippet}
 
-<!-- A row of colors: its label, its swatches, then 1 reset for those of them that are the person's own. -->
 {#snippet colors(label: string, keys: MarkKey[], swatches: Snippet)}
   <div class={ROW}>
     <span class="text-base text-fg">{label}</span>
@@ -113,8 +100,6 @@
   </div>
 {/snippet}
 
-<!-- A section as a band across the page: its name, then a box of rows that fills the width. A row is a label, its
-control, then its reset; the controls of all rows end on 1 edge. On a narrow page the name goes above the box. -->
 {#snippet band(label: string, rows: Snippet)}
   <section class="grid gap-x-6 gap-y-1.5 @3xl:grid-cols-[11rem_minmax(0,1fr)]" aria-label={label}>
     <h2 class="px-2.5 text-sm text-fg-muted @3xl:mt-3 @3xl:px-0 @3xl:text-base @3xl:text-fg">{label}</h2>
@@ -177,7 +162,7 @@ control, then its reset; the controls of all rows end on 1 edge. On a narrow pag
 {/snippet}
 
 <div class="@container h-full page-body">
-  <!-- A wide page has no section name above the first box, so it gets more room at the top. -->
+  <!-- Wide pages have no name above the first box, so it gets more top room. -->
   <div class="flex flex-col gap-5 pt-3 @3xl:pt-5">
     {@render band('Appearance', appearance)}
     {@render band('General', general)}

@@ -8,7 +8,6 @@
 
   import type { InstrumentSelection } from './selection.svelte';
 
-  /** The station's name and the selected instrument, with a menu of the station's instruments. */
   let { selection, disabled = false }: { selection: InstrumentSelection; disabled?: boolean } = $props();
 
   const station = getVoxelStation();
@@ -55,7 +54,6 @@
       >
         <span class="min-w-0 flex-1 truncate">{displayName(name)}</span>
         {#if open}<span class="shrink-0 text-sm text-fg-muted">Open</span>{/if}
-        <!-- The count is text, and its color says if the instrument can still open. Config has the messages. -->
         {#if problems}
           <span
             class={cn(
@@ -73,8 +71,6 @@
     {:else}
       <DropdownMenu.Item disabled>No instruments</DropdownMenu.Item>
     {/each}
-    <!-- The open instrument closes from here, after a question in the menu. While an acquisition runs it does not,
-    and the item says why. -->
     {#if !changing && openName}
       <DropdownMenu.Separator />
       {#if selection.asking}

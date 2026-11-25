@@ -9,9 +9,8 @@
     href: string;
     label: string;
     icon: Component<SvelteHTMLElements['svg']>;
-    /** Pages below this path also make the item current. It is `href` unless set. */
+    /** Pages below this path also mark the item current. Defaults to `href`. */
     below?: string;
-    /** Issues the page shows, as a red count on the icon. */
     issues?: { count: number; label: string };
     muted?: boolean;
   }
@@ -21,7 +20,7 @@
   const active = $derived(current || page.url.pathname.startsWith(`${below ?? href}/`));
 </script>
 
-<!-- The link is the whole hover area, and the pill inside it is what shows. So no strip between items is dead. -->
+<!-- The link fills the hover area so there is no dead strip between items. -->
 <li>
   <a
     {href}

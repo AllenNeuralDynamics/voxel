@@ -8,11 +8,8 @@
   import { Check } from '@voxel/kit/icons';
 
   /**
-   * The app bar of a page that shows 1 profile of the open instrument, at `<place>/<profile>`. The first crumb is
-   * `label` and goes to `place`. The second names the profile and opens a menu of all profiles, where the active one
-   * says so. The bar makes the profile the active one, or says that it is. The profile of the address becomes the
-   * profile on show. At `place` with no profile, at a profile that the instrument does not have, and when the profile
-   * on show changes, the address goes to the profile on show, else the active one, else the first one.
+   * App bar for `<place>/<profile>` pages. With no or an unknown profile in the address, redirects to the shown profile,
+   * else the active one, else the first.
    */
   let { place, label }: { place: string; label: string } = $props();
 
@@ -21,11 +18,11 @@
   const shown = getShownProfile();
   const name = $derived(page.params.instrument ?? '');
   const profileId = $derived(page.params.profileId);
-  // The model is of the open instrument, which may not be the one that the address names.
+  // The model is the open instrument, which may differ from the one in the address.
   const instrument = $derived(selection.instrument);
   const session = $derived(selection.session);
   const active = $derived(profileId !== undefined && session?.activeProfile === profileId);
-  // A run uses its own profiles, so no other one is made active while it is on.
+  // A run uses its own profiles, so nothing can be activated during it.
   const running = $derived(station.sessionOf(SpimSession)?.acquisition !== undefined);
 
   function href(id: string): string {
@@ -58,7 +55,7 @@
     };
   });
 
-  // The address sets the profile on show. This runs before the effect below, so a new address is never sent back.
+  // Runs before the effect below, so a new address is never sent back.
   $effect(() => {
     if (profileId !== undefined && instrument?.state.profileIds.includes(profileId)) shown.id = profileId;
   });
@@ -75,8 +72,7 @@
   <span class="shrink-0 text-sm text-fg-muted">Active</span>
 {/snippet}
 
-<!-- Activate, or the word Active in a box of the same size: each holds both texts, and shows 1. Active is a state, not
-a button. -->
+<!-- Both labels share one box so the size does not change; Active is a state, not a button. -->
 {#snippet activate()}
   {#if active}
     <span

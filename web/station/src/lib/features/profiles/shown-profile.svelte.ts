@@ -2,17 +2,12 @@ import { untrack } from 'svelte';
 
 import type { Station } from '$lib/core/station.svelte';
 
-/**
- * The profile that the pages of 1 profile show: Profiles, Timing and Light share it, so a profile picked on one is
- * on show on the others. It is kept while the window is open, and starts as the active profile. While it is the
- * active profile, it follows a change of the active profile; a profile that a person picked stays.
- */
+/** Profile shown on the Profiles, Timing and Light pages; follows the active profile until the person picks one. */
 export class ShownProfile {
-  /** The id of the profile on show, or undefined until an instrument is open. It may name a profile that the open
-   * instrument does not have. */
+  /** May name a profile the open instrument does not have. */
   id = $state<string>();
 
-  /** Made while a component starts, because it watches the active profile of `station`'s open instrument. */
+  /** Create during component initialization; it watches the active profile. */
   constructor(station: Station) {
     let active: string | undefined;
     $effect(() => {

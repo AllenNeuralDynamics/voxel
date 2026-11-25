@@ -6,10 +6,8 @@
   import { TriangleAlert } from '@voxel/kit/icons';
 
   /**
-   * 1 file of an instrument's folder, as its content, with each problem of the file under the key it is at. It reads
-   * the inspection of the instrument, so it shows an instrument that is not open, and one that cannot open. The
-   * state of the open instrument comes from the feed, which has every edit at once. With no `state.json` on disk, the
-   * state is the default's content, because the instrument starts from it.
+   * One instrument file with its problems placed under their keys. Reads the inspection, so it also works for closed or
+   * failing instruments. Without `state.json` on disk, the default's content is shown, since the instrument starts from it.
    */
   let { file, expandDepth = 2 }: { file: FolderFileName; expandDepth?: number } = $props();
 
@@ -20,18 +18,16 @@
 
   const problems = $derived((inspection?.problems ?? []).filter((problem) => problem.loc[0] === file));
   const read = $derived(inspection?.files?.[file]);
-  // A state that is not on disk has no content and no problem.
   const missing = $derived(file === 'state' && read !== undefined && read.data === null && problems.length === 0);
   const data = $derived(
     file === 'state' && live ? live.instrument.state.value : missing ? inspection?.files?.default.data : read?.data
   );
-  // The file has content that was not checked: the rig, which it is checked against, has a problem.
+  // Unchecked content: the rig it is checked against has a problem.
   const waits = $derived(
     read !== undefined && read.data !== null && read.model === null && problems.length === 0 && !missing
   );
 
-  // Each problem goes under its key. A problem at a key that the file leaves out goes under the nearest key above it
-  // that the file has; one at no key of the file shows above the content.
+  // A problem at a missing key goes under the nearest present ancestor; one with no key shows above the content.
   const placed = $derived(
     problems.map((problem) => {
       const path: (string | number)[] = [];
@@ -62,7 +58,6 @@
   </p>
 {/snippet}
 
-<!-- A mark gives back the problem that it was made with. -->
 {#snippet note(problem: unknown)}{@render line(problem as Problem)}{/snippet}
 
 <div class="flex page-body min-h-0 flex-1 flex-col gap-3 pt-2.5">

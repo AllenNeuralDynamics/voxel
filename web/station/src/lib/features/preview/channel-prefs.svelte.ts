@@ -5,10 +5,7 @@ import { emissionToPreviewColor } from '@voxel/kit/colors';
 
 import { Colormaps } from './colormaps.svelte';
 
-/**
- * How the person wants each channel shown, saved in this browser. A channel is a name in 1 profile of 1 instrument,
- * with 1 of its cameras; a choice is for the instrument that is open.
- */
+/** Per-channel display choices for the open instrument, saved in this browser. */
 export class ChannelPrefs {
   readonly #station: Station;
   readonly #colormaps: Colormaps;
@@ -19,13 +16,12 @@ export class ChannelPrefs {
     this.#colormaps = colormaps;
   }
 
-  /** The colormap chosen for the channel: a colormap's id, a hex color, or `Colormaps.AUTO`. */
   colormap(profileId: string, channel: string, camera: string): string {
     const choice = this.#picks.get()[this.#key(profileId, channel, camera)]?.colormap;
     return choice !== undefined && this.#colormaps.has(choice) ? choice : Colormaps.AUTO;
   }
 
-  /** Chooses the colormap of the channel. `Colormaps.AUTO` drops the choice. */
+  /** `Colormaps.AUTO` drops the choice. */
   setColormap(profileId: string, channel: string, camera: string, choice: string): void {
     const picks = { ...this.#picks.get() };
     if (choice === Colormaps.AUTO) delete picks[this.#key(profileId, channel, camera)];
@@ -33,19 +29,13 @@ export class ChannelPrefs {
     this.#picks.set(picks);
   }
 
-  /**
-   * The 1 color that marks the channel: of the brightest value of its chosen colormap, or the channel's own color
-   * with no choice. It is the color in the image, the same in the light and the dark theme.
-   */
+  /** Brightest color of the chosen colormap, else the channel's own color; theme-independent. */
   color(profileId: string, channel: string, camera: string): string {
     const choice = this.colormap(profileId, channel, camera);
     return choice === Colormaps.AUTO ? this.autoColor(profileId, channel, camera) : this.#colormaps.color(choice);
   }
 
-  /**
-   * The channel's own color, which `Colormaps.AUTO` shows it in: the color of the middle of the band that reaches
-   * the camera; with no filter on the way, the color of the channel's laser; else white.
-   */
+  /** Center of the band reaching the camera; with no filter, the laser color; else white. */
   autoColor(profileId: string, channel: string, camera: string): string {
     const session = this.#station.session;
     const instrument = session?.instrument;
@@ -55,7 +45,7 @@ export class ChannelPrefs {
     return emissionToPreviewColor(band ? ChannelPrefs.#middle(band) : laser?.wavelength) ?? '#ffffff';
   }
 
-  /** The wavelength that stands for a band: its middle, or 20 nm inside its 1 end when the other is open. */
+  /** Band center, or 20 nm inside the closed end when the other end is open. */
   static #middle([low, high]: [number | null, number | null]): number | undefined {
     if (low !== null && high !== null) return (low + high) / 2;
     if (low !== null) return low + 20;

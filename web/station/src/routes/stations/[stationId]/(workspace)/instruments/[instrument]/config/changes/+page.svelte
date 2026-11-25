@@ -7,17 +7,12 @@
   import { Button, Checkbox, ObjectDiff, ObjectView } from '@voxel/kit';
   import { displayName } from '@voxel/kit/format';
 
-  /**
-   * How the state of the instrument differs from its default state, in blocks. A choice in the app bar shows only the
-   * changes, or all values with the changes marked. Checked blocks go back to the default, or become the default.
-   */
   const selection = getInstrumentSelection();
   const name = $derived(page.params.instrument ?? '');
   const instrument = $derived(selection.instrument);
   const session = $derived(selection.session);
 
-  // What differs between the state and the default state, in blocks: 1 for each profile that differs, then 1 for
-  // each other field that differs. A profile or a field that only 1 side has is compared with nothing.
+  // A profile or field that only 1 side has is compared with nothing.
   const blocks = $derived.by(() => {
     if (!instrument) return [];
     const [state, defaults] = [instrument.state, instrument.defaultState];
@@ -45,10 +40,10 @@
       .filter((block) => block.count > 0);
   });
 
-  // The blocks that a person checked, by key. A block that no longer differs leaves the page, and is not counted.
+  // A block that no longer differs drops out and is not counted.
   const checked = new SvelteSet<string>();
   const picked = $derived(blocks.filter((block) => checked.has(block.key)));
-  // The save is asked about first, because no undo takes it back. Why the instrument refused the last action.
+  // A save is confirmed first; no undo takes it back.
   let asking = $state(false);
   let refused = $state<string>();
 
@@ -58,7 +53,7 @@
     asking = false;
   }
 
-  /** Restores or saves the checked blocks. A refusal stays on the page until the next action. */
+  /** A refusal stays on the page until the next action. */
   async function act(action: 'restore' | 'save'): Promise<void> {
     const paths = picked.map((block) => block.path);
     asking = false;
@@ -71,7 +66,6 @@
     }
   }
 
-  // Only the changes show, or every value with the changes marked.
   const VIEWS = ['changes', 'all'];
   let view = $state('changes');
 
@@ -85,14 +79,12 @@
 
 <div class="page-body min-h-0 flex-1 pt-2.5">
   {#if instrument}
-    <!-- 1 block for each thing that differs: its name, then its changes. -->
     <div class="flex flex-col gap-5">
       {#each blocks as block (block.key)}
         <section class="flex flex-col gap-2">
-          <!-- The block's name, with its kind before it, and at the row's end how many values differ. -->
           <div class="flex items-center gap-4 px-0.5">
             <label class="flex min-w-0 cursor-pointer items-center gap-2.5">
-              <!-- A block is checked to restore or to save it, which only the instrument that runs can do. -->
+              <!-- Only the running instrument can restore or save. -->
               {#if session}<Checkbox value={checked.has(block.key)} onChange={(on) => check(block.key, on)} />{/if}
               <h2 class="flex min-w-0 items-baseline gap-2 text-base font-medium">
                 {#if block.kind}<span class="text-sm font-normal text-fg-muted">{block.kind}</span>{/if}
@@ -111,8 +103,7 @@
       {/each}
     </div>
   {:else if name && selection.problems(name) > 0}
-    <!-- The compare needs the state and the default state as they pass their checks. A folder with a problem has
-    none, so the page goes to the problem. Nothing shows while the folder loads. -->
+    <!-- A folder with a problem has no checked state to compare. -->
     <p class="text-sm text-fg-muted">
       Cannot compare.
       <a class="text-danger-fg hover:underline" href={selection.problemsHref(name)}>
@@ -122,8 +113,6 @@
     </p>
   {/if}
 </div>
-<!-- Under the changes: why the last action was refused, then what to do with the checked blocks. A save is asked
-  about first. -->
 {#if session && blocks.length > 0}
   {#if refused}
     <p class="px-inset shrink-0 bg-danger-tint py-2 text-sm text-danger-fg" role="alert">{refused}</p>

@@ -1,5 +1,4 @@
 <script lang="ts" module>
-  /** A menu item that runs `onclick`, or follows `href` in `target`. */
   export type MenuAction = { href?: string; target?: string; onclick?: () => void };
 </script>
 
@@ -9,10 +8,6 @@
   import { Settings } from '@voxel/kit/icons';
   import { ModeSwitch } from '@voxel/kit/style';
 
-  /**
-   * The menu on the Voxel logo, in both windows: Show the other window (while the live profile is undocked), Settings,
-   * where the live profile is, and the mode.
-   */
   let {
     show,
     settings,
@@ -60,8 +55,6 @@
     {/if}
     {@render item('Settings', settings, Settings)}
     <DropdownMenu.Separator />
-    <!-- Rows that switch: the label, then the control. The controls share a column, so they are as wide as the widest.
-    Picking where the live profile is closes the menu, since a window opens or closes; a mode keeps it open. -->
     <div
       class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 py-1 pr-1 pl-2 text-sm whitespace-nowrap text-fg-muted"
     >

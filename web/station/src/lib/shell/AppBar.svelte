@@ -9,15 +9,7 @@
   import { cn } from '@voxel/kit/cn';
   import { Check, Ellipsis } from '@voxel/kit/icons';
 
-  /**
-   * The page's app bar: `start` (the station menu), then the page's crumbs, its status, its actions and `history`
-   * (undo and redo). When they do not fit, parts fold in steps: 1 the status shows only its icon, 2 `history` goes
-   * into a menu, 3 so do buttons and custom actions, 4 so do choices, 5 the crumbs between `start` and the last fold
-   * into a menu, 6 a primary action goes into the menu. A custom action without a menu never folds. The last crumb
-   * truncates when even step 6 does not fit. At the end, while the
-   * instrument on show is not the open one, a button opens it; while another one is open, the window asks first. Then `end`,
-   * such as the profile while the live profile is in another window. Neither folds.
-   */
+  /** Fold steps: status icon, history, buttons and custom actions, choices, middle crumbs, primary action. */
   let {
     bar,
     start,
@@ -33,13 +25,11 @@
 
   const station = getVoxelStation();
   const selection = getInstrumentSelection();
-  // The instrument on show, while it is not the open one.
   const closed = $derived(
     selection.selected && selection.selected !== station.session?.instrument.name ? selection.selected : null
   );
 
-  // The width that is left after `start`, and the width the row takes at each step, measured on hidden copies. So a
-  // fold never changes what is measured, and the bar does not flip between 2 steps.
+  // Measured on hidden copies so a fold never changes what is measured and the bar cannot oscillate.
   let room = $state(0);
   let widths = $state<number[]>([]);
   const step = $derived(STEPS.find((at) => (widths[at] ?? Infinity) <= room) ?? STEPS.length - 1);
@@ -51,8 +41,6 @@
   }
 </script>
 
-<!-- A sibling in a crumb's menu, as a row of the station menu: its name, what the page adds, then a check on the open
-one, which also has a fill. -->
 {#snippet siblingRow(sibling: CrumbItem)}
   {@const open = sibling.href === page.url.pathname}
   <DropdownMenu.Item
@@ -121,7 +109,6 @@ one, which also has a fill. -->
   </Breadcrumb.Item>
 {/snippet}
 
-<!-- An action in the bar is as tall as the profile selector, with text of the same size. -->
 {#snippet inBar(action: Action)}
   {#if 'bar' in action}
     {@render action.bar()}
@@ -174,7 +161,7 @@ one, which also has a fill. -->
   {/if}
 {/snippet}
 
-<!-- The row after `start` at 1 step. `live` is the copy on show; the others are only measured. -->
+<!-- `live` is the visible copy; the others are only measured. -->
 {#snippet row(at: number, live: boolean)}
   {@const shown = actions.filter((action) => !folds(action, at))}
   {@const folded = actions.filter((action) => folds(action, at))}
@@ -230,13 +217,11 @@ one, which also has a fill. -->
     </DropdownMenu.Root>
   {/if}
   {#if closed && selection.blocked(closed)}
-    <!-- An instrument that cannot open has no Open button. The count of its problems goes to them, in Config. -->
     <a class="shrink-0 text-sm whitespace-nowrap text-danger-fg hover:underline" href={selection.problemsHref(closed)}>
       {selection.problems(closed)}
       {selection.problems(closed) === 1 ? 'problem' : 'problems'}
     </a>
   {:else if closed}
-    <!-- While an acquisition runs, another instrument does not open, and the bar says why. -->
     {#if selection.running}<span class="shrink-0 text-sm whitespace-nowrap text-fg-muted">Stop the run first</span>{/if}
     <Button
       size="sm"
@@ -245,7 +230,7 @@ one, which also has a fill. -->
       onclick={() => closed && selection.askToOpen(closed)}>{station.status === 'opening' ? 'Opening…' : 'Open'}</Button
     >
   {/if}
-  <!-- No box of its own: when `end` draws nothing, the row has no empty part with a gap before it. -->
+  <!-- `contents` so an empty `end` adds no gap. -->
   {#if end}<div class="contents">{@render end()}</div>{/if}
 {/snippet}
 

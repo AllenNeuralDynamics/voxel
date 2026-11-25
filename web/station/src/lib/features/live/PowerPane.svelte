@@ -7,13 +7,9 @@
   import { wavelengthToColor } from '@voxel/kit/colors';
   import { displayName } from '@voxel/kit/format';
 
-  /**
-   * What each laser does now, with the modulators and shutters that only its light passes as rows under it. The
-   * lasers of the active profile and each laser that is on show first, those that are on above the rest; the others
-   * follow under their own label. The modulators and
-   * shutters that several lasers share are a group at the end. Lights off makes every light dark, and leaves a laser
-   * on when something after it stops its light.
-   */
+  import type { DeviceLink } from './live-dock.svelte';
+
+  /** Each laser with the modulators and shutters only it feeds; shared ones are grouped at the end. */
   const station = getVoxelStation();
   const session = $derived(station.session);
   const profile = $derived(
@@ -23,7 +19,6 @@
     new Set(Object.values(profile?.channels ?? {}).flatMap((byCamera) => Object.values(byCamera)))
   );
   const beams = $derived(session?.beams ?? []);
-  // The lasers that are on come first; each part keeps the order of the wavelengths.
   const shown = $derived(
     beams
       .filter((beam) => inProfile.has(beam.source.id) || beam.source.isOn)
@@ -31,6 +26,7 @@
   );
   const others = $derived(beams.filter((beam) => !shown.includes(beam)));
   const shared = $derived(session?.sharedGates ?? []);
+  const { deviceLink }: { deviceLink: DeviceLink } = $props();
   const uid = $props.id();
   const block = 'col-span-3 grid grid-cols-subgrid rounded-md bg-tint px-2.5 py-1';
 </script>
@@ -45,7 +41,7 @@
   {@const passes = gate instanceof Shutter ? gate.isOpen : gate.isOn}
   <div role="row" class="col-span-3 grid grid-cols-subgrid">
     <span role="rowheader" class={cn('truncate py-0.5 text-fg-muted', nested && 'pl-4.5')} title={displayName(gate.id)}
-      >{displayName(gate.id)}</span
+      ><a {...deviceLink(gate.id)} class="hover:text-fg hover:underline">{displayName(gate.id)}</a></span
     >
     <span role="cell" class={cn('py-0.5', !passes && 'text-fg-muted')}>
       {gate instanceof Shutter ? (passes ? 'Open' : 'Closed') : passes ? 'On' : 'Off'}
@@ -54,13 +50,12 @@
   </div>
 {/snippet}
 
-<!-- 1 laser and the devices that only its light passes, as 1 block. -->
 {#snippet beamRows(beam: Beam)}
   {@const color = wavelengthToColor(beam.source.wavelength)}
   <div role="rowgroup" class={block}>
     <div role="row" class="col-span-3 grid grid-cols-subgrid">
       <span role="rowheader" class="flex min-w-0 items-center gap-2 py-0.5">
-        <!-- The color is the wavelength. Filled: the light reaches the sample. Faint: on, but stopped. Ring: off. -->
+        <!-- Filled: reaches the sample. Faint: on but blocked. Ring: off. -->
         <span
           class="size-2.5 shrink-0 rounded-full border-2"
           style:border-color={color}
@@ -71,7 +66,9 @@
               : 'transparent'}
           aria-hidden="true"
         ></span>
-        <span class="truncate" title={displayName(beam.source.id)}>{displayName(beam.source.id)}</span>
+        <a {...deviceLink(beam.source.id)} class="truncate hover:underline" title={displayName(beam.source.id)}
+          >{displayName(beam.source.id)}</a
+        >
       </span>
       <span role="cell" class={cn('py-0.5', !beam.source.isOn && 'text-fg-muted')}>
         {#if !beam.source.isOn}
@@ -96,7 +93,7 @@
     <Button variant="outline" size="xs" disabled={!session} onclick={() => session?.lightsOff()}>Lights off</Button>
   </div>
   <div class="px-inset min-h-0 flex-1 overflow-y-auto pb-2">
-    <!-- The blocks' edges are on the pane's inset; the text in them is inset from that. The column names are for screen readers only. Their row is placed in this box, so a closed panel cuts it off. -->
+    <!-- `relative` anchors the sr-only header row, so a closed panel clips it. -->
     <div
       role="table"
       aria-label="Lights"

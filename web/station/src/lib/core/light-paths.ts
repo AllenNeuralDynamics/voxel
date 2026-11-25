@@ -1,31 +1,20 @@
-/** The light paths of an optical graph. */
 import type { OpticalGraph } from './types';
 
-/**
- * A way from a light source to the specimen, or from the specimen to a detector: its nodes in order, and the position
- * that each router on it needs.
- */
 export interface LightPath {
   nodes: string[];
   positions: Record<string, string>;
 }
 
-/** Where a node is on the light paths: before or after the specimen, and the sources or the detectors it serves. */
 export interface Served {
   side: 'excitation' | 'detection';
   ends: string[];
 }
 
-/**
- * Every light path of an optical graph, worked out once: each way from a source to the specimen and from the specimen
- * to a detector, which visits no node twice. A source is a node that gets no light, and a detector a node where light
- * ends. Its lookups never change.
- */
+/** Every path that visits no node twice. A source gets no light; a detector is where light ends. */
 export class LightPaths {
-  /** The node where the light meets the specimen. */
   static readonly SPECIMEN = 'specimen';
 
-  /** The nodes that send the light 1 of several ways, each with its positions. */
+  /** Nodes that send light 1 of several ways, with their positions. */
   readonly routers: Record<string, string[]> = {};
   readonly #paths: LightPath[] = [];
   readonly #served = new Map<string, Served>();
@@ -73,17 +62,15 @@ export class LightPaths {
     }
   }
 
-  /** The ways from the light source `source` to the specimen. */
   from(source: string): LightPath[] {
     return this.#paths.filter((path) => path.nodes[0] === source);
   }
 
-  /** The ways from the specimen to the detector `detector`. */
   to(detector: string): LightPath[] {
     return this.#paths.filter((path) => path.nodes[path.nodes.length - 1] === detector);
   }
 
-  /** Where `node` is on the light paths, or undefined for a node on none. */
+  /** Undefined for a node on no path. */
   serves(node: string): Served | undefined {
     return this.#served.get(node);
   }

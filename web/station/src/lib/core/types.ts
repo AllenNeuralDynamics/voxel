@@ -1,9 +1,7 @@
-/** Shapes that the station's feed and routes send. */
 import type { Timeline, TuningField } from './signals';
 
 export type StreamTier = 'fast' | 'normal' | 'slow';
 
-/** A property of a device: its label, type, access and units, and how often the feed sends it. */
 export interface PropertyInfo {
   name: string;
   label: string;
@@ -14,7 +12,6 @@ export interface PropertyInfo {
   stream: StreamTier | null;
 }
 
-/** An operation: its name, label, intent, what it acts on, and JSON Schemas of its arguments and return value. */
 export interface OperationInfo {
   name: string;
   label: string;
@@ -27,13 +24,22 @@ export interface OperationInfo {
   returns: Record<string, unknown>;
 }
 
-/** An operation with how a client reaches it over HTTP. A `{name}` in the path is the argument `name`. */
+/** An operation argument as a form needs it. `other` is a shape with no fields of its own, such as a list. */
+export interface OperationParam {
+  name: string;
+  required: boolean;
+  type: 'integer' | 'number' | 'boolean' | 'string' | 'object' | 'other';
+  default?: unknown;
+  options?: (string | number)[];
+  fields?: OperationParam[];
+}
+
+/** A `{name}` in the path is the argument `name`. */
 export interface HttpOperationInfo extends OperationInfo {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
 }
 
-/** What a client can ask an open instrument, how it reaches each operation, and the JSON Schema of its view. */
 export interface HttpInstrumentInterface {
   id: string;
   kind: string;
@@ -41,7 +47,6 @@ export interface HttpInstrumentInterface {
   view: Record<string, unknown>;
 }
 
-/** A device's kind, how often each stream tier is sent, its operations and its properties. */
 export interface DeviceInterface {
   id: string;
   kind: string;
@@ -50,37 +55,31 @@ export interface DeviceInterface {
   props: Record<string, PropertyInfo>;
 }
 
-/** The result of 1 property: its value, or the reason the device refused it. */
 export type PropResult = { ok: true; value: unknown } | { ok: false; error: unknown };
 
 export interface PropResults {
   results: Record<string, PropResult>;
 }
 
-/** A node that passes light on: to the next node, to several at once, or to a node for each of its positions. */
+/** Passes light to the next node, to several at once, or to 1 node per position. */
 export interface OpticalElement {
   to: string | string[] | Record<string, string | string[]>;
 }
 
-/** A node where light ends: a camera. `width` and `height` are the directions of its frame's sides, in specimen axes. */
+/** A camera. `width` and `height` are its frame's side directions in specimen axes. */
 export interface Detector {
   width: Partial<Record<SpecimenAxis, number>>;
   height: Partial<Record<SpecimenAxis, number>>;
 }
 
-/** `optics`: each node of the light's way by name. A node is a device, a part, or `specimen`. */
+/** A node is a device, a part, or `specimen`. */
 export type OpticalGraph = Record<string, OpticalElement | Detector>;
 
-/** An axis of the specimen. */
 export type SpecimenAxis = 'x' | 'y' | 'z';
 
-/** The lowest and the highest value of a range. */
 export type Span = [low: number, high: number];
 
-/**
- * A part of the rig that is not a device, such as a filter or an objective. `kind` says what it is. An entry names its
- * class in `target` when it is more than a plain part; that class adds its own fields, such as a filter's `band`.
- */
+/** A rig part that is not a device. `target` names a subclass that adds fields, such as a filter's `band`. */
 export interface Part {
   kind: string;
   target?: string;
@@ -88,29 +87,22 @@ export interface Part {
   [field: string]: unknown;
 }
 
-/**
- * A part that lets 1 band of wavelengths through, from low to high, as text such as `500 nm`. A null end is open, as a
- * long-pass filter has.
- */
+/** `band` is text such as `500 nm`. A null end is open, as for a long-pass filter. */
 export interface Filter extends Part {
   kind: 'filter';
   band: [low: string | null, high: string | null];
 }
 
-/** The wavelengths that get through, from low to high, in nm. A null end is open. */
+/** In nm. A null end is open. */
 export type PassBand = [low: number | null, high: number | null];
 
-/** A part that magnifies. 1 objective can stand for the objective and its tube lens together. */
+/** 1 objective may stand for the objective and its tube lens together. */
 export interface Objective extends Part {
   kind: 'objective';
   magnification: number;
 }
 
-/**
- * How 1 device of the rig is built: `target` is the class of its driver, and `init` its arguments. `defaults` are
- * properties set when it opens, `streaming` the seconds between sends for the stream tiers it names, and `details`
- * information for people.
- */
+/** `target` is the driver class and `init` its arguments. `streaming` is seconds between sends per stream tier. */
 export interface DeviceConfig {
   target: string;
   init: Record<string, unknown>;
@@ -119,20 +111,20 @@ export interface DeviceConfig {
   details: Record<string, unknown>;
 }
 
-/** A process of the rig apart from the station's own, with the devices that run in it. */
+/** A process apart from the station's own. */
 export interface NodeConfig {
   kind: 'subprocess' | 'remote';
   address: string | null;
   devices: Record<string, DeviceConfig>;
 }
 
-/** The device that moves the specimen along 1 axis, and the part of its travel where the specimen is. */
+/** `specimen` is the part of the travel where the specimen is. */
 export interface StageAxis {
   device: string;
   specimen: Span | null;
 }
 
-/** A wire that carries pulses, from the pin `pin` of its sender to each pin of `to`, written `device/pin`. */
+/** Pins are written `device/pin`. */
 export interface DigitalWire {
   pin: string;
   to: string[];
@@ -144,7 +136,7 @@ export interface DigitalWire {
   repeat_time: string | null;
 }
 
-/** A wire that carries a level in `unit`. `scales` turn a unit into another, and `limits` bound each unit. */
+/** `scales` convert between units; `limits` bound each unit. */
 export interface AnalogWire {
   pin: string;
   to: string[];
@@ -157,14 +149,11 @@ export interface AnalogWire {
   jerk_time: string | null;
 }
 
-/** `wiring`: the wires of each device that sends signals, by name. */
 export type Wiring = Record<string, Record<string, DigitalWire | AnalogWire>>;
 
 /**
- * The open instrument's configuration, as its `rig.yaml` has it: who the instrument is and what is on its bench.
- * `target` names the class of its kind. `autosave` names, for each device, the properties that a change by a person
- * saves in the active profile: a list, or `*` for each one that can be written. A kind of instrument adds its own
- * fields.
+ * As in `rig.yaml`. `autosave` names, per device, the properties a manual change saves into the active profile: a list,
+ * or `*` for every writable one.
  */
 export interface InstrumentConfig {
   id: string;
@@ -180,7 +169,7 @@ export interface InstrumentConfig {
   autosave: Record<string, '*' | string[]>;
 }
 
-/** Something wrong with the open instrument now, since `since`. It ends by itself when the state changes back. */
+/** Ends by itself when the state changes back. */
 export interface Alert {
   code: string;
   level: 'error' | 'warning';
@@ -190,7 +179,7 @@ export interface Alert {
   since: string;
 }
 
-/** 1 line of the station's log, with its place `seq` in the log. `level` is a Python logging level, such as 20. */
+/** `level` is a Python logging level, such as 20. */
 export interface LogEntry {
   seq: number;
   emitted_at: string;
@@ -203,13 +192,12 @@ export interface LogEntry {
   exception: unknown;
 }
 
-/** Something the instrument runs over time, such as a preview. A kind of activity can add fields. */
+/** A kind of activity can add fields. */
 export interface ActivityInfo {
   kind: string;
   [field: string]: unknown;
 }
 
-/** The last value of 1 device property as the feed sends it, with its limits, step and choices when it has them. */
 export interface PropValue<T = unknown> {
   kind: string;
   value: T | null;
@@ -219,10 +207,8 @@ export interface PropValue<T = unknown> {
   options: T[] | null;
 }
 
-/** What controls a laser or a modulator: software, a digital pin, an analog pin, or both pins. */
 export type ControlMode = 'software' | 'digital' | 'analog' | 'mixed';
 
-/** How a camera's stream runs: its frame rate, the frames it dropped, and its data rate. */
 export interface StreamInfo {
   frame_index: number;
   input_buffer_size: number;
@@ -233,13 +219,11 @@ export interface StreamInfo {
   payload_mbs: number | null;
 }
 
-/** Which powers of a profile are in use. */
 export type PowerMode = 'full' | 'dim';
 
 /**
- * The power of 1 laser or modulator that software sets, as text in the device's own unit, such as `100 mW`. `dim` is
- * for a dim light; without one, the full power holds. Each is 1 power, or 1 for each position of `router`, a device
- * that sends the light a different way.
+ * Text in the device's own unit, such as `100 mW`. Each is 1 value, or 1 per position of `router`. Without `dim`,
+ * `full` holds.
  */
 export interface Power {
   full: string | Record<string, string>;
@@ -247,7 +231,7 @@ export interface Power {
   router: string | null;
 }
 
-/** 1 number of a timeline that a person tunes during preview: `field` of the signal on `wire` of `generator`. */
+/** `field` of the signal on `wire` of `generator`. */
 export interface TuningKnob {
   label: string;
   generator: string;
@@ -255,20 +239,13 @@ export interface TuningKnob {
   field: TuningField;
 }
 
-/** 1 command for a device: the operation `attr` with its arguments, by place and by name. */
 export interface OperationRequest {
   attr: string;
   args: unknown[];
   kwargs: Record<string, unknown>;
 }
 
-/**
- * What is on at the same moment. `channels` names each channel, with its cameras and the light each uses. `positions`
- * gives the position of each device that the profile sets, `power` the power of each laser and modulator, `props` the
- * device properties, `setup` the commands that each device gets when the profile starts, `timelines` what each signal
- * generator plays, and `tuning_knobs` the numbers of its timelines that a person tunes. A kind of instrument adds its
- * own fields.
- */
+/** What is on at the same moment. `setup` holds the commands each device gets when the profile starts. */
 export interface Profile {
   channels: Record<string, Record<string, string>>;
   positions: Record<string, number | string>;
@@ -281,8 +258,7 @@ export interface Profile {
   label: string | null;
 }
 
-/** A device follows the stage: along `axis`, it takes the positions in `order`, and changes at each point of `at`, in
- * µm; within `margin` of a point, it keeps the position it has. */
+/** `at` is in µm; within `margin` of a point the device keeps its position. */
 export interface StageFollowRule {
   axis: SpecimenAxis;
   order: string[];
@@ -290,20 +266,13 @@ export interface StageFollowRule {
   margin: number;
 }
 
-/** 1 entry in the plan: the profiles to image, and the metadata of the specimen. A kind of instrument adds its own
- * fields. */
 export interface Task {
   id: string;
   profiles: string[];
   metadata: Record<string, unknown>;
 }
 
-/**
- * What the operator edits: the saved state, and the default state, which has the same form. `positions` gives the
- * position of each device that the instrument sets, the same for every profile: 1 position, or the rule by which the
- * device follows the stage. `plan` is the tasks to run, and `metadata_cls` names the form of the metadata of each task.
- * A kind of instrument adds its own fields.
- */
+/** `positions` are the same for every profile: 1 position, or a stage-follow rule. */
 export interface InstrumentState {
   metadata_cls: string;
   profiles: Record<string, Profile>;
@@ -311,20 +280,19 @@ export interface InstrumentState {
   plan: Task[];
 }
 
-/** What the next undo and the next redo take back or do again, by the name of the edit; null when there is none. */
+/** Null when there is none. */
 export interface HistoryState {
   undo_label: string | null;
   redo_label: string | null;
 }
 
-/** The fields of a profile that an update may change, each one optional. A kind of instrument adds its own fields. */
 export interface ProfileFields {
   label?: string | null;
   desc?: string;
   tuning_knobs?: TuningKnob[];
 }
 
-/** The region of an area camera's sensor that is read out, in sensor pixels. */
+/** In sensor pixels. */
 export interface AreaROI {
   x: number;
   y: number;
@@ -332,17 +300,16 @@ export interface AreaROI {
   h: number;
 }
 
-/** The size of a camera's sensor, and of 1 pixel on it. */
 export interface CameraSensor {
   pixel_um: { x: number; y: number };
   size_px: { x: number; y: number };
 }
 
-/** The sizes that a region can have: the widths in `h` and the heights in `v`. An offset has the same step. */
+/** `h` is widths and `v` heights. Offsets share the step. */
 export interface ROIGrid {
   h: { min: number; max: number; step: number };
   v: { min: number; max: number; step: number };
 }
 
-/** The keys that lead to a value of the state, such as `['profiles', 'gfp']`. A path of 1 key is a whole field. */
+/** Such as `['profiles', 'gfp']`. A path of 1 key is a whole field. */
 export type KeyPath = (string | number)[];

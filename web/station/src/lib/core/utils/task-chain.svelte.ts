@@ -1,4 +1,4 @@
-/** A task that did not run, because a task before it in the chain failed. `cause` is that failure. */
+/** `cause` is the earlier failure. */
 export class SkippedTaskError extends Error {
   constructor(cause: unknown) {
     super('Not run, because an earlier task failed.', { cause });
@@ -6,21 +6,17 @@ export class SkippedTaskError extends Error {
   }
 }
 
-/**
- * Async tasks run 1 at a time, in the order they are added. When a task fails, the tasks already behind it are skipped
- * with a `SkippedTaskError`; tasks added after the chain drains run again.
- */
+/** Runs async tasks 1 at a time. A failure skips the tasks queued behind it; tasks added after it drains run again. */
 export class TaskChain {
   #unfinished = $state(0);
   #closed = false;
   #tail: Promise<void> = Promise.resolve();
 
-  /** Whether a task is still unfinished. */
   get pending(): boolean {
     return this.#unfinished > 0;
   }
 
-  /** Counts 1 unfinished task until the returned function is called, such as while a value is being dragged. */
+  /** Counts as pending until the returned function is called, such as during a drag. */
   hold(): () => void {
     if (this.#closed) throw new Error('Task chain is closed');
     this.#unfinished += 1;
@@ -32,7 +28,6 @@ export class TaskChain {
     };
   }
 
-  /** Runs `operation` after every task added before it. */
   run<T>(operation: () => Promise<T>): Promise<T> {
     if (this.#closed) return Promise.reject(new Error('Task chain is closed'));
     const release = this.hold();
@@ -55,7 +50,6 @@ export class TaskChain {
     return result;
   }
 
-  /** Refuses every task from now on. */
   dispose(): void {
     this.#closed = true;
   }

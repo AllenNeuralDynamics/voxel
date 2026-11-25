@@ -1,27 +1,20 @@
-/** An instrument, open or closed: what its files say. */
 import { Quantity } from '$lib/core/utils/quantity';
 import { ObjectDiff } from '@voxel/kit/object-diff';
 
 import { LightPaths } from './light-paths';
 import { State } from './state.svelte';
 import type { Topics } from './topics.svelte';
-import type { Filter, InstrumentConfig, InstrumentState, Objective, Part, PassBand } from './types';
+import type { DeviceConfig, Filter, InstrumentConfig, InstrumentState, Objective, Part, PassBand } from './types';
 
 /**
- * An instrument as its files give it: its config, its saved state and its default state, and what follows from them,
- * such as its light paths. It is the same for an instrument that runs and for one that does not; it has no devices
- * and takes no commands. Those are in the InstrumentSession of the instrument that runs. It reads topics with the
- * names of the feed: `config`, `state.*` and `default_state.*`. It holds what every kind of instrument has; a kind,
- * such as SpimInstrument, extends it, and names the config `C` and the state `S` of its kind.
+ * An instrument as its files describe it, open or not: config, saved state and default state. Devices and commands
+ * live in InstrumentSession.
  */
 export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends InstrumentState = InstrumentState> {
-  /** The name of the instrument's folder. */
   readonly name: string;
   readonly #topics: Topics;
 
-  /** The saved state: the profiles, the positions that the instrument sets, the plan. */
   readonly state: State<S>;
-  /** The default state, in the same form as `state`. */
   readonly defaultState: State<S>;
 
   constructor(name: string, topics: Topics) {
@@ -32,8 +25,7 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends
   }
 
   /**
-   * How many values of the saved state are not those of the default state, in the fields that the default state
-   * has. A field that cannot be a default, such as the plan, does not count.
+   * Saved values that differ from the default state. Fields that cannot have a default, such as the plan, do not count.
    */
   get changes(): number {
     const [now, was] = [this.state.value, this.defaultState.value] as Record<string, unknown>[];
@@ -44,20 +36,24 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends
     return this.#topics.get<C>('config');
   }
 
-  /** The filters among the config's parts, by name. */
+  /** In rig order: station devices first, then each node's. `node` is null for the station. */
+  readonly deviceConfigs: Record<string, { config: DeviceConfig; node: string | null }> = $derived.by(() => {
+    const own = Object.entries(this.config?.devices ?? {}).map(([id, config]) => [id, { config, node: null }]);
+    const remote = Object.entries(this.config?.nodes ?? {}).flatMap(([node, { devices }]) =>
+      Object.entries(devices).map(([id, config]) => [id, { config, node }])
+    );
+    return Object.fromEntries([...own, ...remote]);
+  });
+
   readonly filters: Record<string, Filter> = $derived.by(() => this.#partsOf<Filter>('filter'));
 
-  /** The objectives among the config's parts, by name. */
   readonly objectives: Record<string, Objective> = $derived.by(() => this.#partsOf<Objective>('objective'));
 
-  /** The light paths of the config's optical graph, worked out once for each config. */
   readonly lightPaths: LightPaths = $derived.by(() => new LightPaths(this.config?.optics ?? {}));
 
   /**
-   * The wavelengths that reach `camera` with the positions of the profile `profileId`: what every filter on the way
-   * from the specimen lets through. A filter on the way is a node that is a filter, or the filter that the profile
-   * puts a node at. When the filters share no wavelength, it is the band of the filter nearest the camera. Undefined
-   * when no filter is on the way.
+   * The band every filter between the specimen and `camera` passes under the profile's positions. When the filters
+   * share no wavelength, the band of the filter nearest the camera. Undefined when no filter is on the way.
    */
   passBand(profileId: string, camera: string): PassBand | undefined {
     const positions = this.state.profile(profileId)?.positions ?? {};
@@ -78,14 +74,13 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends
     return low !== null && high !== null && low > high ? bands[bands.length - 1] : [low, high];
   }
 
-  /** A wavelength as text, such as `500 nm` or `0.5 um`, in nm. Null for null and for text that is no wavelength. */
+  /** Text such as `500 nm` or `0.5 um`, in nm. Null when it is not a wavelength. */
   static #nm(text: string | null): number | null {
     const value = text === null ? undefined : Quantity.parse(text);
     if (!value) return null;
     return value.unit === 'um' ? value.number * 1000 : value.number;
   }
 
-  /** The config's parts of 1 kind, by name. */
   #partsOf<T extends Part>(kind: T['kind']): Record<string, T> {
     const parts = Object.entries(this.config?.parts ?? {});
     return Object.fromEntries(parts.filter(([, part]) => part.kind === kind)) as Record<string, T>;

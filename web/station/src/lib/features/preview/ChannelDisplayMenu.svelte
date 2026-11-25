@@ -7,11 +7,7 @@
 
   import { Colormaps } from './colormaps.svelte';
 
-  /**
-   * How the image shows 1 channel on 1 camera, in a menu that opens from the channel's dot. The dot has the channel's
-   * color. The menu chooses the colormap: 1 from the groups that are shown, as rows of colors and name in 3 columns, found by a search of the names of all colormaps too, a hex color, or
-   * auto, which is the color of the light that reaches the camera. `label` names the channel for screen readers.
-   */
+  /** Colormap menu for 1 channel on 1 camera, opened from its color dot. `label` is for screen readers. */
   interface Props {
     profileId: string;
     channel: string;
@@ -38,7 +34,7 @@
   const found = $derived.by(() => {
     const query = search.trim().toLowerCase();
     if (!query) return null;
-    // Every colormap, also of a hidden group or of no group, in the order of the groups.
+    // Includes colormaps in hidden groups or in no group.
     const ids = new Set([...colormaps.groups.flatMap((group) => group.ids), ...colormaps.all.map((each) => each.id)]);
     return [...ids].filter((id) => colormaps.name(id).toLowerCase().includes(query));
   });
@@ -48,11 +44,11 @@
     open = false;
   }
 
-  // The text of the custom color box while it is not a color, so the person can correct it.
+  // Holds invalid text so the person can correct it.
   let hexText = $state('');
   let hexBad = $state(false);
 
-  /** Uses the typed color, with or without its `#`, in 3 or 6 digits. Text that is no color stays in the box. */
+  /** Accepts 3 or 6 hex digits, with or without `#`; invalid text stays in the box. */
   function applyHex(text: string): void {
     const typed = text.trim();
     const hex = typed.startsWith('#') ? typed : `#${typed}`;
@@ -62,7 +58,6 @@
   }
 </script>
 
-<!-- A colormap as a row: its colors, then its name. The names of a column start on 1 line. -->
 {#snippet swatch(value: string, name: string, gradient: string)}
   <button
     type="button"
@@ -87,7 +82,6 @@
     hexBad = false;
   }}
 >
-  <!-- The hit area is larger than the dot, and takes no room in the row. -->
   <Popover.Trigger
     class="-m-1.5 shrink-0 cursor-pointer rounded-sm p-1.5 hover:bg-tint aria-expanded:bg-tint"
     title="Colormap: {choiceName}"
@@ -105,7 +99,6 @@
       searchInput?.focus();
     }}
   >
-    <!-- The list is first, so it has the most room. What finds or makes a color is 1 row at the foot. -->
     <div class="max-h-96 overflow-y-auto px-2 py-2">
       <div class="swatches">
         {@render swatch(Colormaps.AUTO, 'auto', colormaps.gradient(auto))}
@@ -132,7 +125,7 @@
       {/if}
     </div>
 
-    <!-- Enter in a box here must not also press the button that gets the focus when the menu closes. -->
+    <!-- Enter must not also press the button that gets focus when the menu closes. -->
     <div
       class="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-1.5 border-t border-line-faint p-2"
       style:--hex-color={color}
@@ -159,7 +152,7 @@
         aria-invalid={hexBad}
         class={cn('min-w-0 border-l-[3px] border-l-(--hex-color) font-mono', hexBad && 'ring-danger-fg!')}
       >
-        <!-- The box keeps the focus until the click. Leaving the box then sends the text. -->
+        <!-- The box keeps focus until the click; blur then submits the text. -->
         <Button
           variant="ghost"
           size="icon-sm"

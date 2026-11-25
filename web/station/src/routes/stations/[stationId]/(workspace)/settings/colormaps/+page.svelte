@@ -10,13 +10,6 @@
   import { ChevronDown, Eye, EyeOff, GripVertical, Minus, Plus, RotateCcw, Trash } from '@voxel/kit/icons';
   import Sortable from '@voxel/kit/sortable';
 
-  /**
-   * The colormap groups of this browser: 1 row for each group, to drag into order, to hide and to open. An open group
-   * shows its colormaps as rows of colors and name, takes a new label and more colormaps, and loses colormaps. A group of the person's
-   * can be deleted, and a default group that changed can be reset. A colormap takes a new name in its row, and new
-   * colors in the menu of its colors. The person's colormaps in no group follow, and only there is one deleted. The
-   * app bar makes a group, and resets the default colormaps and groups while one of them is changed.
-   */
   useAppBar(() => ({
     crumbs: [{ label: 'Settings', href: `/stations/${page.params.stationId}/settings` }, { label: 'Colormaps' }],
     actions: [
@@ -29,24 +22,18 @@
 
   const colormaps = getColormaps();
   const open = new SvelteSet<string>();
-  // The group whose list of colormaps to add is open, with the text of its search.
   let adding = $state<string | null>(null);
   let search = $state('');
-  // The tile whose menu is open: its group, or null for a colormap in no group, then its id.
   let editing = $state<string | null>(null);
 
-  // The rows of a group, in as many columns as fit. A column holds the colors and the longest name.
   const rows = 'grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-5 gap-y-1.5';
-  // A group's header and its rows have the same first column, for the grip and for the line under it.
   const rail = 'grid-cols-[1.75rem_minmax(0,1fr)]';
 
-  /** The colormaps that `group` does not have and whose name matches the search. */
   function toAdd(group: ColormapGroup) {
     const query = search.trim().toLowerCase();
     return colormaps.all.filter((each) => !group.ids.includes(each.id) && each.name.toLowerCase().includes(query));
   }
 
-  /** Makes a colormap of 1 color with a name that no colormap has, in `group`. */
   function create(group: string): void {
     const names = new Set(colormaps.all.map((each) => each.name));
     let count = 1;
@@ -60,8 +47,6 @@
   }
 </script>
 
-<!-- A colormap as a row: its colors, then its name as a box. The colors open a menu: the colors of the colormap, its
-place in the group, the reset of a default colormap that changed, and, in no group, the delete of the colormap. -->
 {#snippet row(id: string, group: ColormapGroup | null)}
   {@const colormap = colormaps.get(id)}
   {#if colormap}
@@ -167,8 +152,7 @@ place in the group, the reset of a default colormap that changed, and, in no gro
       {#snippet item(group, index)}
         {@const isOpen = open.has(group.id)}
         <Sortable.Item item={group} class={cn('flex flex-col', index > 0 && 'border-t border-line-faint')}>
-          <!-- A click on the row, but not on a control in it, opens or closes the group. The arrow does it from the
-          keyboard. -->
+          <!-- The arrow toggles the group from the keyboard. -->
           <div
             class={cn('grid min-h-ui-lg cursor-pointer items-center gap-1 pr-2.5 pl-1', rail)}
             role="presentation"
@@ -223,7 +207,6 @@ place in the group, the reset of a default colormap that changed, and, in no gro
             </div>
           </div>
           {#if isOpen}
-            <!-- The rows start at the group's name. The line under the grip shows what the group holds. -->
             <div class={cn('grid gap-1 pr-2.5 pb-3 pl-1', rail)}>
               <span class="w-px justify-self-center bg-control-line" aria-hidden="true"></span>
               <div class="flex min-w-0 flex-col gap-3 pt-0.5">

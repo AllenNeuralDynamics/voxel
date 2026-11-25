@@ -1,7 +1,6 @@
 <script lang="ts">
   import { useAppBar } from '$lib/context.svelte';
 
+  // The layout draws the list.
   useAppBar(() => ({ crumbs: [{ label: 'Devices' }] }));
 </script>
-
-<h1 class="px-inset py-3 text-xl">Devices</h1>

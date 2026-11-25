@@ -5,6 +5,7 @@
   import { AreaCamera } from '$lib/core/device.svelte';
   import ActivityButton from '$lib/features/live/ActivityButton.svelte';
   import LasersOff from '$lib/features/live/LasersOff.svelte';
+  import type { DeviceLink } from '$lib/features/live/live-dock.svelte';
   import LiveControls from '$lib/features/live/LiveControls.svelte';
   import PowerPane from '$lib/features/live/PowerPane.svelte';
   import StreamPane from '$lib/features/live/StreamPane.svelte';
@@ -13,19 +14,18 @@
   import { wavelengthToColor } from '@voxel/kit/colors';
   import { AutoSplit, createPaneSize, Pane, PaneDivider, PaneGroup, SplitView } from '@voxel/kit/pane';
 
-  /**
-   * The live profile: its bar (`start`, then the layout controls, the profile and the activity button), the image and the live controls,
-   * and a footer panel for the stream and power, which a click on its bar opens; Lasers off sits at the bar's right
-   * end. The workspace's side pane and the Live window both show it.
-   */
+  /** The live image and controls, shown in the workspace side pane or the Live window. */
   let {
     start,
     connected,
+    deviceLink,
     dock
   }: {
     start: Snippet;
     connected: boolean;
-    /** The footer panel's smallest height and the height it opens at, in rem. */
+    /** The workspace and the Live window reach a device page differently. */
+    deviceLink: DeviceLink;
+    /** In rem. */
     dock: { min: number; start: number };
   } = $props();
   // Read once, as `createPaneSize` reads its bounds once.
@@ -33,7 +33,6 @@
 
   let controls = $state<Snippet>();
 
-  // The footer: a panel for the stream and power, which a click on the bar opens and closes.
   let columnEl = $state<HTMLElement | null>(null);
   let streamRef = $state<Pane | undefined>(undefined);
   const streamPanel = createPaneSize(() => columnEl, {
@@ -43,7 +42,6 @@
     fallback: { collapsed: 0, min: 15, default: 30 },
     persist: 'live-footer'
   });
-  // The image and the light settings keep at least half the column while the footer panel is dragged.
   const mainSize = createPaneSize(() => columnEl, {
     get min() {
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
@@ -53,7 +51,6 @@
   });
   const streamOpen = $derived(streamRef ? !streamRef.isCollapsed() : false);
 
-  // The bar's summaries: the slowest camera stream with all dropped frames, and the lights that are on.
   const station = getVoxelStation();
   const session = $derived(station.session);
   const streams = $derived(
@@ -93,13 +90,13 @@
             inert={!connected}
           ></section>{/snippet}
         {#snippet settings()}<section class="h-full" aria-label="Live controls" inert={!connected}>
-            <LiveControls />
+            <LiveControls {deviceLink} />
           </section>{/snippet}
       </SplitView>
     </Pane>
     <PaneDivider ondblclick={() => streamRef && streamPanel.toggle(streamRef)} />
     <Pane bind:this={streamRef} {...streamPanel} defaultSize={0} collapsible class="min-h-0 bg-pane">
-      <!-- Stream beside Power while both fit, else above it, so each sits over its summary in the bar. -->
+      <!-- Side by side when they fit, so each sits over its summary in the bar. -->
       <AutoSplit
         persist="live-dock"
         panes={{
@@ -107,13 +104,12 @@
           power: { horizontal: { min: 18, default: 22, max: 32 }, vertical: { min: 5, default: 8 } }
         }}
       >
-        {#snippet stream()}<StreamPane />{/snippet}
-        {#snippet power()}<PowerPane />{/snippet}
+        {#snippet stream()}<StreamPane {deviceLink} />{/snippet}
+        {#snippet power()}<PowerPane {deviceLink} />{/snippet}
       </AutoSplit>
     </Pane>
   </PaneGroup>
   <footer aria-label="Stream and power">
-    <!-- The bar opens and closes the panel; Lasers off is its own button at the right end. -->
     <div class="status-bar">
       <button
         type="button"
@@ -124,7 +120,6 @@
         aria-expanded={streamOpen}
         onclick={toggleStreamPanel}
       >
-        <!-- The slowest stream, with the frames dropped; then the lights that are on. -->
         <span class="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap tabular-nums">
           {#if slowest}
             <span>{slowest.frame_rate_fps.toFixed(1)} fps</span>
@@ -134,7 +129,7 @@
         <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           {#each lit as beam (beam.source.id)}
             {@const color = wavelengthToColor(beam.source.wavelength)}
-            <!-- Filled: the light reaches the sample. Faint: the laser is on, but something stops its light. -->
+            <!-- Faint: laser on, but its light is blocked downstream. -->
             <span
               class="size-2.5 rounded-full border-2"
               style:border-color={color}

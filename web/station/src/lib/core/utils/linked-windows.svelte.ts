@@ -1,10 +1,9 @@
 /**
- * A parent window and the 1 child window it opens, talking over a `BroadcastChannel`. Each side holds a handle on
- * the other: the parent a {@link ChildWindow}, the child a {@link ParentWindow}.
+ * A parent window and the child it opens, linked over a `BroadcastChannel`.
  *
- * Browsers let a window bring forward a window it opened, but not the window that opened it. So the child raises its
- * parent with a link that targets the parent's name and changes only the fragment of the parent's address: the parent
- * comes to the front and does not reload. Repeating it with the same fragment adds no history step.
+ * Browsers let a window focus a window it opened, but not its opener. So the child raises the parent with a link that
+ * targets the parent's name and changes only the fragment: the parent comes forward without reloading, and repeating
+ * the same fragment adds no history entry.
  */
 
 type Message =
@@ -14,12 +13,11 @@ type Message =
   | { type: 'address'; href: string }
   | { type: 'navigate'; path: string };
 
-/** A child that says `gone` and not `here` again within this time has closed; a reload says both. */
+/** A child that says `gone` and not `here` again within this time has closed; a reload sends both. */
 const GONE_AFTER_MS = 500;
-/** How long a parent waits after a `navigate` for the fragment change of the same click. */
+/** Wait after a `navigate` for the fragment change from the same click. */
 const NAVIGATE_AFTER_MS = 150;
 
-/** The parent's handle on its child window. It names its own window `parent`. */
 export class ChildWindow {
   readonly #name: string;
   readonly #url: () => string;
@@ -28,28 +26,24 @@ export class ChildWindow {
   #isOpen = $state(false);
   #goneTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /**
-   * `url` is the child's address, loaded only when no child window is open. `address` is this window's own address
-   * without its fragment; the child links to it.
-   */
+  /** `url` loads only when no child is open. `address` is this window's address without its fragment. */
   constructor(options: { name: string; parent: string; channel: string; url: () => string; address: () => string }) {
     this.#name = options.name;
     this.#url = options.url;
     window.name = options.parent;
     this.#channel = new BroadcastChannel(options.channel);
     this.#channel.onmessage = (event: MessageEvent<Message>) => this.#receive(event.data);
-    // Sent at start and on every change. A child answers the first one with `here`.
+    // A child answers the first one with `here`.
     $effect(() => {
       this.#post({ type: 'address', href: options.address() });
     });
   }
 
-  /** Whether the child window is open. */
   get isOpen(): boolean {
     return this.#isOpen;
   }
 
-  /** Brings the child window to the front, and opens it when none is open. An open child does not reload. */
+  /** Opens the child when none is open. An open child does not reload. */
   show(): void {
     const child = window.open('', this.#name, 'popup');
     if (!child) return;
@@ -57,12 +51,11 @@ export class ChildWindow {
     child.focus();
   }
 
-  /** Asks the child window to close itself. */
   close(): void {
     this.#post({ type: 'close' });
   }
 
-  /** Calls `handler` when the child asks this window to show `path`. Returns a function that stops it. */
+  /** Returns an unsubscribe function. */
   onNavigate(handler: (path: string) => void): () => void {
     this.#navigate.add(handler);
     return () => this.#navigate.delete(handler);
@@ -85,8 +78,7 @@ export class ChildWindow {
         this.#goneTimer = setTimeout(() => (this.#isOpen = false), GONE_AFTER_MS);
         break;
       case 'navigate':
-        // The link that sent it also changes this window's fragment. Moving first would turn that change into a load
-        // of the old page, so the move waits for it.
+        // The link also changes this window's fragment; navigating first would turn that into a load of the old page.
         setTimeout(() => {
           for (const handler of this.#navigate) handler(message.path);
         }, NAVIGATE_AFTER_MS);
@@ -99,14 +91,12 @@ export class ChildWindow {
   }
 }
 
-/** The child's handle on the window that opened it. It names its own window `name`. */
 export class ParentWindow {
   readonly #parent: string;
   readonly #fragment: string;
   readonly #channel: BroadcastChannel;
   #address = $state<string | null>(null);
 
-  /** `fragment` is what a link to the parent puts after `#` in the parent's address. */
   constructor(options: { name: string; parent: string; channel: string; fragment: string }) {
     this.#parent = options.parent;
     this.#fragment = options.fragment;
@@ -117,15 +107,12 @@ export class ParentWindow {
     this.#post({ type: 'here' });
   }
 
-  /** Whether a parent window opened this one. A typed or bookmarked address has none. */
+  /** False for a typed or bookmarked address. */
   get connected(): boolean {
     return window.opener !== null;
   }
 
-  /**
-   * Props for an `<a>` that brings the parent window to the front without a reload. With `path`, a click also asks
-   * the parent to show `path`.
-   */
+  /** Props for an `<a>` that raises the parent without a reload. With `path`, the parent also navigates there. */
   link(path?: string): { href: string; target: string; onclick: () => void } {
     return {
       href: `${this.#address ?? ''}#${this.#fragment}`,
@@ -145,7 +132,7 @@ export class ParentWindow {
   #receive(message: Message): void {
     switch (message.type) {
       case 'address':
-        // Answered every time, so a parent that just loaded or reloaded learns that this child is open.
+        // Answered every time, so a reloaded parent learns this child is open.
         this.#address = message.href;
         this.#post({ type: 'here' });
         break;

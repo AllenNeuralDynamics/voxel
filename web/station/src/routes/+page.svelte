@@ -6,7 +6,7 @@
 
   let failed = $state(false);
 
-  // The server says which station it fronts; that station's pages have the same path without `/api`.
+  // Station pages share the server's path without `/api`.
   onMount(async () => {
     try {
       const answer = await fetch('/api');

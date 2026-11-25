@@ -11,7 +11,6 @@
 
   import type { LayoutProps } from './$types';
 
-  // What both windows of a station need: the workspace and the Live window.
   let { children, params }: LayoutProps = $props();
 
   const station = provideStationContext();

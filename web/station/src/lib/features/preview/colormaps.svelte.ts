@@ -1,8 +1,7 @@
 import { Prefs } from '$lib/core/prefs';
 import { isValidHex } from '@voxel/kit/colors';
 
-/** A colormap: its name and its colors from the darkest value to the brightest. `own` is true for one that the person
- * made. `changed` is true for a default one whose name or colors the person changed. */
+/** Colors run darkest to brightest. `changed` marks an edited default. */
 export interface Colormap {
   id: string;
   name: string;
@@ -11,9 +10,7 @@ export interface Colormap {
   changed: boolean;
 }
 
-/** A group of colormaps: its label and the ids of its colormaps, in order. `own` is true for a group that the person
- * made. `changed` is true for a default group that the person changed. `hidden` keeps it out of the lists to choose
- * from. */
+/** `hidden` keeps the group out of the choice lists. */
 export interface ColormapGroup {
   id: string;
   label: string;
@@ -23,21 +20,16 @@ export interface ColormapGroup {
   changed: boolean;
 }
 
-/** The person's changes to the default colormaps and groups: for each, only the fields that differ. */
+/** Only the fields that differ from the defaults. */
 interface DefaultChanges {
   colormaps: Record<string, { name?: string; stops?: string[] }>;
   groups: Record<string, { label?: string; ids?: string[]; hidden?: boolean }>;
 }
 
 /**
- * The colormaps that an image can show a channel in, in groups. A colormap of 1 color goes from black to that color.
- * A group is a list of colormap ids, so a colormap can be in no group, in 1 or in many. The default colormaps and
- * groups are in the code, and the id of a default colormap is its first name. The default groups that few people need
- * start hidden. The person can change the default ones,
- * make more colormaps and groups, order all groups and hide a group. This browser saves the changes to the default
- * ones and the person's own ones apart, so a reset of the first keeps the second. An id that no longer exists is
- * skipped. A choice for a channel is a colormap's id, a hex color, which goes from black to that color, or `AUTO`,
- * which leaves the color to the channel.
+ * Colormaps and their groups. A colormap can be in any number of groups; a default colormap's id is its first name.
+ * Default edits and own items are saved apart, so resetting defaults keeps own items. A channel choice is a colormap id,
+ * a hex color (black to that color) or `AUTO`.
  */
 export class Colormaps {
   static readonly AUTO = 'auto';
@@ -195,31 +187,26 @@ export class Colormaps {
     {}
   );
 
-  /** Every colormap, the default ones first. */
   readonly all: Colormap[] = $derived.by(() =>
     [...Object.keys(Colormaps.DEFAULTS), ...Object.keys(this.#own.get())].flatMap((id) => this.get(id) ?? [])
   );
 
-  /** Every group, hidden or not, in the person's order. With no order, the person's groups come first, the newest
-   * at the top. A group with no place in the order comes last. */
+  /** Without a saved order, own groups come first, newest on top; unordered groups go last. */
   readonly groups: ColormapGroup[] = $derived.by(() => {
     const order = this.#order.get();
     const place = (id: string): number => (order.includes(id) ? order.indexOf(id) : order.length);
     return this.#natural().toSorted((a, b) => place(a.id) - place(b.id));
   });
 
-  /** The groups to choose from: those not hidden and not empty. */
   readonly shownGroups: ColormapGroup[] = $derived.by(() =>
     this.groups.filter((group) => !group.hidden && group.ids.length > 0)
   );
 
-  /** The ids of the person's colormaps that are in no group. */
   readonly ungrouped: string[] = $derived.by(() => {
     const grouped = new Set(this.groups.flatMap((group) => group.ids));
     return Object.keys(this.#own.get()).filter((id) => !grouped.has(id));
   });
 
-  /** The colormap `id`, or undefined when there is none. */
   get(id: string): Colormap | undefined {
     const own = this.#own.get()[id];
     if (own) return { id, name: own.name, stops: own.stops, own: true, changed: false };
@@ -234,17 +221,15 @@ export class Colormaps {
     };
   }
 
-  /** Whether `choice` is a colormap's id or a hex color. */
   has(choice: string): boolean {
     return this.get(choice) !== undefined || isValidHex(choice);
   }
 
-  /** The name to show for `choice`: the colormap's name, or the choice itself. */
   name(choice: string): string {
     return this.get(choice)?.name ?? choice;
   }
 
-  /** The colors of `choice`, from the darkest value to the brightest: black to white for a choice that is unknown. */
+  /** Black to white for an unknown choice. */
   stops(choice: string): string[] {
     if (isValidHex(choice)) return [Colormaps.#BLACK, choice];
     const stops = this.get(choice)?.stops;
@@ -252,19 +237,16 @@ export class Colormaps {
     return stops.length === 1 ? [Colormaps.#BLACK, stops[0]] : stops;
   }
 
-  /** The color of the brightest value of `choice`: the 1 color to mark its channel with. */
   color(choice: string): string {
     const stops = this.stops(choice);
     return stops[stops.length - 1];
   }
 
-  /** `choice` as a CSS gradient from left to right. */
   gradient(choice: string): string {
     return `linear-gradient(to right, ${this.stops(choice).join(', ')})`;
   }
 
-  /** Makes a colormap of the person's with the hex colors `stops`, and returns its id. Raises an error for stops
-   * that are not 1 or more hex colors. */
+  /** Raises an error unless `stops` is 1 or more hex colors. */
   create(name: string, stops: string[]): string {
     Colormaps.#checkStops(stops);
     const id = `own-${crypto.randomUUID()}`;
@@ -272,7 +254,7 @@ export class Colormaps {
     return id;
   }
 
-  /** Gives the colormap `id` the name `name`. An empty name changes nothing. */
+  /** An empty name changes nothing. */
   setName(id: string, name: string): void {
     if (name === '') return;
     const own = this.#own.get();
@@ -280,7 +262,7 @@ export class Colormaps {
     else this.#changeColormap(id, { name: name === id ? undefined : name });
   }
 
-  /** Gives the colormap `id` the hex colors `stops`. Raises an error for stops that are not 1 or more hex colors. */
+  /** Raises an error unless `stops` is 1 or more hex colors. */
   setStops(id: string, stops: string[]): void {
     Colormaps.#checkStops(stops);
     const own = this.#own.get();
@@ -288,12 +270,11 @@ export class Colormaps {
     else this.#changeColormap(id, { stops: Colormaps.#same(stops, Colormaps.DEFAULTS[id]) ? undefined : [...stops] });
   }
 
-  /** Gives the default colormap `id` its name and colors from the code again. */
   reset(id: string): void {
     this.#changeColormap(id, { name: undefined, stops: undefined });
   }
 
-  /** Deletes the person's colormap `id`, from every group too. */
+  /** Also removes it from every group. */
   remove(id: string): void {
     const own = this.#own.get();
     if (!own[id]) return;
@@ -303,7 +284,6 @@ export class Colormaps {
     }
   }
 
-  /** Makes an empty group of the person's, before the other groups, and returns its id. */
   addGroup(label: string): string {
     const id = `own-${crypto.randomUUID()}`;
     this.#ownGroups.set({ ...this.#ownGroups.get(), [id]: { label, ids: [] } });
@@ -312,7 +292,7 @@ export class Colormaps {
     return id;
   }
 
-  /** Gives the group `group` the label `label`. An empty label changes nothing. */
+  /** An empty label changes nothing. */
   setLabel(group: string, label: string): void {
     if (label === '') return;
     const own = this.#ownGroups.get();
@@ -320,7 +300,7 @@ export class Colormaps {
     else this.#changeGroup(group, { label: label === Colormaps.#defaultGroup(group)?.label ? undefined : label });
   }
 
-  /** Deletes the person's group `group`. Its colormaps stay. */
+  /** Its colormaps stay. */
   removeGroup(group: string): void {
     const own = this.#ownGroups.get();
     if (!own[group]) return;
@@ -328,12 +308,10 @@ export class Colormaps {
     this.#order.set(this.#order.get().filter((id) => id !== group));
   }
 
-  /** Gives the default group `group` its label, its colormaps and its place in the lists from the code again. */
   resetGroup(group: string): void {
     this.#changeGroup(group, { label: undefined, ids: undefined, hidden: undefined });
   }
 
-  /** Puts all groups in the order of `ids`. */
   orderGroups(ids: string[]): void {
     this.#order.set(
       Colormaps.#same(
@@ -345,13 +323,11 @@ export class Colormaps {
     );
   }
 
-  /** Adds the colormap `id` to the end of the group `group`. */
   addTo(group: string, id: string): void {
     const ids = this.groups.find((each) => each.id === group)?.ids;
     if (ids && !ids.includes(id)) this.#setIds(group, [...ids, id]);
   }
 
-  /** Takes the colormap `id` out of the group `group`. */
   removeFrom(group: string, id: string): void {
     const ids = this.groups.find((each) => each.id === group)?.ids;
     if (ids?.includes(id)) {
@@ -362,7 +338,6 @@ export class Colormaps {
     }
   }
 
-  /** Hides or shows the group `group`. */
   setHidden(group: string, hidden: boolean): void {
     const own = this.#ownGroups.get();
     if (own[group]) {
@@ -374,8 +349,6 @@ export class Colormaps {
     }
   }
 
-  /** Every group in the order they have with no order from the person: the person's, the newest first, then the
-   * default ones. */
   #natural(): ColormapGroup[] {
     const exists = (id: string): boolean => this.get(id) !== undefined;
     const changes = this.#changes.get().groups;
@@ -407,15 +380,13 @@ export class Colormaps {
     else this.#changeGroup(group, { ids: Colormaps.#same(ids, Colormaps.#defaultGroup(group)?.ids) ? undefined : ids });
   }
 
-  /** Sets fields of the person's change to the default colormap `id`. A field that is undefined is dropped, and a
-   * change with no field left is dropped too. */
+  /** Undefined fields are dropped, and an empty change is removed. */
   #changeColormap(id: string, fields: DefaultChanges['colormaps'][string]): void {
     if (!Object.hasOwn(Colormaps.DEFAULTS, id)) return;
     const { colormaps, groups } = this.#changes.get();
     this.#changes.set({ colormaps: Colormaps.#merged(colormaps, id, fields), groups });
   }
 
-  /** As `#changeColormap`, for the default group `id`. */
   #changeGroup(id: string, fields: DefaultChanges['groups'][string]): void {
     if (!Colormaps.#defaultGroup(id)) return;
     const { colormaps, groups } = this.#changes.get();

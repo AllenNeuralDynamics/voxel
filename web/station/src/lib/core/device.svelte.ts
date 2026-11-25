@@ -1,4 +1,3 @@
-/** The devices of the open instrument: any device, and typed classes for the kinds that the pages read by name. */
 import type { Client } from './client.svelte';
 import type { Topics } from './topics.svelte';
 import type {
@@ -6,16 +5,27 @@ import type {
   CameraSensor,
   ControlMode,
   DeviceInterface,
+  OperationParam,
   PropResults,
   PropValue,
   ROIGrid,
   StreamInfo
 } from './types';
 
+interface ParamSchema {
+  type?: string | string[];
+  default?: unknown;
+  enum?: unknown[];
+  anyOf?: ParamSchema[];
+  $ref?: string;
+  $defs?: Record<string, ParamSchema>;
+  properties?: Record<string, ParamSchema>;
+  required?: string[];
+}
+
 /**
- * A device of the open instrument: its interface and its properties, read from the feed topics
- * `instrument.devices.<id>.*`. Reading 1 property tracks only that property. Writes go through the instrument's
- * routes, which decide whether the device may be used now. `Device.of` gives the class of a device's kind.
+ * A device of the open instrument, read from the feed topics `instrument.devices.<id>.*`. Writes go through the
+ * instrument's routes, which decide whether the device may be used now.
  */
 export class Device {
   readonly id: string;
@@ -30,17 +40,16 @@ export class Device {
     this.#base = `${base}/devices/${encodeURIComponent(id)}`;
   }
 
-  /** The device's kind, properties and operations, or undefined until the feed sends it. */
+  /** Undefined until the feed sends it. */
   get interface(): DeviceInterface | undefined {
     return this.#topics.get<DeviceInterface>('interface');
   }
 
-  /** The names of the properties that the feed sends. */
   get propNames(): string[] {
     return this.#topics.names('props');
   }
 
-  /** A device as the class of its kind, or as a plain Device for a kind with no class. */
+  /** The class of the device's kind, or a plain Device for a kind with no class. */
   static of(client: Client, topics: Topics, base: string, id: string): Device {
     const kinds: Record<string, typeof Device> = {
       laser: Laser,
@@ -54,39 +63,76 @@ export class Device {
     return new (kinds[kind] ?? Device)(client, topics, base, id);
   }
 
-  /** The last report of the property `name`: its value with its limits, step and choices. */
   prop<T>(name: string): PropValue<T> | undefined {
     return this.#topics.get<PropValue<T>>(`props.${name}`);
   }
 
-  /** The last value of the property `name`, or undefined when the device has not reported one. */
   value<T>(name: string): T | undefined {
     return this.prop<T>(name)?.value ?? undefined;
   }
 
-  /** The unit of the property `name`, such as `mW`, or an empty string. */
+  /** Such as `mW`, or an empty string. */
   unit(name: string): string {
     return this.interface?.props[name]?.units ?? '';
   }
 
-  /** Sets properties. The station refuses all of them when it refuses 1. */
+  /** The station refuses all of them when it refuses 1. */
   set(properties: Record<string, unknown>): Promise<PropResults> {
     return this.#client.patch<PropResults>(this.#base, properties);
   }
 
-  /** Runs the operation `name` with its arguments by name. */
+  /** In JSON Schema order. A nullable argument takes its other type, so `int | None` is an integer. */
+  params(name: string): OperationParam[] {
+    const root = (this.interface?.operations[name]?.params ?? {}) as ParamSchema;
+    return Device.#fields(root, root, 0);
+  }
+
+  /** `depth` stops a recursive schema. */
+  static #fields(schema: ParamSchema, root: ParamSchema, depth: number): OperationParam[] {
+    const required = new Set(schema.required ?? []);
+    return Object.entries(schema.properties ?? {}).map(([name, raw]): OperationParam => {
+      const plain = Device.#notNull(raw, root);
+      const named = Array.isArray(plain.type) ? plain.type.find((type) => type !== 'null') : plain.type;
+      const options = plain.enum?.filter((option) => typeof option === 'string' || typeof option === 'number');
+      const param = { name, required: required.has(name), default: plain.default };
+      if (options?.length) return { ...param, type: 'string', options };
+      if (named === 'integer' || named === 'number' || named === 'boolean' || named === 'string') {
+        return { ...param, type: named };
+      }
+      if (plain.properties && depth < Device.#DEPTH) {
+        return { ...param, type: 'object', fields: Device.#fields(plain, root, depth + 1) };
+      }
+      return { ...param, type: 'other' };
+    });
+  }
+
+  static readonly #DEPTH = 8;
+
+  static #resolved(schema: ParamSchema, root: ParamSchema): ParamSchema {
+    const name = schema.$ref?.split('/').pop();
+    return name && root.$defs?.[name] ? { ...root.$defs[name], ...schema, $ref: undefined } : schema;
+  }
+
+  static #notNull(schema: ParamSchema, root: ParamSchema): ParamSchema {
+    const resolved = Device.#resolved(schema, root);
+    const branch = resolved.anyOf
+      ?.map((option) => Device.#resolved(option, root))
+      .find((option) => option.type !== 'null');
+    return branch ? { ...branch, default: resolved.default } : resolved;
+  }
+
   run<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
     return this.#client.post<T>(`${this.#base}:${encodeURIComponent(name)}`, args);
   }
 }
 
-/** A laser or a modulator: its power, as it is set and not as measured, in the device's own unit. */
+/** A laser or a modulator. Power is the setpoint, not a measurement, in the device's own unit. */
 export class Dimmable extends Device {
   get power(): number | undefined {
     return this.value<number>('power');
   }
 
-  /** The lowest and the highest power it can do. Both are the same when its power is fixed. */
+  /** Both ends are equal when the power is fixed. */
   get powerRange(): [number, number] | undefined {
     return this.value<[number, number]>('power_range');
   }
@@ -104,7 +150,6 @@ export class Dimmable extends Device {
   }
 }
 
-/** A laser: it makes light at 1 wavelength. */
 export class Laser extends Dimmable {
   /** In nm. */
   get wavelength(): number | undefined {
@@ -112,23 +157,20 @@ export class Laser extends Dimmable {
   }
 }
 
-/** A modulator: it lets a part of the light through, in %. */
+/** Power in %. */
 export class Modulator extends Dimmable {}
 
-/** A shutter: it lets the light through, or blocks it. */
 export class Shutter extends Device {
   get isOpen(): boolean {
     return this.value<boolean>('is_open') ?? false;
   }
 }
 
-/** An axis that moves along a line, such as a focus stage. */
 export class LinearAxis extends Device {
   get position(): number | undefined {
     return this.value<number>('position');
   }
 
-  /** The lowest and the highest position it can go to. */
   get limits(): [number, number] | undefined {
     return this.value<[number, number]>('limits');
   }
@@ -145,15 +187,14 @@ export class LinearAxis extends Device {
     return this.run('move_to', { position });
   }
 
-  /** Stops a move. */
   halt(): Promise<void> {
     return this.run('halt');
   }
 }
 
-/** An axis with a few named positions, such as a filter wheel or a device that sends the light 1 of several ways. */
+/** An axis with named positions, such as a filter wheel or a light router. */
 export class DiscreteAxis extends Device {
-  /** The names of its positions, in slot order. A slot with no name is left out. */
+  /** In slot order; unnamed slots are left out. */
   get labels(): string[] {
     const labels = this.value<Record<string, string>>('labels') ?? {};
     return Object.keys(labels)
@@ -161,7 +202,7 @@ export class DiscreteAxis extends Device {
       .map((slot) => labels[slot]);
   }
 
-  /** The name of the position it is at, or undefined between positions or at a slot with no name. */
+  /** Undefined between positions or at an unnamed slot. */
   get position(): string | undefined {
     return this.#state?.position ?? undefined;
   }
@@ -170,12 +211,10 @@ export class DiscreteAxis extends Device {
     return this.#state?.is_moving ?? false;
   }
 
-  /** Moves to the position named `position`. */
   moveTo(position: string): Promise<void> {
     return this.run('move_to', { position });
   }
 
-  /** Stops a move. */
   halt(): Promise<void> {
     return this.run('halt');
   }
@@ -187,9 +226,8 @@ export class DiscreteAxis extends Device {
   }
 }
 
-/** A camera with an area sensor. */
 export class AreaCamera extends Device {
-  /** How its stream runs, or undefined while it sends no frames. */
+  /** Undefined while no frames are sent. */
   get streamInfo(): StreamInfo | undefined {
     return this.value<StreamInfo>('stream_info');
   }
@@ -198,12 +236,10 @@ export class AreaCamera extends Device {
     return this.value<CameraSensor>('sensor');
   }
 
-  /** The region that it reads out now. */
   get roi(): AreaROI | undefined {
     return this.value<AreaROI>('roi');
   }
 
-  /** The sizes that its region can have now. */
   get roiGrid(): ROIGrid | undefined {
     return this.value<ROIGrid>('roi_grid');
   }

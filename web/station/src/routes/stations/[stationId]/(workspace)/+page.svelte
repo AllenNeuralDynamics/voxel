@@ -2,7 +2,6 @@
   import { goto } from '$app/navigation';
   import { getInstrumentSelection, getVoxelStation } from '$lib/context.svelte';
 
-  // The station's address goes to the open instrument, else the first one, once the station is known.
   const station = getVoxelStation();
   const selection = getInstrumentSelection();
 

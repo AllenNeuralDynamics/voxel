@@ -3,12 +3,7 @@
   import { SpimSession } from '$lib/core/spim.svelte';
   import { Button, Dialog } from '@voxel/kit';
 
-  /**
-   * Starts a preview, or stops what a SPIM microscope runs now: the preview at once, an acquisition after it asks.
-   * Each window shows it once: on the live profile, or on the app bar while the live profile is in another window.
-   * Shows nothing while no SPIM microscope is open. It is as wide as its longest text, so the bar does not shift when
-   * the text changes.
-   */
+  /** Starts or stops a SPIM preview or acquisition. Sized to its longest label so the bar does not shift. */
   const station = getVoxelStation();
   const spim = $derived(station.sessionOf(SpimSession));
   const acquisition = $derived(spim?.acquisition);

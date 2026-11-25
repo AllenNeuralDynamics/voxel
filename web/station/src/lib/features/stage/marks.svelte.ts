@@ -2,18 +2,14 @@ import { Prefs } from '$lib/core/prefs';
 import { legibleFor, toHex } from '@voxel/kit/colors';
 import { themes, watchTheme } from '@voxel/kit/style';
 
-/** A color of the stage and live views that the person can pick: an axis, the stage markers, or a stage region. */
 export type MarkKey = 'x' | 'y' | 'z' | 'markers' | 'region1' | 'region2' | 'region3' | 'region4';
 
 /**
- * The colors that the person picked for the axes, the stage markers and the stage regions, saved in this browser. A
- * picked color wins over the theme's color, and a pick that is equal to the theme's color is not kept. A picked axis or
- * region color is made lighter or darker for the mode, so it reads on the theme's surfaces. Make it while a component
- * initializes.
+ * User-picked axis, marker and region colors, saved in this browser. A pick equal to the theme color is not kept;
+ * axis and region picks are adjusted per mode for contrast. Create during component initialization.
  */
 export class Marks {
-  /** The CSS token that holds each color. A view with more than 4 regions uses the 4 region colors in order, then
-   * starts again at the first. */
+  /** Views with more than 4 regions cycle through the 4 region colors. */
   static readonly TOKENS: Record<MarkKey, string> = {
     x: '--axis-x',
     y: '--axis-y',
@@ -31,15 +27,14 @@ export class Marks {
   #themeColors = $state<Partial<Record<MarkKey, string>>>({});
 
   constructor() {
-    // The picked colors are on the body, so the root still has the theme's.
+    // Picks are set on body, so root still holds the theme colors.
     watchTheme(() => {
       const styles = getComputedStyle(document.documentElement);
       this.#themeColors = Object.fromEntries(
         Object.entries(Marks.TOKENS).map(([key, token]) => [key, toHex(styles.getPropertyValue(token).trim())])
       );
     });
-    // The picked colors are on the body, so the root keeps the theme's colors to show beside them. They are in their
-    // own style element, because a sheet or dialog puts back the body's own style when it closes.
+    // Own style element, because a sheet or dialog restores the body's inline style when it closes.
     $effect(() => {
       const mode = themes.resolvedMode;
       const rules: string[] = [];
@@ -55,24 +50,22 @@ export class Marks {
     });
   }
 
-  /** The colors that the person picked, as `#rrggbb`. A color with no pick is the theme's. */
   get picks(): Partial<Record<MarkKey, string>> {
     return this.#picks.get();
   }
 
-  /** The theme's color of each key in the mode now, as `#rrggbb`. It is empty until the page is drawn. */
+  /** Empty until the page is drawn. */
   get themeColors(): Partial<Record<MarkKey, string>> {
     return this.#themeColors;
   }
 
-  /** Picks `color`, as `#rgb` or `#rrggbb`, for `key`. The theme's color of `key` drops the pick. */
+  /** Picking the theme color drops the pick. */
   pick(key: MarkKey, color: string): void {
     const hex = /^#[\da-f]{3}$/i.test(color) ? color.replace(/[\da-f]/gi, (digit) => digit + digit) : color;
     if (hex.toLowerCase() === this.#themeColors[key]?.toLowerCase()) this.reset(key);
     else this.#picks.set({ ...this.#picks.get(), [key]: hex });
   }
 
-  /** Gives `key` the theme's color again. */
   reset(key: MarkKey): void {
     const picks = { ...this.#picks.get() };
     delete picks[key];

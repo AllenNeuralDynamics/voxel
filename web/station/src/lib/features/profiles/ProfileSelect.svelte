@@ -3,11 +3,7 @@
   import { Select } from '@voxel/kit';
   import { displayName } from '@voxel/kit/format';
 
-  /**
-   * The profile the open instrument's devices are set to, and the list to pick another. Shows nothing while no
-   * instrument is open. Each window shows it once: on the live profile, or on the app bar while the live profile is
-   * in another window.
-   */
+  /** Active profile picker; rendered once per window, on the live profile or else on the app bar. */
   const station = getVoxelStation();
   const session = $derived(station.session);
 </script>

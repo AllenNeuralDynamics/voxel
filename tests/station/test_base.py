@@ -222,6 +222,20 @@ async def test_a_profile_takes_only_what_a_device_can_set_and_never_a_stage_posi
     await instrument.apply_profile()  # the profile still applies
 
 
+async def test_a_value_removed_from_the_profile_is_undone_as_1_step(instrument: _Bench) -> None:
+    await instrument.set_device_properties("camera", {"exposure_time_ms": 20.0})
+    await instrument.save_to_profile("camera", ["exposure_time_ms"])
+
+    await instrument.remove_from_profile("camera", ["exposure_time_ms"])
+    assert instrument.view.value.state.profiles["main"].props == {}
+    assert instrument.view.value.history.undo_label == "Remove from profile"
+    with pytest.raises(NotFoundError, match="The active profile has no"):
+        await instrument.remove_from_profile("camera", ["exposure_time_ms"])
+
+    await instrument.undo()
+    assert instrument.view.value.state.profiles["main"].props == {"camera": {"exposure_time_ms": 20.0}}
+
+
 async def test_a_save_to_the_profile_is_undone_as_1_step(instrument: _Bench) -> None:
     await instrument.set_device_properties("camera", {"exposure_time_ms": 20.0})
     await instrument.save_to_profile("camera", ["exposure_time_ms"])
