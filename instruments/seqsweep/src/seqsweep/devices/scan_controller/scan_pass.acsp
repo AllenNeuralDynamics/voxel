@@ -1,0 +1,71 @@
+! seqsweep scan pass: one strip pass along the scan axis.
+! The host writes the global parameters below before it runs this buffer.
+! Names follow the Python names; positions in mm, speeds in mm/s, accel/decel in mm/s^2.
+
+global real scan_start_mm, scan_end_mm       ! imaged range, written in travel order
+global real scan_margin_mm, pixel_size_mm, scan_speed_mm_s
+global real line_pulse_width_ms, move_velocity_mm_s, scan_accel, scan_decel   ! move_velocity_mm_s is also used by home.acsp
+global real limit_min_mm, limit_max_mm       ! reachable range of the scan axis
+global int scan_axis                         ! controller axis index
+global int scan_dir                          ! +1 towards higher positions, -1 towards lower
+global int pulse_count                       ! result: line pulses fired during the pass
+
+real run_start, run_end, capture
+int chLine
+
+run_start = scan_start_mm - scan_dir * scan_margin_mm
+run_end = scan_end_mm + scan_dir * scan_margin_mm
+capture = ABS(scan_end_mm - scan_start_mm)
+
+IF (run_start < limit_min_mm) | (run_start > limit_max_mm) | (run_end < limit_min_mm) | (run_end > limit_max_mm)
+    DISP "ERROR: scan outside safety limits: ", run_start, run_end
+    STOP
+END
+
+ACC(scan_axis) = scan_accel
+DEC(scan_axis) = scan_decel
+
+
+! --------------------------------------------------------------
+! LCI INITIALIZATION
+! --------------------------------------------------------------
+lc.Init()
+lc.SetSafetyMasks(1, 1)
+lc.SetMotionAxes(scan_axis)
+
+! Channel 0: line trigger pulse train
+int Channels(8) = (100,0,0,0,0,0,0,0)
+lc.AssignChannels(Channels)
+
+! Disconnect configurable output initially
+lc.SetConfigOut(0, 0, 0)
+
+
+! --------------------------------------------------------------
+! MAIN SCAN (One strip)
+! --------------------------------------------------------------
+! Go to the start of the lead-in
+VEL(scan_axis) = move_velocity_mm_s
+PTP/e(scan_axis), run_start
+TILL ^MST(scan_axis).#MOVE
+
+! Pulse positions are relative to where the scan move starts
+chLine = lc.FixedDistPulse(line_pulse_width_ms, scan_dir * pixel_size_mm, scan_dir * scan_margin_mm, scan_dir * (scan_margin_mm + capture))
+
+lc.LaserEnable()
+
+! One move: lead-in + capture + lead-out
+VEL(scan_axis) = scan_speed_mm_s
+PTP/e(scan_axis), run_end
+TILL ^MST(scan_axis).#MOVE
+
+lc.LaserDisable()
+
+! Back to the positioning speed: moves started without a velocity use the axis's current one
+VEL(scan_axis) = move_velocity_mm_s
+
+pulse_count = lc.GetPulseCounts(chLine)
+
+lc.SetConfigOut(0, 0, 0)
+lc.Stop()
+STOP

@@ -2,17 +2,23 @@ import asyncio
 import inspect
 
 import pytest
-from vxl.hal.errors import HALStartupError
-
-from seqsweep.devices.acs.handle import ScanControllerHandle
-from seqsweep.devices.acs.simulated_acs import SimulatedAcsController
+from seqsweep.devices.scan_controller.handle import ScanControllerHandle
+from seqsweep.devices.scan_controller.simulated import SimulatedScanController
 from seqsweep.hal import HAL, SeqSweepHardwareTopology
 from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
-from seqsweep.seqsweep_config_model import SeqSweepInstrumentConfig
+from seqsweep.seqsweep_config_model import OpticsConfig, SeqSweepInstrumentConfig, SeqSweepInstrumentDefaults
 
-ACS_TARGET = "seqsweep.devices.acs.simulated_acs.SimulatedAcsController"
-ACS_INIT = {"gate_outputs": {"laser_532": "OUT0"}}
+from vxl.hal.errors import HALStartupError
+
+ACS_TARGET = "seqsweep.devices.scan_controller.simulated.SimulatedScanController"
+ACS_INIT = {"move_velocity_mm_s": 50, "motion_timeout_s": 60}
+DEFAULTS = SeqSweepInstrumentDefaults(
+    scan_axis="x",
+    optics=OpticsConfig(tdi_pixel_um=5.0, magnification=20.0, tdi_image_width_px=4352),
+    chamber_edge_margin_mm=10,
+    chambers_step_mm={1: 200.25, 2: 155.0, 3: 109.75},
+)
 
 
 def _topology(scan_controller: str = "acs") -> SeqSweepHardwareTopology:
@@ -23,7 +29,7 @@ def _topology(scan_controller: str = "acs") -> SeqSweepHardwareTopology:
 
 
 def _config(topology: SeqSweepHardwareTopology) -> SeqSweepInstrumentConfig:
-    return SeqSweepInstrumentConfig(hal=topology)
+    return SeqSweepInstrumentConfig(hal=topology, default=DEFAULTS)
 
 
 def test_unknown_role_device_is_rejected_at_load():
@@ -53,8 +59,8 @@ def test_hal_scan_controller_requires_open():
 
 
 def test_hal_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(SimulatedAcsController, "__DEVICE_TYPE__", "camera")
-    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller") as exc_info:
+    monkeypatch.setattr(SimulatedScanController, "__DEVICE_TYPE__", "camera")
+    with pytest.raises(HALStartupError, match=r"hal\.scan_controller\.not_scan_controller") as exc_info:
         asyncio.run(HAL(_topology()).open())
     (violation,) = exc_info.value.violations
     assert violation.loc == ("hal", "scan_controller")
@@ -62,10 +68,10 @@ def test_hal_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.Monke
 
 def test_hal_open_skips_role_check_for_unavailable_device():
     hal = HAL(_topology())
-    assert hal._compatibility_violations({"acs"}) == []  # noqa: SLF001
+    assert hal._compatibility_violations({"acs"}) == []
 
 
-def test_seqsweep_open_succeeds_with_simulated_acs():
+def test_seqsweep_open_succeeds_with_simulated_scan_controller():
     async def run() -> None:
         seqsweep = SeqSweep(_config(_topology()))
         await seqsweep.open()
@@ -78,8 +84,8 @@ def test_seqsweep_open_succeeds_with_simulated_acs():
 
 
 def test_seqsweep_open_fails_when_role_points_at_wrong_type(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(SimulatedAcsController, "__DEVICE_TYPE__", "camera")
-    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
+    monkeypatch.setattr(SimulatedScanController, "__DEVICE_TYPE__", "camera")
+    with pytest.raises(HALStartupError, match=r"hal\.scan_controller\.not_scan_controller"):
         asyncio.run(SeqSweep(_config(_topology())).open())
 
 
@@ -98,8 +104,8 @@ def test_rpc_serves_sync_methods_with_the_core_signature():
 
 
 def test_rpc_open_failure_stops_the_loop_thread(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(SimulatedAcsController, "__DEVICE_TYPE__", "camera")
+    monkeypatch.setattr(SimulatedScanController, "__DEVICE_TYPE__", "camera")
     rpc = SeqSweepRpc(SeqSweep(_config(_topology())))
-    with pytest.raises(HALStartupError, match="hal.scan_controller.not_scan_controller"):
+    with pytest.raises(HALStartupError, match=r"hal\.scan_controller\.not_scan_controller"):
         rpc.open()
-    assert not rpc._loop.running  # noqa: SLF001
+    assert not rpc._loop.running

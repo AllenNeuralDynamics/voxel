@@ -1,6 +1,6 @@
 [project]
 name = "seqsweep"
-version = "0.4.0"
+version = "0.5.0"
 description = "SeqSweep: BARseq's TDI line-scan imaging instrument, built on Voxel's rigup, device, writer, and records libraries"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -19,7 +19,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.0.0"]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-asyncio>=0.24.0",  # the root pytest config sets asyncio_mode
+    "ruff>=0.8.0",
+]
 
 [project.scripts]
 seqsweep = "seqsweep.scripts.seqsweep_main:main"

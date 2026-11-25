@@ -3,13 +3,13 @@ import logging
 import logging.config
 import os
 import time
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
-from ficus.database.filesys import FileSysStore  # type: ignore
-from ficus.services.configs import get_config  # type: ignore
-from one_liner.server import RouterServer  # type: ignore
-
+from ficus.database.filesys import FileSysStore  # type: ignore[import-untyped]
+from ficus.services.configs import get_config  # type: ignore[import-untyped]
+from one_liner.server import RouterServer  # type: ignore[import-untyped]
 from seqsweep.rpc.seqsweep_rpc import SeqSweepRpc
 from seqsweep.seqsweep import SeqSweep
 from seqsweep.seqsweep_config_model import SeqSweepSystemConfig
@@ -60,18 +60,22 @@ def main():
         help="Hostname scope for config overrides (configs/hostname/<hostname>/...).",
     )
 
+    parser.add_argument(
+        "--simulated",
+        action="store_true",
+        help="Run with the simulated ACS controller (the seqsweep_simulated config) instead of the hardware.",
+    )
+
     args = parser.parse_args()
     logger = logging.getLogger()
 
     # Config
-    if args.config_dir:
-        config_dir = Path(args.config_dir).resolve()
-    else:
-        config_dir = Path(__file__).resolve().parents[3] / "configs"
+    config_dir = Path(args.config_dir).resolve() if args.config_dir else Path(__file__).resolve().parents[3] / "configs"
     data_store = FileSysStore(rootdir=config_dir, scopes={"defaults", "hostname"})
     current_scopes = {"hostname": args.hostname}
     logging_config = get_config(data_store=data_store, namespace="logging")
-    seqsweep_config = get_config(data_store=data_store, namespace="seqsweep", scope_identifiers=current_scopes)
+    namespace = "seqsweep_simulated" if args.simulated else "seqsweep"
+    seqsweep_config = get_config(data_store=data_store, namespace=namespace, scope_identifiers=current_scopes)
     seqsweep_config.data["logging"] = logging_config.data.get("logging", {})
     config = SeqSweepSystemConfig(**seqsweep_config.data)
 
@@ -81,11 +85,12 @@ def main():
     logging.config.dictConfig(config.logging.model_dump(by_alias=True, exclude_none=True))
 
     old_factory = logging.getLogRecordFactory()
-    def record_factory(*args, **kwargs):
+
+    def record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
         record = old_factory(*args, **kwargs)
         record.project = "seqSweep"
         record.version = version("seqsweep")
-        record.comp_id = os.getenv("aibs_comp_id", "unknown")
+        record.comp_id = os.getenv("aibs_comp_id", "unknown")  # noqa: SIM112 (the lab-wide name is lowercase)
         record.msg = f"SeqSweep: {record.msg}"
         return record
 
@@ -110,6 +115,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down seqsweep server..")
     finally:
+        server.close()
         seqsweep.close()
 
 

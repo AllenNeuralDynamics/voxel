@@ -1,7 +1,7 @@
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from one_liner.models import RouterServerConfig  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field
+from one_liner.models import RouterServerConfig  # type: ignore[import-untyped]
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from vxlib.schema import FrozenModel
 
 from seqsweep.hal import SeqSweepHardwareTopology
@@ -29,10 +29,57 @@ class RouterServerPortConfig(BaseModel):
     broadcast_port: int = 5556
 
 
+class OpticsConfig(FrozenModel):
+    """TDI sensor and objective; sets the pixel size on the sample. No defaults: derived values depend on these."""
+
+    tdi_pixel_um: float = Field(..., gt=0, description="TDI sensor pixel size")
+    magnification: float = Field(..., gt=0)
+    tdi_image_width_px: int = Field(
+        ..., gt=0, le=16384, multiple_of=32, description="Sensor width in pixels (long side of TDI sensor)"
+    )
+
+    @property
+    def pixel_size_um(self) -> float:
+        """Pixel size on the sample."""
+        return self.tdi_pixel_um / self.magnification
+
+    @property
+    def tdi_image_width_um(self) -> float:
+        """Strip width on the sample, across the scan."""
+        return self.tdi_image_width_px * self.pixel_size_um
+
+
 class SeqSweepInstrumentDefaults(FrozenModel):
     """Baseline run settings (``default``): everything that can live in ``config.default``."""
 
-    # TODO: scan settings (velocity, line pitch, lasers), passes, limits
+    scan_axis: Literal["x", "y"] = Field(
+        ..., description="Stage axis the scan runs along; the strip step is along the other axis"
+    )
+    optics: OpticsConfig = Field(..., description="TDI camera and objective")
+    # TODO Maybe different type of key for chambers (e.g., str instead of int)
+    chambers_step_mm: dict[int, float] = Field(
+        default_factory=dict,
+        description="Start position of each chamber along the step axis (across the scan); strips step upward from it",
+    )
+    chamber_edge_margin_mm: float = Field(
+        ...,
+        gt=0,
+        description="Clearance between the safe X range and the chamber edge; a job's scan_margin_mm must fit in it",
+    )
+    scan_safe_range_mm: tuple[float, float] | None = Field(
+        default=None,
+        description="Scan-axis range kept clear of the chamber edges; a job's scan range is checked against it",
+    )
+    max_line_rate_hz: float | None = Field(
+        default=None, gt=0, description="Camera line rate limit; keep in step with the camera config"
+    )
+    # TODO: lasers, passes
+
+    @model_validator(mode="after")
+    def _check_safe_range(self) -> Self:
+        if self.scan_safe_range_mm is not None and self.scan_safe_range_mm[0] >= self.scan_safe_range_mm[1]:
+            raise ValueError("scan_safe_range_mm must be [min, max]")
+        return self
 
 
 class SeqSweepInstrumentConfig(BaseModel):
@@ -42,9 +89,7 @@ class SeqSweepInstrumentConfig(BaseModel):
     hal: SeqSweepHardwareTopology = Field(
         description="Hardware blueprint: rigup devices and nodes, plus the role each device plays"
     )
-    default: SeqSweepInstrumentDefaults = Field(
-        default_factory=SeqSweepInstrumentDefaults, description="Baseline run settings; empty for now"
-    )
+    default: SeqSweepInstrumentDefaults = Field(description="Baseline run settings")
 
 
 class SeqSweepSystemConfig(SeqSweepInstrumentConfig, validate_assignment=True):

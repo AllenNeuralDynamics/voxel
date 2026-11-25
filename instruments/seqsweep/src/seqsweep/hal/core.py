@@ -4,11 +4,10 @@ import asyncio
 import logging
 from collections.abc import Mapping
 
-from vxl.hal.errors import HALStartupError, Violation
-
 from rigup import DeviceHandle, DeviceInterface, Rig
-from seqsweep.devices.acs.handle import ScanControllerHandle
 from seqsweep.devices.base import SeqSweepDeviceType
+from seqsweep.devices.scan_controller.handle import ScanControllerHandle
+from vxl.hal.errors import HALStartupError, Violation
 
 from .topology import SeqSweepHardwareTopology
 
@@ -22,7 +21,7 @@ class HAL:
         self._topology = topology
         self._rig = Rig(topology, name)
 
-        self.scan_controllers: dict[str, ScanControllerHandle] = {}  # TODO Add ACS Handle
+        self.scan_controllers: dict[str, ScanControllerHandle] = {}
         self._device_interfaces: dict[str, DeviceInterface] = {}
 
     @property

@@ -1,8 +1,11 @@
-name: "SeqSweep Test Job"
-direction: forward
-pass_config:
-  start_um: 0
-  end_um: 1000
-  velocity_um_s: 500
-  line_pitch_um: 1
-  lasers: []
+# One whole scan; every value of the scan is in the job, so a saved job replays the same scan.
+# Values from "Stage buffer_112026.txt" (mm).
+name: "Chambers 1 and 3"
+chambers: [3, 1]  # scanned in this order; each resolves to its Y start from default.chambers_step_mm
+num_strips: 5  # passes or frames per chamber
+scan_start_mm: 125.0  # X0: imaged range along the scan axis starts here; must be below scan_end_mm
+scan_end_mm: 178.75  # X_end: imaged range ends here
+scan_margin_mm: 6.0  # MARGIN: run-up and run-out at each end; travel = capture + 2 x margin
+traversal: sweep  # sweep | snake, as Voxel's TileOrder (snake is not implemented yet)
+step_margin_mm: 8.33  # TODO temporary: chamber start to first strip; Y0 118.08 - chamber 3 start 109.75 (applies to every chamber)
+line_rate_hz: 470000  # camera line rate; pixel pitch and stage speed follow from the optics
