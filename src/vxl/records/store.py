@@ -109,6 +109,10 @@ class AcquisitionStore:
         """Every acquisition that is not archived, newest first."""
         return await asyncio.to_thread(self._select_all)
 
+    async def newest(self) -> Acquisition | None:
+        """The acquisition created last that is not archived; ``None`` when there is none."""
+        return await asyncio.to_thread(self._select_newest)
+
     async def interrupt_open(self) -> list[UUID]:
         """End each acquisition that never ended as interrupted: the station stopped during it. Give back their
         ids."""
@@ -161,6 +165,17 @@ class AcquisitionStore:
             row = connection.execute(
                 "SELECT acquisition_json FROM acquisitions WHERE id = ? AND archived_at_us IS NULL",
                 (str(acquisition_id),),
+            ).fetchone()
+            return None if row is None else Acquisition.model_validate_json(row["acquisition_json"])
+        finally:
+            connection.close()
+
+    def _select_newest(self) -> Acquisition | None:
+        connection = self._database.connect()
+        try:
+            row = connection.execute(
+                "SELECT acquisition_json FROM acquisitions WHERE archived_at_us IS NULL "
+                "ORDER BY created_at_us DESC LIMIT 1"
             ).fetchone()
             return None if row is None else Acquisition.model_validate_json(row["acquisition_json"])
         finally:

@@ -104,7 +104,7 @@ class HAL:
             raise
         if errors := problems.errors():
             await self._shut_down()
-            raise StartupError(errors)
+            raise StartupError(errors.as_fatal())
         await self._device_views.set(
             {
                 device_id: DeviceView(interface=interfaces[device_id], props=dict(device.props.cache))

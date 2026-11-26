@@ -35,11 +35,7 @@
 {#if workspace.connected}
   <div class="h-screen w-screen overflow-x-auto overflow-y-hidden bg-shell text-fg">
     <div class="h-full" style:min-width="{LAYOUT.live.min}rem">
-      <LiveProfile
-        {connected}
-        dock={LAYOUT.dock}
-        deviceLink={(id) => workspace.link(`${openHome}/devices/${encodeURIComponent(id)}`)}
-      >
+      <LiveProfile {connected} dock={LAYOUT.dock} pageLink={(path) => workspace.link(`${openHome}/${path}`)}>
         {#snippet start()}
           <div class="app-bar w-rail shrink-0 justify-center border-r px-1.5">
             <LogoMenu

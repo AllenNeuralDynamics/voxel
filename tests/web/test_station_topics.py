@@ -123,6 +123,32 @@ async def test_a_saved_acquisition_publishes_only_the_fields_and_visits_that_cha
     topics.close()
 
 
+async def test_the_newest_stored_acquisition_is_shown_and_an_older_save_does_not_replace_it(station: Station) -> None:
+    now = datetime.datetime.now(tz=datetime.UTC)
+    older, newer = (
+        Acquisition(
+            id=uuid4(),
+            operator="ana",
+            host="rig",
+            created_at=now - datetime.timedelta(hours=hours),
+            storage=StorageSpec(path=PurePosixPath(f"runs/{hours}")),
+            instrument_config={"id": "bench"},
+            instrument_state={},
+            visits=[Visit(task="a", profile="main", channels={"main": {"camera": Image(transform=_TRANSFORM)}})],
+        )
+        for hours in (2, 1)
+    )
+    for acquisition in (newer, older):
+        await station.records.acquisitions.save(acquisition, write_file=False)
+    publisher, topics = _publish(station)
+
+    await topics.show_newest()
+    await station.records.acquisitions.save(older.ended("interrupted", now, []), write_file=False)
+
+    assert publisher.snapshot().topics["stations.s.acquisition.id"] == str(newer.id)
+    topics.close()
+
+
 async def test_the_newest_log_line_is_a_topic(station: Station) -> None:
     await station.open()
     publisher, topics = _publish(station)

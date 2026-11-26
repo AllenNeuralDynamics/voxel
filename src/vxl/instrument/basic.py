@@ -33,6 +33,11 @@ class BasicInstrument(Instrument[InstrumentConfig, InstrumentState]):
         """Change fields of the metadata of a task, checked against the metadata form."""
         await self._update_task_metadata(task_id, fields)
 
+    @action(on="plan", key="task_id", verb="rename")
+    async def rename_task(self, task_id: TaskId, new_id: TaskId) -> None:
+        """Give a task another id. It keeps its place in the plan."""
+        await self._rename_task(task_id, new_id)
+
     @action(on="plan", verb="remove")
     async def remove_tasks(self, task_ids: list[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""

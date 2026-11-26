@@ -178,11 +178,17 @@ type AxisPath = Literal["forward", "alternate"]
 """``forward`` always starts from the same end; ``alternate`` goes back and forth."""
 
 
+type AxisEnd = Literal["low", "high"]
+"""The end of an axis that a path starts from: its lowest or its highest value."""
+
+
 class Grid(FrozenModel):
-    """Tiles in rows and columns. The tiled axes, fastest first, each with how it goes."""
+    """Tiles in rows and columns. The tiled axes, fastest first, each with how it goes. ``start`` gives the end each
+    axis starts from, which is the grid's first corner; an axis it leaves out starts low."""
 
     kind: Literal["grid"]
     axes: list[dict[SpecimenAxis, AxisPath]] = Field(min_length=1)
+    start: dict[SpecimenAxis, AxisEnd] = Field(default_factory=dict)
 
     @field_validator("axes")
     @classmethod
@@ -251,6 +257,9 @@ class TaskDefaults(FrozenModel):
         ).under("path", "scan")
         tiles = self.path.tiles
         if isinstance(tiles, Grid):
+            if outside := sorted(set(tiles.start) - set(tiled)):
+                msg = f"Only a tiled axis has a start; {', '.join(outside)} is not tiled."
+                problems.add("task.path.grid_start", msg, "path", "tiles", "start")
             if sorted(tiles.axis_order) != sorted(tiled):
                 msg = f"The grid must list each tiled axis once: {tiled}."
                 problems.add("task.path.grid_axes", msg, "path", "tiles", "axes")

@@ -77,6 +77,7 @@ export { default as Unplug } from '~icons/lucide/unplug';
 export { default as Video } from '~icons/lucide/video';
 export { default as WrapText } from '~icons/lucide/wrap-text';
 export { default as X } from '~icons/lucide/x';
+export { default as Zap } from '~icons/lucide/zap';
 
 export { default as GridLines } from '~icons/lucide-lab/grid-lines';
 

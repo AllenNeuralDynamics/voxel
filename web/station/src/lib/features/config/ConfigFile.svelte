@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { getInstrumentSelection, getVoxelStation, useAppBar } from '$lib/context.svelte';
+  import { LEVEL_ICONS } from '$lib/core/levels';
   import type { FolderFileName, Problem } from '$lib/core/station.svelte';
   import { ObjectDiff, ObjectView, type ObjectMark } from '@voxel/kit';
-  import { TriangleAlert } from '@voxel/kit/icons';
 
   /**
    * One instrument file with its problems placed under their keys. Reads the inspection, so it also works for closed or
@@ -52,8 +52,9 @@
 </script>
 
 {#snippet line(problem: Problem)}
+  {@const Icon = LEVEL_ICONS[problem.level]}
   <p class={['flex items-start gap-1.5', problem.level === 'warning' ? 'text-warning-fg' : 'text-danger-fg']}>
-    <TriangleAlert class="mt-[0.2em] size-3.5 shrink-0" aria-hidden="true" />
+    <Icon class="mt-[0.2em] size-3.5 shrink-0" aria-hidden="true" />
     <span class="min-w-0">{problem.msg}</span>
   </p>
 {/snippet}

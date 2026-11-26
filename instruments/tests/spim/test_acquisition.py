@@ -1,6 +1,9 @@
 """Acquisitions on simulated devices that pass their trigger edges along the rig's wires."""
 
 import asyncio
+import copy
+import shutil
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -10,15 +13,20 @@ from ome_zarr_writer import ScaleLevel
 from rigup.device.handle import PropView
 from vxl_drivers.metadata import ExaspimMetadata
 from vxl_instruments.spim.instrument import AcquisitionInfo, Microscope
+from vxl_instruments.spim.plan import PlannedTask, Unplanned
 from vxl_instruments.spim.task import SPIMTask
+from vxlib.issues import Level
 
 from vxl.devices.camera import handle as camera_handle
 from vxl.devices.camera.area import AreaCameraController
 from vxl.instrument.folder import InstrumentFolder
 from vxl.records import Acquisition, Records
-from vxl.station.errors import RejectedError
+from vxl.station.config import StationInfo
+from vxl.station.errors import RejectedError, StaleError
+from vxl.station.station import SessionInfo, SessionView, StationStatus, StationView
 from vxl.storage import StorageSpec
 from vxl.system import System
+from vxl.web.station.topics import StationTopics
 
 from .support import simulated, template
 
@@ -233,6 +241,100 @@ async def test_a_task_with_empty_required_metadata_refuses_the_start(stepping: M
 
     assert [problem.loc for problem in caught.value.problems] == [("plan", 0, "metadata", "subject_id")]
     assert stepping.view.value.activities == ()
+
+
+async def test_a_task_left_outside_a_narrowed_specimen_range_stops_only_the_start(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    data = _wired(config_data)
+    first = await _open(copy.deepcopy(data), tmp_path)
+    await first.close()
+    data["stage"]["x"]["specimen"] = [100, 200]
+    folder = InstrumentFolder.create(template(data), "right", tmp_path)
+    shutil.copy(tmp_path / "left.voxel" / "state.json", folder.home / "state.json")
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / "data" / spec.path)
+    system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
+    microscope = Microscope(InstrumentFolder.read(folder.home), records=records, system=system)
+    await microscope.open()
+    try:
+        alerts = [(alert.code, alert.level) for alert in microscope.view.value.alerts]
+        with pytest.raises(RejectedError) as caught:
+            await microscope.start_acquisition(_STORAGE, "ana")
+        await microscope.update_profile("gfp", spacing=2.0)
+    finally:
+        await microscope.close()
+
+    assert ("task.region.outside_specimen", Level.ERROR) in alerts
+    assert [problem.code for problem in caught.value.problems] == ["task.region.outside_specimen"]
+
+
+async def test_a_run_past_the_stage_limits_refuses_the_start(config_data: dict[str, Any], tmp_path: Path) -> None:
+    microscope = await _open(_wired(config_data), tmp_path, points=((0, 60_000),))
+    try:
+        with pytest.raises(RejectedError) as caught:
+            await microscope.start_acquisition(_STORAGE, "ana")
+    finally:
+        await microscope.close()
+
+    (problem,) = caught.value.problems
+    assert (problem.code, problem.loc) == ("task.plan.outside_limits", ("plan", 0, "region"))
+    assert problem.msg == (
+        "brain: the stage would go to y 60000.0..60000.0 µm, past the y-axis limits -50000..50000 µm."
+    )
+
+
+async def test_the_start_runs_the_plan_that_was_shown_and_refuses_one_that_changed_since(stepping: Microscope) -> None:
+    shown = stepping.view.value.plan_fingerprint
+    await stepping.update_profile("gfp", spacing=2.0)
+    view = stepping.view.value
+    planned = view.planned_tasks["brain"]
+    assert isinstance(planned, PlannedTask)
+    assert (planned.scan.frames, len(planned.stops)) == ({"gfp": 3}, 1)
+    assert view.plan_fingerprint not in (None, shown)
+
+    with pytest.raises(StaleError):
+        await stepping.start_acquisition(_STORAGE, "ana", shown)
+    acquisition_id = await stepping.start_acquisition(_STORAGE, "ana", view.plan_fingerprint)
+    await _finish(stepping)
+
+    stored = await stepping._records.acquisitions.get(acquisition_id)
+    assert stored.visits[0].images()["camera"].frames_total == 3
+
+
+async def test_the_plan_is_1_topic_for_each_task_and_each_footprint(stepping: Microscope) -> None:
+    session = SessionView(info=SessionInfo(id=uuid.uuid4(), instrument_name="left"), instrument=stepping.view.value)
+    view = StationView(status=StationStatus.ACTIVE, session=session)
+    topics = StationTopics.view_topics(StationInfo(id=uuid.uuid4(), name="s"), view)
+
+    (footprint_id,) = stepping.view.value.footprints
+    task, footprint = topics["instrument.planned_tasks.brain"], topics[f"instrument.footprints.{footprint_id}"]
+    assert isinstance(task, dict)
+    assert isinstance(footprint, dict)
+    assert task["stops"] == [[0, 0, 0]]
+    assert footprint["size_px"] == {"rows": 64, "columns": 64}
+    assert isinstance(topics["instrument.plan_fingerprint"], str)
+    assert "instrument.planned_tasks" not in topics
+    assert "instrument.remote_stores" in topics  # a mapping without the mark stays 1 topic
+
+
+async def test_a_task_saved_before_the_open_is_planned_once_the_cameras_report(
+    config_data: dict[str, Any], tmp_path: Path
+) -> None:
+    first = await _open(_wired(config_data), tmp_path)
+    shown = first.view.value.plan_fingerprint
+    await first.close()
+
+    folder = InstrumentFolder.read(next(tmp_path.rglob("rig.yaml")).parent)
+    records = Records(tmp_path / "again.sqlite3", resolve_root=lambda spec: tmp_path / "data" / spec.path)
+    system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
+    again = Microscope(folder, records=records, system=system)
+    assert isinstance(again.view.value.planned_tasks["brain"], Unplanned)  # no camera has reported yet
+    await again.open()
+    try:
+        assert isinstance(again.view.value.planned_tasks["brain"], PlannedTask)
+        assert again.view.value.plan_fingerprint == shown
+    finally:
+        await again.close()
 
 
 async def test_a_step_scan_paced_by_the_program_takes_every_frame(config_data: dict[str, Any], tmp_path: Path) -> None:

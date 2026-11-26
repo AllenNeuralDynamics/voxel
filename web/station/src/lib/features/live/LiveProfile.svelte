@@ -5,7 +5,7 @@
   import { AreaCamera } from '$lib/core/device.svelte';
   import ActivityButton from '$lib/features/live/ActivityButton.svelte';
   import LasersOff from '$lib/features/live/LasersOff.svelte';
-  import type { DeviceLink } from '$lib/features/live/live-dock.svelte';
+  import type { PageLink } from '$lib/features/live/live-dock.svelte';
   import LiveControls from '$lib/features/live/LiveControls.svelte';
   import PowerPane from '$lib/features/live/PowerPane.svelte';
   import StreamPane from '$lib/features/live/StreamPane.svelte';
@@ -19,13 +19,13 @@
   let {
     start,
     connected,
-    deviceLink,
+    pageLink,
     dock
   }: {
     start: Snippet;
     connected: boolean;
     /** The workspace and the Live window reach a device page differently. */
-    deviceLink: DeviceLink;
+    pageLink: PageLink;
     /** In rem. */
     dock: { min: number; start: number };
   } = $props();
@@ -105,7 +105,7 @@
             inert={!connected}
           ></section>{/snippet}
         {#snippet settings()}<section class="h-full" aria-label="Live controls" inert={!connected}>
-            <LiveControls {deviceLink} />
+            <LiveControls {pageLink} />
           </section>{/snippet}
       </SplitView>
     </Pane>
@@ -119,8 +119,8 @@
           power: { horizontal: { min: 18, default: 30, max: 40 }, vertical: { min: 5, default: 8 } }
         }}
       >
-        {#snippet stream()}<StreamPane {deviceLink} />{/snippet}
-        {#snippet power()}<PowerPane {deviceLink} />{/snippet}
+        {#snippet stream()}<StreamPane {pageLink} />{/snippet}
+        {#snippet power()}<PowerPane {pageLink} />{/snippet}
       </AutoSplit>
     </Pane>
   </PaneGroup>

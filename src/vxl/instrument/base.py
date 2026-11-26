@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 from types import get_original_bases
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast, get_args, get_origin
 
-from pydantic import SerializeAsAny, ValidationError
-from pydantic_core import to_jsonable_python
+from pydantic import GetCoreSchemaHandler, SerializeAsAny, ValidationError
+from pydantic_core import CoreSchema, core_schema, to_jsonable_python
 from rigup.activity import ActivityInfo, ActivityScheduler, Resource
 from rigup.build import dependencies
 from rigup.device import PropResults, Result
@@ -19,9 +19,9 @@ from rigup.device.handle import NotObservedError
 from rigup.interface import OperationInfo, OperationParamsError, action, bind_operations, failsafe, query
 from vxlib.asyncio import gather_all
 from vxlib.history import Change, HistoryState, UndoHistory
-from vxlib.issues import Alert, Issue, KeyPath, Problems
+from vxlib.issues import Alert, Issue, KeyPath, Level, Problem, Problems
 from vxlib.reactivity import Cell, Computed, Derived, Emitter, Readable, Subscribable
-from vxlib.schema import FrozenModel
+from vxlib.schema import FrozenModel, check_identifier
 from vxlib.units import Quantity
 from vxlib.vector import Span, StagePosition
 
@@ -84,6 +84,21 @@ class TuningKnobView(FrozenModel):
     problem: str | None = None
 
 
+@dataclass(frozen=True)
+class KeyedTopics:
+    """Marks a mapping field of an instrument view, as in ``Annotated[dict[TaskId, Plan], KeyedTopics()]``: the feed
+    sends it as 1 topic for each key. Each key must be an identifier, checked when the view is made."""
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        return core_schema.no_info_after_validator_function(self._checked, handler(source))
+
+    @staticmethod
+    def _checked(value: Mapping[str, Any]) -> Mapping[str, Any]:
+        for key in value:
+            check_identifier(key, "Key")
+        return value
+
+
 class InstrumentView[C: InstrumentConfig, S: InstrumentState](FrozenModel):
     """The open instrument as a screen sees it: its ``rig.yaml``, its saved state and default state, the next edit to
     undo and to redo, the profile its devices are set to, the power mode in use, what runs, its devices, the object
@@ -139,10 +154,11 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
 
     def __init__(self, folder: "InstrumentFolder[C, S]", *, records: Records, system: System) -> None:
         """Construct the instrument of ``folder`` without opening hardware. Raise :class:`StartupError` when the
-        folder has a problem, and :class:`TypeError` when another class runs it."""
+        folder has a fatal problem, and :class:`TypeError` when another class runs it. Its errors are issues of the
+        open instrument, which refuse a start."""
         config, default = folder.rig.model, folder.default.model
-        if folder.problems or config is None or default is None:
-            raise StartupError(folder.problems)
+        if (blocking := folder.problems.fatal()) or config is None or default is None:
+            raise StartupError(blocking)
         if folder.kind is not None and not isinstance(self, folder.kind):
             raise TypeError(f"{folder.home} is run by {folder.kind.__name__}, not by {type(self).__name__}")
         self._config = config
@@ -211,7 +227,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             await self._discover_remote_stores()
             if errors := (await self._open_problems()).errors():
                 await self._hal.close()
-                raise StartupError(errors)
+                raise StartupError(errors.as_fatal())
             # Read each stage axis once, so the first live frames already have a position: until a streamed
             # position arrives, an axis that is not read has none. An axis that fails stays unknown.
             await asyncio.gather(*(axis.position.get() for axis in self._hal.stage.values()), return_exceptions=True)
@@ -486,6 +502,14 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             form = self._store.value.metadata_cls
             await edit.record({("plan", index, "metadata"): form.merged(metadata, fields)})
 
+    async def _rename_task(self, task_id: TaskId, new_id: TaskId) -> None:
+        """Give a task another id, as 1 edit. It keeps its place in the plan; a taken or malformed id is refused."""
+        if new_id == task_id:
+            self._task_index(task_id)
+            return
+        async with self._state_edit("Rename task") as edit:
+            await edit.record({("plan", self._task_index(task_id), "id"): new_id})
+
     async def _remove_tasks(self, task_ids: Sequence[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""
         async with self._state_edit("Remove tasks") as edit:
@@ -608,7 +632,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
         """Each changing field of :attr:`view`, by its name there. A kind of instrument with more to show adds its
         own fields to these."""
         if self._alerts is None:
-            triggers = (self._store, self._active_profile, self._hal.device_views, self._scheduler.operation)
+            triggers = (*self._issue_triggers(), self._scheduler.operation)
             self._alerts = Computed[tuple[Alert, ...]](*triggers, initial=(), fn=self._work_out_alerts)
         if self._tuning is None:
             triggers = (self._store, self._active_profile, self._hal.device_views)
@@ -661,17 +685,26 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             knobs.append(view.model_copy(update=update))
         return tuple(knobs)
 
+    def _issue_triggers(self) -> tuple[Readable[Any], ...]:
+        """What :meth:`_live_issues` reads. A kind of instrument whose issues read more adds it to these."""
+        return (self._store, self._active_profile, self._hal.device_views)
+
+    def _start_errors(self) -> Problems:
+        """The issues now that refuse a start, worked out again rather than taken from the view."""
+        return Problems(Problem(**issue.model_dump()) for issue in self._live_issues() if issue.level >= Level.ERROR)
+
     def _live_issues(self) -> list[Issue]:
-        """What is wrong with the running instrument now: a warning for each property and each position that the
-        active profile sets and that the device last reported with another value. A number differs when it is off by
-        more than half of the property's step. A kind of instrument adds its own issues to these."""
+        """What is wrong with the running instrument now: the problems of its state, such as a task outside the
+        specimen range, each required metadata field a task leaves empty, and a warning for each property and each
+        position that the active profile sets and that the device last reported with another value. A number differs
+        when it is off by more than half of the property's step. A kind of instrument adds its own issues to these."""
         profile = self._store.value.profiles[self._active_profile.value]
         views = self._hal.device_views.value
         wanted: dict[tuple[DeviceId, str], Any] = {
             (device, name): value for device, props in profile.props.items() for name, value in props.items()
         }
         wanted.update({(device, "position"): position for device, position in profile.positions.items()})
-        issues: list[Issue] = []
+        issues: list[Issue] = [*self._store.value.problems(self._config), *self._metadata_problems()]
         for (device, name), value in wanted.items():
             if device not in views or (found := self._last_value(views[device], name)) is None:
                 continue
@@ -684,7 +717,7 @@ class Instrument[C: InstrumentConfig, S: InstrumentState, V: InstrumentView = In
             if not same:
                 msg = f"{device}: {name} is {live}, the profile has {value}."
                 loc = ("devices", device, "props", name)
-                issues.append(Issue(code="device.inconsistent_with_profile", level="warning", msg=msg, loc=loc))
+                issues.append(Issue(code="device.inconsistent_with_profile", level=Level.WARNING, msg=msg, loc=loc))
         return issues
 
     @staticmethod

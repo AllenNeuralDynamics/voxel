@@ -48,11 +48,6 @@
   const station = getVoxelStation();
   const selection = getInstrumentSelection();
   const appBar = provideAppBar();
-  const cannotOpen = $derived(
-    params.instrument && selection.blocked(params.instrument) && !page.route.id?.includes('/[instrument]/config')
-      ? params.instrument
-      : null
-  );
   const live = new LiveDock(() => params.stationId);
   onDestroy(() => live.dispose());
 
@@ -151,7 +146,7 @@
   });
 
   const alerts = $derived(station.session?.alerts ?? []);
-  const worstAlertLevel = $derived(alerts.some((alert) => alert.level === 'error') ? 'error' : 'warning');
+  const worstAlertLevel = $derived(alerts.some((alert) => alert.level !== 'warning') ? 'error' : 'warning');
   // Held 1 s so a quick operation does not flash in the bar.
   const runningOperation = new Linger(() => station.session?.operation ?? null, 1000);
   // Skips debug lines, which would flicker past.
@@ -263,15 +258,6 @@
         <PaneGroup direction="vertical" bind:ref={pageColumnEl} class="min-h-0">
           <Pane bind:this={pageRef} {...pageSize} collapsible class="min-h-0">
             <main class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-pane" inert={!connected || notOpen}>
-              {#if cannotOpen}
-                <p class="px-inset shrink-0 pt-3 text-sm text-fg-muted">
-                  Cannot open.
-                  <a class="text-danger-fg hover:underline" href={selection.problemsHref(cannotOpen)}>
-                    {selection.problems(cannotOpen)}
-                    {selection.problems(cannotOpen) === 1 ? 'problem' : 'problems'}
-                  </a>
-                </p>
-              {/if}
               {@render children()}
             </main>
           </Pane>
@@ -328,9 +314,13 @@
                             <span
                               class={cn(
                                 'mt-[0.45rem] size-2 rounded-full',
-                                alert.level === 'error' ? 'bg-danger-fg' : 'bg-warning-fg'
+                                alert.level === 'warning' ? 'bg-warning-fg' : 'bg-danger-fg'
                               )}
-                              aria-label={alert.level === 'error' ? 'Error' : 'Warning'}
+                              aria-label={alert.level === 'fatal'
+                                ? 'Fatal'
+                                : alert.level === 'error'
+                                  ? 'Error'
+                                  : 'Warning'}
                               role="img"
                             ></span>
                             <span class="min-w-0">
@@ -405,7 +395,7 @@
           <LiveProfile
             {connected}
             dock={LAYOUT.dock}
-            deviceLink={(id) => ({ href: selection.href(openName ?? '', `devices/${encodeURIComponent(id)}`) })}
+            pageLink={(path) => ({ href: selection.href(openName ?? '', path) })}
           >
             {#snippet start()}
               <h2 class="pl-inset flex min-w-0 items-center gap-1.5 font-medium whitespace-nowrap">

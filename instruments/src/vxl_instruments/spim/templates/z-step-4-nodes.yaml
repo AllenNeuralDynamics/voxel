@@ -250,9 +250,9 @@ rig:
     cam_4: [exposure_time_ms]
 
   stage:
-    x: {device: x_axis}
-    y: {device: y_axis}
-    z: {device: z_axis}
+    x: {device: x_axis, specimen: [5000, 45000]}
+    y: {device: y_axis, specimen: [5000, 45000]}
+    z: {device: z_axis, specimen: [0, 20000]}
 
   scan:
     axis: z

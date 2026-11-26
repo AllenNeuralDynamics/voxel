@@ -26,7 +26,7 @@
   const marks = getMarks();
   const AXES: MarkKey[] = ['x', 'y', 'z'];
   const colormaps = getColormaps();
-  const REGIONS: MarkKey[] = ['region1', 'region2', 'region3', 'region4'];
+  const ZONES: MarkKey[] = ['zone1', 'zone2', 'zone3', 'zone4'];
   const ROW = 'grid min-h-ui-lg grid-cols-[7rem_minmax(0,1fr)_1rem] items-center gap-3 py-1.5';
   const WIDE = 'w-full max-w-[52rem]';
 
@@ -137,9 +137,9 @@
   {@render swatch('markers', 'Markers', ['#e254d4', '#ffffff', '#f0e442', '#56b4e9'])}
 {/snippet}
 
-{#snippet regions()}
-  {#each REGIONS as key, index (key)}
-    {@render swatch(key, `Region ${index + 1}`)}
+{#snippet zones()}
+  {#each ZONES as key, index (key)}
+    {@render swatch(key, `Zone ${index + 1}`)}
   {/each}
 {/snippet}
 
@@ -147,7 +147,7 @@
   <div class="flex flex-col divide-y divide-line-faint">
     {@render colors('Axes', AXES, axes)}
     {@render colors('Markers', ['markers'], markers)}
-    {@render colors('Regions', REGIONS, regions)}
+    {@render colors('Zones', ZONES, zones)}
     <div class={ROW}>
       <span class="text-base text-fg">Colormaps</span>
       <a

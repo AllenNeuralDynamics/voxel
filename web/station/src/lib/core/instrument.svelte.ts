@@ -33,6 +33,11 @@ export class Instrument<C extends InstrumentConfig = InstrumentConfig, S extends
     return this.defaultState.fields.reduce((sum, field) => sum + ObjectDiff.count(now[field], was[field]), 0);
   }
 
+  /** The dotted class path of the form that each task's metadata has. */
+  get metadataForm(): string | undefined {
+    return this.state.get('metadata_cls');
+  }
+
   get config(): C | undefined {
     return this.#topics.get<C>('config');
   }

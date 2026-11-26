@@ -3,9 +3,35 @@ import { untrack } from 'svelte';
 import { Client, type ClientOptions, type Unsub } from './client.svelte';
 import { Instrument } from './instrument.svelte';
 import { InstrumentSession } from './session.svelte';
-import { SpimInstrument, SpimSession } from './spim.svelte';
+import { SpimInstrument, SpimSession, type StorageSpec } from './spim.svelte';
 import { Topics } from './topics.svelte';
-import type { InstrumentConfig, LogEntry } from './types';
+import type { InstrumentConfig, LogEntry, MetadataSchema } from './types';
+
+export type RunResult = 'completed' | 'failed' | 'cancelled' | 'interrupted';
+
+/** Where each pixel of an image sat, in specimen µm: pixel [frame, row, column] is at `origin` plus each index times
+ * its step. */
+export interface ImageTransform {
+  origin: Record<'x' | 'y' | 'z', number>;
+  steps: [Record<'x' | 'y' | 'z', number>, Record<'x' | 'y' | 'z', number>, Record<'x' | 'y' | 'z', number>];
+  shape: [number, number, number];
+}
+
+/** 1 profile of 1 task at 1 place, with the image of each camera of each channel. */
+export interface RunVisit {
+  task: string;
+  profile: string;
+  result?: 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'skipped' | null;
+  channels: Record<string, Record<string, { transform: ImageTransform }>>;
+}
+
+/** A run as the station's `acquisition.*` topics give it. */
+export interface RunRecord {
+  id: string;
+  result?: RunResult;
+  storage?: StorageSpec;
+  visits: RunVisit[];
+}
 
 interface Kind {
   instrument: new (name: string, topics: Topics) => Instrument;
@@ -34,7 +60,7 @@ export interface SessionInfo {
 
 export interface Problem {
   code: string;
-  level: 'error' | 'warning';
+  level: 'fatal' | 'error' | 'warning';
   msg: string;
   loc: (string | number)[];
   detail: string | null;
@@ -77,6 +103,22 @@ export class Station {
   readonly #sessionId: string | undefined = $derived(this.#info?.id);
   readonly #sessionName: string | undefined = $derived(this.#info?.instrument_name);
   readonly #target: string | undefined = $derived(this.topics.get<InstrumentConfig>('instrument.config')?.target);
+  /** The newest run on the station, when it ran with the open instrument's config. */
+  readonly lastRun: RunRecord | undefined = $derived.by(() => {
+    const id = this.topics.get<string>('acquisition.id');
+    const config = this.topics.get<{ id?: string }>('acquisition.instrument_config');
+    const open = this.session?.instrument.config?.id;
+    if (id === undefined || open === undefined || config?.id !== open) return undefined;
+    return {
+      id,
+      result: this.topics.get<RunResult>('acquisition.result'),
+      storage: this.topics.get<StorageSpec>('acquisition.storage'),
+      visits: this.topics
+        .names('acquisition.visits')
+        .sort((a, b) => Number(a) - Number(b))
+        .flatMap((index) => this.topics.get<RunVisit>(`acquisition.visits.${index}`) ?? [])
+    };
+  });
   readonly session: InstrumentSession | null = $derived.by(() => {
     if (!this.#sessionId || !this.#sessionName) return null;
     const kind = KINDS[this.#target ?? ''] ?? PLAIN;
@@ -180,6 +222,15 @@ export class Station {
   async loadInstruments(): Promise<void> {
     this.instruments = await this.#client.get<Record<string, InstrumentInspection>>(
       `/stations/${this.#stationId}/instruments`
+    );
+  }
+
+  /** The metadata forms that the station offers, by name: each class's dotted path and its JSON Schema. None until
+   * the station is known. */
+  metadataForms(): Promise<Record<string, { path: string; schema: MetadataSchema }>> {
+    if (!this.#stationId) return Promise.resolve({});
+    return this.#client.get<Record<string, { path: string; schema: MetadataSchema }>>(
+      `/stations/${this.#stationId}/metadata-forms`
     );
   }
 

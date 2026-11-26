@@ -566,12 +566,11 @@
       </Section>
     {/if}
 
-    <!-- The Run page does not show 1 task yet. -->
     <Section heading="Tasks">
       {#if tasks.length > 0}
         <div class="flex flex-wrap gap-x-5 gap-y-1.5 frame-tinted px-3 py-2 text-sm">
           {#each tasks as task (task.id)}
-            <a class="font-medium hover:underline" href="{selection.href(name, 'run')}#{encodeURIComponent(task.id)}">
+            <a class="font-medium hover:underline" href={selection.href(name, `run/${encodeURIComponent(task.id)}`)}>
               {displayName(task.id)}
             </a>
           {/each}

@@ -9,35 +9,41 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import partial
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any, Unpack
+from typing import TYPE_CHECKING, Annotated, Any, Unpack
 
 from rigup.activity import Activity, ActivityInfo
+from rigup.device.handle import NotObservedError
 from rigup.interface import action, create, failsafe, update
 from vxlib.asyncio import gather_all, gather_in_order
 from vxlib.imaging.writer import WriterProgress
-from vxlib.issues import Problems
-from vxlib.reactivity import Cell, Readable
+from vxlib.issues import Issue, Problems
+from vxlib.reactivity import Cell, Computed, Derived, Readable
+from vxlib.vector import Span
 
 from vxl.devices.axes.continuous.base import Pulses, Sweep
+from vxl.devices.axes.discrete.handle import DiscreteAxisHandle
 from vxl.devices.base import DeviceId
-from vxl.devices.camera import AreaROI
+from vxl.devices.camera import AreaROI, CameraSensor
 from vxl.devices.camera.handle import AreaCameraHandle
 from vxl.devices.signals.generator.base import InputEdges, OwnClock
-from vxl.instrument.base import Instrument, InstrumentView
+from vxl.instrument.base import Instrument, InstrumentView, KeyedTopics
 from vxl.instrument.config import Stage
-from vxl.instrument.state import ProfileId, TaskId
+from vxl.instrument.state import ProfileId, StageFollowRule, TaskId
 from vxl.instrument.store import ABSENT
+from vxl.optics import AxisPosition, SpecimenAxis
 from vxl.records import Acquisition, Image, Records, Visit, VisitRecording
-from vxl.station.errors import RejectedError
+from vxl.station.errors import RejectedError, StaleError
 from vxl.storage import StorageSpec
 from vxl.system import System
 
 from .config import SPIMConfig, SPIMProfile, TriggerChain
-from .plan import Volume, plan_task
+from .plan import Footprint, FootprintId, PlannedTask, Planner, TaskPlans, Unplanned, Volume
 from .state import SPIMProfileFields, SPIMState, WriterFields
 from .task import SPIMTask, SPIMTaskFields
 
 if TYPE_CHECKING:
+    from vxlib.lifecycle import Teardown
+
     from vxl.instrument.folder import InstrumentFolder
 
 logger = logging.getLogger(__name__)
@@ -89,9 +95,18 @@ class _Acquisition:
 
 class SPIMView(InstrumentView[SPIMConfig, SPIMState]):
     """A SPIM microscope as a screen sees it: also the channels that a preview of the active profile shows, by camera,
-    whether or not a preview runs."""
+    whether or not a preview runs, and the plan before a run.
+
+    ``planned_tasks`` gives each task's plan, or why it has none, and ``footprints`` the footprints that they name.
+    ``plan_fingerprint`` is what Start compares with the plan that a person saw; it is ``None`` while a task has no
+    plan. ``new_task_tile_um`` is the area on each tiled axis that 1 capture of the active profile surely covers, with
+    the devices where they are now, around the stage position; ``None`` while it cannot be worked out."""
 
     preview_channels: tuple[DeviceId, ...]
+    footprints: Annotated[dict[FootprintId, Footprint], KeyedTopics()]
+    planned_tasks: Annotated[dict[TaskId, PlannedTask | Unplanned], KeyedTopics()]
+    plan_fingerprint: str | None
+    new_task_tile_um: dict[SpecimenAxis, tuple[float, float]] | None
 
 
 class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
@@ -109,6 +124,30 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         self._preview_channels = Cell[tuple[DeviceId, ...]](self._preview_choice(self._active_profile.value))
         self._preview: _Preview | None = None
         self._acquisition: _Acquisition | None = None
+        self._plan = Computed[TaskPlans](self._store, fn=self._work_out_plan)
+        self._new_task_tile = Computed[dict[SpecimenAxis, tuple[float, float]] | None](
+            self._store, self._active_profile, fn=self._work_out_new_task_tile
+        )
+        self._device_unsubs: list[Teardown] = []
+
+    async def open(self) -> None:
+        """Open the instrument, then work out the plan again each time a camera reports its sensor, and the new task's
+        tile also each time a device with named positions moves."""
+        await super().open()
+        sensors = [camera.sensor for camera in self._hal.area_cameras.values()]
+        axes = [axis.state for axis in self._discrete_axes().values()]
+        self._device_unsubs = [
+            *(sensor.subscribe(lambda _: self._plan.refresh()) for sensor in sensors),
+            *(trigger.subscribe(lambda _: self._new_task_tile.refresh()) for trigger in (*sensors, *axes)),
+        ]
+        await self._plan.refresh()
+        await self._new_task_tile.refresh()
+
+    async def close(self) -> None:
+        for unsub in self._device_unsubs:
+            unsub()
+        self._device_unsubs = []
+        await super().close()
 
     @action(on="preview", verb="start")
     async def start_preview(self) -> None:
@@ -124,28 +163,38 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
             await self._end_preview()
 
     @action(on="acquisition", verb="start")
-    async def start_acquisition(self, storage: StorageSpec, operator: str) -> uuid.UUID:
-        """Acquire the whole plan in the background into ``storage``, and give back the new acquisition's id once its
-        record exists. Each task must have its required metadata. The preview stops first, and every camera of the plan
-        must be able to write ``storage``. While it runs, it holds every device and the state."""
+    async def start_acquisition(
+        self, storage: StorageSpec, operator: str, plan_fingerprint: str | None = None
+    ) -> uuid.UUID:
+        """Acquire the plan in ``planned_tasks`` in the background into ``storage``, and give back the new
+        acquisition's id once its record exists. Refused while an issue is an error, such as a task with no plan, no
+        stop, a run past the stage limits (a sweep's run-up included) or an empty required metadata field. With
+        ``plan_fingerprint``, the plan must still be the one that it names. The preview stops first, and every camera
+        of the plan must be able to write ``storage``. While it runs, it holds every device and the state."""
         async with self._scheduler.run("starting acquisition", requires=()):
             if self._acquisition is not None:
                 raise RejectedError("An acquisition is already running")
-            state = self._store.value
+            state, plan = self._store.value, self._plan.value
             if not state.plan:
                 raise RejectedError("The plan has no tasks")
-            if problems := self._metadata_problems():
+            problems = self._start_errors()
+            limits: dict[SpecimenAxis, Span] = {axis: await self._hal.stage[axis].get_limits() for axis in Stage.axes()}
+            speeds = {volume.scan.speed for volume in plan.volumes if volume.scan.speed is not None}
+            scan_axis = self._hal.stage[self._config.scan.axis]
+            run_ups = {speed: await scan_axis.run_up(speed) for speed in speeds}
+            shown = {(found.code, found.loc, found.msg) for found in problems}
+            problems += Problems(
+                found
+                for found in self._travel_problems(plan, limits, run_ups)
+                if (found.code, found.loc, found.msg) not in shown
+            )
+            if problems:
                 raise RejectedError(str(problems), problems)
+            volumes = plan.volumes
+            if plan_fingerprint is not None and plan_fingerprint != plan.fingerprint:
+                raise StaleError("The plan changed since it was shown; look at it again")
             await self._end_preview()
             cameras = self._hal.area_cameras
-            sensors = dict(
-                zip(
-                    cameras,
-                    await gather_all(*(c.sensor.get() for c in cameras.values()), message="sensors"),
-                    strict=True,
-                )
-            )
-            volumes = [volume for task in state.plan for volume in plan_task(task, self._config, state, sensors)]
             if self._config.scan.motion == "sweep":
                 if short := sorted({v.task for v in volumes if v.scan.speed is None or v.scan.count < 2}):
                     raise RejectedError(f"A sweep needs a speed and at least 2 frames; {', '.join(short)} has fewer")
@@ -264,6 +313,11 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         """Change fields of the metadata of a task, checked against the metadata form."""
         await self._update_task_metadata(task_id, fields)
 
+    @action(on="plan", key="task_id", verb="rename")
+    async def rename_task(self, task_id: TaskId, new_id: TaskId) -> None:
+        """Give a task another id. It keeps its place in the plan."""
+        await self._rename_task(task_id, new_id)
+
     @action(on="plan", verb="remove")
     async def remove_tasks(self, task_ids: list[TaskId]) -> None:
         """Remove tasks from the plan, as 1 edit."""
@@ -337,7 +391,107 @@ class Microscope(Instrument[SPIMConfig, SPIMState, SPIMView]):
         self._preview = _Preview(activity, cameras, generators)
 
     def _view_sources(self) -> dict[str, Readable[Any]]:
-        return {**super()._view_sources(), "preview_channels": self._preview_channels}
+        return {
+            **super()._view_sources(),
+            "preview_channels": self._preview_channels,
+            "footprints": Derived(self._plan, fn=lambda plan: plan.footprints),
+            "planned_tasks": Derived(self._plan, fn=lambda plan: plan.tasks),
+            "plan_fingerprint": Derived(self._plan, fn=lambda plan: plan.fingerprint),
+            "new_task_tile_um": self._new_task_tile,
+        }
+
+    def _sensors(self) -> dict[DeviceId, CameraSensor]:
+        """The sensor that each area camera last reported. A camera that has not reported it is left out."""
+        found: dict[DeviceId, CameraSensor] = {}
+        for camera, handle in self._hal.area_cameras.items():
+            with suppress(NotObservedError):
+                found[camera] = handle.sensor.value
+        return found
+
+    def _discrete_axes(self) -> dict[DeviceId, DiscreteAxisHandle]:
+        """Each open device that holds 1 of some named positions."""
+        hal = self._hal
+        return {d: handle for d in hal.device_views.value if isinstance(handle := hal.device(d), DiscreteAxisHandle)}
+
+    def _work_out_plan(self) -> TaskPlans:
+        return Planner(self._config, self._store.value, self._sensors()).plan()
+
+    def _work_out_new_task_tile(self) -> dict[SpecimenAxis, tuple[float, float]] | None:
+        """The tile of the active profile, with each device that has named positions where it last said it is, and
+        each other device where the state puts it."""
+        state = self._store.value
+        picks: dict[str, AxisPosition] = {
+            d: p for d, p in state.positions.items() if not isinstance(p, StageFollowRule)
+        }
+        for device_id, axis in self._discrete_axes().items():
+            with suppress(NotObservedError):
+                if (position := axis.state.value.position) is not None:
+                    picks[device_id] = position
+        try:
+            tile = Planner(self._config, state, self._sensors()).tile([self._active_profile.value], picks)
+        except Exception:
+            logger.debug("The new task's tile cannot be worked out", exc_info=True)
+            return None
+        return {axis: (span.low, span.high) for axis, span in tile.items()}
+
+    def _issue_triggers(self) -> tuple[Readable[Any], ...]:
+        """Also the plan, which updates after the state when the cameras report."""
+        return (*super()._issue_triggers(), self._plan)
+
+    def _live_issues(self) -> list[Issue]:
+        """Also each task with no plan or no stop, and each run past the stage limits the axes last reported. A
+        sweep's run-up is left out here: it needs a call to the axis, which Start makes."""
+        plan = self._plan.value
+        limits: dict[SpecimenAxis, Span] = {}
+        for axis in Stage.axes():
+            view = self._hal.device_views.value.get(self._config.stage.device(axis))
+            prop = view.props.get("limits") if view else None
+            if prop is not None and prop.value is not None:
+                limits[axis] = Span(*prop.value)
+        return [*super()._live_issues(), *self._plan_problems(plan), *self._travel_problems(plan, limits, {})]
+
+    def _plan_problems(self, plan: TaskPlans) -> Problems:
+        """A problem for each task that has no plan or no stop."""
+        problems = Problems()
+        for index, task in enumerate(self._store.value.plan):
+            planned = plan.tasks[task.id]
+            if isinstance(planned, Unplanned):
+                problems.add(planned.code, f"{task.id}: {planned.msg}", "plan", index)
+            elif not planned.stops:
+                problems.add("task.plan.no_stops", f"{task.id}: no tile of it meets its region.", "plan", index)
+        return problems
+
+    def _travel_problems(
+        self, plan: TaskPlans, limits: Mapping[SpecimenAxis, Span], run_ups: Mapping[float, float]
+    ) -> Problems:
+        """A problem for each task and stage axis where its run would take the stage past the axis's ``limits``: to a
+        stop, to a frame, or through a sweep's run-up at its speed, 0 for a speed missing from ``run_ups``. An axis
+        missing from ``limits`` is not checked."""
+        stage = self._config.stage
+        travel: dict[tuple[TaskId, SpecimenAxis], list[float]] = {}
+        for volume in plan.volumes:
+            run = volume.scan
+            last = run.first + (run.count - 1) * run.spacing
+            run_up = 0.0 if run.speed is None else run_ups.get(run.speed, 0.0)
+            for axis in stage.axes():
+                if axis == run.axis:
+                    at = [min(run.first, last) - run_up, max(run.first, last) + run_up]
+                else:
+                    at = [getattr(volume.start, axis)]
+                travel.setdefault((volume.task, axis), []).extend(at)
+        problems = Problems()
+        for index, task in enumerate(self._store.value.plan):
+            for axis in stage.axes():
+                if not (taken := travel.get((task.id, axis))) or (span := limits.get(axis)) is None:
+                    continue
+                low, high = min(taken), max(taken)
+                if low < span.low or high > span.high:
+                    msg = (
+                        f"{task.id}: the stage would go to {axis} {low}..{high} µm, past the {axis}-axis limits "
+                        f"{span.low}..{span.high} µm."
+                    )
+                    problems.add("task.plan.outside_limits", msg, "plan", index, "region")
+        return problems
 
     async def _end_preview(self) -> None:
         """Stop the preview's devices and end its activity. Do nothing when no preview runs."""

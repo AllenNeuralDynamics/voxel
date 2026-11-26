@@ -7,7 +7,7 @@
   import { wavelengthToColor } from '@voxel/kit/colors';
   import { displayName } from '@voxel/kit/format';
 
-  import type { DeviceLink } from './live-dock.svelte';
+  import type { PageLink } from './live-dock.svelte';
 
   /** Each laser with the modulators and shutters only it feeds; shared ones are grouped at the end. */
   const station = getVoxelStation();
@@ -26,7 +26,7 @@
   );
   const others = $derived(beams.filter((beam) => !shown.includes(beam)));
   const shared = $derived(session?.sharedGates ?? []);
-  const { deviceLink }: { deviceLink: DeviceLink } = $props();
+  const { pageLink }: { pageLink: PageLink } = $props();
   const uid = $props.id();
   const block = 'col-span-3 grid grid-cols-subgrid frame-tinted px-2.5 py-1';
 </script>
@@ -39,7 +39,9 @@
 {#snippet gateFrame(gate: Modulator | Shutter, nested: boolean, passes: boolean, state: string, power: string)}
   <div role="row" class="col-span-3 grid grid-cols-subgrid">
     <span role="rowheader" class={cn('truncate py-0.5 text-fg-muted', nested && 'pl-4.5')} title={displayName(gate.id)}
-      ><a {...deviceLink(gate.id)} class="hover:text-fg hover:underline">{displayName(gate.id)}</a></span
+      ><a {...pageLink(`devices/${encodeURIComponent(gate.id)}`)} class="hover:text-fg hover:underline"
+        >{displayName(gate.id)}</a
+      ></span
     >
     <span role="cell" class={cn('py-0.5', !passes && 'text-fg-muted')}>{state}</span>
     {@render powerCell(power)}
@@ -85,8 +87,10 @@
               : 'transparent'}
           aria-hidden="true"
         ></span>
-        <a {...deviceLink(beam.source.id)} class="truncate hover:underline" title={displayName(beam.source.id)}
-          >{displayName(beam.source.id)}</a
+        <a
+          {...pageLink(`devices/${encodeURIComponent(beam.source.id)}`)}
+          class="truncate hover:underline"
+          title={displayName(beam.source.id)}>{displayName(beam.source.id)}</a
         >
       </span>
       <span role="cell" class={cn('py-0.5', !beam.source.isOn && 'text-fg-muted')}>

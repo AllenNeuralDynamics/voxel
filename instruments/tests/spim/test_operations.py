@@ -28,6 +28,7 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[Microscope], Mapping[str, Any
     "update_task_metadata": {"task_id": "a", "fields": {"notes": "left hemisphere"}},
     "reorder_tasks": {"task_ids": ["b", "a"]},
     "remove_tasks": {"task_ids": ["b"]},
+    "rename_task": {"task_id": "a", "new_id": "c"},
     "update_profile": {"profile_id": "gfp", "spacing": 2.5, "label": "GFP"},
     "update_writer_settings": {"shard_frame_chunks": 4},
     "set_preview_channels": {"channels": ["camera"]},
@@ -67,6 +68,7 @@ async def test_every_operation_runs_and_each_state_change_is_1_undo_step(opened:
         if opened.operations[name].intent in ("create", "update", "delete") or name in (
             "reorder_tasks",
             "remove_tasks",
+            "rename_task",
         ):
             assert opened.view.value.state != before, name
             await opened.execute("undo", {})

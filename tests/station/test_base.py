@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -367,6 +368,19 @@ def test_read_gives_a_problem_for_a_target_it_cannot_import(tmp_path: Path) -> N
     assert InstrumentFolder.read(tmp_path / "empty.voxel").problems.codes() == ["rig.missing"]
 
 
+def test_a_state_file_whose_plan_cannot_be_read_keeps_the_instrument_from_opening(tmp_path: Path) -> None:
+    folder = _create(tmp_path, f"{__name__}._Bench")
+    task = {"id": "brain", "profiles": ["main"]}
+    (folder.home / "state.json").write_text(json.dumps({**_DEFAULT, "plan": [task, task]}))
+    records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
+    system = System(store=tmp_path / "data", scratch=tmp_path / "scratch", remotes={}, max_ram_fraction=0.1)
+
+    with pytest.raises(StartupError) as caught:
+        InstrumentFolder.read(folder.home).instrument(records=records, system=system)
+
+    assert caught.value.problems[0].loc[:2] == ("state", "plan")
+
+
 def test_the_folder_builds_the_instrument_of_its_kind(tmp_path: Path) -> None:
     folder = _create(tmp_path, f"{__name__}._Bench")
     records = Records(tmp_path / "records.sqlite3", resolve_root=lambda spec: tmp_path / spec.path.as_posix())
@@ -416,6 +430,27 @@ async def test_a_task_metadata_edit_can_be_undone_and_redone(instrument: _Bench)
     assert _metadata(instrument).get("notes", "") == ""
     await instrument.redo()
     assert _metadata(instrument)["notes"] == "left hemisphere"
+
+
+async def test_a_renamed_task_keeps_its_place_and_the_rename_can_be_undone(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    await instrument._add_task(Task(id="heart", profiles=["main"]))
+    await instrument._rename_task("brain", "cortex")
+
+    assert [task.id for task in instrument.view.value.state.plan] == ["cortex", "heart"]
+    assert instrument.view.value.history.undo_label == "Rename task"
+    await instrument.undo()
+    assert [task.id for task in instrument.view.value.state.plan] == ["brain", "heart"]
+
+
+async def test_a_rename_to_a_taken_or_malformed_id_is_refused(instrument: _Bench) -> None:
+    await _with_task(instrument)
+    await instrument._add_task(Task(id="heart", profiles=["main"]))
+    for new_id in ("heart", "no spaces"):
+        with pytest.raises(RejectedError):
+            await instrument._rename_task("brain", new_id)
+
+    assert [task.id for task in instrument.view.value.state.plan] == ["brain", "heart"]
 
 
 async def test_metadata_that_does_not_fit_its_form_is_rejected_at_its_field(instrument: _Bench) -> None:
@@ -617,6 +652,7 @@ def test_a_basic_instrument_offers_the_base_operations_and_its_profile_update() 
         "add_task",
         "update_task",
         "update_task_metadata",
+        "rename_task",
         "remove_tasks",
         "reorder_tasks",
     }

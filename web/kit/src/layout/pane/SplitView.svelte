@@ -15,12 +15,17 @@
     panes: Record<Id, SplitPane>;
     /** Saves the order, the choice to stack, and each extent that has a default, under this key. */
     persist: string;
+    /**
+     * The pane that holds the page's main view; the button shades its half. Without it, the main pane is the only one
+     * with no horizontal default or max, else the first pane.
+     */
+    main?: NoInfer<Id>;
     /** Out: the button that steps through the layouts, to show anywhere on the page. */
     controls?: Snippet;
     class?: string;
   } & Record<NoInfer<Id>, Snippet>;
 
-  let { panes, persist, controls = $bindable(), class: className, ...snippets }: Props = $props();
+  let { panes, persist, main, controls = $bindable(), class: className, ...snippets }: Props = $props();
   const content = $derived(snippets as unknown as Record<Id, Snippet>);
 
   const { ids, key } = untrack(() => ({ ids: Object.keys(panes) as Id[], key: persist }));
@@ -42,13 +47,20 @@
   const sideOf = (beside: boolean, first: boolean): Side =>
     beside ? (first ? 'left' : 'right') : first ? 'top' : 'bottom';
   const firstShown = $derived(order[0] === ids[0]);
-  const side = $derived(sideOf(layout === 'horizontal', firstShown));
+  const shaded = $derived.by(() => {
+    if (main) return main;
+    const free = ids.filter((id) => !panes[id].horizontal?.default && !panes[id].horizontal?.max);
+    return free.length === 1 ? free[0] : ids[0];
+  });
+  // Where the main pane sits: where the first pane sits, or across from it.
+  const mainFirst = (first: boolean): boolean => (shaded === ids[0]) === first;
+  const side = $derived(sideOf(layout === 'horizontal', mainFirst(firstShown)));
   // The next layout, clockwise: left, top, right, bottom, then left again; only top and bottom while narrow.
   const next = $derived.by(() => {
     if (narrow) return { stack: false, first: !firstShown };
     return layout === 'horizontal' ? { stack: true, first: firstShown } : { stack: false, first: !firstShown };
   });
-  const nextSide = $derived(narrow ? sideOf(false, next.first) : sideOf(!next.stack, next.first));
+  const nextSide = $derived(narrow ? sideOf(false, mainFirst(next.first)) : sideOf(!next.stack, mainFirst(next.first)));
   const ROTATION: Record<Side, number> = { left: 0, top: 90, right: 180, bottom: 270 };
 
   function step(): void {
@@ -63,7 +75,7 @@
 </script>
 
 {#snippet button()}
-  {@const label = `${displayName(ids[0])} on the ${nextSide}`}
+  {@const label = `${displayName(shaded)} on the ${nextSide}`}
   <button
     type="button"
     class="grid h-ui-md w-[2.75rem] shrink-0 place-items-center rounded-sm border border-control-line bg-element-bg text-fg-muted hover:bg-element-hover hover:text-fg"
@@ -71,7 +83,7 @@
     aria-label={label}
     onclick={step}
   >
-    <!-- A box split in 2, the first pane's half shaded, turned to the side it sits on now. -->
+    <!-- A box split in 2, the main pane's half shaded, turned to the side it sits on now. -->
     <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
       <g transform="rotate({ROTATION[side]} 12 12)" stroke="currentColor" stroke-width="2" fill="none">
         <rect x="3" y="3" width="7.5" height="18" fill="currentColor" fill-opacity="0.75" stroke="none" />

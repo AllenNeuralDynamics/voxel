@@ -54,6 +54,15 @@ async def test_an_instrument_is_inspected_over_http_with_the_content_of_its_file
     assert missing[0] == 404
 
 
+async def test_the_metadata_forms_of_the_station_are_listed_over_http(service: StationService) -> None:
+    async with asyncio.timeout(20):
+        status, _, forms = await call(service.url, "GET", "/metadata-forms")
+
+    assert (status, list(forms)) == (200, ["Base"])
+    assert forms["Base"]["path"] == "vxl.metadata.ExperimentMetadata"
+    assert "notes" in forms["Base"]["schema"]["properties"]
+
+
 async def test_a_session_opens_and_a_device_changes_over_http_and_the_feed_shows_both(service: StationService) -> None:
     prefix = f"stations.{service.station.config.id}"
     reader = FeedClient(service.url.replace("http", "ws", 1))

@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal, Self, TypedDict
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
 from pydantic_core import InitErrorDetails
 from rigup.device import OperationRequest
-from vxlib.issues import Problem, Problems
+from vxlib.issues import Level, Problem, Problems
 from vxlib.schema import FrozenModel, Key, UniqueList, identifier, repeated
 from vxlib.units import Quantity
 
@@ -288,7 +288,7 @@ class Profile(FrozenModel):
             else:
                 seen.add(number)
                 continue
-            problems.add(f"profile.tuning_knob.{code}", msg, "tuning_knobs", index, level="warning")
+            problems.add(f"profile.tuning_knob.{code}", msg, "tuning_knobs", index, level=Level.WARNING)
         return problems
 
     def _given(self) -> str:
@@ -416,13 +416,14 @@ class InstrumentState(BaseModel, frozen=True):
         return found
 
     def problems(self, config: InstrumentConfig) -> Problems:
-        """Return the problems of this state against ``config``: those of its positions and of each profile. A kind
-        of instrument adds its own."""
-        problems = self._position_problems(config).under("positions")
+        """Return the problems of this state against ``config``: those of its positions and of each profile, whose
+        errors are fatal since the instrument applies them to its devices, and those of the plan, which only refuse a
+        start. A kind of instrument adds its own."""
+        problems = self._position_problems(config).under("positions").as_fatal()
         for profile_id, profile in self.profiles.items():
-            problems += profile.problems(config).under("profiles", profile_id)
-        problems += self._level_problems(config).under("profiles")
-        problems += self._magnification_problems(config).under("profiles")
+            problems += profile.problems(config).under("profiles", profile_id).as_fatal()
+        problems += self._level_problems(config).under("profiles").as_fatal()
+        problems += self._magnification_problems(config).under("profiles").as_fatal()
         for index, task in enumerate(self.plan):
             for profile_index, profile_id in enumerate(task.profiles):
                 if profile_id not in self.profiles:

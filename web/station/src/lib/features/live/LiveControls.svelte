@@ -8,15 +8,16 @@
   import { Quantity } from '$lib/core/utils/quantity';
   import { LightMap } from '$lib/features/devices/light-map';
   import ChannelDisplayMenu from '$lib/features/preview/ChannelDisplayMenu.svelte';
-  import { Button, Checkbox, Choice, RadioBar, Ruler, Slider } from '@voxel/kit';
+  import { Button, Checkbox, Choice, RadioBar, Ruler, Slider, Tooltip } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { displayName } from '@voxel/kit/format';
+  import { Zap } from '@voxel/kit/icons';
 
   import { type ChannelSection, LiveControlsLayout } from './live-controls';
-  import type { DeviceLink } from './live-dock.svelte';
+  import type { PageLink } from './live-dock.svelte';
 
   /** Camera selection changes wait for Apply while a preview runs, because applying restarts it. */
-  const { deviceLink }: { deviceLink: DeviceLink } = $props();
+  const { pageLink }: { pageLink: PageLink } = $props();
   const uid = $props.id();
   const station = getVoxelStation();
   const session = $derived(station.session);
@@ -80,13 +81,16 @@
     return text === undefined ? undefined : Quantity.parse(text)?.number;
   }
 
-  /** The device's own pins that a generator's wire drives, such as `ttl_in`. */
-  const driven = (id: string): string =>
-    (instrument?.wires.into(id) ?? [])
-      .flatMap((wire) => wire.to.filter((port) => port.device === id).map((port) => port.pin))
-      .join(', ');
+  /** The wires into the device's pins, 1 line each, such as `ttl_in ← daq/ao0 (digital)`. */
+  const wiresInto = (id: string): string[] =>
+    (instrument?.wires.into(id) ?? []).flatMap((wire) =>
+      wire.to
+        .filter((port) => port.device === id)
+        .map((port) => `${port.pin} ← ${wire.from.device}/${wire.from.pin} (${wire.config.kind})`)
+    );
 
-  const MODES = { analog: 'Analog in', digital: 'Digital in', mixed: 'Analog and digital in' } as const;
+  // A digital pin only switches the light, so its power stays set here.
+  const MODES = { analog: 'Analog in', mixed: 'Analog and digital in' } as const;
 
   /** The band of the filter at `label`, such as `425–475 nm`. */
   function bandOf(label: string | undefined): string {
@@ -150,7 +154,30 @@
     {#if label}
       {@render label()}
     {:else}
-      <a {...deviceLink(id)} class="truncate text-fg-muted hover:text-fg hover:underline">{displayName(id)}</a>
+      {@const wire = instrument?.wires.into(id)[0]}
+      <span class="flex min-w-0 items-center gap-1">
+        <a
+          {...pageLink(`devices/${encodeURIComponent(id)}`)}
+          class="truncate text-fg-muted hover:text-fg hover:underline">{displayName(id)}</a
+        >
+        {#if wire}
+          <Tooltip.Root delayDuration={100}>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <a
+                  {...props}
+                  {...pageLink(`wires?wire=${encodeURIComponent(`${wire.from.device}.${wire.name}`)}`)}
+                  class="shrink-0 text-fg-faint hover:text-fg"
+                  aria-label="Wires into {displayName(id)}"><Zap class="size-[0.625rem]" /></a
+                >
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content side="top">
+              {#each wiresInto(id) as line (line)}<div class="font-mono">{line}</div>{/each}
+            </Tooltip.Content>
+          </Tooltip.Root>
+        {/if}
+      </span>
     {/if}
     <span class="flex min-w-0 items-center">{@render control()}</span>
     <span class="truncate text-right text-fg-muted tabular-nums">{@render reading()}</span>
@@ -158,7 +185,7 @@
 {/snippet}
 
 {#snippet lightRow(id: string, light: Dimmable)}
-  {@const signal = light.controlMode && light.controlMode !== 'software' ? light.controlMode : null}
+  {@const signal = light.controlMode === 'analog' || light.controlMode === 'mixed' ? light.controlMode : null}
   {@const power = profile?.power[id]}
   {@const value = power ? powerOf(power) : undefined}
   {#snippet control()}
@@ -181,9 +208,7 @@
     {/if}
   {/snippet}
   {#snippet reading()}
-    {#if signal}
-      <span title={driven(id)}>{driven(id)}</span>
-    {:else if light.power !== undefined}
+    {#if !signal && light.power !== undefined}
       {light.power} {light.powerUnit}
     {/if}
   {/snippet}
@@ -242,7 +267,12 @@
 <!-- 1 number of a timeline, named by the knob; it links to the generator that plays it. -->
 {#snippet knobRow(knob: TuningKnobView)}
   {#snippet label()}
-    <a {...deviceLink(knob.generator)} class="truncate text-fg-muted hover:text-fg hover:underline">{knob.label}</a>
+    <a
+      {...pageLink(
+        `timing/${encodeURIComponent(profileId ?? '')}?wire=${encodeURIComponent(`${knob.generator}.${knob.wire}`)}`
+      )}
+      class="truncate text-fg-muted hover:text-fg hover:underline">{knob.label}</a
+    >
   {/snippet}
   {#snippet control()}
     {#if knob.value !== null && knob.bounds}
@@ -357,7 +387,7 @@
               {/each}
             </div>
           {:else}
-            <div class="flex flex-col frame-raised">{@render rows(group.devices)}</div>
+            <div class="flex flex-col frame-raised py-1.5">{@render rows(group.devices)}</div>
           {/if}
         </div>
       {/each}

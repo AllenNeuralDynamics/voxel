@@ -2,6 +2,7 @@
 called."""
 
 from collections.abc import Iterable
+from typing import ClassVar
 
 from vxlib.issues import Problem, Problems
 
@@ -30,6 +31,13 @@ class NotFoundError(RejectedError):
     """The request names something that does not exist, such as a task or a profile, and nothing changed."""
 
 
+class StaleError(RejectedError):
+    """The request was made against a version that has changed since, and nothing changed. ``problem_type`` tells it
+    apart from other refusals in an HTTP answer."""
+
+    problem_type: ClassVar[str] = "tag:voxel,2026:stale"
+
+
 class BusyError(VoxelError):
     """The request is valid, but it cannot run now: an activity holds what it needs, or the station is in another
     phase."""
@@ -43,6 +51,7 @@ __all__ = [
     "BusyError",
     "NotFoundError",
     "RejectedError",
+    "StaleError",
     "StartupError",
     "StationNotConfiguredError",
     "VoxelError",

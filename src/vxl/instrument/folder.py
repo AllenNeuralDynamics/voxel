@@ -7,7 +7,7 @@ from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, SerializeAsAny, ValidationError
 from rigup.build import import_class
-from vxlib.issues import Problem, Problems
+from vxlib.issues import Level, Problem, Problems
 from vxlib.schema import FrozenModel
 
 from vxl._utils.files import load_yaml, update_yaml
@@ -31,7 +31,7 @@ class FolderFile[T: BaseModel](FrozenModel):
 
 class InstrumentInspection(TypedDict):
     """What a client gets of an instrument's folder: each problem at its place. The instrument can be built when no
-    problem is an error. The full form has ``files``: ``rig``, ``default`` and ``state``, each with its content and
+    problem is fatal. The full form has ``files``: ``rig``, ``default`` and ``state``, each with its content and
     its model."""
 
     problems: list[Problem]
@@ -60,8 +60,8 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
 
     @property
     def ok(self) -> bool:
-        """Whether the instrument can be built."""
-        return self.rig.model is not None and self.default.model is not None and not self.problems.errors()
+        """Whether the instrument can be built: no problem is fatal."""
+        return self.rig.model is not None and self.default.model is not None and not self.problems.fatal()
 
     def inspection(self, *, files: bool = False) -> InstrumentInspection:
         """The folder as a client gets it, with the content of its files when ``files`` is set."""
@@ -73,7 +73,9 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
     @staticmethod
     def read(home: Path | str) -> "InstrumentFolder[Any, Any]":
         """Read the folder at ``home``. Return each problem; do not raise. Every file is read, also when one before
-        it has a problem; a file is checked only when the files it is checked against are in order."""
+        it has a problem; a file is checked only when the files it is checked against are in order. Every problem of
+        the rig and the defaults is fatal, and so is a file that cannot be read or does not pass its checks: the
+        instrument would start without it. The state's own checks set their levels."""
         home = Path(home)
         rig, problems = _load(home / "rig.yaml", "rig")
         if rig is None and not problems:
@@ -95,18 +97,20 @@ class InstrumentFolder[C: InstrumentConfig, S: InstrumentState]:
             problems += found
         if config is not None:
             problems += config.problems().under("rig")
-        problems += default_problems
+        problems = problems.as_fatal()
+        problems += default_problems.as_fatal()
         if kind is not None and config is not None and default is not None:
             default_model, found = _validate(default, kind.state_cls, "default")
-            problems += found
+            problems += found.as_fatal()
             if default_model is not None:
                 for name in sorted(default_model.model_fields_set - default_model.default_fields()):
-                    problems.add("default.not_default", f"'{name}' is not saved as a default.", "default", name)
-                problems += default_model.problems(config).under("default")
-        problems += state_problems
+                    msg = f"'{name}' is not saved as a default."
+                    problems.add("default.not_default", msg, "default", name, level=Level.FATAL)
+                problems += default_model.problems(config).under("default").as_fatal()
+        problems += state_problems.as_fatal()
         if kind is not None and config is not None and state is not None:
             state_model, found = _validate(state, kind.state_cls, "state")
-            problems += found
+            problems += found.as_fatal()
             if state_model is not None:
                 problems += state_model.problems(config).under("state")
         return InstrumentFolder(

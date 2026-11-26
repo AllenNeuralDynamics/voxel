@@ -3,12 +3,13 @@
 from collections.abc import Awaitable, Callable
 from functools import partial
 from types import TracebackType
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from fastapi import Body, FastAPI, Request, Response
 from starlette.types import Receive, Scope, Send
 
 from vxl.instrument.folder import InstrumentInspection
+from vxl.metadata import resolve_metadata_class
 from vxl.records import Records
 from vxl.station.config import StationConfig
 from vxl.station.errors import BusyError
@@ -49,6 +50,7 @@ class StationService:
         app.router.routes.extend(FeedSockets(self._publisher).routes(self._prefix))
         app.add_api_route(f"{self._prefix}/instruments", self._instruments, methods=["GET"])
         app.add_api_route(f"{self._prefix}/instruments/{{name}}:inspect", self._inspect, methods=["GET"])
+        app.add_api_route(f"{self._prefix}/metadata-forms", self._metadata_forms, methods=["GET"])
         app.add_api_route(f"{self._prefix}/session:open", self._open, methods=["POST"])
         app.add_api_route(f"{self._prefix}/session:close", self._close, methods=["POST"], status_code=204)
         app.mount(f"{self._prefix}/instrument", self._instrument)
@@ -72,6 +74,7 @@ class StationService:
         self._topics = StationTopics(
             self.station.config.info, self.station.view, self.station.live, self.station.records, self._publisher
         )
+        await self._topics.show_newest()
         return self
 
     async def __aexit__(
@@ -92,6 +95,14 @@ class StationService:
     async def _inspect(self, name: str) -> InstrumentInspection:
         """1 installed instrument, as :meth:`_instruments` gives it, with the content of its 3 files as read."""
         return self.station.inspect(name).inspection(files=True)
+
+    async def _metadata_forms(self) -> dict[str, dict[str, Any]]:
+        """The metadata forms that this station offers, by name: the dotted ``path`` of each class, and its JSON
+        ``schema``."""
+        return {
+            name: {"path": path, "schema": resolve_metadata_class(path).model_json_schema()}
+            for name, path in self.station.config.metadata_menu().items()
+        }
 
     async def _open(self, instrument: Annotated[str, Body(embed=True)]) -> SessionInfo:
         """Open an installed instrument as the station's session."""

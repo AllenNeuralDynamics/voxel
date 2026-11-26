@@ -108,9 +108,9 @@ rig:
     camera:    [exposure_time_ms]
 
   stage:                                          # each specimen axis: its device, and where imaging can happen (µm)
-    x: {device: x_axis}
-    y: {device: y_axis}
-    z: {device: z_axis}
+    x: {device: x_axis, specimen: [-15000, 15000]}
+    y: {device: y_axis, specimen: [-15000, 15000]}
+    z: {device: z_axis, specimen: [-5000, 5000]}
   # z_axis: this motor counts up as the specimen goes up, but +z is deeper: its direction will be set on the device
 
   scan:                                           # how 1 capture runs. Only the choices: the rest follows from the wires

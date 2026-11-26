@@ -14,8 +14,9 @@ changed since (RFC 9110 §13.1.1); without ``If-Match`` the change applies. ``If
 when nothing changed.
 
 Errors follow RFC 9457 (:class:`vxl.web.problems.ProblemDetails`): ``400`` for a body that is not a JSON object,
-``404`` for an unknown item or device, ``409`` when the instrument or a part of it is busy, ``412`` when ``If-Match``
-names an old version, ``422`` for arguments or edits it refuses, ``500`` for anything else.
+``404`` for an unknown item or device, ``409`` when the instrument or a part of it is busy or when a request body names
+a version that changed since (with its own ``type``, RFC 9110 §15.5.10), ``412`` when ``If-Match`` names an old
+version, ``422`` for arguments or edits it refuses, ``500`` for anything else.
 """
 
 import contextlib
@@ -40,7 +41,7 @@ from vxlib.schema import key_field
 
 from vxl.instrument.base import Instrument
 from vxl.instrument.interface import Target, in_state
-from vxl.station.errors import BusyError, NotFoundError, VoxelError
+from vxl.station.errors import BusyError, NotFoundError, StaleError, VoxelError
 from vxl.web.problems import ProblemDetails, Statuses
 from vxl.web.station.interface import HttpInstrumentInterface
 
@@ -73,6 +74,7 @@ class InstrumentRouter(APIRouter):
 
     statuses: ClassVar[Statuses] = {
         NotFoundError: 404,
+        StaleError: 409,
         BusyError: 409,
         ActivityBusyError: 409,
         VoxelError: 422,

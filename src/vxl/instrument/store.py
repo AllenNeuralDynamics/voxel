@@ -201,7 +201,10 @@ class InstrumentStore[S: InstrumentState](Subscribable[S]):
             raise RejectedError(str(problems), problems) from exc
         if validated == self._value:
             return
-        if found := validated.problems(self._config).errors():
+        # Only an error that the edit adds refuses it: a task gone stale, such as after a change of the rig, must not
+        # block every other edit, nor its own fix.
+        before = {(found.code, found.loc) for found in self._value.problems(self._config).errors()}
+        if found := Problems(p for p in validated.problems(self._config).errors() if (p.code, p.loc) not in before):
             raise RejectedError(str(found), found)
         await asyncio.to_thread(
             atomic_write, self._home / "state.json", validated.model_dump_json(indent=2, exclude_none=True)

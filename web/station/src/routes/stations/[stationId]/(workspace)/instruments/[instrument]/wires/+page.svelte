@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { getInstrumentSelection, useAppBar } from '$lib/context.svelte';
   import { Prefs } from '$lib/core/prefs';
   import type { Wire } from '$lib/core/wires';
@@ -99,6 +101,17 @@
   function pick(wire: Wire): void {
     if (instrument) Prefs.wirePicks.set({ ...Prefs.wirePicks.get(), [instrument.name]: keyOf(wire) });
   }
+
+  // A link from elsewhere names a wire as `?wire=<sender>.<name>`: pick it, then drop it from the address.
+  $effect(() => {
+    const asked = page.url.searchParams.get('wire');
+    const wire = asked ? wires.find((found) => keyOf(found) === asked) : undefined;
+    if (!asked || !wire) return;
+    pick(wire);
+    const url = new URL(page.url);
+    url.searchParams.delete('wire');
+    void goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+  });
 
   // The map is 1 Tab stop: the line last moved to, else the first line of the picked wire. Arrow keys move between
   // lines by where their middles are on screen, and pick as they go.

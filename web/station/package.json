@@ -17,7 +17,9 @@
     "test": "node --test 'src/**/*.test.ts'"
   },
   "dependencies": {
-    "@voxel/kit": "workspace:*"
+    "@voxel/kit": "workspace:*",
+    "konva": "^10.9.0",
+    "svelte-konva": "^1.0.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",

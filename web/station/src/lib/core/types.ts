@@ -172,7 +172,7 @@ export interface InstrumentConfig {
 /** Ends by itself when the state changes back. */
 export interface Alert {
   code: string;
-  level: 'error' | 'warning';
+  level: 'fatal' | 'error' | 'warning';
   msg: string;
   loc: (string | number)[];
   detail: string | null;
@@ -273,6 +273,25 @@ export interface StageFollowRule {
   order: string[];
   at: number[];
   margin: number;
+}
+
+/** 1 field of a metadata form's JSON Schema. `$ref` points into the form's `$defs` for a group of fields. `isKey` marks
+ * the field that tells which specimen a task is about; `isAnnotation`, a field that stays editable in a run's record. */
+export interface MetadataField {
+  type?: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
+  title?: string;
+  default?: unknown;
+  enum?: string[];
+  items?: { type?: string };
+  properties?: Record<string, MetadataField>;
+  $ref?: string;
+  isKey?: boolean;
+  isAnnotation?: boolean;
+}
+
+/** The JSON Schema of the form that each task's metadata has. */
+export interface MetadataSchema extends MetadataField {
+  $defs?: Record<string, MetadataField>;
 }
 
 export interface Task {

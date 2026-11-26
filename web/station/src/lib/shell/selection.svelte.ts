@@ -82,7 +82,7 @@ export class InstrumentSelection {
   }
 
   blocked(name: string): boolean {
-    return this.#station.instruments[name]?.problems.some((problem) => problem.level === 'error') ?? false;
+    return this.#station.instruments[name]?.problems.some((problem) => problem.level === 'fatal') ?? false;
   }
 
   problems(name: string): number {

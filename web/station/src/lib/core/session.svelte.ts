@@ -12,10 +12,12 @@ import type {
   HistoryState,
   HttpInstrumentInterface,
   KeyPath,
+  MetadataSchema,
   PowerMode,
   StageFollowRule,
   TuningKnobView,
-  ProfileFields
+  ProfileFields,
+  SpecimenAxis
 } from './types';
 
 /** A laser with the modulators and shutters only its light passes. */
@@ -105,6 +107,11 @@ export class InstrumentSession<I extends Instrument = Instrument> {
     return this.#topics.get<Alert[]>('alerts') ?? [];
   }
 
+  /** The form of each task's metadata. */
+  get metadataSchema(): MetadataSchema | undefined {
+    return this.#topics.get<MetadataSchema>('metadata_schema');
+  }
+
   get tuning(): TuningKnobView[] {
     return this.#topics.get<TuningKnobView[]>('tuning') ?? [];
   }
@@ -185,6 +192,11 @@ export class InstrumentSession<I extends Instrument = Instrument> {
     return !type || device instanceof type ? device : undefined;
   }
 
+  /** Each task keeps the metadata that fits the new form; `path` is the form's dotted class path. */
+  setMetadataForm(path: string): Promise<void> {
+    return this.edits.run(() => this.call('set_metadata_class', { cls: path }));
+  }
+
   selectProfile(id: string): Promise<void> {
     return this.edits.run(() => this.call('select_profile', { profile_id: id }));
   }
@@ -221,6 +233,11 @@ export class InstrumentSession<I extends Instrument = Instrument> {
    */
   saveAsDefaultState(paths?: KeyPath[]): Promise<void> {
     return this.edits.run(() => this.call('save_as_default_state', paths ? { paths } : {}));
+  }
+
+  /** How the device gets its position for every profile: always 1 position, or by following the stage. */
+  setPositionRule(device: string, rule: string | number | StageFollowRule): Promise<void> {
+    return this.edits.run(() => this.call('set_position_rule', { device_id: device, rule }));
   }
 
   /** Properties by name, plus the position under `position`. Empty when the profile sets nothing on the device. */
@@ -285,6 +302,11 @@ export class InstrumentSession<I extends Instrument = Instrument> {
   /** Not undoable. */
   restoreFromProfile(id: string, properties: string[]): Promise<void> {
     return this.call('restore_from_profile', { device_id: id, properties });
+  }
+
+  /** Refused, with no axis moved, when a position is outside the limits of its axis. */
+  moveStage(position: Partial<Record<SpecimenAxis, number>>): Promise<void> {
+    return this.call('move_stage', position);
   }
 
   undo(): Promise<void> {

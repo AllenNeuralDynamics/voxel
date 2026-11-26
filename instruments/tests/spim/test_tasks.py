@@ -34,6 +34,7 @@ def test_a_short_task_takes_the_instrument_defaults(config_data: dict[str, Any])
     assert task.model_dump(mode="json")["path"]["tiles"] == {
         "kind": "grid",
         "axes": [{"x": "alternate"}, {"y": "forward"}],
+        "start": {},
     }
 
 

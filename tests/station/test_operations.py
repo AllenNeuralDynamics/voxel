@@ -18,6 +18,7 @@ _EXAMPLES: dict[str, Mapping[str, Any] | Callable[[BasicInstrument], Mapping[str
     "update_task_metadata": {"task_id": "a", "fields": {"notes": "left hemisphere"}},
     "reorder_tasks": {"task_ids": ["b", "a"]},
     "remove_tasks": {"task_ids": ["b"]},
+    "rename_task": {"task_id": "a", "new_id": "c"},
     "update_profile": {"profile_id": "gfp", "label": "GFP"},
     "select_profile": {"profile_id": "gfp"},
     "apply_profile": {},

@@ -14,7 +14,7 @@
   /* The live image is always dark, in both themes. */
   --image-bg: #060606;
 
-  /* The colors of the axes, the stage markers and the stage regions. Each one starts from a color of the theme, and
+  /* The colors of the axes, the stage markers and the stage zones. Each one starts from a color of the theme, and
   the person can pick another in the settings. X, Y and Z are red, green and blue, as in 3D tools. */
   --axis-x: var(--danger-fg);
   --axis-y: var(--success-fg);
@@ -23,10 +23,10 @@
   --axis-y-tint: var(--success-tint);
   --axis-z-tint: var(--accent-tint);
   --stage-markers: var(--fg);
-  --stage-region-1: var(--series-1);
-  --stage-region-2: var(--series-2);
-  --stage-region-3: var(--series-3);
-  --stage-region-4: var(--series-4);
+  --stage-zone-1: var(--series-1);
+  --stage-zone-2: var(--series-2);
+  --stage-zone-3: var(--series-3);
+  --stage-zone-4: var(--series-4);
 }
 
 @theme inline {
@@ -42,10 +42,10 @@
   --color-axis-y-tint: var(--axis-y-tint);
   --color-axis-z-tint: var(--axis-z-tint);
   --color-stage-markers: var(--stage-markers);
-  --color-stage-region-1: var(--stage-region-1);
-  --color-stage-region-2: var(--stage-region-2);
-  --color-stage-region-3: var(--stage-region-3);
-  --color-stage-region-4: var(--stage-region-4);
+  --color-stage-zone-1: var(--stage-zone-1);
+  --color-stage-zone-2: var(--stage-zone-2);
+  --color-stage-zone-3: var(--stage-zone-3);
+  --color-stage-zone-4: var(--stage-zone-4);
 }
 
 /* One part of the top bar. Each pane has its own part, and the parts line up as 1 bar. */
@@ -62,6 +62,12 @@
  * of its own, such as `sr-only` text, is placed from it and scrolls with it. */
 @utility page-body {
   @apply px-inset relative overflow-y-auto pb-5;
+}
+
+/* The dotted strip at the left of a card that drags it. */
+@utility grip {
+  background-image: radial-gradient(circle, currentColor 0.5px, transparent 0.6px);
+  background-size: 2px 2px;
 }
 
 /* The app is a frame as large as the window, and only its panes scroll. The body is as tall as the window, it is the

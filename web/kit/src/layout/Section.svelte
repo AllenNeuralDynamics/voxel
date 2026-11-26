@@ -37,7 +37,7 @@
         variant: ['raised', 'bordered'],
         class: {
           root: 'overflow-hidden',
-          header: 'h-9 items-center',
+          header: 'h-10 items-center px-2.5',
           heading: 'text-base text-fg',
           body: 'px-2.5 pb-2.5'
         }

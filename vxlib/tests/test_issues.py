@@ -3,7 +3,7 @@ from typing import Self
 
 import pytest
 from pydantic import BaseModel, ValidationError, model_validator
-from vxlib.issues import Alert, Issue, Problem, Problems
+from vxlib.issues import Alert, Issue, Level, Problem, Problems
 
 
 class _Rig(BaseModel, frozen=True):
@@ -83,22 +83,35 @@ def test_assignments_names_each_missing_and_each_unexpected_key():
 def test_a_problem_is_an_issue_that_is_an_error_unless_it_says_warning() -> None:
     problem = Problem(code="rig.x", msg="wrong", loc=("devices", "camera"))
     assert isinstance(problem, Issue)
-    assert problem.level == "error"
-    assert Problem.model_validate({"code": "rig.x", "msg": "odd", "level": "warning"}).level == "warning"
+    assert problem.level is Level.ERROR
+    assert Problem.model_validate({"code": "rig.x", "msg": "odd", "level": "warning"}).level is Level.WARNING
+    assert problem.model_dump(mode="json")["level"] == "error"
+
+
+def test_levels_are_ordered_by_what_they_refuse_and_errors_keeps_the_fatal_ones_too() -> None:
+    assert Level.WARNING < Level.ERROR < Level.FATAL
+    found = Problems()
+    found.add("rig.x", "Wrong.", level=Level.FATAL)
+    found.add("plan.x", "Odd.")
+    found.add("knob.x", "Loose.", level=Level.WARNING)
+
+    assert found.errors().codes() == ["rig.x", "plan.x"]
+    assert found.fatal().codes() == ["rig.x"]
+    assert [problem.level for problem in found.as_fatal()] == [Level.FATAL, Level.FATAL, Level.WARNING]
 
 
 def test_errors_keeps_only_the_problems_that_refuse() -> None:
     found = Problems()
-    found.add("knob.no_signal", "The knob's wire has no signal.", "tuning_knobs", 0, level="warning")
+    found.add("knob.no_signal", "The knob's wire has no signal.", "tuning_knobs", 0, level=Level.WARNING)
     found.add("timeline.no_wires", "The generator sends no wires.", "timelines", "ao")
 
-    assert [problem.level for problem in found] == ["warning", "error"]
+    assert [problem.level for problem in found] == [Level.WARNING, Level.ERROR]
     assert found.errors().codes() == ["timeline.no_wires"]
     assert isinstance(found.errors(), Problems)
 
 
 def test_warnings_alone_raise_nothing_and_never_join_the_raised_errors() -> None:
-    warnings = Problems([Problem(code="knob.no_signal", msg="no signal", level="warning")])
+    warnings = Problems([Problem(code="knob.no_signal", msg="no signal", level=Level.WARNING)])
     warnings.raise_if_any("Only warnings")
 
     mixed = Problems([*warnings, Problem(code="timeline.no_wires", msg="no wires", loc=("timelines", "ao"))])
@@ -111,7 +124,11 @@ def test_warnings_alone_raise_nothing_and_never_join_the_raised_errors() -> None
 def test_an_alert_is_an_issue_that_started_at_a_time() -> None:
     since = datetime(2026, 11, 17, 10, 42, tzinfo=UTC)
     alert = Alert(
-        code="camera.no_frames", level="error", msg="Camera sends no frames.", loc=("devices", "camera"), since=since
+        code="camera.no_frames",
+        level=Level.ERROR,
+        msg="Camera sends no frames.",
+        loc=("devices", "camera"),
+        since=since,
     )
     assert isinstance(alert, Issue)
     assert alert.since == since

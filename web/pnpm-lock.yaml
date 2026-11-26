@@ -306,6 +306,12 @@ importers:
       '@voxel/kit':
         specifier: workspace:*
         version: link:../kit
+      konva:
+        specifier: ^10.9.0
+        version: 10.9.0
+      svelte-konva:
+        specifier: ^1.0.1
+        version: 1.0.1(konva@10.9.0)(svelte@5.57.3(@typescript-eslint/types@8.72.1))
     devDependencies:
       '@sveltejs/adapter-static':
         specifier: ^3.0.10

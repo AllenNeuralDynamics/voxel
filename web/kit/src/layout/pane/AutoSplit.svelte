@@ -80,7 +80,8 @@
 
 <div bind:this={boxEl} class={cn('size-full', className)}>
   <PaneGroup {direction} bind:ref={groupEl}>
-    {#each shown as id, index (id)}
+    <!-- paneforge sorts its panes only when they mount, so a new order mounts them again. -->
+    {#each shown as id, index (`${index}:${id}`)}
       {#if index > 0}<PaneDivider />{/if}
       <Pane id="{uid}-{id}" order={index} {...sizes[id][direction]}>
         {@render content[id]()}

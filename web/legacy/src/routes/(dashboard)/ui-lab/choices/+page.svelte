@@ -1,6 +1,6 @@
 <script lang="ts">
   import { BoolModel, EnumeratedModel } from '$lib/core/model';
-  import { Button, Checkbox, Choice, RadioBar, Select, Switch } from '@voxel/kit';
+  import { Button, Checkbox, Choice, RadioBar, RadioList, Select, Switch } from '@voxel/kit';
   import { Monitor, Moon, Sun } from '@voxel/kit/icons';
 
   import { lab } from '../lab';
@@ -18,6 +18,8 @@
   const format = new EnumeratedModel('mono', ['mono', 'rgb', 'rgba'], { onPatch: track('choice') });
   const binning = new EnumeratedModel<number>(2, [1, 2, 4, 8], { onPatch: track('choice') });
   const power = new EnumeratedModel<number>(20, [5, 10, 20, 50], { onPatch: track('choice') });
+  const form = new EnumeratedModel('base', ['base', 'exaspim', 'mesospim'], { onPatch: track('choice') });
+  const FORMS: Record<string, string> = { base: 'Base', exaspim: 'exaSPIM metadata', mesospim: 'mesoSPIM metadata' };
   const LOOKS = ['filled', 'soft', 'plain'] as const;
   const MODE_ICONS = { light: Sun, dark: Moon, auto: Monitor };
   let place = $state<'Docked' | 'Undocked'>('Docked');
@@ -95,6 +97,22 @@
           </div>
         </div>
       {/each}
+    </div>
+  </section>
+
+  <section class={lab.section}>
+    <h2 class={lab.heading}>RadioList</h2>
+    <div class="flex gap-10 frame-raised px-3 py-3">
+      {#each ['sm', 'md', 'lg'] as const as size (size)}
+        <div class="flex flex-col gap-1">
+          <span class="text-sm text-fg-muted">{size}</span>
+          <RadioList {size} model={form} display={(key) => FORMS[key]} />
+        </div>
+      {/each}
+      <div class="flex flex-col gap-1">
+        <span class="text-sm text-fg-muted">Disabled</span>
+        <RadioList disabled model={form} display={(key) => FORMS[key]} />
+      </div>
     </div>
   </section>
 

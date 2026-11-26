@@ -1,10 +1,11 @@
 <script lang="ts">
   import { getVoxelStation } from '$lib/context.svelte';
+  import { LEVEL_ICONS } from '$lib/core/levels';
   import { Button, DropdownMenu } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
   import { reportFailure } from '@voxel/kit/failures';
   import { displayName } from '@voxel/kit/format';
-  import { Check, TriangleAlert } from '@voxel/kit/icons';
+  import { Check } from '@voxel/kit/icons';
 
   import type { InstrumentSelection } from './selection.svelte';
 
@@ -47,6 +48,12 @@
     {#each instruments as [name, folder] (name)}
       {@const open = name === openName}
       {@const problems = folder.problems.length}
+      {@const worst = folder.problems.some((p) => p.level === 'fatal')
+        ? 'fatal'
+        : folder.problems.some((p) => p.level === 'error')
+          ? 'error'
+          : 'warning'}
+      {@const Icon = LEVEL_ICONS[worst]}
       <DropdownMenu.Item
         class={cn(name === selected && 'bg-element-selected data-highlighted:bg-element-selected')}
         aria-label={`${displayName(name)}${open ? ', open' : ''}${problems ? `, ${problems} ${problems === 1 ? 'problem' : 'problems'}` : ''}`}
@@ -58,10 +65,10 @@
           <span
             class={cn(
               'flex shrink-0 items-center gap-1 text-sm',
-              selection.blocked(name) ? 'text-danger-fg' : 'text-warning-fg'
+              worst === 'warning' ? 'text-warning-fg' : 'text-danger-fg'
             )}
           >
-            <TriangleAlert class="size-3.5" aria-hidden="true" />
+            <Icon class="size-3.5" aria-hidden="true" />
             {problems}
             {problems === 1 ? 'problem' : 'problems'}
           </span>

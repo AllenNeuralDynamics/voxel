@@ -2,23 +2,23 @@ import { Prefs } from '$lib/core/prefs';
 import { legibleFor, toHex } from '@voxel/kit/colors';
 import { themes, watchTheme } from '@voxel/kit/style';
 
-export type MarkKey = 'x' | 'y' | 'z' | 'markers' | 'region1' | 'region2' | 'region3' | 'region4';
+export type MarkKey = 'x' | 'y' | 'z' | 'markers' | 'zone1' | 'zone2' | 'zone3' | 'zone4';
 
 /**
- * User-picked axis, marker and region colors, saved in this browser. A pick equal to the theme color is not kept;
- * axis and region picks are adjusted per mode for contrast. Create during component initialization.
+ * User-picked axis, marker and zone colors, saved in this browser. A pick equal to the theme color is not kept;
+ * axis and zone picks are adjusted per mode for contrast. Create during component initialization.
  */
 export class Marks {
-  /** Views with more than 4 regions cycle through the 4 region colors. */
+  /** Views with more than 4 zones cycle through the 4 zone colors. */
   static readonly TOKENS: Record<MarkKey, string> = {
     x: '--axis-x',
     y: '--axis-y',
     z: '--axis-z',
     markers: '--stage-markers',
-    region1: '--stage-region-1',
-    region2: '--stage-region-2',
-    region3: '--stage-region-3',
-    region4: '--stage-region-4'
+    zone1: '--stage-zone-1',
+    zone2: '--stage-zone-2',
+    zone3: '--stage-zone-3',
+    zone4: '--stage-zone-4'
   };
   static readonly #AXES: MarkKey[] = ['x', 'y', 'z'];
   static readonly #HEX = /^#[\da-f]{6}$/i;

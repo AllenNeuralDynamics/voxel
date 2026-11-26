@@ -17,6 +17,11 @@
     class?: string;
     /** Sizing, borders, and positioning of the outer scroll container. */
     containerClass?: string;
+    /**
+     * Scrolls in its own box, which keeps the wheel when it reaches an end. Off, the list is a plain box inside a
+     * scrolling page: the wheel reaches the page, and a drag does not scroll by itself near the edges.
+     */
+    scroll?: boolean;
     ariaLabel?: string;
     flipDuration?: number;
   }
@@ -30,6 +35,7 @@
     threshold = 4,
     class: className = '',
     containerClass = '',
+    scroll = true,
     ariaLabel = 'Sortable list',
     flipDuration = 120
   }: Props = $props();
@@ -52,16 +58,7 @@
   });
 </script>
 
-<ScrollArea.Root
-  bind:viewportRef={viewport}
-  class={containerClass}
-  orientation={layout === 'horizontal' ? 'horizontal' : 'vertical'}
-  viewportProps={{
-    'aria-label': ariaLabel,
-    role: 'region',
-    class: 'overscroll-contain [overflow-anchor:none]'
-  }}
->
+{#snippet entries()}
   <div class={className}>
     {#each list.items as entry, index (list.key(entry))}
       <div animate:flip={{ duration: flipDuration }}>
@@ -69,4 +66,23 @@
       </div>
     {/each}
   </div>
-</ScrollArea.Root>
+{/snippet}
+
+{#if scroll}
+  <ScrollArea.Root
+    bind:viewportRef={viewport}
+    class={containerClass}
+    orientation={layout === 'horizontal' ? 'horizontal' : 'vertical'}
+    viewportProps={{
+      'aria-label': ariaLabel,
+      role: 'region',
+      class: 'overscroll-contain [overflow-anchor:none]'
+    }}
+  >
+    {@render entries()}
+  </ScrollArea.Root>
+{:else}
+  <div bind:this={viewport} class={containerClass} aria-label={ariaLabel} role="region">
+    {@render entries()}
+  </div>
+{/if}

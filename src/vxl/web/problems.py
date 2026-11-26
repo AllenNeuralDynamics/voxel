@@ -29,7 +29,8 @@ class ProblemDetails(BaseModel):
     def install(cls, app: Starlette, statuses: Statuses | None = None) -> None:
         """Make ``app`` answer each failure as problem details. ``statuses`` gives the status of each kind of error,
         the most special kind first. An HTTP error keeps its own status, and any other error answers ``500``. An
-        error with ``errors()`` has its refused arguments listed, and an error with ``problems`` has those listed."""
+        error with ``errors()`` has its refused arguments listed, and an error with ``problems`` has those listed. An
+        error with ``problem_type`` answers with that ``type``."""
         kinds = dict(statuses or {})
 
         async def answer(request: Request, error: Exception) -> JSONResponse:
@@ -51,10 +52,11 @@ class ProblemDetails(BaseModel):
         instance: str,
         errors: list[Any] | None = None,
         headers: Mapping[str, str] | None = None,
+        problem_type: str = "about:blank",
     ) -> JSONResponse:
         """A problem answer with ``status``, and with ``headers`` when given."""
         title = HTTPStatus(status).phrase if status in HTTPStatus else "Error"
-        body = cls(title=title, status=status, detail=detail, instance=instance, errors=errors)
+        body = cls(type=problem_type, title=title, status=status, detail=detail, instance=instance, errors=errors)
         content = body.model_dump(mode="json", exclude_none=True)
         return JSONResponse(content, status_code=status, headers=headers, media_type="application/problem+json")
 
@@ -76,7 +78,8 @@ class ProblemDetails(BaseModel):
         problems = [
             problem.model_dump(mode="json") if isinstance(problem, BaseModel) else problem for problem in carried
         ]
-        return cls.response(status, str(error), where, problems or None)
+        problem_type = str(getattr(error, "problem_type", "about:blank"))
+        return cls.response(status, str(error), where, problems or None, problem_type=problem_type)
 
 
 __all__ = ["ProblemDetails", "Statuses"]

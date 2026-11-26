@@ -3,9 +3,9 @@
   import { AreaCamera } from '$lib/core/device.svelte';
   import { displayName } from '@voxel/kit/format';
 
-  import type { DeviceLink } from './live-dock.svelte';
+  import type { PageLink } from './live-dock.svelte';
 
-  const { deviceLink }: { deviceLink: DeviceLink } = $props();
+  const { pageLink }: { pageLink: PageLink } = $props();
   const station = getVoxelStation();
   const cameras = $derived(station.session?.devicesOf(AreaCamera) ?? []);
   // Last column is wider by the block text inset so its header aligns with the block edge.
@@ -32,7 +32,9 @@
         {@const stream = camera.streamInfo}
         <div role="row" class="col-span-4 grid grid-cols-subgrid frame-tinted py-1.5 pl-2.5">
           <span role="rowheader" class="truncate" title={displayName(camera.id)}
-            ><a {...deviceLink(camera.id)} class="hover:underline">{displayName(camera.id)}</a></span
+            ><a {...pageLink(`devices/${encodeURIComponent(camera.id)}`)} class="hover:underline"
+              >{displayName(camera.id)}</a
+            ></span
           >
           <span role="cell" class="text-right">{stream ? `${stream.frame_rate_fps.toFixed(1)} fps` : '–'}</span>
           <span role="cell" class={['text-right', stream && stream.dropped_frames > 0 && 'text-warning-fg']}>

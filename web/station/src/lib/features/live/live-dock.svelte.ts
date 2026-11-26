@@ -2,8 +2,8 @@ import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import { ChildWindow, ParentWindow } from '$lib/core/utils/linked-windows.svelte';
 
-/** Props for an `<a>` to a device page in the workspace. */
-export type DeviceLink = (id: string) => { href: string; target?: string; onclick?: () => void };
+/** Props for an `<a>` to a page of the open instrument in the workspace, at `path` inside it, such as `devices/laser`. */
+export type PageLink = (path: string) => { href: string; target?: string; onclick?: () => void };
 
 const WORKSPACE = 'voxel-workspace';
 const LIVE = 'voxel-live';

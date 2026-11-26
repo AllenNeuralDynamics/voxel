@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 from rigup.activity import ActivityBusyError, ActivityInfo
+from vxlib.issues import Level
 from vxlib.vector import Span
 
 from vxl.instrument.basic import BasicInstrument
@@ -51,12 +52,24 @@ def test_each_knob_that_turns_no_number_is_a_warning_and_is_kept() -> None:
     assert not found.errors()
     where = ("default", "profiles", "gfp", "tuning_knobs")
     assert [(p.code, p.loc, p.level) for p in found] == [
-        ("profile.tuning_knob.no_timeline", (*where, 0), "warning"),
-        ("profile.tuning_knob.no_signal", (*where, 1), "warning"),
-        ("profile.tuning_knob.no_field", (*where, 2), "warning"),
-        ("profile.tuning_knob.duplicate", (*where, 4), "warning"),
+        ("profile.tuning_knob.no_timeline", (*where, 0), Level.WARNING),
+        ("profile.tuning_knob.no_signal", (*where, 1), Level.WARNING),
+        ("profile.tuning_knob.no_field", (*where, 2), Level.WARNING),
+        ("profile.tuning_knob.duplicate", (*where, 4), Level.WARNING),
     ]
     assert len(load(data)[1].profiles["gfp"].tuning_knobs) == len(knobs)
+
+
+async def test_a_knob_that_turns_no_number_lets_the_instrument_open_and_shows_as_a_warning(tmp_path: Path) -> None:
+    data = simulated(rig())
+    profile(data)["tuning_knobs"] = [_knob("lens", "center")]
+    instrument = basic(data, tmp_path)
+    await instrument.open()
+    try:
+        alerts = [(alert.code, alert.level) for alert in instrument.view.value.alerts]
+    finally:
+        await instrument.close()
+    assert ("profile.tuning_knob.no_signal", Level.WARNING) in alerts
 
 
 # --- tune: bounds, step and units ---
@@ -200,9 +213,13 @@ async def test_the_view_gives_each_knob_its_number_or_why_it_turns_none(opened: 
 
     sweep, laser = opened.view.value.tuning
     assert (sweep.label, sweep.unit, sweep.problem) == ("Sweep", "V", None)
-    assert sweep.value is not None and sweep.bounds is not None and sweep.step is not None
+    assert sweep.value is not None
+    assert sweep.bounds is not None
+    assert sweep.step is not None
     assert sweep.bounds.low <= sweep.value <= sweep.bounds.high
-    assert laser.value is None and laser.problem is not None and "has no 'center'" in laser.problem
+    assert laser.value is None
+    assert laser.problem is not None
+    assert "has no 'center'" in laser.problem
 
     await opened.set_tuning_knob("ao_main", "galvo", "amplitude", 0.4)
     assert opened.view.value.tuning[0].value == pytest.approx(0.4)

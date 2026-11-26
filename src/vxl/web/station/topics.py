@@ -1,11 +1,12 @@
-"""The station as feed topics: its view, its live frames, the acquisition that ran last, and its newest log line."""
+"""The station as feed topics: its view, its live frames, its newest acquisition, and its newest log line."""
 
 from collections.abc import Mapping
 from functools import reduce
 from typing import TYPE_CHECKING, Any, cast
 
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 
+from vxl.instrument.base import KeyedTopics
 from vxl.live import LiveSourceEmission
 from vxl.records import Acquisition, LogEntry, Records
 from vxl.station.config import StationInfo
@@ -24,8 +25,9 @@ _SPLIT_BY_FIELD = ("state", "default_state")
 
 class StationTopics:
     """Publishes a station as topics: what changed in its view, each live frame under its camera and layer, the
-    acquisition that ran last, and the newest log line. A change of session publishes every topic again as 1 full
-    message. The caller closes the publisher."""
+    newest acquisition, and the newest log line. The newest acquisition is the one created last: a save of an older
+    one, such as an unfinished run ended as interrupted at startup, does not replace it. A change of session
+    publishes every topic again as 1 full message. The caller closes the publisher."""
 
     def __init__(
         self,
@@ -39,6 +41,8 @@ class StationTopics:
         self._publisher = publisher
         self._view = view.value
         self._parts = self._view_parts(info, self._view)
+        self._records = records
+        self._shown: Acquisition | None = None
         self._acquisition: dict[str, JsonValue] = {}
         self._log: dict[str, JsonValue] = {}
         publisher.replace(self._as_json(info, self._view, self._parts))
@@ -53,7 +57,8 @@ class StationTopics:
     def view_topics(cls, info: StationInfo, view: StationView) -> dict[str, JsonValue]:
         """Every topic of a station view, with its value as JSON. A topic is a field of the view. The instrument's
         states are split by field, and their profiles by id. A device is 1 topic for its interface and 1 for each
-        property. A field that is ``None`` has no topic."""
+        property. A field of the instrument view marked with :class:`KeyedTopics` is 1 topic for each key. A field
+        that is ``None`` has no topic."""
         return cls._as_json(info, view, cls._view_parts(info, view))
 
     def close(self) -> None:
@@ -75,7 +80,17 @@ class StationTopics:
         if self._view.status is StationStatus.ACTIVE:
             self._publisher.publish_frame(f"instrument.frames.{camera}.{layer}", frame, position)
 
+    async def show_newest(self) -> None:
+        """Publish the newest stored acquisition, as if it had just been saved. The topics start with none, since
+        the store tells only of saves."""
+        if (newest := await self._records.acquisitions.newest()) is not None:
+            self._on_acquisition(newest)
+
     def _on_acquisition(self, acquisition: Acquisition) -> None:
+        shown = self._shown
+        if shown is not None and acquisition.id != shown.id and acquisition.created_at < shown.created_at:
+            return
+        self._shown = acquisition
         last, self._acquisition = self._acquisition, self._acquisition_topics(acquisition)
         self._publisher.publish(self._changes(last, self._acquisition))
 
@@ -102,9 +117,16 @@ class StationTopics:
                         topic = f"instrument.devices.{device_id}"
                         parts[f"{topic}.interface"] = device.interface
                         parts.update({f"{topic}.props.{prop}": item for prop, item in device.props.items()})
+                elif StationTopics._keyed(type(view.session.instrument), name):
+                    parts.update({f"instrument.{name}.{key}": item for key, item in value.items()})
                 else:
                     parts[f"instrument.{name}"] = value
         return {topic: part for topic, part in parts.items() if part is not None}
+
+    @staticmethod
+    def _keyed(view_cls: type[BaseModel], name: str) -> bool:
+        """Whether field ``name`` of the instrument view is marked with :class:`KeyedTopics`."""
+        return any(isinstance(mark, KeyedTopics) for mark in view_cls.model_fields[name].metadata)
 
     @staticmethod
     def _changes[T](last: Mapping[str, T], now: Mapping[str, T]) -> dict[str, T | None]:

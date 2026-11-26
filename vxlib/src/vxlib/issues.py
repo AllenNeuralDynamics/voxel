@@ -1,7 +1,8 @@
 """Issues: what is wrong, each with a stable code, a level, a message, and the place in the data that it is about.
 
-A :class:`Problem` is wrong in a setup's data. An error refuses what it belongs to, such as opening an instrument or
-an edit; a warning is reported and refuses nothing. An :class:`Alert` is wrong in a running instrument now, and ends
+A :class:`Problem` is wrong in a setup's data. Its :class:`Level` says what it refuses: a fatal problem refuses
+everything, such as opening an instrument; an error refuses the next step, such as an edit or a start; a warning is
+reported and refuses nothing. An :class:`Alert` is wrong in a running instrument now, and ends
 by itself when the state changes back. A :class:`Failure` is what stopped a piece of work, such as an acquisition,
 and stays in its record.
 
@@ -12,10 +13,12 @@ The 2 forms convert into each other: :meth:`Problems.raise_if_any` and :meth:`Pr
 import traceback
 from collections.abc import Collection
 from datetime import datetime
-from typing import Literal, LiteralString, Self, cast
+from enum import IntEnum
+from typing import Any, LiteralString, Self, cast
 
-from pydantic import BaseModel, ValidationError
-from pydantic_core import InitErrorDetails, PydanticCustomError
+from pydantic import BaseModel, GetCoreSchemaHandler, GetJsonSchemaHandler, ValidationError
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema, InitErrorDetails, PydanticCustomError, core_schema
 
 from vxlib.schema import error_message
 
@@ -23,8 +26,31 @@ type KeyPath = tuple[str | int, ...]
 """The keys that lead to a value in nested data, such as ``("nodes", "detection", "devices", "camera")``."""
 
 
-type Level = Literal["error", "warning"]
-"""How bad an issue is."""
+class Level(IntEnum):
+    """What an issue refuses, ordered: a higher level refuses more. It is saved and sent as its name in lowercase,
+    such as ``"error"``; the numbers only order the levels in code, with room to add one between or below."""
+
+    WARNING = 10
+    ERROR = 20
+    FATAL = 30
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        return core_schema.no_info_plain_validator_function(
+            cls._parse, serialization=core_schema.plain_serializer_function_ser_schema(lambda level: level.name.lower())
+        )
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        return {"type": "string", "enum": [level.name.lower() for level in cls]}
+
+    @classmethod
+    def _parse(cls, value: object) -> "Level":
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, str) and value.upper() in cls.__members__:
+            return cls[value.upper()]
+        raise ValueError(f"a level is one of {', '.join(level.name.lower() for level in cls)}, not {value!r}")
 
 
 class Issue(BaseModel, frozen=True):
@@ -41,11 +67,10 @@ class Issue(BaseModel, frozen=True):
 
 
 class Problem(Issue, frozen=True):
-    """Something wrong in a setup's data. An error, the default, refuses what it belongs to, such as opening an
-    instrument or an edit; a warning is reported and refuses nothing. A check gives ``loc`` from the object it
-    checks; each parent check puts its own key in front, with :meth:`Problems.under`."""
+    """Something wrong in a setup's data, an error by default. A check gives ``loc`` from the object it checks; each
+    parent check puts its own key in front, with :meth:`Problems.under`."""
 
-    level: Level = "error"
+    level: Level = Level.ERROR
 
     @classmethod
     def not_configured(cls, label: str, name: str, *, code: str, loc: KeyPath) -> Self:
@@ -64,7 +89,7 @@ class Failure(Issue, frozen=True):
     """What stopped a piece of work, such as an acquisition or 1 part of it. It is always an error, and it stays in
     the record of the work."""
 
-    level: Literal["error"] = "error"
+    level: Level = Level.ERROR
 
     @classmethod
     def of(cls, error: BaseException, *, code: str, loc: KeyPath = ()) -> Self:
@@ -102,13 +127,23 @@ class Problems(list[Problem]):
             found.add(f"{code}.unexpected", f"Unexpected {label} assignment '{key}'.", key)
         return found
 
-    def add(self, code: str, msg: str, *loc: str | int, detail: str | None = None, level: Level = "error") -> None:
+    def add(self, code: str, msg: str, *loc: str | int, detail: str | None = None, level: Level = Level.ERROR) -> None:
         """Add 1 problem at ``loc``."""
         self.append(Problem(code=code, msg=msg, loc=loc, detail=detail, level=level))
 
     def errors(self) -> Self:
-        """The problems that refuse: the errors, without the warnings."""
-        return type(self)(found for found in self if found.level == "error")
+        """The problems that refuse something: the fatal ones and the errors, without the warnings."""
+        return type(self)(found for found in self if found.level >= Level.ERROR)
+
+    def fatal(self) -> Self:
+        """The problems that refuse everything."""
+        return type(self)(found for found in self if found.level is Level.FATAL)
+
+    def as_fatal(self) -> Self:
+        """These problems, each error made fatal: for a check whose every error refuses everything. Warnings stay."""
+        return type(self)(
+            found.model_copy(update={"level": Level.FATAL}) if found.level is Level.ERROR else found for found in self
+        )
 
     def under(self, *keys: str | int) -> Self:
         """These problems, with ``keys`` in front of each place."""

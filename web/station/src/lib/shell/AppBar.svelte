@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { getInstrumentSelection, getVoxelStation } from '$lib/context.svelte';
+  import { LEVEL_ICONS } from '$lib/core/levels';
   import type { Action, AppBar, Crumb, CrumbItem } from '$lib/shell/app-bar.svelte';
   import { Breadcrumb, Button, DropdownMenu, RadioBar } from '@voxel/kit';
   import { cn } from '@voxel/kit/cn';
@@ -178,6 +179,37 @@
     </Breadcrumb.List>
   </Breadcrumb.Root>
   <span class="min-w-3 flex-1"></span>
+  {#if closed}
+    {@const found = station.instruments[closed]?.problems ?? []}
+    {@const errors = found.filter((problem) => problem.level !== 'warning').length}
+    {@const fatal = found.filter((problem) => problem.level === 'fatal').length}
+    {@const warnings = found.length - errors}
+    {@const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`}
+    <!-- The files' problems, by level: only before opening, since an open instrument shows its live issues below. -->
+    {#each [['fatal', fatal, 'fatal problem'], ['error', errors - fatal, 'error']] as const as [level, count, word] (level)}
+      {#if count > 0}
+        {@const Icon = LEVEL_ICONS[level]}
+        <a
+          class="relative flex h-ui-xs shrink-0 items-center gap-1 rounded-sm bg-danger-tint px-1.5 text-sm text-danger-fg tabular-nums hover:underline"
+          href={selection.problemsHref(closed)}
+          title="{plural(count, word)} in the files"
+          ><Icon class="size-3" aria-hidden="true" />{count}<span class="sr-only">
+            {plural(count, word).slice(String(count).length)}</span
+          ></a
+        >
+      {/if}
+    {/each}
+    {#if warnings > 0}
+      <a
+        class="relative flex h-ui-xs shrink-0 items-center gap-1 rounded-sm bg-warning-tint px-1.5 text-sm text-warning-fg tabular-nums hover:underline"
+        href={selection.problemsHref(closed)}
+        title="{plural(warnings, 'warning')} in the files"
+        ><LEVEL_ICONS.warning class="size-3" aria-hidden="true" />{warnings}<span class="sr-only">
+          {warnings === 1 ? 'warning' : 'warnings'}</span
+        ></a
+      >
+    {/if}
+  {/if}
   {#if status}
     <span
       class="flex shrink-0 items-center gap-1.5 text-fg-muted"
@@ -216,19 +248,23 @@
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   {/if}
-  {#if closed && selection.blocked(closed)}
-    <a class="shrink-0 text-sm whitespace-nowrap text-danger-fg hover:underline" href={selection.problemsHref(closed)}>
-      {selection.problems(closed)}
-      {selection.problems(closed) === 1 ? 'problem' : 'problems'}
-    </a>
-  {:else if closed}
+  {#if closed}
+    {@const found = station.instruments[closed]?.problems ?? []}
+    {@const errors = found.filter((problem) => problem.level !== 'warning').length}
+    {@const fatal = found.filter((problem) => problem.level === 'fatal').length}
+    {@const warnings = found.length - errors}
+    {@const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`}
     {#if selection.running}<span class="shrink-0 text-sm whitespace-nowrap text-fg-muted">Stop the run first</span>{/if}
-    <Button
-      size="sm"
-      class="shrink-0"
-      disabled={station.status === 'opening' || selection.running}
-      onclick={() => closed && selection.askToOpen(closed)}>{station.status === 'opening' ? 'Opening…' : 'Open'}</Button
-    >
+    <!-- The wrapper holds the tooltip, since a disabled button shows none in some browsers. -->
+    <span class="inline-flex shrink-0" title={fatal > 0 ? `Cannot open: ${plural(fatal, 'fatal problem')}` : undefined}>
+      <Button
+        size="sm"
+        class="shrink-0"
+        disabled={fatal > 0 || station.status === 'opening' || selection.running}
+        onclick={() => closed && selection.askToOpen(closed)}
+        >{station.status === 'opening' ? 'Opening…' : 'Open'}</Button
+      >
+    </span>
   {/if}
   <!-- `contents` so an empty `end` adds no gap. -->
   {#if end}<div class="contents">{@render end()}</div>{/if}
